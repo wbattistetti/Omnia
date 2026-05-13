@@ -50,6 +50,13 @@ export interface ConversationsStepReviewCardProps {
   onAdvanceStep?: () => void;
   canAdvanceStep: boolean;
   advanceStepAnchorRef: React.RefObject<HTMLButtonElement | null>;
+  /**
+   * Messaggio payoff inline mostrato sotto i 3 pulsanti di creazione (in rosso). Usato
+   * dal **gate di stile**: quando l'utente clicca un pulsante senza aver definito uno
+   * stile, il padre attiva il flash a SX e passa qui il payoff. `null` = niente payoff.
+   * Vedi `useStyleGateFlash` in `ConversationsStyleGate.tsx`.
+   */
+  payoffMessage?: string | null;
 }
 
 const BTN_UNIFORM =
@@ -98,6 +105,7 @@ export function ConversationsStepReviewCard({
   onAdvanceStep,
   canAdvanceStep,
   advanceStepAnchorRef,
+  payoffMessage = null,
 }: ConversationsStepReviewCardProps): React.ReactElement {
   const hasConversations = conversationsCount > 0;
   const canCreate = typeof onCreateConversation === 'function';
@@ -274,6 +282,15 @@ export function ConversationsStepReviewCard({
                 ) : null}
               </button>
             </>
+          ) : null}
+
+          {payoffMessage ? (
+            <p
+              role="alert"
+              className="text-center text-[11px] font-semibold leading-snug text-rose-300"
+            >
+              {payoffMessage}
+            </p>
           ) : null}
 
           {showNoModelToast ? (

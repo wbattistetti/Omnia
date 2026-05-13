@@ -36,5 +36,8 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentWizardCurrentStep: AGENT_WIZARD_FIRST_STEP_INDEX,
     /** Tutor mai vista per task vergini: la prima apertura mostra la schermata di benvenuto. */
     agentWizardTutorAcknowledged: false,
+    /** Gate di stile «Imita questo stile»: vuoto/false di default — costringe il designer a definirlo. */
+    agentConversationStyleExample: '',
+    agentConversationStyleAuto: false,
   };
 }

@@ -214,6 +214,24 @@ export interface AIAgentEditorDockContextValue {
    */
   canCreateConversationalPrompt: boolean;
   onOpenConversationalPromptDialog: () => void;
+
+  /**
+   * **Gate di stile** del passo «Conversazione» (persistito sul task).
+   *
+   * Disgiunzione semantica: la generazione di una nuova conversazione richiede che
+   * **almeno una** delle due sia "valorizzata":
+   * - `agentConversationStyleExample` non vuoto (testo libero, esempio dialogo) — vince
+   *   sull'auto se entrambe sono valorizzate (l'esempio è il più specifico).
+   * - `agentConversationStyleAuto === true` (delega all'AI la scelta dello stile).
+   *
+   * UI: empty state mostra una card con textarea + checkbox; se l'utente clicca
+   * un pulsante di generazione senza aver definito lo stile, il pannello SX lampeggia
+   * e appare un payoff inline ("Devi prima scegliere uno stile a sinistra").
+   */
+  agentConversationStyleExample: string;
+  setAgentConversationStyleExample: (next: string) => void;
+  agentConversationStyleAuto: boolean;
+  setAgentConversationStyleAuto: (next: boolean) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

@@ -489,6 +489,22 @@ export interface Task {
    */
   agentWizardTutorAcknowledged?: boolean;
 
+  /**
+   * Esempio di stile conversazionale fornito dal designer nel passo «Conversazione» del
+   * wizard. Stringa libera (multilinea) che diventa parte del prompt LLM quando si genera
+   * una conversazione. Vuoto = nessun esempio fornito. Vedi `agentConversationStyleAuto`
+   * per il caso "delega all'AI".
+   */
+  agentConversationStyleExample?: string;
+  /**
+   * `true` quando il designer ha spuntato la checkbox «Lascia che Omnia scelga uno stile»
+   * nel passo «Conversazione». Disgiunzione semantica con `agentConversationStyleExample`:
+   * almeno una delle due deve essere "valorizzata" (esempio non vuoto OPPURE flag a true)
+   * perché la generazione conversazione sia abilitata. Vedi gate di stile in
+   * `AIAgentEditorDockPanels.tsx`.
+   */
+  agentConversationStyleAuto?: boolean;
+
   /** Client-only: last IA provisioning failure for this row (never persisted). */
   provisioningError?: NormalizedIaProviderError;
 

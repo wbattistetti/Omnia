@@ -677,7 +677,7 @@
       "modelId": "gemini-2.0-flash-001",
       "inputUsdPer1M": 0.09999999999999999,
       "outputUsdPer1M": 0.39999999999999997,
-      "contextLength": 1048576,
+      "contextLength": 1000000,
       "rawId": "google/gemini-2.0-flash-001"
     },
     {
@@ -1519,7 +1519,7 @@
       "modelId": "gemini-2.0-flash-001",
       "inputUsdPer1M": 0.09999999999999999,
       "outputUsdPer1M": 0.39999999999999997,
-      "contextLength": 1048576,
+      "contextLength": 1000000,
       "rawId": "google/gemini-2.0-flash-001"
     },
     "openai::o3-mini": {
@@ -1686,6 +1686,6 @@
   "meta": {
     "source": "openrouter",
     "count": 105,
-    "updatedAt": "2026-05-13T01:00:17.266Z"
+    "updatedAt": "2026-05-13T07:37:54.369Z"
   }
 }

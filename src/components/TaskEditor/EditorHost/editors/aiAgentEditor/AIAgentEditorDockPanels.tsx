@@ -1,5 +1,8 @@
 /**
- * Dockview panel bodies for the outer AI Agent editor layout (registered by component name in AIAgentEditorDockShell).
+ * Pannelli usati dal `AIAgentConstructionWizardShell`. Storicamente erano pannelli
+ * Dockview registrati per nome nello shell esterno; oggi sono semplici React component
+ * istanziati direttamente dal renderer dello step wizard. Il file è rimasto qui per
+ * minimizzare il diff post-unificazione layout.
  */
 
 import React from 'react';
@@ -8,6 +11,12 @@ import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
 import { ConversationsBubbleView } from './useCaseGeneratorWizard/ConversationsBubbleView';
+import {
+  ConversationsStyleGate,
+  ConversationsStyleBand,
+  isStyleDefined,
+  useStyleGateFlash,
+} from './useCaseGeneratorWizard/ConversationsStyleGate';
 import { UseCaseWizardListToolbarProvider } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
@@ -158,6 +167,10 @@ export function EditorUseCasesPanel() {
     onClearAllWizardOutput,
     onClearWizardConversations,
     onClearWizardTokenization,
+    agentConversationStyleExample,
+    setAgentConversationStyleExample,
+    agentConversationStyleAuto,
+    setAgentConversationStyleAuto,
   } = useAIAgentEditorDock();
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
@@ -228,6 +241,41 @@ export function EditorUseCasesPanel() {
     />
   );
 
+  /**
+   * Gate di stile (passo «Conversazione»):
+   *  - `flashing` → applicato al pannello SX quando l'utente clicca uno dei 3 pulsanti
+   *    di generazione SENZA aver definito uno stile (lampeggio ambra ~800ms).
+   *  - `payoffMessage` → mostrato in rosso sotto i 3 pulsanti per indicare cosa fare.
+   *  - `triggerFlash()` invocato dal wrapper `wrappedAssembleConversation` quando il gate è chiuso.
+   *  - `clearFlash()` invocato in effetto quando lo stile diventa definito (auto-dismiss).
+   */
+  const styleDefined = isStyleDefined(agentConversationStyleExample, agentConversationStyleAuto);
+  const styleFlash = useStyleGateFlash();
+  React.useEffect(() => {
+    if (styleDefined) {
+      styleFlash.clearFlash();
+    }
+  }, [styleDefined, styleFlash]);
+
+  /**
+   * Wrapper del callback di creazione conversazione: rispetta il gate di stile.
+   * Se lo stile non è definito → trigger flash + payoff (NO chiamata backend).
+   * Se definito → delega all'originale.
+   *
+   * Memo: deps cambiano solo se cambia il gate o il callback originale; altrimenti il
+   * `ConversationsStepReviewCard` non si re-renderizza.
+   */
+  const wrappedAssembleConversation = React.useCallback(
+    (params: { outcome: 'positive' | 'negative'; allowSuggestedUseCases: boolean }) => {
+      if (!styleDefined) {
+        styleFlash.triggerFlash();
+        return;
+      }
+      return onAssembleConversation(params);
+    },
+    [styleDefined, styleFlash, onAssembleConversation]
+  );
+
   if (useWizardShell && useCaseGeneratorWizard) {
     const currentStepId = useCaseGeneratorWizard.currentStepId;
     const isStepConversations = currentStepId === 'conversations';
@@ -245,24 +293,61 @@ export function EditorUseCasesPanel() {
      * sullo step 1 della pipeline.
      */
     const showBubbleView = isStepConversations;
+    const conversationsCount = useCaseGeneratorWizard.conversations.length;
 
-    const leftPanel: React.ReactNode = showBubbleView ? (
-      <ConversationsBubbleView
-        conversations={useCaseGeneratorWizard.conversations}
-        activeConversationId={useCaseGeneratorWizard.activeConversationId}
-        onUpdateTurnText={useCaseGeneratorWizard.updateConversationTurnText}
-        modifiedAgentTurnKeysByConversation={
-          useCaseGeneratorWizard.conversationStylePlan.modifiedByConversation
-        }
-        onPromoteSuggestion={onPromoteSuggestionToCatalog}
-        onRejectSuggestion={onRejectSuggestion}
-        showTokenized={useCaseGeneratorWizard.showTokenizedInBubbles}
-        tokenizedByUseCaseId={tokenizedByUseCaseId}
-        excludedUseCaseIds={excludedUseCaseIds}
-      />
-    ) : (
-      composer
-    );
+    /**
+     * Costruzione del leftPanel — passo «Conversazione» (3 stati):
+     *
+     * 1. **Empty + style non definito**: gate di stile (textarea + checkbox auto).
+     *    Costringe il designer a fornire uno stile prima di generare.
+     * 2. **Empty + style definito**: empty-state minimal con band + invito a cliccare i 3
+     *    pulsanti DX. La band è espansa di default così l'utente vede il proprio input.
+     * 3. **Con conversazioni**: band compatta (collassata di default) + bubble view.
+     *
+     * Negli altri passi: composer (lista use case), come prima.
+     */
+    let leftPanel: React.ReactNode;
+    if (showBubbleView) {
+      if (conversationsCount === 0) {
+        leftPanel = (
+          <ConversationsStyleGate
+            styleExample={agentConversationStyleExample}
+            onStyleExampleChange={setAgentConversationStyleExample}
+            styleAuto={agentConversationStyleAuto}
+            onStyleAutoChange={setAgentConversationStyleAuto}
+            flashing={styleFlash.flashing}
+          />
+        );
+      } else {
+        leftPanel = (
+          <div className="flex h-full min-h-0 flex-1 flex-col">
+            <ConversationsStyleBand
+              styleExample={agentConversationStyleExample}
+              onStyleExampleChange={setAgentConversationStyleExample}
+              styleAuto={agentConversationStyleAuto}
+              onStyleAutoChange={setAgentConversationStyleAuto}
+            />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <ConversationsBubbleView
+                conversations={useCaseGeneratorWizard.conversations}
+                activeConversationId={useCaseGeneratorWizard.activeConversationId}
+                onUpdateTurnText={useCaseGeneratorWizard.updateConversationTurnText}
+                modifiedAgentTurnKeysByConversation={
+                  useCaseGeneratorWizard.conversationStylePlan.modifiedByConversation
+                }
+                onPromoteSuggestion={onPromoteSuggestionToCatalog}
+                onRejectSuggestion={onRejectSuggestion}
+                showTokenized={useCaseGeneratorWizard.showTokenizedInBubbles}
+                tokenizedByUseCaseId={tokenizedByUseCaseId}
+                excludedUseCaseIds={excludedUseCaseIds}
+              />
+            </div>
+          </div>
+        );
+      }
+    } else {
+      leftPanel = composer;
+    }
 
     const tokenizedUseCaseCount = useCases.reduce(
       (n, u) =>
@@ -291,8 +376,9 @@ export function EditorUseCasesPanel() {
             onApplyExamplePhraseStyle={onPropagateExamplePhraseStyle}
             examplePhraseStyleBusy={useCasePhraseStylePropagationBusy}
             examplePhraseStyleBatchProgress={useCasePhraseStyleBatchProgress}
-            onCreateConversation={onAssembleConversation}
+            onCreateConversation={wrappedAssembleConversation}
             createConversationBusy={assembleConversationBusy}
+            conversationsPayoffMessage={styleFlash.payoffMessage}
             onProofreadConversationAgentTurns={onProofreadConversationAgentTurns}
             proofreadConversationBusy={proofreadConversationBusy}
             onTokenizeUseCases={onTokenizeUseCases}

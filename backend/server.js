@@ -6657,6 +6657,16 @@ app.post('/design/ai-agent-generate', async (req, res) => {
           : 0;
       const outcome = body.outcome === 'negative' ? 'negative' : 'positive';
       const allowSuggestedUseCases = Boolean(body.allowSuggestedUseCases);
+      /**
+       * `stylePromptHint`: esempio testuale fornito dal designer nel passo
+       * «Conversazione» (textarea «Imita questo stile»). Stringhe whitespace-only
+       * sono considerate "non fornite" (gate "auto" del designer). Trim difensivo
+       * + cap a 4000 char per evitare prompt rotti / costi spropositati.
+       */
+      const stylePromptHintRaw = typeof body.stylePromptHint === 'string'
+        ? body.stylePromptHint.trim()
+        : '';
+      const stylePromptHint = stylePromptHintRaw ? stylePromptHintRaw.slice(0, 4000) : '';
       console.log(`[AI_AGENT_USE_CASES][${requestId}] assemble_conversation`, {
         provider,
         model,
@@ -6664,6 +6674,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         previousConversationsCount,
         outcome,
         allowSuggestedUseCases,
+        styleHintChars: stylePromptHint.length,
       });
       const conversation = await assembleConversation({
         useCases: ucForConv,
@@ -6673,6 +6684,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         previousConversationsCount,
         outcome,
         allowSuggestedUseCases,
+        stylePromptHint,
         provider,
         model,
         purpose:

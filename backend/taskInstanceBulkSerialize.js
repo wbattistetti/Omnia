@@ -69,6 +69,8 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentConstructionPhase',
   'agentWizardCurrentStep',
   'agentWizardTutorAcknowledged',
+  'agentConversationStyleExample',
+  'agentConversationStyleAuto',
 ];
 
 /**

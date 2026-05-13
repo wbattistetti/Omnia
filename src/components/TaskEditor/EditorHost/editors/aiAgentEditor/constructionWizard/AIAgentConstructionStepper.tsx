@@ -52,6 +52,14 @@ export interface AIAgentConstructionStepperProps {
    * o `undefined`, lo spazio non viene riservato.
    */
   readonly deploySlot?: React.ReactNode;
+  /**
+   * Quando `true`, tutti gli step risultano cliccabili indipendentemente dallo stato di
+   * completamento dei precedenti. Usato per i task legacy (`hasAgentGeneration === true`):
+   * il flusso guidato vale solo per i task vergini, i veterani hanno libero accesso a
+   * qualunque step (anche quelli con criteri di completamento non soddisfatti).
+   * Lo stato visivo `isComplete` resta basato sul `completion[]` reale.
+   */
+  readonly bypassGating?: boolean;
 }
 
 /**
@@ -80,8 +88,22 @@ export function AIAgentConstructionStepper({
   costsActive = false,
   onSelectCosts,
   deploySlot = null,
+  bypassGating = false,
 }: AIAgentConstructionStepperProps): React.ReactElement {
-  const enabled = React.useMemo(() => computeStepEnabled(completion), [completion]);
+  /**
+   * Per i veterani (`bypassGating=true`) tutti gli step sono cliccabili senza vincolo di
+   * ordine: il flusso guidato vale solo per i task vergini. Per i task nuovi
+   * (`bypassGating=false`) si applica la regola "step `i` cliccabile solo se tutti i `0..i-1`
+   * sono ✅" (vedi `computeStepEnabled`). In entrambi i casi lo stato visivo `isComplete`
+   * resta basato su `completion[]` reale.
+   */
+  const enabled = React.useMemo(
+    () =>
+      bypassGating
+        ? (new Array(AGENT_WIZARD_STEP_COUNT).fill(true) as readonly boolean[])
+        : computeStepEnabled(completion),
+    [bypassGating, completion]
+  );
 
   return (
     <nav

@@ -874,6 +874,12 @@ export interface AssembleAIAgentConversationParams {
   provider: string;
   model: string;
   callMeta?: AiCallMeta;
+  /**
+   * Esempio di stile fornito dal designer nel passo «Conversazione» (textarea libera).
+   * Quando presente, viene incorporato nel prompt LLM con istruzione esplicita di imitare
+   * lo stile. Se vuoto/omesso, l'AI sceglie liberamente lo stile (gate "auto" del designer).
+   */
+  stylePromptHint?: string;
 }
 
 function newClientConversationId(): string {
@@ -1024,6 +1030,15 @@ export async function assembleAIAgentConversationApi(
     }
     if (typeof previousConversationsCount === 'number' && previousConversationsCount > 0) {
       bodyPayload.previousConversationsCount = previousConversationsCount;
+    }
+    /**
+     * Style hint testuale fornito dal designer nel passo «Conversazione». Viene aggiunto al
+     * prompt server-side con un'istruzione esplicita ("crea le conversazioni nello stile
+     * di questo esempio"). Trim difensivo: stringhe whitespace-only sono considerate
+     * "non fornite" e omesse dal payload (gate "auto" del designer).
+     */
+    if (typeof params.stylePromptHint === 'string' && params.stylePromptHint.trim().length > 0) {
+      bodyPayload.stylePromptHint = params.stylePromptHint.trim();
     }
     const res = await fetch('/design/ai-agent-generate', {
       method: 'POST',

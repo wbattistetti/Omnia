@@ -134,6 +134,7 @@ function buildAssembleConversationUserMessage({
   previousConversationsCount,
   outcome,
   allowSuggestedUseCases,
+  stylePromptHint,
 }) {
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
@@ -150,6 +151,17 @@ function buildAssembleConversationUserMessage({
   const previousHint =
     typeof previousConversationsCount === 'number' && previousConversationsCount > 0
       ? `\nThis is conversation #${previousConversationsCount + 1}: keep the SAME arc shape (Opening → Middle → Closing) but vary the MIDDLE use cases vs the previous conversations when possible.`
+      : '';
+  /**
+   * Style hint del designer (textarea «Imita questo stile» nel passo «Conversazione»).
+   * Quando presente, istruisce il modello a imitare il REGISTRO/TONO/RITMO dell'esempio
+   * limitatamente ai turni USER (i turni AGENT restano vincolati al canonico
+   * `assistant_example` per policy del modello). Cap a 4000 char (già applicato
+   * server-side in `server.js` ma manteniamo difesa in profondità).
+   */
+  const styleHint =
+    typeof stylePromptHint === 'string' && stylePromptHint.trim()
+      ? `\nDESIGNER_STYLE_EXAMPLE (mimic the REGISTER, TONE and RHYTHM of this dialogue when writing USER turns; keep AGENT turns verbatim from the canonical assistant_example):\n"""\n${stylePromptHint.trim().slice(0, 4000)}\n"""\n`
       : '';
   const { targetTurns, minMix, maxMix } = computeConversationLengthHints(useCases.length);
   const outcomeInfo = describeOutcome(outcome);
@@ -182,7 +194,7 @@ USE_CASE_MIX: pick between ${minMix} and ${maxMix} distinct use cases from the c
 
 AVAILABLE_USE_CASES (id, label, payoff, assistant_example):
 ${compact}
-${ctx}${style}${previousHint}
+${ctx}${style}${styleHint}${previousHint}
 
 Task: build ONE simulated conversation between a USER and an AGENT with a COMPLETE NARRATIVE ARC.
 
@@ -310,6 +322,7 @@ function findCatalogSynonymForSuggestion(proposedLabel, useCases) {
  * @param {number} [params.previousConversationsCount]
  * @param {'positive'|'negative'} [params.outcome]
  * @param {boolean} [params.allowSuggestedUseCases]
+ * @param {string} [params.stylePromptHint] Esempio testuale «Imita questo stile» del designer; il modello mimerà il registro nei turni USER.
  * @param {string} [params.provider]
  * @param {string} [params.model]
  * @param {import('./AIProviderService')} params.aiProviderService
@@ -322,6 +335,7 @@ async function assembleConversation({
   previousConversationsCount,
   outcome,
   allowSuggestedUseCases,
+  stylePromptHint,
   provider = 'groq',
   model,
   purpose,
@@ -346,6 +360,7 @@ async function assembleConversation({
         previousConversationsCount,
         outcome: normalizedOutcome,
         allowSuggestedUseCases: allowSuggested,
+        stylePromptHint,
       }),
     },
   ];

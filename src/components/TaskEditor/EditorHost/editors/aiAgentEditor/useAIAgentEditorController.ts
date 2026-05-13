@@ -280,6 +280,16 @@ export function useAIAgentEditorController({
   const [agentWizardTutorAcknowledged, setAgentWizardTutorAcknowledgedState] =
     React.useState(false);
 
+  /**
+   * Stato del **gate di stile** del passo «Conversazione». Almeno una delle due deve essere
+   * "valorizzata" per abilitare la generazione di nuove conversazioni:
+   * - `agentConversationStyleExample`: testo libero (esempio di dialogo nello stile desiderato).
+   * - `agentConversationStyleAuto`: checkbox «Lascia che Omnia scelga uno stile».
+   */
+  const [agentConversationStyleExample, setAgentConversationStyleExampleState] =
+    React.useState('');
+  const [agentConversationStyleAuto, setAgentConversationStyleAutoState] = React.useState(false);
+
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
   );
@@ -533,6 +543,28 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  /**
+   * Setter del **gate di stile** del passo «Conversazione». Marcano dirty per persistere.
+   *
+   * Disgiunzione: una sola delle due fa "valido" lo stato (testo non vuoto OPPURE flag true).
+   * Quando l'utente scrive nell'esempio, NON resetta automaticamente la checkbox auto: stati
+   * indipendenti — il gate UI considera valido se *almeno uno* dei due è valorizzato.
+   */
+  const setAgentConversationStyleExample = React.useCallback((next: string) => {
+    setAgentConversationStyleExampleState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+  const setAgentConversationStyleAuto = React.useCallback((next: boolean) => {
+    setAgentConversationStyleAutoState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
   const hydratedRef = React.useRef(false);
   React.useEffect(() => {
     hydratedRef.current = hydrated;
@@ -644,6 +676,8 @@ export function useAIAgentEditorController({
     setAgentConstructionPhaseState(b.agentConstructionPhase);
     setAgentWizardCurrentStepState(b.agentWizardCurrentStep);
     setAgentWizardTutorAcknowledgedState(b.agentWizardTutorAcknowledged);
+    setAgentConversationStyleExampleState(b.agentConversationStyleExample);
+    setAgentConversationStyleAutoState(b.agentConversationStyleAuto);
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -749,6 +783,8 @@ export function useAIAgentEditorController({
       agentConstructionPhase,
       agentWizardCurrentStep,
       agentWizardTutorAcknowledged,
+      agentConversationStyleExample,
+      agentConversationStyleAuto,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -793,6 +829,8 @@ export function useAIAgentEditorController({
     agentConstructionPhase,
     agentWizardCurrentStep,
     agentWizardTutorAcknowledged,
+    agentConversationStyleExample,
+    agentConversationStyleAuto,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -1796,6 +1834,8 @@ export function useAIAgentEditorController({
     agentConstructionPhase,
     agentWizardCurrentStep,
     agentWizardTutorAcknowledged,
+    agentConversationStyleExample,
+    agentConversationStyleAuto,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -1949,5 +1989,9 @@ export function useAIAgentEditorController({
     setAgentWizardCurrentStep,
     agentWizardTutorAcknowledged,
     acknowledgeAgentWizardTutor,
+    agentConversationStyleExample,
+    setAgentConversationStyleExample,
+    agentConversationStyleAuto,
+    setAgentConversationStyleAuto,
   };
 }

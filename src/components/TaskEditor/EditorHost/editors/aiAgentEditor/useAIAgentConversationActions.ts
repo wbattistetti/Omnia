@@ -33,6 +33,11 @@ export interface AssembleConversationParams {
   outcome: UseCaseGeneratorWizardConversationOutcome;
   /** Checkbox toolbar: lascia all'AI la facoltà di proporre AL MASSIMO 1 use case emergente. */
   allowSuggestedUseCases: boolean;
+  /**
+   * Esempio di stile (textarea «Imita questo stile» del passo «Conversazione»). Se vuoto/omesso
+   * l'AI sceglie liberamente lo stile (modalità "auto" del designer).
+   */
+  stylePromptHint?: string;
 }
 
 export interface ProofreadConversationAgentTurnsParams {
@@ -99,6 +104,7 @@ export function useAIAgentConversationActions({
       previousConversationsCount,
       outcome,
       allowSuggestedUseCases,
+      stylePromptHint,
     }: AssembleConversationParams): Promise<UseCaseGeneratorWizardConversation | null> => {
       /**
        * Filtro inclusione: passiamo all'IA SOLO gli use case con `included_in_conversations !==
@@ -129,6 +135,9 @@ export function useAIAgentConversationActions({
           allowSuggestedUseCases,
           provider,
           model,
+          ...(typeof stylePromptHint === 'string' && stylePromptHint.trim().length > 0
+            ? { stylePromptHint: stylePromptHint.trim() }
+            : {}),
           ...(buildCallMeta
             ? {
                 callMeta: buildCallMeta(

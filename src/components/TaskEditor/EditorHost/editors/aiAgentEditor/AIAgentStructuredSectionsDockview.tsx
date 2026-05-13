@@ -1,6 +1,7 @@
 /**
- * Nested Dockview for structured sections only — used by `AIAgentStructuredSectionsPanel` (e.g. legacy `AIAgentLeftColumn`).
- * The main task editor uses a single unified Dockview in `AIAgentEditorDockShell` instead.
+ * Nested Dockview for structured sections only — used by `AIAgentStructuredSectionsPanel`
+ * (e.g. legacy `AIAgentLeftColumn`). Il main task editor non usa più Dockview: è renderizzato
+ * dal `AIAgentConstructionWizardShell` (vedi `aiAgentEditor/constructionWizard/`).
  */
 
 import React from 'react';

@@ -317,22 +317,13 @@ export function WizardStepOneListToolbarControls({
           <span aria-hidden>A↓B</span>
         </button>
       ) : null}
-      {wizard && canShowJsonToggle ? (
-        <CompactIconToggle
-          active={wizard.showJsonPanel}
-          onClick={wizard.toggleShowJsonPanel}
-          title={
-            wizard.showJsonPanel
-              ? 'Nascondi il preview JSON nel pannello destro'
-              : 'Mostra il JSON conversazionale nel pannello destro'
-          }
-          ariaLabel="Mostra/nascondi JSON conversazionale"
-          activeClass="text-violet-300 bg-violet-500/15"
-        >
-          <Braces size={13} aria-hidden />
-        </CompactIconToggle>
-      ) : null}
-      {wizard ? <WizardShowTokensToggle wizard={wizard} /> : null}
+      {/*
+        Toggle «Mostra JSON» ({}) e «Mostra Tokens» ([x]) rimossi dalla toolbar:
+        la tokenizzazione resta «sotto il cofano» — visibile solo nel JSON conversazionale
+        (pannello DX nei passi dedicati). Le icone interferivano col messaggio canonico
+        leggibile e duplicavano controlli già accessibili da altri punti.
+        I prop `wizard` e `canShowJsonToggle` restano in firma per compat, ignorati qui.
+      */}
     </>
   );
 }

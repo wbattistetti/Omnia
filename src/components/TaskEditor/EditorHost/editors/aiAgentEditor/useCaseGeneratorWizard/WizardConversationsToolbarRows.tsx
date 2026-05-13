@@ -29,7 +29,6 @@ import { USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS } from '@domain/useCaseGene
 import type {
   UseCaseGeneratorWizardConversation,
 } from '@domain/useCaseGeneratorWizard/types';
-import { WizardShowTokensToggle } from './WizardStepOneListToolbar';
 
 type ConversationToolbarGroup = 'positive' | 'negative' | 'discovery';
 
@@ -139,10 +138,11 @@ export function WizardConversationsTabsControls({
           {conversations.length}/{maxConversations}
         </span>
       ) : null}
-
-      <div className="ml-auto inline-flex items-center">
-        <WizardShowTokensToggle wizard={wizard} />
-      </div>
+      {/*
+        Toggle «Mostra Tokens» rimosso: la tokenizzazione è ora «sotto il cofano»,
+        visibile solo nel JSON conversazionale. Le bubble agente del passo 2 mostrano
+        sempre la frase canonica leggibile.
+      */}
     </>
   );
 }

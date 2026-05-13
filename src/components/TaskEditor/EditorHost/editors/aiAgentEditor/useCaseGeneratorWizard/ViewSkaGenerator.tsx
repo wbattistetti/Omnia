@@ -63,21 +63,13 @@ const STEP_COLOR_THEME: Record<
 };
 
 /**
- * Altezza fissa dei pill dello stepper. Pre-allocata all'altezza del pill **più alto**
- * fra quelli espansi: il Passo 2 «Conversazioni», che contiene i cluster outcome
- * (`px-1.5 py-1` + bordo) con dentro le `ConversationTabButton` (`text-[11px] px-2 py-1`).
- * Misura: button ~27px → cluster 27 + py-1 (8px) + bordo (2px) = 37px → pill 37 +
- * py-1.5 (12px) + bordo (2px) = 51px. Arrotondiamo a **52px** per stabilità sub-pixel.
- *
- * Tutti i pill (collassati e attivi di qualunque passo) partono quindi con
- * `min-h-[52px]`: il click su un passo non causa **mai** un salto verticale, anche se
- * il passo selezionato è quello con i cluster.
- *
- * Per tutelare la garanzia anche sotto viewport stretti, l'active pill usa
- * `flex-nowrap` sui propri controlli (vedi sotto): se la barra non sta in larghezza,
- * a wrappare è il pill **intero** dentro il container (`gap-y-2`), non i suoi controlli.
+ * Altezza minima della pill: i tre tab (Casi d'uso / Conversazioni / Prompt e JSON) sono
+ * ora compatti (~32 px) perché i controlli contestuali (espandi, scenario, messaggio,
+ * cluster outcome…) NON vivono più dentro la pill del tab attivo, ma in una **seconda
+ * riga** sotto i tab (vedi `ContextualToolbarRow`). Questo libera spazio verticale e
+ * rende la barra dei tab più leggibile.
  */
-const STEP_PILL_MIN_HEIGHT = 'min-h-[52px]';
+const STEP_PILL_MIN_HEIGHT = 'min-h-[32px]';
 
 function clampRightAsideWidth(px: number, viewportWidth: number): number {
   const max = Math.max(
@@ -167,6 +159,12 @@ export interface ViewSkaGeneratorProps {
    * Default: array vuoto (il bottone resta nascosto, le frecce DX nascoste).
    */
   useCases?: readonly AIAgentUseCase[];
+  /**
+   * Messaggio payoff inline da mostrare sotto i 3 pulsanti di creazione conversazione
+   * (Passo 2). Usato dal **gate di stile**: se l'utente clicca un pulsante senza aver
+   * definito uno stile a SX, il padre passa qui il messaggio in rosso. Default `null`.
+   */
+  conversationsPayoffMessage?: string | null;
 }
 
 function TutorialAsideBody(props: { stepId: UseCaseGeneratorWizardStepId }): React.ReactElement {
@@ -225,6 +223,7 @@ export function ViewSkaGenerator({
   selectedUseCase = null,
   onSelectUseCaseRequest,
   useCases,
+  conversationsPayoffMessage = null,
 }: ViewSkaGeneratorProps) {
   const [clearScope, setClearScope] = React.useState<ClearWizardScope | null>(null);
   const clearUseCasesAnchorRef = React.useRef<HTMLButtonElement>(null);
@@ -312,44 +311,41 @@ export function ViewSkaGenerator({
   const advanceStepAnchorRef = React.useRef<HTMLButtonElement>(null);
 
   const [rightAsideWidthPx, setRightAsideWidthPx] = React.useState(readInitialRightAsideWidth);
-  const [isLgViewport, setIsLgViewport] = React.useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
-  );
   const resizeActiveRef = React.useRef(false);
 
+  /**
+   * Mantiene l'aside DX entro i limiti se cambia la viewport (es. drag finestra). Il media
+   * query `lg` non è più rilevante: il layout è sempre a due colonne (vedi nota nel JSX
+   * sopra). Il clamp serve solo a garantire `min/max` rispetto alla larghezza viewport.
+   */
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onMq = () => setIsLgViewport(mq.matches);
-    mq.addEventListener('change', onMq);
     const onResize = () => {
       setRightAsideWidthPx((w) => clampRightAsideWidth(w, window.innerWidth));
     };
     window.addEventListener('resize', onResize);
     return () => {
-      mq.removeEventListener('change', onMq);
       window.removeEventListener('resize', onResize);
     };
   }, []);
 
   const onAsideResizePointerDown = React.useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!isLgViewport) return;
       e.preventDefault();
       resizeActiveRef.current = true;
       e.currentTarget.setPointerCapture(e.pointerId);
     },
-    [isLgViewport]
+    []
   );
 
   const onAsideResizePointerMove = React.useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!resizeActiveRef.current || !isLgViewport) return;
+      if (!resizeActiveRef.current) return;
       const vw = window.innerWidth;
       const fromRight = vw - e.clientX;
       setRightAsideWidthPx(clampRightAsideWidth(fromRight, vw));
     },
-    [isLgViewport]
+    []
   );
 
   const finishAsideResize = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -435,7 +431,7 @@ export function ViewSkaGenerator({
                     {active ? (
                       <div
                         className={[
-                          'flex max-w-full flex-nowrap items-center gap-x-3 rounded-lg border px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-all',
+                          'flex max-w-full flex-nowrap items-center gap-x-2 rounded-lg border px-3 py-1 text-[11px] font-semibold tracking-wide transition-all',
                           STEP_PILL_MIN_HEIGHT,
                           theme.active,
                         ].join(' ')}
@@ -456,12 +452,6 @@ export function ViewSkaGenerator({
                             </span>
                           ) : null}
                         </button>
-                        <ActiveStepInlineControls
-                          stepId={step.id}
-                          wizard={wizard}
-                          showListControls={showListToolbarRow}
-                          canShowJsonToggle={canShowJsonToggle}
-                        />
                         {canClear ? (
                           <StepClearButton
                             ref={clearRef}
@@ -485,7 +475,7 @@ export function ViewSkaGenerator({
                         }
                         onClick={() => wizard.selectStep(index)}
                         className={[
-                          'flex max-w-[180px] items-center rounded-lg border px-3 py-1.5 text-left text-[11px] font-semibold tracking-wide transition-all',
+                          'flex max-w-[180px] items-center rounded-lg border px-3 py-1 text-left text-[11px] font-semibold tracking-wide transition-all',
                           STEP_PILL_MIN_HEIGHT,
                           selectable
                             ? `cursor-pointer border-slate-600/80 bg-slate-900/90 text-amber-100/85 ${theme.inactiveHover}`
@@ -505,20 +495,36 @@ export function ViewSkaGenerator({
                 );
               })}
             </div>
-            <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
-              {/*
-                NB: il pulsante «Crea prompt conversazionale» è stato spostato nella tab strip
-                Dockview (vedi `AIAgentNonClosableDockTab`) per essere accessibile da qualunque
-                tab attivo, non solo dal pannello «Use case». Questa toolbar resta dedicata allo
-                stepper del wizard.
-              */}
-            </div>
           </div>
+          {/*
+            Riga 2 (toolbar contestuale): controlli che dipendono dal tab attivo.
+            È una RIGA separata sotto i tab — non più inline dentro la pill — così la
+            riga dei tab resta breve e la toolbar prende il colore-tema del passo attivo
+            (verde per Casi d'uso, sky per Conversazioni, ambra per legacy).
+            Quando il passo non ha controlli contestuali (o sono nascosti) la riga non
+            viene resa: niente spazio sprecato.
+          */}
+          <ContextualToolbarRow
+            stepId={wizard.currentStepId}
+            wizard={wizard}
+            showListControls={showListToolbarRow}
+            canShowJsonToggle={canShowJsonToggle}
+            themeKey={wizard.currentStepId}
+          />
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-0 lg:flex-row">
+        {/*
+          Layout SX/DX SEMPRE a due colonne (flex-row) — non più condizionato a `lg:` del
+          viewport. Il vincolo `min-w-[720px]` su `AIAgentEditor` garantisce che il pannello
+          interno non scenda mai sotto questa soglia (sotto, scroll orizzontale esterno),
+          quindi le due colonne hanno sempre lo spazio per coesistere senza che la SX (lista
+          use case / bubble view) venga schiacciata a 0 dall'aside DX (Guida rapida).
+          Risolve la regressione: in modalità "verticale" (pannello dock stretto) il SX
+          non sparisce più.
+        */}
+        <div className="flex min-h-0 flex-1 flex-row gap-0">
           <section
-            className="flex min-h-0 min-w-0 flex-1 flex-col border-b border-slate-800 lg:border-b-0"
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
             aria-label="Area lavoro passo corrente"
           >
             {/*
@@ -532,7 +538,7 @@ export function ViewSkaGenerator({
             aria-orientation="vertical"
             aria-label="Ridimensiona pannello destro"
             tabIndex={0}
-            className="hidden w-2 shrink-0 cursor-col-resize touch-none flex-col items-stretch justify-center border-x border-slate-700/75 bg-slate-900/45 select-none hover:bg-violet-950/30 lg:flex"
+            className="flex w-2 shrink-0 cursor-col-resize touch-none flex-col items-stretch justify-center border-x border-slate-700/75 bg-slate-900/45 select-none hover:bg-violet-950/30"
             onPointerDown={onAsideResizePointerDown}
             onPointerMove={onAsideResizePointerMove}
             onPointerUp={finishAsideResize}
@@ -541,8 +547,8 @@ export function ViewSkaGenerator({
             <span className="mx-auto h-12 w-1 rounded-full bg-slate-500/90" aria-hidden />
           </div>
           <aside
-            className="flex w-full min-w-0 shrink-0 flex-col border-slate-800 bg-gradient-to-b from-slate-900/55 to-slate-950/90 lg:w-auto lg:max-w-[60vw] lg:min-w-[250px]"
-            style={isLgViewport ? { width: rightAsideWidthPx } : undefined}
+            className="flex min-w-[250px] max-w-[60vw] shrink-0 flex-col border-slate-800 bg-gradient-to-b from-slate-900/55 to-slate-950/90"
+            style={{ width: rightAsideWidthPx }}
             aria-label={
               showJsonRightPanel
                 ? 'Anteprima JSON conversazionale dello use case selezionato'
@@ -629,6 +635,7 @@ export function ViewSkaGenerator({
                     onAdvanceStep={onAdvanceWizardStep}
                     canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
                     advanceStepAnchorRef={advanceStepAnchorRef}
+                    payoffMessage={conversationsPayoffMessage}
                   />
                   {wizard.showNoChangesTutorial ? (
                     <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
@@ -712,20 +719,48 @@ export function ViewSkaGenerator({
  * Il conteggio totale (use case / conversazioni) è stato spostato nel label
  * del pill (es. `1. Casi d'uso (4)`), quindi qui NON è più ripetuto.
  */
-function ActiveStepInlineControls({
+/**
+ * Riga 2 dello stepper: toolbar contestuale del tab attivo, sotto la riga dei tab.
+ *
+ * - Sfondo coerente al colore tema del passo (`THEME_TOOLBAR_BG`), così visivamente è
+ *   chiaro che la riga "appartiene" al tab acceso sopra.
+ * - Border-top sottile in tinta per separarla senza creare un secondo header pesante.
+ * - Quando il passo non ha controlli da mostrare (o sono nascosti), il componente
+ *   ritorna `null` e la riga non viene riservata: niente spazio sprecato.
+ *
+ * NB: il toggle «Mostra Tokens» (icona `[x]`) e il toggle «Mostra JSON» (icona `{}`)
+ * sono stati rimossi dalla toolbar contestuale: la tokenizzazione resta «sotto il
+ * cofano» (visibile solo nel JSON conversazionale) e il JSON è già accessibile dal
+ * pannello DX nei passi dedicati.
+ */
+const THEME_TOOLBAR_BG: Record<UseCaseGeneratorWizardStepId, string> = {
+  use_case_list: 'border-violet-400/30 bg-violet-950/35',
+  conversations: 'border-sky-400/30 bg-sky-950/30',
+  tokenization: 'border-amber-400/30 bg-amber-950/25',
+};
+
+function ContextualToolbarRow({
   stepId,
   wizard,
   showListControls,
   canShowJsonToggle,
+  themeKey,
 }: {
   stepId: UseCaseGeneratorWizardStepId;
   wizard: UseCaseGeneratorWizardModel;
   showListControls: boolean;
   canShowJsonToggle: boolean;
+  themeKey: UseCaseGeneratorWizardStepId;
 }): React.ReactElement | null {
+  const themeBg = THEME_TOOLBAR_BG[themeKey];
+
   if (stepId === 'conversations') {
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+      <div
+        className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-3 py-1.5 ${themeBg}`}
+        role="toolbar"
+        aria-label="Controlli del passo Conversazioni"
+      >
         <WizardConversationsTabsControls wizard={wizard} />
       </div>
     );
@@ -734,7 +769,11 @@ function ActiveStepInlineControls({
   if (stepId === 'use_case_list') {
     if (!showListControls) return null;
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div
+        className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-t px-3 py-1.5 ${themeBg}`}
+        role="toolbar"
+        aria-label="Controlli del passo Casi d'uso"
+      >
         <WizardStepOneListToolbarControls
           wizard={wizard}
           canShowJsonToggle={canShowJsonToggle}
@@ -747,8 +786,17 @@ function ActiveStepInlineControls({
   if (stepId === 'tokenization') {
     if (!showListControls) return null;
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-        <WizardShowTokensToggle wizard={wizard} />
+      <div
+        className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-t px-3 py-1.5 ${themeBg}`}
+        role="toolbar"
+        aria-label="Controlli del passo Tokenizzazione"
+      >
+        {/*
+          Toggle «Mostra Tokens» rimosso. Il passo tokenizzazione mostra la sua azione
+          principale dal pannello DX; questa riga 2 resta vuota (niente da mostrare) e
+          quindi il chiamante può scegliere di non renderizzarla — qui non rendiamo
+          nulla per evitare una riga vuota visivamente confusa.
+        */}
       </div>
     );
   }

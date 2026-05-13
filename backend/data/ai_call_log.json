@@ -1,6 +1,66 @@
 {
   "records": [
     {
+      "id": "a88b4530-4412-496d-b485-9dc93acd78f7",
+      "ts": "2026-05-13T07:25:34.077Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 3319,
+      "outputTokens": 1260,
+      "totalTokens": 4579,
+      "costUsd": 0.00334975,
+      "costEur": 0.002847220505,
+      "durationMs": 11816,
+      "pricingFound": true,
+      "error": null
+    },
+    {
+      "id": "5dd446ad-927b-4ad4-9dd4-f3112bc70179",
+      "ts": "2026-05-13T07:25:22.248Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 3319,
+      "outputTokens": 1235,
+      "totalTokens": 4554,
+      "costUsd": 0.00329975,
+      "costEur": 0.002804721505,
+      "durationMs": 13709,
+      "pricingFound": true,
+      "error": null
+    },
+    {
+      "id": "a37e53d1-7b09-4255-9315-af7207fdb894",
+      "ts": "2026-05-13T07:25:08.527Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 3319,
+      "outputTokens": 1204,
+      "totalTokens": 4523,
+      "costUsd": 0.00323775,
+      "costEur": 0.002752022745,
+      "durationMs": 11557,
+      "pricingFound": true,
+      "error": null
+    },
+    {
+      "id": "55db07e3-d4a1-45bb-848b-501588a43b90",
+      "ts": "2026-05-13T07:24:56.955Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 3287,
+      "outputTokens": 1187,
+      "totalTokens": 4474,
+      "costUsd": 0.00319575,
+      "costEur": 0.0027163235849999995,
+      "durationMs": 13383,
+      "pricingFound": true,
+      "error": null
+    },
+    {
       "id": "a9d8bd78-06ee-4405-8a76-dc99bb335e89",
       "ts": "2026-05-13T00:12:36.284Z",
       "providerId": "openai",
@@ -17,6 +77,6 @@
     }
   ],
   "meta": {
-    "updatedAt": "2026-05-13T00:12:36.285Z"
+    "updatedAt": "2026-05-13T07:25:34.077Z"
   }
 }

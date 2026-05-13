@@ -1,16 +1,16 @@
 /**
- * AI Agent Construction Wizard — Shell che orchestra Stepper + vista step corrente.
+ * AI Agent Construction Wizard — Shell del Task Editor AI Agent.
  *
- * Sostituisce il `AIAgentEditorDockShell` quando `agentConstructionPhase === 'wizard'`.
+ * Post-unificazione layout: è l'**unico** shell del Task Editor AI Agent (il vecchio
+ * `AIAgentEditorDockShell` è stato rimosso). Tutti i task — nuovi e legacy — sono
+ * renderizzati qui.
  *
  * Filosofia di design:
  *   - Riusa as-is i pannelli esistenti (`EditorUnifiedDescriptionPanel`,
  *     `EditorBackendsPanel`, `EditorUseCasesPanel`, `EditorDatiPanel`,
- *     `EditorIaRuntimePanel`). NIENTE riscrittura: il wizard è solo una nuova
- *     "chrome" che li mostra uno alla volta, sequenziali.
+ *     `EditorIaRuntimePanel`). NIENTE riscrittura: il wizard è solo la "chrome"
+ *     che li mostra uno alla volta, sequenziali.
  *   - Renderizza un'header tutorial breve sopra ciascuno step (titolo + 1 riga di guida).
- *   - L'auto-transizione `wizard → edit` quando tutti i 5 step sono ✅ è delegata via
- *     `onWizardComplete` (chiamato in effect dal parent quando `allComplete` diventa true).
  *
  * Niente Dockview qui: lo shell wizard è un layout fisso, lineare.
  */
@@ -63,6 +63,14 @@ export interface AIAgentConstructionWizardShellProps {
    * agnostico rispetto al contenuto (il dropdown «Deploy» vive lato parent).
    */
   readonly deploySlot?: React.ReactNode;
+  /**
+   * Quando `true` il gating "step precedenti devono essere ✅" viene bypassato e tutti gli
+   * step risultano cliccabili. Usato per i task legacy (`hasAgentGeneration === true`) che
+   * pre-esistevano prima del wizard e potrebbero non avere tutti i criteri di completamento
+   * soddisfatti, ma vanno comunque navigabili liberamente: il flusso guidato vale solo per
+   * i task vergini.
+   */
+  readonly bypassGating?: boolean;
 }
 
 /**
@@ -95,6 +103,7 @@ export function AIAgentConstructionWizardShell({
   taskId,
   taskLabel,
   deploySlot = null,
+  bypassGating = false,
 }: AIAgentConstructionWizardShellProps): React.ReactElement {
   const safeStep: AgentWizardStepIndex =
     STEP_RENDERERS[currentStep] !== undefined ? currentStep : AGENT_WIZARD_FIRST_STEP_INDEX;
@@ -111,6 +120,7 @@ export function AIAgentConstructionWizardShell({
         costsActive={costsActive}
         onSelectCosts={onSelectCosts}
         deploySlot={deploySlot}
+        bypassGating={bypassGating}
       />
       {costsActive ? (
         /*

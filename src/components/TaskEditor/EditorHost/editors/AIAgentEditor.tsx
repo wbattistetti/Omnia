@@ -9,7 +9,6 @@ import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
-import { AIAgentEditorDockShell } from './aiAgentEditor/AIAgentEditorDockShell';
 import {
   useAIAgentEditorController,
   type GenerateUseCaseBundleOutcome,
@@ -361,6 +360,13 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           previousConversationsCount: accumulated.length,
           outcome,
           allowSuggestedUseCases,
+          /**
+           * Style hint: passa l'esempio testuale del designer SOLO se è valorizzato.
+           * Quando il designer ha invece spuntato «Lascia che Omnia scelga uno stile»
+           * l'esempio è omesso (il campo `agentConversationStyleExample` è tipicamente
+           * vuoto in quel caso) e l'AI sceglie liberamente.
+           */
+          stylePromptHint: c.agentConversationStyleExample,
         });
         if (!conv) break;
         useCaseGenWizard.appendConversation(conv);
@@ -382,6 +388,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       conversationActions,
       useCaseGenWizard,
       c.useCases,
+      c.agentConversationStyleExample,
     ]
   );
 
@@ -654,16 +661,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     c.agentPrompt.trim().length > 0;
 
   /**
-   * In modalit\u00e0 wizard sullo step Task (index 0) il pulsante «Create Agent» va reso
-   * accanto al titolo dello step (vedi `AIAgentConstructionWizardShell`), NON nell'header
-   * globale dell'editor n\u00e9 nella tab toolbar del Response Editor (3 punti potenziali di
-   * rendering — l'header globale, la tab toolbar quando `hideHeader=true`, e l'header dello
-   * step nel wizard). \u00c8 una richiesta UX per avere l'azione vicina al campo descrizione che
-   * la genera. Negli altri step del wizard il pulsante non ha senso. In modalit\u00e0 `edit` il
-   * pulsante torna nell'header globale / tab toolbar come prima.
+   * Sullo step Task (index 0) del wizard il pulsante «Create Agent» va reso accanto al titolo
+   * dello step (vedi `AIAgentConstructionWizardShell`), NON nell'header globale dell'editor né
+   * nella tab toolbar del Response Editor. È una richiesta UX per avere l'azione vicina al
+   * campo descrizione che la genera. Negli altri step il pulsante non ha senso e viene soppresso.
    */
-  const isWizardTaskStep =
-    c.agentConstructionPhase === 'wizard' && c.agentWizardCurrentStep === 0;
+  const isWizardTaskStep = c.agentWizardCurrentStep === 0;
 
   const { primaryAgentActionLabel } = useAIAgentToolbarController({
     task,
@@ -733,18 +736,21 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   /**
    * ───────────────────────────────────────────────────────────────────────────────────────────
-   * Phase machine top-level: Tutor (benvenuto) → Wizard (5 step guidati) → Edit (Dockview).
+   * Top-level layout: Tutor di benvenuto → Construction Wizard (unico shell).
    * ───────────────────────────────────────────────────────────────────────────────────────────
    *
-   * - `agentConstructionPhase` (persisted): 'wizard' | 'edit'.
-   * - `agentWizardCurrentStep` (persisted): 0..4. Permette riprendere dallo step lasciato.
-   * - Schermata Tutor: visibile SOLO se phase === 'wizard' && nessuno step ancora completato
-   *   (cioè descrizione vuota): è un anchor narrativo per il primissimo accesso.
-   * - Auto-transizione `wizard → edit`: scatta quando TUTTI i 5 step sono ✅ (vedi regole D
-   *   in `agentWizardStepCompletion.ts`). Niente bottone «Termina».
+   * Post-unificazione layout: il vecchio Dockview classic è stato rimosso. Tutti i task
+   * — nuovi e legacy — usano lo stesso `AIAgentConstructionWizardShell`. Il campo
+   * `agentConstructionPhase` viene mantenuto sui dati persistiti per backward compat ma è
+   * sempre normalizzato a `'wizard'` dal resolver (vedi
+   * `domain/aiAgentConstruction/agentConstructionPhase.ts`).
    *
-   * Sincronizziamo `hasAgentGeneration === true` ⇔ `phase === 'edit'` come invariante
-   * (Opzione A del design): l'agente è in edit quando ha generato almeno una volta.
+   * - `agentWizardCurrentStep` (persisted): 0..4. Permette riprendere dallo step lasciato.
+   * - Schermata Tutor: visibile UNA volta sola, controllata dal flag persistito
+   *   `agentWizardTutorAcknowledged`. Per i task legacy con `hasAgentGeneration=true` lo
+   *   snapshot lo forza a `true` (i veterani non rivedono l'onboarding).
+   * - `completion[]` serve a colorare gli step ✅ nello stepper. Per i veterani gli step
+   *   incompleti restano comunque navigabili (vedi `bypassGating` dello stepper).
    */
   const completion = React.useMemo(
     () =>
@@ -765,31 +771,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     [c.designDescription, c.useCases.length, useCaseGenWizard.conversations.length]
   );
 
-  const phaseSetter = c.setAgentConstructionPhase;
-  React.useEffect(() => {
-    if (
-      c.agentConstructionPhase === 'wizard' &&
-      allWizardStepsComplete &&
-      c.hasAgentGeneration
-    ) {
-      phaseSetter('edit');
-    }
-  }, [
-    c.agentConstructionPhase,
-    allWizardStepsComplete,
-    c.hasAgentGeneration,
-    phaseSetter,
-  ]);
-
   /**
-   * Schermata Tutor di benvenuto: visibile solo per task in fase wizard che non hanno
-   * ancora acknowledgato la Tutor (flag persistito `agentWizardTutorAcknowledged`).
-   * Decisione di prodotto E=2: la Tutor \u00e8 didattica e va vista UNA volta sola; le
-   * riaperture successive saltano direttamente allo Stepper, anche se l'utente non ha
-   * ancora completato alcuno step.
+   * Schermata Tutor: si mostra solo se l'utente non ha ancora cliccato «Cominciamo».
+   * `agentWizardTutorAcknowledged` per i task legacy è già forzato a `true` dallo
+   * snapshot loader, quindi i veterani non la vedono mai (vedi `buildTaskSnapshotFromRaw`).
    */
-  const showWelcomeTutor =
-    c.agentConstructionPhase === 'wizard' && !c.agentWizardTutorAcknowledged;
+  const showWelcomeTutor = !c.agentWizardTutorAcknowledged;
 
   const stepSetter = c.setAgentWizardCurrentStep;
   const ackTutor = c.acknowledgeAgentWizardTutor;
@@ -1077,6 +1064,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
     canCreateConversationalPrompt,
     onOpenConversationalPromptDialog,
+
+    agentConversationStyleExample: c.agentConversationStyleExample,
+    setAgentConversationStyleExample: c.setAgentConversationStyleExample,
+    agentConversationStyleAuto: c.agentConversationStyleAuto,
+    setAgentConversationStyleAuto: c.setAgentConversationStyleAuto,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
@@ -1098,8 +1090,16 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    */
   const effectiveHideHeader = hideHeader && !fullscreenPref.enabled;
 
-  const editorBody = (
-    <div className="h-full w-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
+  /**
+   * Vincolo larghezza minima del Task Editor AI Agent (720 px). Sotto questa soglia il layout
+   * interno del Construction Wizard (specialmente lo step Conversazione con la lista use case
+   * + guida laterale) si comprime fino a far sparire i pannelli. Per evitare la regressione
+   * UX usiamo `min-w-[720px]` sull'inner-body e `overflow-x-auto` sul wrapper esterno: se il
+   * pannello Dockview esterno è più stretto di 720px (es. utente lo trascina o lo splitta in
+   * verticale), appare una scrollbar orizzontale invece di un layout rotto.
+   */
+  const editorInner = (
+    <div className="h-full w-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden min-w-[720px]">
       {!effectiveHideHeader && (
         <div
           className="flex items-center gap-2 px-4 py-2 border-b border-slate-800 shrink-0"
@@ -1183,22 +1183,18 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
       <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
         {/*
-          Phase machine top-level: tre viste mutuamente esclusive.
-          - Tutor di benvenuto: solo per task ancora vergini (descrizione vuota in wizard).
-          - WizardShell: wizard di costruzione 5-step con stepper visivo + gating soft.
-          - DockShell: refinement libero post-completamento (Dockview attuale, intatto).
-          Tutte e tre condividono lo stesso `dockValue` via `AIAgentEditorDockProvider` per
-          riusare i pannelli esistenti senza duplicazioni.
+          Layout top-level (post-unificazione): due sole viste mutuamente esclusive.
+          - Tutor di benvenuto: solo al primo accesso di un task vergine.
+          - Construction Wizard: unico shell del Task Editor AI Agent. I pannelli interni
+            (Editor*Panel) leggono dallo stesso `dockValue` via `AIAgentEditorDockProvider`,
+            single source of truth.
+          Per i veterani (`hasAgentGeneration === true`) il flag `agentWizardTutorAcknowledged`
+          è già forzato a `true` dallo snapshot loader, quindi cadono direttamente nello
+          stepper senza vedere la Tutor.
         */}
         {showWelcomeTutor || tutorExiting ? (
           <AIAgentWelcomeTutor onStart={onStartFromTutor} isExiting={tutorExiting} />
-        ) : c.agentConstructionPhase === 'wizard' ? (
-          /*
-            WizardShell renderizza i pannelli esistenti (Editor*Panel) che leggono dal
-            DockProvider; il provider va quindi montato anche qui (non solo dentro il
-            DockShell del ramo `edit`). Stesso `dockValue` usato dal ramo Dockview
-            classic — single source of truth.
-          */
+        ) : (
           <AIAgentEditorDockProvider value={dockValue}>
             <AIAgentConstructionWizardShell
               currentStep={c.agentWizardCurrentStep}
@@ -1211,16 +1207,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               taskId={instanceId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}
+              bypassGating={c.hasAgentGeneration}
             />
           </AIAgentEditorDockProvider>
-        ) : (
-          <AIAgentEditorDockShell
-            layoutKey={dockLayoutKey}
-            hasAgentGeneration={c.hasAgentGeneration}
-            showRightPanel={showRightPanel}
-            value={dockValue}
-            generateError={c.generateError}
-          />
         )}
         {/*
           Dialog «Crea prompt conversazionale»: confinato al rettangolo dell'editor (non
@@ -1233,6 +1222,18 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           onClose={onCloseConversationalPromptDialog}
         />
       </div>
+    </div>
+  );
+
+  /**
+   * Wrapper esterno con `overflow-x-auto`: se il pannello Dockview che ospita l'editor è
+   * più stretto di 720px, appare una scrollbar orizzontale interna invece di un layout
+   * compresso/rotto. `overflow-y-hidden` evita doppia scrollbar verticale (quella interna
+   * dei pannelli del wizard rimane attiva).
+   */
+  const editorBody = (
+    <div className="h-full w-full overflow-x-auto overflow-y-hidden bg-slate-950">
+      {editorInner}
     </div>
   );
 

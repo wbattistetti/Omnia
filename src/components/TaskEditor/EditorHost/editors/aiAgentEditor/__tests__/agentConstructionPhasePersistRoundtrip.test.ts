@@ -1,10 +1,14 @@
 /**
  * Tests del roundtrip persistenza phase machine: snapshot (read) ↔ patch (write).
  *
- * Garantisce che i nuovi campi `agentConstructionPhase` e `agentWizardCurrentStep`:
- *   - vengano letti correttamente da `buildTaskSnapshotFromRaw` con fallback intelligente;
- *   - vengano scritti dal `buildAIAgentTaskPersistPatch` senza perdita semantica;
- *   - sopravvivano a un giro completo read → modify → write → read.
+ * Post-unificazione layout: il resolver (`resolveAgentConstructionPhase`) ritorna sempre
+ * `'wizard'` perché esiste un unico shell. I test riflettono questa normalizzazione:
+ * - lo snapshot mappa SEMPRE la phase a `'wizard'` (anche `'edit'` storico → `'wizard'`);
+ * - la patch resta fedele al valore in input (per non corrompere dati storici di produzione
+ *   che potrebbero contenere ancora `'edit'`).
+ *
+ * I campi `agentWizardCurrentStep` e `agentWizardTutorAcknowledged` mantengono la
+ * semantica originale.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -48,14 +52,15 @@ describe('phase machine persist roundtrip', () => {
     expect(snapshot.agentWizardCurrentStep).toBe(2);
   });
 
-  it('roundtrip completo wizard \u2192 edit preserva la phase', () => {
+  it("snapshot normalizza il valore storico 'edit' a 'wizard' (post-unificazione layout)", () => {
     const patch = buildAIAgentTaskPersistPatch({
       ...baseState,
       agentConstructionPhase: 'edit',
       agentWizardCurrentStep: 4,
     });
+    expect(patch.agentConstructionPhase).toBe('edit');
     const snapshot = buildTaskSnapshotFromRaw(patch);
-    expect(snapshot.agentConstructionPhase).toBe('edit');
+    expect(snapshot.agentConstructionPhase).toBe('wizard');
     expect(snapshot.agentWizardCurrentStep).toBe(4);
   });
 
@@ -69,13 +74,13 @@ describe('phase machine persist roundtrip', () => {
     expect(snapshot.agentWizardCurrentStep).toBe(0);
   });
 
-  it('snapshot di task pre-feature gi\u00e0 generato \u2192 phase = edit (veterani saltano il wizard)', () => {
+  it('snapshot di task pre-feature gi\u00e0 generato \u2192 phase = wizard (unico shell post-unificazione)', () => {
     const legacyRaw = {
       agentDesignDescription: 'qualche descrizione',
       agentDesignHasGeneration: true,
     };
     const snapshot = buildTaskSnapshotFromRaw(legacyRaw);
-    expect(snapshot.agentConstructionPhase).toBe('edit');
+    expect(snapshot.agentConstructionPhase).toBe('wizard');
     expect(snapshot.agentWizardCurrentStep).toBe(0);
   });
 

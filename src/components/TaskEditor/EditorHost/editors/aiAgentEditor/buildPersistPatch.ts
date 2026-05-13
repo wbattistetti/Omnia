@@ -37,6 +37,10 @@ export interface AIAgentPersistState {
   agentWizardCurrentStep: AgentWizardStepIndex;
   /** True dopo il primo click «Cominciamo» nella schermata Tutor del wizard. */
   agentWizardTutorAcknowledged: boolean;
+  /** Esempio di stile conversazionale (multilinea) — gate del passo «Conversazione». */
+  agentConversationStyleExample: string;
+  /** Checkbox «Lascia che Omnia scelga uno stile» — gate del passo «Conversazione». */
+  agentConversationStyleAuto: boolean;
 }
 
 /**
@@ -68,5 +72,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentConstructionPhase: state.agentConstructionPhase,
     agentWizardCurrentStep: state.agentWizardCurrentStep,
     agentWizardTutorAcknowledged: state.agentWizardTutorAcknowledged,
+    agentConversationStyleExample: state.agentConversationStyleExample,
+    agentConversationStyleAuto: state.agentConversationStyleAuto,
   };
 }

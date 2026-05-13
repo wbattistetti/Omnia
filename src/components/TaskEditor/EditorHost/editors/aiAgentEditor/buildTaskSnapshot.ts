@@ -53,6 +53,16 @@ export interface AIAgentTaskSnapshot {
    * (non ha senso mostrare la Tutor a chi ha gi\u00e0 superato la fase di costruzione).
    */
   agentWizardTutorAcknowledged: boolean;
+  /**
+   * Esempio di stile conversazionale fornito dal designer (vuoto = nessun esempio).
+   * Vedi gate di stile nel passo «Conversazione».
+   */
+  agentConversationStyleExample: string;
+  /**
+   * `true` quando il designer delega all'AI la scelta dello stile (checkbox
+   * «Lascia che Omnia scelga uno stile» nel passo «Conversazione»).
+   */
+  agentConversationStyleAuto: boolean;
 }
 
 /**
@@ -103,6 +113,11 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
      */
     agentWizardTutorAcknowledged:
       r?.agentWizardTutorAcknowledged === true || persistedHasGen === true,
+    agentConversationStyleExample:
+      typeof r?.agentConversationStyleExample === 'string'
+        ? r.agentConversationStyleExample
+        : '',
+    agentConversationStyleAuto: r?.agentConversationStyleAuto === true,
   };
 }
 

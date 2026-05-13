@@ -1,26 +1,35 @@
 /**
  * AI Agent — Phase machine di alto livello del Task Editor.
  *
- * Modello mentale (concordato con il prodotto, vedi design notes):
+ * **Stato attuale (post-unificazione layout):** esiste un *solo* shell, il
+ * Construction Wizard. Il vecchio Dockview classic (`AIAgentEditorDockShell`) è stato
+ * rimosso. TUTTI i task — sia nuovi sia legacy con `hasAgentGeneration=true` — usano
+ * lo stesso `AIAgentConstructionWizardShell`.
  *
- *   `wizard` → l'utente sta costruendo l'agente per la prima volta seguendo il
- *              flusso guidato (5 step: Task → Backend → Conversazione → Dati → Voce).
- *              Una schermata Tutor di benvenuto è mostrata se anche `wizardCurrentStep`
- *              è 0 e nessuno step risulta ancora completato.
+ * Per ragioni di compatibilità del payload persistito, il campo
+ * `task.agentConstructionPhase` può ancora esistere su disco con valore `'edit'` (scritto
+ * da versioni precedenti). Il resolver lo normalizza a `'wizard'`: NON c'è più un
+ * branch di rendering che differenzi le due fasi. Il tipo viene mantenuto come union
+ * letterale per non rompere la firma di snapshot/patch e la lettura dei dati storici,
+ * ma `'edit'` è di fatto deprecato e non viene mai più scritto da nuovo codice.
  *
- *   `edit`   → l'agente è già stato costruito almeno una volta. Viene aperto direttamente
- *              il Dockview di refinement libero (modalità esperta), senza gating.
+ * La schermata Tutor di benvenuto è mostrata solo se `agentWizardTutorAcknowledged === false`.
+ * Per i task legacy con `hasAgentGeneration=true` lo snapshot la forza a `true` (vedi
+ * `buildTaskSnapshotFromRaw`), così i veterani non rivedono l'onboarding.
  *
- * La transizione `wizard → edit` è automatica: scatta quando TUTTI i 5 step sono ✅
- * (vedi `useAIAgentWizardCompletion`). NON esiste un bottone «Termina».
- *
- * Backward-compat: i task pre-feature non hanno questi campi. Il loader
- * (`resolveAgentConstructionPhase`) deduce la fase dal vecchio flag
- * `agentDesignHasGeneration`: se l'agente ha già generato almeno una volta, parte
- * direttamente in `edit` (i veterani non rivedono il wizard).
+ * Per i veterani (`hasAgentGeneration === true`) lo stepper sblocca anche la navigazione
+ * libera tra step incompleti (vedi `AIAgentConstructionStepper#bypassGating`): un task
+ * pre-wizard può non avere completato la "voce" o i "backend" e va comunque navigabile.
  */
 
-/** Fasi di costruzione di alto livello del Task Editor AI Agent. */
+/**
+ * Fasi di costruzione del Task Editor AI Agent.
+ *
+ * - `'wizard'` → unica fase attiva: shell wizard 5-step.
+ * - `'edit'`   → DEPRECATO. Conservato solo per compatibilità di payload storici.
+ *                Il resolver lo mappa a `'wizard'`. Non viene mai scritto da nuovo
+ *                codice.
+ */
 export type AgentConstructionPhase = 'wizard' | 'edit';
 
 /**
@@ -67,22 +76,19 @@ export function isAgentConstructionPhase(value: unknown): value is AgentConstruc
 /**
  * Risolve la phase effettiva dato lo stato persistito letto dal task.
  *
- * Strategia (fail-safe ma backward-compatible):
+ * **Post-unificazione layout:** esiste un solo shell (il Construction Wizard).
+ * Il resolver ignora il valore persistito e ritorna sempre `'wizard'`.
+ * I parametri sono mantenuti in firma per non rompere i call site dello snapshot
+ * builder, ma non hanno più effetto sul valore restituito.
  *
- * 1. Se la phase è esplicitamente persistita e valida → usa quella.
- * 2. Altrimenti: se l'agente ha già generato almeno una volta (`hasAgentGeneration`)
- *    → `edit` (veterani che non hanno mai visto il wizard non lo vedono ora).
- * 3. Altrimenti → `wizard` (nuovi task partono dal flusso guidato).
- *
- * @param persistedPhase  valore letto da `task.agentConstructionPhase` (può essere undefined/sconosciuto)
- * @param hasAgentGeneration  flag `task.agentDesignHasGeneration` (true se già generato)
+ * I task storici con `agentConstructionPhase === 'edit'` continuano a essere letti
+ * senza errore: vengono semplicemente normalizzati a `'wizard'` in render.
  */
 export function resolveAgentConstructionPhase(
-  persistedPhase: unknown,
-  hasAgentGeneration: boolean
+  _persistedPhase: unknown,
+  _hasAgentGeneration: boolean
 ): AgentConstructionPhase {
-  if (isAgentConstructionPhase(persistedPhase)) return persistedPhase;
-  return hasAgentGeneration ? 'edit' : 'wizard';
+  return 'wizard';
 }
 
 /**
