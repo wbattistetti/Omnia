@@ -31,6 +31,36 @@ import {
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 /**
+ * Opzioni di build del prompt finale. `includeLog`:
+ *  - inietta nel JSON di ogni use case il campo `log: "Usecase: <label>"` (vedi
+ *    {@link projectAllUseCasesToConversationalJson});
+ *  - antepone in testa al blocco "Catalogo use case" un'istruzione testuale che spiega
+ *    al motore esterno come gestire il caso "input non riconosciuto" — classificarlo,
+ *    inventare un titolo breve, restituire `Usecase: nuovo_<titolo>` come trace.
+ *
+ * Default `false` (back-compat): i task gi\u00e0 pubblicati continuano a generare lo stesso
+ * prompt di prima finch\u00e9 il designer non attiva il toggle "Logga Use Case" dal menu Upload.
+ */
+export interface BuildConversationalPromptOptions {
+  readonly includeLog?: boolean;
+}
+
+/**
+ * Istruzione testuale "non riconosciuto" iniettata in testa al blocco catalogo quando
+ * `includeLog` è `true`. Tenuta come template costante, in italiano, coerente per stile
+ * e tono con {@link PROMPT_HEADER_IT} (lo stesso motore esterno legge entrambi).
+ *
+ * Formato del trace nuovo intenzionalmente diverso da `Usecase: <label>`: il prefisso
+ * `nuovo_` permette al designer (che vede i log runtime) di riconoscere a colpo d'occhio
+ * gli use case "non in catalogo" da promuovere in design-time.
+ */
+const PROMPT_LOG_INSTRUCTION_IT = `Logging use case
+Per ogni risposta, alla fine del testo restituisci anche il marker dello use case applicato:
+- Se hai riconosciuto uno dei casi del catalogo qui sotto, copia letteralmente il valore del campo \`log\` di quello use case (formato: \`Usecase: <nome>\`).
+- Se NESSUN use case del catalogo si applica all'input dell'utente, classificalo tu: scegli un titolo breve in snake_case che descriva l'intento, e termina la risposta con \`Usecase: nuovo_<titolo>\` (esempio: \`Usecase: nuovo_richiesta_rimborso\`).
+- Il marker va sempre alla fine, su nuova riga, senza altre parole prima o dopo.`;
+
+/**
  * Sezione testuale iniziale del prompt: istruzioni operative per il motore esterno.
  *
  * Mantenuta come template costante (non parametrizzata) per garantire identicità della
@@ -65,7 +95,10 @@ Ogni voce è autonoma. Il campo \`tokenizedExample\` è il template da usare; \`
  * programmazione: il caller deve filtrare via UI (pulsante «Crea prompt conversazionale»
  * visibile solo se tutti hanno un messaggio canonico compilabile).
  */
-export function buildConversationalPrompt(useCases: readonly AIAgentUseCase[]): string {
+export function buildConversationalPrompt(
+  useCases: readonly AIAgentUseCase[],
+  options: BuildConversationalPromptOptions = {}
+): string {
   if (useCases.length === 0) {
     throw new Error(
       'buildConversationalPrompt: il catalogo use case è vuoto. ' +
@@ -78,7 +111,8 @@ export function buildConversationalPrompt(useCases: readonly AIAgentUseCase[]): 
     );
   }
 
-  const projected = projectAllUseCasesToConversationalJson(useCases);
+  const includeLog = options.includeLog === true;
+  const projected = projectAllUseCasesToConversationalJson(useCases, { includeLog });
 
   /**
    * Layout del catalogo:
@@ -102,5 +136,16 @@ export function buildConversationalPrompt(useCases: readonly AIAgentUseCase[]): 
       `### Use case ${index + 1}\n${JSON.stringify(uc, null, 2)}`
   );
 
-  return `${PROMPT_HEADER_IT}\n\n${catalogBlocks.join('\n\n')}\n`;
+  /**
+   * Quando `includeLog` è attivo, l'istruzione testuale di logging va **in testa al blocco
+   * Catalogo use case** (non nello header generale): è semanticamente legata al catalogo
+   * — descrive cosa fare con i campi `log` che il motore vede subito dopo. Tenerla qui
+   * invece che in {@link PROMPT_HEADER_IT} mantiene quest'ultimo stabile per i task che
+   * non usano il logging.
+   */
+  const catalogSection = includeLog
+    ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${catalogBlocks.join('\n\n')}`
+    : catalogBlocks.join('\n\n');
+
+  return `${PROMPT_HEADER_IT}\n\n${catalogSection}\n`;
 }

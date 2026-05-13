@@ -19,10 +19,7 @@ import {
   type AssembleConversationInvocation,
 } from './ConversationsStepReviewCard';
 import { WizardAdvanceDialog } from './WizardAdvanceDialog';
-import {
-  WizardShowTokensToggle,
-  WizardStepOneListToolbarControls,
-} from './WizardStepOneListToolbar';
+import { WizardStepOneListToolbarControls } from './WizardStepOneListToolbar';
 import { WizardConversationsTabsControls } from './WizardConversationsToolbarRows';
 import { ClearAllWizardOutputDialog } from './ClearAllWizardOutputDialog';
 import { ConversationalJsonPanel } from './ConversationalJsonPanel';
@@ -165,6 +162,11 @@ export interface ViewSkaGeneratorProps {
    * definito uno stile a SX, il padre passa qui il messaggio in rosso. Default `null`.
    */
   conversationsPayoffMessage?: string | null;
+  /**
+   * Slot compatto a destra della toolbar del passo Conversazioni. Usato per le pill stile
+   * post-generazione: checkbox = stili attivi; glow = stile visualizzato nelle bubble.
+   */
+  conversationsToolbarSlot?: React.ReactNode;
 }
 
 function TutorialAsideBody(props: { stepId: UseCaseGeneratorWizardStepId }): React.ReactElement {
@@ -224,6 +226,7 @@ export function ViewSkaGenerator({
   onSelectUseCaseRequest,
   useCases,
   conversationsPayoffMessage = null,
+  conversationsToolbarSlot = null,
 }: ViewSkaGeneratorProps) {
   const [clearScope, setClearScope] = React.useState<ClearWizardScope | null>(null);
   const clearUseCasesAnchorRef = React.useRef<HTMLButtonElement>(null);
@@ -510,6 +513,7 @@ export function ViewSkaGenerator({
             showListControls={showListToolbarRow}
             canShowJsonToggle={canShowJsonToggle}
             themeKey={wizard.currentStepId}
+            conversationsToolbarSlot={conversationsToolbarSlot}
           />
         </div>
 
@@ -745,22 +749,37 @@ function ContextualToolbarRow({
   showListControls,
   canShowJsonToggle,
   themeKey,
+  conversationsToolbarSlot,
 }: {
   stepId: UseCaseGeneratorWizardStepId;
   wizard: UseCaseGeneratorWizardModel;
   showListControls: boolean;
   canShowJsonToggle: boolean;
   themeKey: UseCaseGeneratorWizardStepId;
+  conversationsToolbarSlot?: React.ReactNode;
 }): React.ReactElement | null {
   const themeBg = THEME_TOOLBAR_BG[themeKey];
 
   if (stepId === 'conversations') {
+    /**
+     * Ordine richiesto: prima le pill stile (filtro vista + checkbox attivazione), poi un
+     * piccolo separatore visivo, poi i cluster outcome con le pill numerate per le
+     * conversazioni esistenti. Lo `slot` è opzionale: quando non c'è (es. nessuna
+     * conversazione ancora) il blocco a sinistra resta vuoto e i cluster occupano
+     * naturalmente lo spazio.
+     */
     return (
       <div
         className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-3 py-1.5 ${themeBg}`}
         role="toolbar"
         aria-label="Controlli del passo Conversazioni"
       >
+        {conversationsToolbarSlot ? (
+          <>
+            {conversationsToolbarSlot}
+            <span aria-hidden className="h-5 w-px bg-sky-400/30" />
+          </>
+        ) : null}
         <WizardConversationsTabsControls wizard={wizard} />
       </div>
     );

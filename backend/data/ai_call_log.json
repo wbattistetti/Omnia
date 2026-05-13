@@ -1,6 +1,91 @@
 {
   "records": [
     {
+      "id": "d0e3df3f-be81-472b-8190-a16f4853a04c",
+      "ts": "2026-05-13T12:40:16.022Z",
+      "providerId": "openai",
+      "modelId": "o4-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 3119,
+      "outputTokens": 3165,
+      "totalTokens": 6284,
+      "costUsd": 0.0173569,
+      "costEur": 0.014786863817000001,
+      "durationMs": 23861,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778668756821-2joo88",
+      "taskLabel": "monica"
+    },
+    {
+      "id": "2f58257e-7edc-4789-abe7-798cfcd618b3",
+      "ts": "2026-05-13T11:04:55.801Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 3151,
+      "outputTokens": 2384,
+      "totalTokens": 5535,
+      "costUsd": 0.00555575,
+      "costEur": 0.004722276385,
+      "durationMs": 33041,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778668756821-2joo88",
+      "taskLabel": "monica"
+    },
+    {
+      "id": "20ffbd3e-70a8-49b0-ac94-51b0ab6b84c0",
+      "ts": "2026-05-13T10:44:37.726Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "CONVERSATION_POSITIVE",
+      "inputTokens": 2820,
+      "outputTokens": 2886,
+      "totalTokens": 5706,
+      "costUsd": 0.006477,
+      "costEur": 0.00550532046,
+      "durationMs": 36399,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778668756821-2joo88",
+      "taskLabel": "monica"
+    },
+    {
+      "id": "e26feaab-c881-4232-9b3a-7c28ef0505ef",
+      "ts": "2026-05-13T10:40:55.814Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "USE_CASE_BUNDLE_INITIAL",
+      "inputTokens": 1527,
+      "outputTokens": 3767,
+      "totalTokens": 5294,
+      "costUsd": 0.00791575,
+      "costEur": 0.006728229184999999,
+      "durationMs": 50402,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778668756821-2joo88",
+      "taskLabel": "monica"
+    },
+    {
+      "id": "2057dc53-dedb-4190-a78b-393528105f59",
+      "ts": "2026-05-13T10:39:51.345Z",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "purpose": "AGENT_CREATE",
+      "inputTokens": 441,
+      "outputTokens": 325,
+      "totalTokens": 766,
+      "costUsd": 0.00076025,
+      "costEur": 0.000646197295,
+      "durationMs": 6084,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778668756821-2joo88",
+      "taskLabel": "monica"
+    },
+    {
       "id": "f464ad80-3a84-4251-bbe7-13b774940739",
       "ts": "2026-05-13T09:45:36.474Z",
       "providerId": "openai",
@@ -162,6 +247,6 @@
     }
   ],
   "meta": {
-    "updatedAt": "2026-05-13T09:45:36.474Z"
+    "updatedAt": "2026-05-13T12:40:16.023Z"
   }
 }

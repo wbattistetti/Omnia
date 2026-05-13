@@ -26,7 +26,6 @@ import {
   NodeRecordsTable,
   formatDurationMs,
   formatEur,
-  formatUsd,
 } from '@components/common/aiCallReport/aiCallReportRendering';
 
 export interface EditorTaskCostsPanelProps {
@@ -109,8 +108,9 @@ export function EditorTaskCostsPanel({
         <div className="flex flex-1 flex-col overflow-hidden">
           {/*
             Header degli aggregati del task: identico al "header del nodo" del dialog globale,
-            ma sempre espanso (no toggle). Coerenza visiva = stessi badge, stesso stile, stessi
-            formattatori (`formatUsd`/`formatEur` con regola "10 cent").
+            ma sempre espanso (no toggle). Coerenza visiva = stessi badge, stesso stile, stesso
+            formattatore (`formatEur` con regola "10 cent"). EUR è la divisa unica di display
+            (vedi NodeAggregateBadges); USD canonico resta nel record per i tooltip cella.
           */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/70 bg-slate-900/60 px-5 py-3">
             <div className="min-w-0 text-[11px] text-slate-400">
@@ -123,8 +123,7 @@ export function EditorTaskCostsPanel({
                 label="Token"
                 value={`${node.aggregates.inputTokens.toLocaleString('it-IT')} in / ${node.aggregates.outputTokens.toLocaleString('it-IT')} out`}
               />
-              <Badge label="Costo $" value={formatUsd(node.aggregates.costUsd)} highlight bold />
-              <Badge label="Costo €" value={formatEur(node.aggregates.costEur)} highlight bold />
+              <Badge label="Costo" value={formatEur(node.aggregates.costEur)} highlight bold />
               <Badge label="Durata" value={formatDurationMs(node.aggregates.durationMs)} />
               {node.aggregates.errorCount > 0 ? (
                 <Badge

@@ -48,6 +48,35 @@ export interface AiExchangeRate {
   ecbDate: string | null;
 }
 
+/**
+ * Voce del catalogo pricing — coerente con `pricingSync.js` lato backend
+ * (`mapOpenRouterRow`). I prezzi sono normalizzati in **USD per milione di token**
+ * per stabilità aritmetica. La conversione in EUR avviene SOLO sul frontend usando
+ * il cambio cached ECB (`AiExchangeRate.usdToEur`).
+ *
+ * Un modello "free" arriva con `inputUsdPer1M=0` e `outputUsdPer1M=0`.
+ * Un modello non-mappato dal catalogo OpenRouter NON appare in lista (silenziosamente
+ * filtrato): chi chiama il calcolatore di costo lo tratta come `pricingFound=false`.
+ */
+export interface LlmPricingEntry {
+  providerId: 'openai' | 'groq' | 'anthropic' | 'google';
+  modelId: string;
+  inputUsdPer1M: number;
+  outputUsdPer1M: number;
+  contextLength: number | null;
+  rawId: string;
+}
+
+/**
+ * Risposta di `GET /api/ai-calls/pricing` — snapshot del catalogo on-disk dei prezzi.
+ * `meta.updatedAt` = ISO della scrittura cache; `meta.source` = 'openrouter' | null.
+ */
+export interface LlmPricingCatalogResponse {
+  count: number;
+  meta: { updatedAt: string | null; source: string | null };
+  items: LlmPricingEntry[];
+}
+
 export class AiCallsApiError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
@@ -112,6 +141,27 @@ export async function fetchExchangeRate(): Promise<AiExchangeRate> {
 
 export async function refreshPricingCatalog(): Promise<{ count: number }> {
   return postEmpty<{ count: number }>('/api/ai-calls/pricing/refresh');
+}
+
+/**
+ * Snapshot del catalogo pricing live (read-only). Wrapper su
+ * `GET /api/ai-calls/pricing`. Non mutala il backend; per forzare un re-sync
+ * usare {@link refreshPricingCatalog}.
+ */
+export async function fetchPricingCatalog(): Promise<LlmPricingCatalogResponse> {
+  const data = await getJson<{
+    count?: number;
+    meta?: { updatedAt: string | null; source: string | null };
+    items?: LlmPricingEntry[];
+  }>('/api/ai-calls/pricing');
+  return {
+    count: typeof data.count === 'number' ? data.count : 0,
+    meta: {
+      updatedAt: data.meta?.updatedAt ?? null,
+      source: data.meta?.source ?? null,
+    },
+    items: Array.isArray(data.items) ? data.items : [],
+  };
 }
 
 export async function refreshExchangeRate(): Promise<AiExchangeRate> {

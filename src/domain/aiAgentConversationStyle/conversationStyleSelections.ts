@@ -20,7 +20,6 @@ import {
   DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID,
 } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/constants';
 import type { UseCaseGeneratorWizardConversation } from '@domain/useCaseGeneratorWizard/types';
-import { CONVERSATION_LEGACY_STYLE_ID } from '@domain/useCaseGeneratorWizard/types';
 
 export interface ConversationStyleEntry {
   /** True = la pill partecipa al batch di generazione. */
@@ -135,21 +134,23 @@ export function hasAnyCheckedStyle(selections: ConversationStyleSelections): boo
  *  - `ConversationStyleSelector` sopra le bubble (filtro vista),
  *  - menu Style del bottone Upload (può uplodare solo stili che hanno esempi).
  *
- * Le conversazioni legacy senza `styleId` finiscono nel sentinel
- * {@link CONVERSATION_LEGACY_STYLE_ID} (raggruppate sotto «—» in UI).
+ * Le conversazioni legacy senza `styleId` vengono attribuite allo stile default
+ * (`DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID`, oggi «Cortese»). Questo evita di
+ * esporre nel menu Deploy una pill tecnica «— (n)»: per l'utente deve sempre
+ * apparire uno stile reale.
  *
- * Ordine di output: come da registry, con il sentinel legacy in coda se presente.
+ * Ordine di output: come da registry; eventuali id sconosciuti vengono aggiunti
+ * dopo gli stili noti per non perdere dati importati/vecchi.
  */
 export function listGeneratedStyleIds(
   conversations: readonly UseCaseGeneratorWizardConversation[]
 ): string[] {
   const present = new Set<string>();
-  let hasLegacy = false;
   for (const c of conversations) {
     if (typeof c.styleId === 'string' && c.styleId.length > 0) {
       present.add(c.styleId);
     } else {
-      hasLegacy = true;
+      present.add(DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID);
     }
   }
   const ordered = AI_AGENT_GLOBAL_USE_CASE_STYLES
@@ -159,12 +160,33 @@ export function listGeneratedStyleIds(
   for (const id of present) {
     if (!AI_AGENT_GLOBAL_USE_CASE_STYLES.some((s) => s.id === id)) ordered.push(id);
   }
-  if (hasLegacy) ordered.push(CONVERSATION_LEGACY_STYLE_ID);
   return ordered;
 }
 
 /**
- * Conta le conversazioni per styleId (chiavi: registry id + sentinel legacy).
+ * Predicato che dice se una conversazione "appartiene" allo stile `styleId` ai fini
+ * della VISTA / FILTRO. Coerente per costruzione con {@link listGeneratedStyleIds}
+ * e {@link countConversationsByStyleId}: le conversazioni legacy senza `styleId`
+ * sono attribuite allo stile default. Ogni filtro UI DEVE usare questo helper,
+ * altrimenti i contatori delle pill non corrispondono a ciò che viene visualizzato
+ * (regressione storica: con `c.styleId === styleId` strict, le conversazioni
+ * legacy contate sotto «Cortese (1)» non venivano mostrate → empty state).
+ */
+export function conversationMatchesStyleId(
+  conversation: UseCaseGeneratorWizardConversation,
+  styleId: string
+): boolean {
+  if (typeof conversation.styleId === 'string' && conversation.styleId.length > 0) {
+    return conversation.styleId === styleId;
+  }
+  return styleId === DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID;
+}
+
+/**
+ * Conta le conversazioni per styleId. Le conversazioni legacy senza `styleId`
+ * vengono conteggiate nello stile default, per la stessa ragione di
+ * {@link listGeneratedStyleIds}: il deploy e i filtri devono mostrare nomi stile reali,
+ * non sentinel tecnici.
  * Utile per badge `Cortese (3)` nel selettore di filtro.
  */
 export function countConversationsByStyleId(
@@ -175,7 +197,7 @@ export function countConversationsByStyleId(
     const key =
       typeof c.styleId === 'string' && c.styleId.length > 0
         ? c.styleId
-        : CONVERSATION_LEGACY_STYLE_ID;
+        : DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID;
     counts[key] = (counts[key] ?? 0) + 1;
   }
   return counts;

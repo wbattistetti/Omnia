@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  conversationMatchesStyleId,
   countConversationsByStyleId,
   defaultStyleEntryForRegistryId,
   firstInvalidCheckedStyle,
@@ -22,7 +23,6 @@ import {
   DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID,
 } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/constants';
 import type { UseCaseGeneratorWizardConversation } from '@domain/useCaseGeneratorWizard/types';
-import { CONVERSATION_LEGACY_STYLE_ID } from '@domain/useCaseGeneratorWizard/types';
 
 const KNOWN_ID = AI_AGENT_GLOBAL_USE_CASE_STYLES[0]?.id ?? 'cortese';
 const SECOND_ID = AI_AGENT_GLOBAL_USE_CASE_STYLES[1]?.id ?? 'ironico';
@@ -133,7 +133,7 @@ describe('listGeneratedStyleIds / countConversationsByStyleId', () => {
     expect(countConversationsByStyleId([])).toEqual({});
   });
 
-  it('orders known styleIds by registry then puts legacy sentinel last', () => {
+  it('orders known styleIds by registry and maps legacy conversations to the default style', () => {
     const out = listGeneratedStyleIds([
       conv(SECOND_ID),
       conv(undefined),
@@ -142,17 +142,49 @@ describe('listGeneratedStyleIds / countConversationsByStyleId', () => {
     ]);
     expect(out[0]).toBe(KNOWN_ID);
     expect(out[1]).toBe(SECOND_ID);
-    expect(out[out.length - 1]).toBe(CONVERSATION_LEGACY_STYLE_ID);
+    expect(out).not.toContain('__legacy__');
   });
 
-  it('counts legacy and known styles separately', () => {
+  it('counts legacy conversations under the default style', () => {
     const counts = countConversationsByStyleId([
       conv(KNOWN_ID),
       conv(KNOWN_ID),
       conv(undefined),
     ]);
-    expect(counts[KNOWN_ID]).toBe(2);
-    expect(counts[CONVERSATION_LEGACY_STYLE_ID]).toBe(1);
+    const expectedDefaultCount = KNOWN_ID === DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID ? 3 : 1;
+    expect(counts[DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID]).toBe(expectedDefaultCount);
+    expect(counts.__legacy__).toBeUndefined();
+  });
+});
+
+describe('conversationMatchesStyleId', () => {
+  function conv(styleId: string | undefined): UseCaseGeneratorWizardConversation {
+    return {
+      conversationId: 'cid',
+      turns: [],
+      outcome: 'positive',
+      ...(styleId ? { styleId } : {}),
+    } as UseCaseGeneratorWizardConversation;
+  }
+
+  it('matcha lo styleId esatto', () => {
+    expect(conversationMatchesStyleId(conv(KNOWN_ID), KNOWN_ID)).toBe(true);
+    expect(conversationMatchesStyleId(conv(KNOWN_ID), SECOND_ID)).toBe(false);
+  });
+
+  it('le conversazioni legacy senza styleId matchano lo stile DEFAULT (coerenza con counters)', () => {
+    expect(conversationMatchesStyleId(conv(undefined), DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID)).toBe(true);
+  });
+
+  it('le conversazioni legacy NON matchano stili diversi dal default', () => {
+    const otherId =
+      AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id !== DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID)
+        ?.id ?? 'ironico';
+    expect(conversationMatchesStyleId(conv(undefined), otherId)).toBe(false);
+  });
+
+  it('styleId vuoto è trattato come legacy', () => {
+    expect(conversationMatchesStyleId(conv(''), DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID)).toBe(true);
   });
 });
 

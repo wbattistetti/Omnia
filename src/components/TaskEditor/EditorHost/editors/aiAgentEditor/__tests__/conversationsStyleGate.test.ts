@@ -69,6 +69,7 @@ describe('agentConversationStyle{Example,Auto} — persist roundtrip', () => {
       agentConversationStyleAuto: false,
       agentConversationStyleSelections: {},
       agentConversationDeployStyleId: null,
+      agentLogUseCase: false,
       ...overrides,
     };
   }
@@ -129,6 +130,7 @@ describe('agentConversationStyleSelections / DeployStyleId — persist roundtrip
       agentConversationStyleAuto: false,
       agentConversationStyleSelections: {},
       agentConversationDeployStyleId: null,
+      agentLogUseCase: false,
       ...overrides,
     };
   }
@@ -147,6 +149,18 @@ describe('agentConversationStyleSelections / DeployStyleId — persist roundtrip
     expect(snap.agentConversationStyleSelections.cortese?.example).toBe('utente: a');
     expect(snap.agentConversationStyleSelections.ironico?.checked).toBe(false);
     expect(snap.agentConversationDeployStyleId).toBe('cortese');
+  });
+
+  it('preserves agentLogUseCase=true through patch → snapshot', () => {
+    const state = makeMinimalState({ agentLogUseCase: true });
+    const patch = buildAIAgentTaskPersistPatch(state);
+    const snap = buildTaskSnapshotFromRaw(patch);
+    expect(snap.agentLogUseCase).toBe(true);
+  });
+
+  it('defaults agentLogUseCase to false when missing in raw row (back-compat)', () => {
+    const snap = buildTaskSnapshotFromRaw({ id: 'x' });
+    expect(snap.agentLogUseCase).toBe(false);
   });
 
   it('lazy-migrates legacy example when selections are absent on load', () => {

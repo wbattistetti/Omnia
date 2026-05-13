@@ -128,6 +128,55 @@ export function saveGlobalVoiceForPlatform(
 }
 
 /**
+ * Risolve la voce visualizzata nel dropdown «Deploy» per una specifica `platform`,
+ * applicando la regola di priorità definita dal designer:
+ *
+ *   1. se la **configurazione GENERALE** (`globalMap`) ha una voce per `platform`, usa quella;
+ *   2. altrimenti, se l'**override del task editor** è impostato sulla **stessa** `platform`
+ *      e contiene una `voice` valida, usa quella (è l'unica platform "raggiungibile"
+ *      dall'override del task, perché l'override ha sempre una sola `platform` alla volta);
+ *   3. altrimenti `null` → la UI mostra «Manca la voce – Fix».
+ *
+ * Pure function: nessun side-effect, nessun accesso a `localStorage`. Il caller passa
+ * la mappa già caricata e (opzionalmente) lo snapshot dell'override task.
+ *
+ * @param platform Piattaforma di destinazione.
+ * @param globalMap Mappa platform → voce caricata da {@link loadGlobalVoiceByPlatform}.
+ * @param taskOverride Snapshot opzionale dell'override IA del task corrente
+ *                     (almeno `platform` e `voice`). Se assente o non coincide con
+ *                     `platform`, il fallback (2) è inattivo.
+ */
+export function resolveVoiceForPlatform(
+  platform: IAAgentPlatform,
+  globalMap: GlobalVoiceByPlatformMap,
+  taskOverride?: { platform?: IAAgentPlatform | null; voice?: IAAgentVoiceConfig | null } | null
+): IAAgentVoiceConfig | null {
+  const fromGlobal = globalMap[platform];
+  if (fromGlobal && isVoiceConfig(fromGlobal)) return fromGlobal;
+  if (taskOverride && taskOverride.platform === platform && taskOverride.voice && isVoiceConfig(taskOverride.voice)) {
+    return taskOverride.voice;
+  }
+  return null;
+}
+
+/**
+ * Versione "batch" di {@link resolveVoiceForPlatform}: ritorna una mappa risolta per tutte
+ * le `SUPPORTED_AGENT_PLATFORMS` (escluse quelle non risolvibili). Comodo per il deploy menu
+ * che mostra una riga per ogni piattaforma.
+ */
+export function resolveVoicesByPlatform(
+  globalMap: GlobalVoiceByPlatformMap,
+  taskOverride?: { platform?: IAAgentPlatform | null; voice?: IAAgentVoiceConfig | null } | null
+): GlobalVoiceByPlatformMap {
+  const out: GlobalVoiceByPlatformMap = {};
+  for (const platform of SUPPORTED_AGENT_PLATFORMS) {
+    const v = resolveVoiceForPlatform(platform, globalMap, taskOverride);
+    if (v) out[platform] = v;
+  }
+  return out;
+}
+
+/**
  * Etichetta umana di una voce per la UI del dropdown. Strategia:
  *   - se {@link IAAgentVoiceConfig.settings.name} (quando il caller ce l'ha messa) è presente
  *     e non vuota, usa quella (es. «Simon»);

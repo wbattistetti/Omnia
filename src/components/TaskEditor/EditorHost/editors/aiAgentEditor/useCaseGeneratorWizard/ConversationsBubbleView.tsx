@@ -245,11 +245,21 @@ function BubbleRow({
    */
   const showTokenInline = !!tokenizedText;
 
+  /**
+   * Quando l'editor inline è in edit, la `textarea` chiede `width: 100%` del padre, ma il
+   * box bubble è auto-fit (shrink-to-fit) → senza un valore di width risolto, collasserebbe
+   * al min-content (≈ una colonna verticale, vedi bug-report screenshot).
+   * Espandiamo il box a `w-full` SOLO durante l'edit, mantenendo `max-w-[92%]`. In display
+   * il box resta auto-fit per preservare il "look chat" tradizionale.
+   */
+  const [isEditing, setIsEditing] = React.useState(false);
+
   return (
     <div className="flex w-full justify-start">
       <div
         className={[
           'flex max-w-[92%] min-w-0 gap-2 rounded-2xl px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
+          isEditing ? 'w-full' : '',
           bubbleSurface,
           isModified ? 'ring-1 ring-emerald-500/55' : '',
           isPending ? 'ring-1 ring-amber-400/55' : '',
@@ -275,6 +285,7 @@ function BubbleRow({
               ariaLabel="Frase agente"
               readOnly={isRejected}
               strike={isRejected}
+              onEditingChange={setIsEditing}
               title={
                 isPending
                   ? 'Use case emergente in attesa: l\'edit cambia solo questa bubble fino a quando lo promuovi al catalogo.'
@@ -358,14 +369,26 @@ function UserBubble({
   text: string;
   onChangeText: (text: string) => void;
 }): React.ReactElement {
+  /** Vedi nota in {@link BubbleRow}: senza `w-full` durante l'edit la bubble collassa. */
+  const [isEditing, setIsEditing] = React.useState(false);
   return (
     <div className="flex w-full justify-end">
-      <div className="flex max-w-[92%] min-w-0 gap-2 rounded-2xl px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] bg-violet-900/45 text-amber-50 border border-violet-500/40">
+      <div
+        className={[
+          'flex max-w-[92%] min-w-0 gap-2 rounded-2xl px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] bg-violet-900/45 text-amber-50 border border-violet-500/40',
+          isEditing ? 'w-full' : '',
+        ].join(' ')}
+      >
         <span className="shrink-0 mt-[1px] text-violet-300/85" aria-hidden>
           <User size={14} />
         </span>
         <div className="min-w-0 flex-1">
-          <BubbleEditor text={text} onChange={onChangeText} ariaLabel="Frase utente" />
+          <BubbleEditor
+            text={text}
+            onChange={onChangeText}
+            ariaLabel="Frase utente"
+            onEditingChange={setIsEditing}
+          />
         </div>
       </div>
     </div>
@@ -394,6 +417,7 @@ function BubbleEditor({
   readOnly = false,
   strike = false,
   title,
+  onEditingChange,
 }: {
   text: string;
   onChange: (text: string) => void;
@@ -401,6 +425,12 @@ function BubbleEditor({
   readOnly?: boolean;
   strike?: boolean;
   title?: string;
+  /**
+   * Notifica al parent l'ingresso/uscita dalla modalità edit. Il parent (BubbleRow /
+   * UserBubble) usa questo flag per espandere il box bubble a `w-full` durante l'edit,
+   * evitando il collasso al min-content quando la `textarea` chiede `width: 100%`.
+   */
+  onEditingChange?: (editing: boolean) => void;
 }): React.ReactElement {
   const ref = React.useRef<HTMLTextAreaElement | null>(null);
   const [isEditing, setIsEditing] = React.useState(false);
@@ -415,13 +445,29 @@ function BubbleEditor({
     if (!isEditing) setDraft(text);
   }, [text, isEditing]);
 
-  /** Auto-grow textarea: ricalcolo altezza in edit a ogni cambio di draft. */
+  /**
+   * Auto-grow textarea: l'altezza diventa esattamente quella necessaria al `draft` corrente
+   * con la larghezza renderizzata della textarea. Ricalcoliamo a:
+   *  - ogni cambio di `draft` (typing),
+   *  - ogni cambio di `isEditing` (entrata/uscita),
+   *  - ogni cambio di **larghezza** della textarea (es. la bubble appena passata a `w-full`,
+   *    resize della finestra, riposizionamento del pannello). Senza il ResizeObserver la
+   *    misura iniziale viene fatta quando la bubble è ancora auto-fit (stretta) e la
+   *    textarea risulta inutilmente alta.
+   */
   React.useEffect(() => {
     if (!isEditing) return;
     const ta = ref.current;
     if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight}px`;
+    const recalc = () => {
+      ta.style.height = 'auto';
+      ta.style.height = `${ta.scrollHeight}px`;
+    };
+    recalc();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(recalc);
+    ro.observe(ta);
+    return () => ro.disconnect();
   }, [draft, isEditing]);
 
   React.useEffect(() => {
@@ -432,22 +478,31 @@ function BubbleEditor({
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }, [isEditing]);
 
+  /**
+   * NB: la notifica `onEditingChange` è chiamata SINCRONA insieme a `setIsEditing` (e non in
+   * un `useEffect`) così che il batching React applichi `w-full` al box bubble nello stesso
+   * render in cui appare la textarea. Senza questo, l'auto-grow misurerebbe la larghezza
+   * "vecchia" (bubble auto-fit, stretta) e la textarea risulterebbe troppo alta.
+   */
   const enterEdit = React.useCallback(() => {
     if (readOnly) return;
     setDraft(text);
     setIsEditing(true);
-  }, [readOnly, text]);
+    onEditingChange?.(true);
+  }, [readOnly, text, onEditingChange]);
 
   const cancelEdit = React.useCallback(() => {
     setDraft(text);
     setIsEditing(false);
-  }, [text]);
+    onEditingChange?.(false);
+  }, [text, onEditingChange]);
 
   const commitEdit = React.useCallback(() => {
     const next = draft;
     setIsEditing(false);
+    onEditingChange?.(false);
     if (next !== text) onChange(next);
-  }, [draft, text, onChange]);
+  }, [draft, text, onChange, onEditingChange]);
 
   if (!isEditing) {
     return (

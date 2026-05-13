@@ -46,6 +46,8 @@ export interface AIAgentPersistState {
   agentConversationStyleSelections: ConversationStyleSelections;
   /** Stile target di Upload (single per ora). */
   agentConversationDeployStyleId: string | null;
+  /** Toggle "Logga Use Case" della dropdown Upload. Default `false`. */
+  agentLogUseCase: boolean;
 }
 
 /**
@@ -81,5 +83,6 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentConversationStyleAuto: state.agentConversationStyleAuto,
     agentConversationStyleSelections: state.agentConversationStyleSelections,
     agentConversationDeployStyleId: state.agentConversationDeployStyleId,
+    agentLogUseCase: state.agentLogUseCase,
   };
 }

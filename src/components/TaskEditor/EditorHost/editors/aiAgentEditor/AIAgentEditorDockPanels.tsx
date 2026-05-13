@@ -12,14 +12,18 @@ import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
 import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
 import { ConversationsBubbleView } from './useCaseGeneratorWizard/ConversationsBubbleView';
 import { useStyleGateFlash } from './useCaseGeneratorWizard/ConversationsStyleGate';
-import { ConversationStyleEditor } from './useCaseGeneratorWizard/ConversationStyleEditor';
-import { ConversationStyleSelector } from './useCaseGeneratorWizard/ConversationStyleSelector';
 import {
+  ConversationStyleEditor,
+  ConversationStyleToolbar,
+} from './useCaseGeneratorWizard/ConversationStyleEditor';
+import {
+  conversationMatchesStyleId,
   countConversationsByStyleId,
   firstInvalidCheckedStyle,
   hasAnyCheckedStyle,
-  listGeneratedStyleIds,
+  listCheckedStyleIds,
 } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
+import { InlineStylePillEditor } from './useCaseGeneratorWizard/ConversationStyleEditor';
 import { UseCaseWizardListToolbarProvider } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
@@ -304,14 +308,50 @@ export function EditorUseCasesPanel() {
   );
 
   /**
-   * Filtro vista sopra le bubble: stile selezionato (locale, non persistito).
-   * Default `null` = mostra «Tutti» — coerente con la lista di stili oggi presente.
-   * Se il selettore mostra un solo stile, la sua selezione è implicita ma il filtro
-   * resta `null` per non confondere il designer.
+   * Filtro vista bubble post-generazione: `null` significa "nessuno stile visualizzabile",
+   * non più "Tutti". La vista mostra solo lo stile checkato con glow nella toolbar.
    */
   const [conversationsFilterStyleId, setConversationsFilterStyleId] = React.useState<
     string | null
   >(null);
+  /**
+   * StyleId della pill in editing inline (matita on-hover sulla pill della toolbar).
+   * `null` = nessun editor aperto. Quando valorizzato, l'editor della singola pill
+   * viene renderizzato sopra le bubble nel pannello SX e le spinge giù; chiudendolo
+   * (X) si torna alla vista bubble normale. Stato locale, non persistito.
+   */
+  const [pillEditorStyleId, setPillEditorStyleId] = React.useState<string | null>(null);
+  const checkedStyleIds = React.useMemo(
+    () => listCheckedStyleIds(agentConversationStyleSelections),
+    [agentConversationStyleSelections]
+  );
+  const conversationsCountForStyleToolbar = useCaseGeneratorWizard?.conversations.length ?? 0;
+  React.useEffect(() => {
+    if (
+      !useWizardShell ||
+      !useCaseGeneratorWizard ||
+      useCaseGeneratorWizard.currentStepId !== 'conversations' ||
+      conversationsCountForStyleToolbar === 0
+    ) {
+      return;
+    }
+    if (checkedStyleIds.length === 0) {
+      if (conversationsFilterStyleId !== null) setConversationsFilterStyleId(null);
+      return;
+    }
+    if (
+      conversationsFilterStyleId === null ||
+      !checkedStyleIds.includes(conversationsFilterStyleId)
+    ) {
+      setConversationsFilterStyleId(checkedStyleIds[0] ?? null);
+    }
+  }, [
+    checkedStyleIds,
+    conversationsCountForStyleToolbar,
+    conversationsFilterStyleId,
+    useCaseGeneratorWizard,
+    useWizardShell,
+  ]);
 
   if (useWizardShell && useCaseGeneratorWizard) {
     const currentStepId = useCaseGeneratorWizard.currentStepId;
@@ -331,6 +371,7 @@ export function EditorUseCasesPanel() {
      */
     const showBubbleView = isStepConversations;
     const conversationsCount = useCaseGeneratorWizard.conversations.length;
+    const countByStyleId = countConversationsByStyleId(useCaseGeneratorWizard.conversations);
 
     /**
      * Costruzione del leftPanel — passo «Conversazione» (gate v2 multi-stile):
@@ -338,20 +379,23 @@ export function EditorUseCasesPanel() {
      * - **Empty (no conversations)**: `ConversationStyleEditor` occupa TUTTO il pannello
      *   (full height, niente split, niente placeholder). Il pannello DX guida già il
      *   designer con la "Guida rapida" + i 3 pulsanti di generazione.
-     * - **Con conversazioni**: split verticale — editor stili sopra (compatto, ~40%)
-     *   con eventuale `ConversationStyleSelector` (filtro vista) + bubble sotto (~60%).
+     * - **Con conversazioni**: niente editor stile nel pannello SX; rimangono solo le bubble.
+     *   Le pill stile vivono nella toolbar contestuale sopra, dove checkbox = genera e glow = vista.
      *
      * Negli altri passi: composer (lista use case), come prima.
      */
     let leftPanel: React.ReactNode;
     if (showBubbleView) {
-      const generatedStyleIds = listGeneratedStyleIds(useCaseGeneratorWizard.conversations);
-      const countByStyleId = countConversationsByStyleId(useCaseGeneratorWizard.conversations);
+      /**
+       * Bug fix (2026-05-13): il filtro vista DEVE coincidere con la classificazione
+       * fatta da `listGeneratedStyleIds` / `countConversationsByStyleId`. Le conversazioni
+       * legacy senza `styleId` vengono attribuite al default («Cortese»), quindi qui usiamo
+       * `conversationMatchesStyleId` invece di un confronto stretto: altrimenti la pill
+       * mostra «Cortese (1)» ma il pannello SX resta vuoto («Nessuna conversazione»).
+       */
       const filteredConversations = conversationsFilterStyleId
-        ? useCaseGeneratorWizard.conversations.filter(
-            (c) =>
-              c.styleId === conversationsFilterStyleId ||
-              (conversationsFilterStyleId === '__legacy__' && !c.styleId)
+        ? useCaseGeneratorWizard.conversations.filter((c) =>
+            conversationMatchesStyleId(c, conversationsFilterStyleId)
           )
         : useCaseGeneratorWizard.conversations;
 
@@ -374,24 +418,35 @@ export function EditorUseCasesPanel() {
         );
       } else {
         leftPanel = (
-          <div className="flex h-full min-h-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border-b border-sky-500/15">
-              {styleEditorNode}
-            </div>
-            <div className="flex min-h-0 flex-[3] flex-col overflow-hidden">
-              {generatedStyleIds.length > 1 ? (
-                <div className="shrink-0 border-b border-sky-500/15 bg-slate-950/50 px-3 py-1.5">
-                  <ConversationStyleSelector
-                    label="Mostra:"
-                    value={conversationsFilterStyleId}
-                    onChange={setConversationsFilterStyleId}
-                    availableStyleIds={generatedStyleIds}
-                    countByStyleId={countByStyleId}
-                    includeAllOption
-                  />
-                </div>
-              ) : null}
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+            {/*
+              Editor inline della pill: visibile SOLO quando l'utente clicca la matita
+              su una pill nella toolbar. È un blocco shrink-0 che si espande SOPRA le
+              bubble e le spinge giù (split, non sostituzione — vedi spec). La X chiude
+              l'editor riportando alla vista bubble normale.
+            */}
+            {pillEditorStyleId ? (
+              <div className="shrink-0 border-b border-sky-500/25 bg-sky-950/20">
+                <InlineStylePillEditor
+                  styleId={pillEditorStyleId}
+                  selections={agentConversationStyleSelections}
+                  onSelectionsChange={setAgentConversationStyleSelections}
+                  auto={agentConversationStyleAuto}
+                  onAutoChange={setAgentConversationStyleAuto}
+                  payoffMessage={
+                    styleFlash.payoffByStyleId?.[pillEditorStyleId] ?? null
+                  }
+                  onClose={() => setPillEditorStyleId(null)}
+                />
+              </div>
+            ) : null}
+
+            {checkedStyleIds.length === 0 ? (
+              <div className="flex h-full items-center justify-center px-4 text-center text-xs font-semibold text-rose-300">
+                Spunta almeno uno stile nella toolbar per vedere o generare conversazioni.
+              </div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-hidden">
                 <ConversationsBubbleView
                   conversations={filteredConversations}
                   activeConversationId={useCaseGeneratorWizard.activeConversationId}
@@ -406,7 +461,7 @@ export function EditorUseCasesPanel() {
                   excludedUseCaseIds={excludedUseCaseIds}
                 />
               </div>
-            </div>
+            )}
           </div>
         );
       }
@@ -444,6 +499,25 @@ export function EditorUseCasesPanel() {
             onCreateConversation={wrappedAssembleConversation}
             createConversationBusy={assembleConversationBusy}
             conversationsPayoffMessage={styleFlash.payoffMessage}
+            conversationsToolbarSlot={
+              isStepConversations && conversationsCount > 0 ? (
+                <ConversationStyleToolbar
+                  selections={agentConversationStyleSelections}
+                  onSelectionsChange={setAgentConversationStyleSelections}
+                  visibleStyleId={conversationsFilterStyleId}
+                  onVisibleStyleIdChange={setConversationsFilterStyleId}
+                  editingStyleId={pillEditorStyleId}
+                  onEditingStyleIdChange={setPillEditorStyleId}
+                  countByStyleId={countByStyleId}
+                  flashingStyleId={styleFlash.flashingStyleId}
+                  payoffMessage={
+                    checkedStyleIds.length === 0
+                      ? 'Spunta almeno uno stile'
+                      : styleFlash.payoffMessage
+                  }
+                />
+              ) : null
+            }
             onProofreadConversationAgentTurns={onProofreadConversationAgentTurns}
             proofreadConversationBusy={proofreadConversationBusy}
             onTokenizeUseCases={onTokenizeUseCases}

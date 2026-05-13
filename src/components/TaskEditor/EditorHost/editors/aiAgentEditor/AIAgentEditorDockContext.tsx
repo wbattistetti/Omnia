@@ -244,6 +244,14 @@ export interface AIAgentEditorDockContextValue {
   ) => void;
   agentConversationDeployStyleId: string | null;
   setAgentConversationDeployStyleId: (next: string | null) => void;
+  /**
+   * Toggle "Logga Use Case" del deploy menu (vedi `Task.agentLogUseCase`). Quando true,
+   * il compilatore di prompt aggiunge il campo `log: "Usecase: <label>"` a ogni elemento
+   * di `UseCaseConversationalJson` e antepone l'istruzione testuale "non riconosciuto"
+   * in testa al blocco use cases del system prompt.
+   */
+  agentLogUseCase: boolean;
+  setAgentLogUseCase: (next: boolean) => void;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

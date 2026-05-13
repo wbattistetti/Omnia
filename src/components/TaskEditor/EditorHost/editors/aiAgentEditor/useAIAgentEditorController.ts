@@ -304,6 +304,17 @@ export function useAIAgentEditorController({
     string | null
   >(null);
 
+  /**
+   * Toggle "Logga Use Case" del deploy menu. Quando true, il compilatore di prompt:
+   *  1. Aggiunge `log: "Usecase: <label>"` a ogni elemento di `UseCaseConversationalJson`.
+   *  2. Antepone in testa al blocco use cases l'istruzione testuale per il caso
+   *     "non riconosciuto" (vedi `Task.agentLogUseCase`).
+   *
+   * Default false: i task esistenti non cambiano comportamento finché il designer
+   * non attiva esplicitamente la checkbox dal pannellino Upload.
+   */
+  const [agentLogUseCase, setAgentLogUseCaseState] = React.useState<boolean>(false);
+
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
   );
@@ -613,6 +624,14 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  const setAgentLogUseCase = React.useCallback((next: boolean) => {
+    setAgentLogUseCaseState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
   const hydratedRef = React.useRef(false);
   React.useEffect(() => {
     hydratedRef.current = hydrated;
@@ -728,6 +747,7 @@ export function useAIAgentEditorController({
     setAgentConversationStyleAutoState(b.agentConversationStyleAuto);
     setAgentConversationStyleSelectionsState(b.agentConversationStyleSelections);
     setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
+    setAgentLogUseCaseState(b.agentLogUseCase);
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -837,6 +857,7 @@ export function useAIAgentEditorController({
       agentConversationStyleAuto,
       agentConversationStyleSelections,
       agentConversationDeployStyleId,
+      agentLogUseCase,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -885,6 +906,7 @@ export function useAIAgentEditorController({
     agentConversationStyleAuto,
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
+    agentLogUseCase,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -1892,6 +1914,7 @@ export function useAIAgentEditorController({
     agentConversationStyleAuto,
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
+    agentLogUseCase,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -2053,5 +2076,7 @@ export function useAIAgentEditorController({
     setAgentConversationStyleSelections,
     agentConversationDeployStyleId,
     setAgentConversationDeployStyleId,
+    agentLogUseCase,
+    setAgentLogUseCase,
   };
 }

@@ -28,8 +28,13 @@ import {
   Maximize2,
   MessageSquareText,
   Minimize2,
+  Search,
+  X as XIcon,
 } from 'lucide-react';
-import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarContext';
+import {
+  useUseCaseWizardListToolbarOptional,
+  type UseCaseWizardListToolbarContextValue,
+} from './UseCaseWizardListToolbarContext';
 import { useOptionalAIAgentEditorDock } from '../AIAgentEditorDockContext';
 import type { UseCaseGeneratorWizardModel } from './useUseCaseGeneratorWizard';
 
@@ -126,6 +131,86 @@ export function CompactIconToggle({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Input «cerca nei messaggi» della toolbar wizard. Commit esplicito al press di
+ * Enter (non on-change) per evitare di re-renderizzare l'intera lista a ogni tasto
+ * digitato. Pulsante X a destra per pulire — compare solo se il draft non è vuoto.
+ *
+ * Vive locale in questo file perché è strettamente legato all'UI di questa toolbar
+ * (`UseCaseWizardListToolbarContext.searchSeed`); se servirà in altre toolbar lo
+ * promuoveremo a `src/components/common/`.
+ */
+function UseCaseListSearchInput({
+  ctx,
+}: {
+  ctx: UseCaseWizardListToolbarContextValue;
+}): React.ReactElement {
+  const [draft, setDraft] = React.useState<string>(ctx.searchSeed);
+
+  /**
+   * Sync inverso: se altro codice resetta il `searchSeed` (es. teardown della
+   * toolbar / clear programmatico) il draft locale segue. Senza questo, l'input
+   * mostrerebbe ancora la vecchia parola pur con highlight spento — confusionario.
+   */
+  React.useEffect(() => {
+    setDraft(ctx.searchSeed);
+  }, [ctx.searchSeed]);
+
+  const commit = React.useCallback((): void => {
+    ctx.setSearchSeed(draft);
+  }, [ctx, draft]);
+
+  const clearAll = React.useCallback((): void => {
+    setDraft('');
+    ctx.setSearchSeed('');
+  }, [ctx]);
+
+  const hasDraft = draft.length > 0;
+  return (
+    <form
+      role="search"
+      aria-label="Cerca nei messaggi degli use case"
+      onSubmit={(e) => {
+        e.preventDefault();
+        commit();
+      }}
+      className="relative inline-flex h-7 items-center"
+    >
+      <Search
+        size={12}
+        aria-hidden
+        className="pointer-events-none absolute left-1.5 text-slate-500"
+      />
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            clearAll();
+          }
+        }}
+        placeholder="cerca nei messaggi…"
+        aria-label="Testo da cercare nei messaggi degli use case"
+        title="Scrivi e premi Invio per evidenziare le occorrenze nei messaggi"
+        className="h-7 w-44 rounded-md border border-slate-700/70 bg-slate-900/60 pl-6 pr-6 text-[12px] text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40"
+      />
+      {hasDraft ? (
+        <button
+          type="button"
+          onClick={clearAll}
+          aria-label="Pulisci ricerca"
+          title="Pulisci ricerca (Esc)"
+          className="absolute right-1 inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-500"
+        >
+          <XIcon size={11} aria-hidden />
+        </button>
+      ) : null}
+    </form>
   );
 }
 
@@ -317,6 +402,7 @@ export function WizardStepOneListToolbarControls({
           <span aria-hidden>A↓B</span>
         </button>
       ) : null}
+      <UseCaseListSearchInput ctx={ctx} />
       {/*
         Toggle «Mostra JSON» ({}) e «Mostra Tokens» ([x]) rimossi dalla toolbar:
         la tokenizzazione resta «sotto il cofano» — visibile solo nel JSON conversazionale

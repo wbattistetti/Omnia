@@ -16,6 +16,8 @@ import {
   describeVoice,
   getGlobalVoiceFor,
   loadGlobalVoiceByPlatform,
+  resolveVoiceForPlatform,
+  resolveVoicesByPlatform,
   saveGlobalVoiceForPlatform,
 } from '../globalVoiceByPlatform';
 import type { IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
@@ -141,6 +143,63 @@ describe('getGlobalVoiceFor', () => {
   it('returns the saved voice for the requested platform', () => {
     saveGlobalVoiceForPlatform('elevenlabs', makeVoice({ id: 'simon' }));
     expect(getGlobalVoiceFor('elevenlabs')).toEqual({ id: 'simon', language: 'it' });
+  });
+});
+
+describe('resolveVoiceForPlatform', () => {
+  /**
+   * Specifica esplicita di B1/C1: la voce mostrata nel deploy menu segue la priorità
+   * (1) configurazione GENERALE (mappa platform→voce) → (2) override del task editor
+   * SE la sua `platform` coincide con quella richiesta → (3) `null` («Manca la voce»).
+   * L'override del task gestisce una sola platform alla volta, quindi può "contribuire"
+   * voci solo per quella platform.
+   */
+  const globalVoice = makeVoice({ id: 'global-simon' });
+  const overrideVoice = makeVoice({ id: 'task-jane', language: 'en' });
+
+  it('priorità (1): se la mappa GLOBALE ha una voce per la platform, vince', () => {
+    const map = { elevenlabs: globalVoice };
+    const taskOverride = { platform: 'elevenlabs' as const, voice: overrideVoice };
+    expect(resolveVoiceForPlatform('elevenlabs', map, taskOverride)).toEqual(globalVoice);
+  });
+
+  it('priorità (2): se la GLOBALE è vuota e l\u2019override del task è sulla stessa platform, usa la voce dell\u2019override', () => {
+    const taskOverride = { platform: 'openai' as const, voice: overrideVoice };
+    expect(resolveVoiceForPlatform('openai', {}, taskOverride)).toEqual(overrideVoice);
+  });
+
+  it('NON ricade sull\u2019override se la sua platform è diversa da quella richiesta', () => {
+    const taskOverride = { platform: 'elevenlabs' as const, voice: overrideVoice };
+    expect(resolveVoiceForPlatform('openai', {}, taskOverride)).toBeNull();
+  });
+
+  it('ritorna null quando GLOBALE assente e override mancante', () => {
+    expect(resolveVoiceForPlatform('anthropic', {}, null)).toBeNull();
+    expect(resolveVoiceForPlatform('anthropic', {}, undefined)).toBeNull();
+  });
+
+  it('ritorna null se la voce nell\u2019override è malformata (id vuoto)', () => {
+    const bad = { platform: 'openai' as const, voice: { id: '', language: 'en' } as IAAgentVoiceConfig };
+    expect(resolveVoiceForPlatform('openai', {}, bad)).toBeNull();
+  });
+});
+
+describe('resolveVoicesByPlatform', () => {
+  it('compone la mappa risolta per tutte le piattaforme supportate', () => {
+    const map = { elevenlabs: makeVoice({ id: 'el-1' }), openai: makeVoice({ id: 'oa-1' }) };
+    const taskOverride = { platform: 'anthropic' as const, voice: makeVoice({ id: 'ant-task' }) };
+    const out = resolveVoicesByPlatform(map, taskOverride);
+    expect(out.elevenlabs).toEqual({ id: 'el-1', language: 'it' });
+    expect(out.openai).toEqual({ id: 'oa-1', language: 'it' });
+    expect(out.anthropic).toEqual({ id: 'ant-task', language: 'it' });
+    expect(out.google).toBeUndefined();
+  });
+
+  it('è pura: non scrive in localStorage', () => {
+    const before = JSON.stringify(loadGlobalVoiceByPlatform());
+    resolveVoicesByPlatform({ elevenlabs: makeVoice({ id: 'x' }) }, null);
+    const after = JSON.stringify(loadGlobalVoiceByPlatform());
+    expect(after).toBe(before);
   });
 });
 

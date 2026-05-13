@@ -90,21 +90,22 @@ export function Badge({
 }
 
 /**
- * Riga di badge aggregati del nodo: chiamate, token in/out, costo $/€ (in grassetto), durata.
+ * Riga di badge aggregati del nodo: chiamate, token in/out, costo € (in grassetto), durata.
+ * EUR è la divisa unica di display (default progetto): USD resta la sorgente canonica
+ * lato backend (`costUsd` nel record) e viene mostrato solo come tooltip/cambio nel footer
+ * del dialog. Vedi feedback designer 2026-05-13: «Inutile mettere due colonne di costo».
  * Nasconde i badge in viewport stretti per non sfondare il layout (`hidden sm:flex`).
  */
 export function NodeAggregateBadges({
   callCount,
   inputTokens,
   outputTokens,
-  costUsd,
   costEur,
   durationMs,
 }: {
   callCount: number;
   inputTokens: number;
   outputTokens: number;
-  costUsd: number;
   costEur: number | null;
   durationMs: number;
 }): React.ReactElement {
@@ -115,8 +116,7 @@ export function NodeAggregateBadges({
         label="Token"
         value={`${inputTokens.toLocaleString('it-IT')} in / ${outputTokens.toLocaleString('it-IT')} out`}
       />
-      <Badge label="Costo $" value={formatUsd(costUsd)} highlight bold />
-      <Badge label="Costo €" value={formatEur(costEur)} highlight bold />
+      <Badge label="Costo" value={formatEur(costEur)} highlight bold />
       <Badge label="Durata" value={formatDurationMs(durationMs)} />
     </div>
   );
@@ -195,7 +195,6 @@ export function TreeNodeRow({
           callCount={node.aggregates.callCount}
           inputTokens={node.aggregates.inputTokens}
           outputTokens={node.aggregates.outputTokens}
-          costUsd={node.aggregates.costUsd}
           costEur={node.aggregates.costEur}
           durationMs={node.aggregates.durationMs}
         />
@@ -207,7 +206,11 @@ export function TreeNodeRow({
 
 /**
  * Tabella delle singole chiamate (records) di un nodo. Layout coerente tra dialog globale e
- * pannello task: data/ora, scopo, provider/modello, token in/out, costi, durata.
+ * pannello task: data/ora, scopo, provider/modello, token in/out, costo €, durata.
+ *
+ * Solo EUR (vedi {@link NodeAggregateBadges}). Il valore USD canonico resta nel record per
+ * eventuali tooltip — qui il `title` della cella mostra «USD: $X.YY» come hint, così il
+ * designer può sempre verificare la conversione senza una colonna in più.
  */
 export function NodeRecordsTable({
   records,
@@ -224,7 +227,6 @@ export function NodeRecordsTable({
             <th className="px-3 py-1.5">Provider / Modello</th>
             <th className="px-3 py-1.5 text-right">Token in</th>
             <th className="px-3 py-1.5 text-right">Token out</th>
-            <th className="px-3 py-1.5 text-right">Costo $</th>
             <th className="px-3 py-1.5 text-right">Costo €</th>
             <th className="px-3 py-1.5 text-right">Durata</th>
           </tr>
@@ -253,8 +255,12 @@ export function NodeRecordsTable({
               <td className="px-3 py-1.5 text-right tabular-nums">
                 {c.outputTokens.toLocaleString('it-IT')}
               </td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{formatUsd(c.costUsd)}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums">{formatEur(c.costEur)}</td>
+              <td
+                className="px-3 py-1.5 text-right tabular-nums"
+                title={`USD canonico: ${formatUsd(c.costUsd)}`}
+              >
+                {formatEur(c.costEur)}
+              </td>
               <td className="px-3 py-1.5 text-right text-slate-400 tabular-nums">
                 {c.durationMs} ms
               </td>

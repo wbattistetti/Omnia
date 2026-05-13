@@ -79,6 +79,7 @@ import {
 import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
 import { VoteThumbPair } from './VoteThumbPair';
 import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHighlightedText';
+import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
@@ -221,6 +222,36 @@ export function AIAgentUseCaseComposer({
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
   const wizardShowMessage =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
+  /**
+   * Seed di ricerca dalla toolbar wizard. Gli highlight col chip giallo sui messaggi
+   * agente sono attivi solo nella vista wizard (`primaryGenerateOnRightOnly`) — è
+   * lì che vive la search box, e fuori dalla wizard non ha senso evidenziare nulla.
+   */
+  const wizardSearchSeed =
+    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.searchSeed : '';
+
+  /**
+   * Lista filtrata dal seed di ricerca: mostra solo gli use case il cui messaggio
+   * agente contiene il seed (case-insensitive, substring). Quando `wizardSearchSeed`
+   * è vuoto la funzione restituisce esattamente `ordered` (stessa reference, evita
+   * re-render inutili dei figli memo). Il filtro coinvolge **solo** il rendering
+   * della lista — `selected`, `orderedIds` e gli altri calcoli logici continuano a
+   * usare `ordered` (l'esistenza degli use case non cambia, cambia solo cosa è
+   * visibile ora).
+   *
+   * Criterio di match coerente con l'highlight: stessa colonna evidenziata col chip
+   * giallo (messaggio agente). Se l'utente cerca una parola che vive solo nello
+   * scenario, niente match — coerenza visiva: ciò che evidenzio = ciò che filtro.
+   */
+  const filteredOrdered = React.useMemo(() => {
+    if (!wizardSearchSeed) return ordered;
+    const lower = wizardSearchSeed.toLocaleLowerCase();
+    return ordered.filter((u) => {
+      const ast = u.dialogue.find((t) => t.role === 'assistant');
+      const text = (ast?.content ?? '').toLocaleLowerCase();
+      return text.includes(lower);
+    });
+  }, [ordered, wizardSearchSeed]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -1106,7 +1137,20 @@ export function AIAgentUseCaseComposer({
               <ul
                 className={`min-h-0 flex-1 space-y-1 overflow-x-hidden p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
               >
-                {ordered.map((u) => {
+                {filteredOrdered.length === 0 && wizardSearchSeed ? (
+                  /*
+                    Nessun match: la lista esiste (`ordered.length > 0`) ma il filtro
+                    della search box ha azzerato tutto. Mostriamo un placeholder esplicito
+                    invece di un `<ul>` vuoto, così l'utente capisce che la lista non è
+                    vuota davvero — basta cancellare il seed (X o Esc nella search box).
+                  */
+                  <li className="px-3 py-6 text-center text-xs text-slate-500">
+                    Nessuno use case corrisponde a «
+                    <span className="font-mono text-slate-300">{wizardSearchSeed}</span>
+                    ». Pulisci la ricerca per vederli tutti.
+                  </li>
+                ) : null}
+                {filteredOrdered.map((u) => {
                   const rowBaseline = fieldBaselineByUseCaseId[u.id];
                   const depth = depthById[u.id] ?? 0;
                   const active = u.id === effectiveSelectedId;
@@ -1575,7 +1619,10 @@ export function AIAgentUseCaseComposer({
                                         )}`}
                                       >
                                         {rowAssistant.content.trim() ? (
-                                          rowAssistant.content
+                                          <SeedHighlightedText
+                                            text={rowAssistant.content}
+                                            seed={wizardSearchSeed}
+                                          />
                                         ) : (
                                           <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
                                         )}

@@ -57,16 +57,13 @@ import {
 import {
   AGENT_PLATFORM_DISPLAY_LABEL,
   loadGlobalVoiceByPlatform,
+  resolveVoicesByPlatform,
 } from '@utils/iaAgentRuntime/globalVoiceByPlatform';
 import {
   conversationConfigForConvaiApi,
   conversationConfigFragmentFromIaAgentConfig,
 } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
-import {
-  loadGlobalIaAgentConfig,
-  saveGlobalIaAgentConfig,
-} from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
@@ -886,35 +883,51 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * aggiornata senza dover montare/smontare il componente.
    */
   const [voicesReloadSeed, setVoicesReloadSeed] = React.useState(0);
+  /**
+   * Mappa platform → voce visualizzata nel deploy menu, secondo la regola B1/C1
+   * concordata col designer:
+   *   1) configurazione GENERALE per la platform (`loadGlobalVoiceByPlatform[platform]`);
+   *   2) altrimenti, la voce dell'**override del task editor** SE la sua `platform`
+   *      coincide con quella richiesta;
+   *   3) altrimenti `null` → la riga del menu mostra «Manca la voce – Fix».
+   *
+   * Il resolver è puro (`resolveVoicesByPlatform`); qui ci limitiamo a passargli
+   * lo snapshot dell'override task corrente (`c.iaRuntimeConfig`).
+   */
   const voicesByPlatform = React.useMemo(
-    () => loadGlobalVoiceByPlatform(),
+    () =>
+      resolveVoicesByPlatform(loadGlobalVoiceByPlatform(), {
+        platform: c.iaRuntimeConfig?.platform ?? null,
+        voice: c.iaRuntimeConfig?.voice ?? null,
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed forza ricalcolo on demand
-    [voicesReloadSeed]
+    [voicesReloadSeed, c.iaRuntimeConfig?.platform, c.iaRuntimeConfig?.voice]
   );
 
   /**
-   * «Fix voice» per piattaforma X: imposta `platform=X` sulla config GLOBAL (così il pannello
-   * Settings/IA Runtime mostra i campi giusti, voce inclusa), salta allo step 5 «Voce» del
-   * wizard, e fa scroll-to-focus sull'elemento `[data-ia-runtime-focus="voice"]` con un
-   * piccolo delay per dare tempo al pannello di montare.
+   * «Fix voice» per piattaforma X: l'utente clicca sul «Fix» di una riga platform nel deploy
+   * menu perché manca la voce. Comportamento concordato col designer (C / C2):
    *
-   * Limit noto: il pannello Voce dello step 5 mostra la platform della config CORRENTE del
-   * task. Cambiamo la platform a livello GLOBAL (non sul task) perché il dropdown Deploy
-   * lavora con le voci default GLOBALI per platform: cambiare la platform del task qui
-   * altererebbe lo stato di design del designer in modo poco prevedibile.
+   *   1. Cambiamo la `platform` dell'**override del task editor** a X, preservando tutti gli
+   *      altri campi (system prompt, tools, ecc.). Il pannello dello step 5 monta `IAAgentSetup`,
+   *      che renderizza le pill platform basate su `iaRuntimeConfig.platform`: questo è l'unico
+   *      modo per «selezionare la TAB» della platform giusta quando il pannello si apre.
+   *      NB: il cambio platform è persistente (override task). La voce eventualmente già
+   *      configurata sulla platform precedente NON viene cancellata: resta dentro `voice` /
+   *      `ttsModel` e tornerà visibile se l'utente ripristina la platform precedente.
+   *   2. Saltiamo allo step 5 («Voce») del wizard.
+   *   3. Dispatch dell'evento `omnia:ia-runtime-focus` con `focus: 'voice'` → il pannello fa
+   *      scroll-into-view sulla sezione voce.
+   *   4. Bumpiamo `voicesReloadSeed` così quando l'utente torna allo stepper la mappa voci
+   *      del deploy menu si rinfresca.
    */
   const onFixVoiceForPlatform = React.useCallback(
     (platform: IAAgentPlatform) => {
-      try {
-        const current = loadGlobalIaAgentConfig();
-        if (current.platform !== platform) {
-          saveGlobalIaAgentConfig({ ...current, platform });
-        }
-      } catch (err) {
-        // Failure to persist the global platform here is recoverable: l'utente vedr\u00e0 il
-        // pannello con la platform precedente e potr\u00e0 cambiarla manualmente. Non rilanciamo
-        // perch\u00e9 il rest del flusso (selezione step, scroll-to-focus) deve comunque procedere.
-        console.warn('Fix voice: cannot persist global platform=', platform, err);
+      const currentCfg = c.iaRuntimeConfig;
+      if (currentCfg && currentCfg.platform !== platform) {
+        const merged = { ...currentCfg, platform };
+        c.setIaRuntimeConfig(merged);
+        c.persistIaRuntimeOverrideSnapshot({ platform });
       }
       onSelectWizardStep(4 as AgentWizardStepIndex);
       window.setTimeout(() => {
@@ -926,7 +939,13 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         setVoicesReloadSeed((s) => s + 1);
       }, 250);
     },
-    [instanceId, onSelectWizardStep]
+    [
+      instanceId,
+      onSelectWizardStep,
+      c.iaRuntimeConfig,
+      c.setIaRuntimeConfig,
+      c.persistIaRuntimeOverrideSnapshot,
+    ]
   );
 
   /**
@@ -1026,6 +1045,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       countByStyleId={deployCountByStyleId}
       deployStyleId={c.agentConversationDeployStyleId}
       onDeployStyleIdChange={c.setAgentConversationDeployStyleId}
+      logUseCaseEnabled={c.agentLogUseCase}
+      onToggleLogUseCase={c.setAgentLogUseCase}
     />
   ) : null;
 
@@ -1138,6 +1159,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentConversationStyleSelections: c.setAgentConversationStyleSelections,
     agentConversationDeployStyleId: c.agentConversationDeployStyleId,
     setAgentConversationDeployStyleId: c.setAgentConversationDeployStyleId,
+    agentLogUseCase: c.agentLogUseCase,
+    setAgentLogUseCase: c.setAgentLogUseCase,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
@@ -1288,6 +1311,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         <ConversationalPromptDialog
           open={conversationalPromptDialogOpen}
           useCases={c.useCases}
+          includeLog={c.agentLogUseCase}
           onClose={onCloseConversationalPromptDialog}
         />
       </div>

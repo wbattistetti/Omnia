@@ -37,6 +37,12 @@ export interface ConversationalPromptDialogProps {
   open: boolean;
   /** Lista use case sorgente — tutti devono avere un messaggio canonico compilabile. */
   useCases: readonly AIAgentUseCase[];
+  /**
+   * Quando true, riflette il toggle "Logga Use Case" del deploy menu: il prompt include
+   * il campo `log` per ogni use case e l'istruzione testuale per il caso "non riconosciuto".
+   * Default `false`: il dialog mostra il prompt classico, senza tracing.
+   */
+  includeLog?: boolean;
   onClose: () => void;
 }
 
@@ -62,6 +68,7 @@ const MONACO_PROMPT_OPTIONS = {
 export function ConversationalPromptDialog({
   open,
   useCases,
+  includeLog = false,
   onClose,
 }: ConversationalPromptDialogProps): React.ReactElement | null {
   /**
@@ -73,14 +80,14 @@ export function ConversationalPromptDialog({
   const promptResult = React.useMemo<{ value: string; error: string | null }>(() => {
     if (!open) return { value: '', error: null };
     try {
-      return { value: buildConversationalPrompt(useCases), error: null };
+      return { value: buildConversationalPrompt(useCases, { includeLog }), error: null };
     } catch (err) {
       return {
         value: '',
         error: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [open, useCases]);
+  }, [open, useCases, includeLog]);
 
   const [copyJustSucceeded, setCopyJustSucceeded] = React.useState(false);
   const [copyError, setCopyError] = React.useState<string | null>(null);

@@ -58,6 +58,33 @@ export interface UseCaseConversationalJson {
    * disambiguazione: `data1`, `data2`).
    */
   tokens: string[];
+  /**
+   * Marker di "log use case" che l'agente runtime deve appendere alla risposta quando
+   * questo use case è stato applicato. Serializzato **solo** quando il task ha
+   * `agentLogUseCase === true` (toggle nel `AIAgentDeployMenu`). Quando assente, il
+   * comportamento runtime è invariato rispetto al passato. Formato fisso: `Usecase: <label>`
+   * (label umana, non GUID, per leggibilità del trace lato designer).
+   */
+  log?: string;
+}
+
+/**
+ * Opzioni del proiettore. `includeLog: true` aggiunge il campo `log` nel JSON con il
+ * formato `Usecase: <label>` — vedi `Task.agentLogUseCase` e
+ * {@link UseCaseConversationalJson.log}. Default: `false` (back-compat).
+ */
+export interface ProjectUseCaseOptions {
+  readonly includeLog?: boolean;
+}
+
+/**
+ * Costruisce il valore del campo `log` per uno use case. Esportato (anche se single-line)
+ * perché il compositore del system prompt — quando inietta l'istruzione "non riconosciuto"
+ * — deve mostrare lo stesso formato come esempio inline: tenerlo qui evita drift tra il
+ * JSON e la documentazione testuale.
+ */
+export function buildUseCaseLogValue(label: string): string {
+  return `Usecase: ${label.trim()}`;
 }
 
 export interface UseCaseConversationalCompilation {
@@ -150,9 +177,11 @@ export function isUseCaseProjectable(uc: AIAgentUseCase): boolean {
  * le regole del progetto: niente fallback silenziosi.
  *
  * @param uc lo use case sorgente, già normalizzato (campi presenti come da {@link AIAgentUseCase}).
+ * @param options vedi {@link ProjectUseCaseOptions}.
  */
 export function projectUseCaseToConversationalJson(
-  uc: AIAgentUseCase
+  uc: AIAgentUseCase,
+  options: ProjectUseCaseOptions = {}
 ): UseCaseConversationalJson | null {
   if (!isUseCaseProjectable(uc)) return null;
 
@@ -162,13 +191,17 @@ export function projectUseCaseToConversationalJson(
   const scenario = typeof uc.payoff === 'string' ? uc.payoff.trim() : '';
   const label = typeof uc.label === 'string' ? uc.label.trim() : '';
 
-  return {
+  const projected: UseCaseConversationalJson = {
     useCaseId: uc.id,
     label,
     scenario,
     tokenizedExample,
     tokens: compiled.tokens,
   };
+  if (options.includeLog === true) {
+    projected.log = buildUseCaseLogValue(label);
+  }
+  return projected;
 }
 
 /**
@@ -183,7 +216,8 @@ export function projectUseCaseToConversationalJson(
  * dall'IA. Vedi {@link isUseCaseIncludedInConversations}.
  */
 export function projectAllUseCasesToConversationalJson(
-  useCases: readonly AIAgentUseCase[]
+  useCases: readonly AIAgentUseCase[],
+  options: ProjectUseCaseOptions = {}
 ): UseCaseConversationalJson[] {
   const sorted = [...useCases]
     .filter(isUseCaseIncludedInConversations)
@@ -193,7 +227,7 @@ export function projectAllUseCasesToConversationalJson(
     });
   const out: UseCaseConversationalJson[] = [];
   for (const uc of sorted) {
-    const projected = projectUseCaseToConversationalJson(uc);
+    const projected = projectUseCaseToConversationalJson(uc, options);
     if (projected) out.push(projected);
   }
   return out;
@@ -220,9 +254,10 @@ export function areAllUseCasesProjectable(useCases: readonly AIAgentUseCase[]): 
  * clipboard copy).
  */
 export function stringifyUseCaseConversationalJson(
-  uc: AIAgentUseCase
+  uc: AIAgentUseCase,
+  options: ProjectUseCaseOptions = {}
 ): string {
-  const projected = projectUseCaseToConversationalJson(uc);
+  const projected = projectUseCaseToConversationalJson(uc, options);
   if (!projected) return '';
   return JSON.stringify(projected, null, 2);
 }

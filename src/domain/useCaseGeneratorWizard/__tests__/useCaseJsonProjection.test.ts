@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   areAllUseCasesProjectable,
+  buildUseCaseLogValue,
   compileUseCaseConversationalText,
   isUseCaseProjectable,
   projectAllUseCasesToConversationalJson,
@@ -239,5 +240,54 @@ describe('stringifyUseCaseConversationalJson', () => {
   it('returns empty string for a non-projectable use case', () => {
     const uc = makeUseCase({ dialogue: [] });
     expect(stringifyUseCaseConversationalJson(uc)).toBe('');
+  });
+});
+
+describe('buildUseCaseLogValue', () => {
+  it('formats label as "Usecase: <label>" with trim difensivo', () => {
+    expect(buildUseCaseLogValue('Saluto')).toBe('Usecase: Saluto');
+    expect(buildUseCaseLogValue('  Spazi  ')).toBe('Usecase: Spazi');
+  });
+});
+
+describe('projectUseCaseToConversationalJson — log field', () => {
+  it("by default does NOT include the 'log' field (back-compat with task gi\u00e0 pubblicati)", () => {
+    const out = projectUseCaseToConversationalJson(makeUseCase());
+    expect(out).not.toBeNull();
+    expect(out!).not.toHaveProperty('log');
+  });
+
+  it("with includeLog=false explicitly: 'log' field is absent", () => {
+    const out = projectUseCaseToConversationalJson(makeUseCase(), { includeLog: false });
+    expect(out!).not.toHaveProperty('log');
+  });
+
+  it("with includeLog=true: 'log' is 'Usecase: <label>' (not GUID)", () => {
+    const out = projectUseCaseToConversationalJson(
+      makeUseCase({ id: 'uc-guid-xyz', label: 'Saluto cliente' }),
+      { includeLog: true }
+    );
+    expect(out!.log).toBe('Usecase: Saluto cliente');
+  });
+
+  it("trims label whitespace before composing the log value", () => {
+    const out = projectUseCaseToConversationalJson(
+      makeUseCase({ label: '  Padded  ' }),
+      { includeLog: true }
+    );
+    expect(out!.log).toBe('Usecase: Padded');
+  });
+});
+
+describe('projectAllUseCasesToConversationalJson — log field', () => {
+  it('propagates includeLog to all projected entries', () => {
+    const ucs: AIAgentUseCase[] = [
+      makeUseCase({ id: 'uc-a', label: 'Alpha', sort_order: 1 }),
+      makeUseCase({ id: 'uc-b', label: 'Beta', sort_order: 2 }),
+    ];
+    const withLog = projectAllUseCasesToConversationalJson(ucs, { includeLog: true });
+    expect(withLog.map((o) => o.log)).toEqual(['Usecase: Alpha', 'Usecase: Beta']);
+    const withoutLog = projectAllUseCasesToConversationalJson(ucs);
+    expect(withoutLog.every((o) => !('log' in o))).toBe(true);
   });
 });

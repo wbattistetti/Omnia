@@ -44,5 +44,11 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentConversationStyleSelections: {},
     /** Upload disabilitato di default finché il designer non sceglie uno stile target. */
     agentConversationDeployStyleId: null,
+    /**
+     * "Logga Use Case": OFF di default. Il designer può abilitarlo dalla dropdown
+     * `AIAgentDeployMenu` quando vuole il trace `Usecase: <label>` in coda alle
+     * risposte runtime.
+     */
+    agentLogUseCase: false,
   };
 }

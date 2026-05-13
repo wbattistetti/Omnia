@@ -20,6 +20,20 @@ import {
 import type { LlmCatalogProviderId } from '@services/iaCatalogApi';
 import { ModelTreePicker } from '@components/common/ModelTreePicker';
 import { consumeMissingAiModelReason } from '@utils/aiModelGuard';
+import { useLlmPricingCatalog } from '@hooks/useLlmPricingCatalog';
+import { useAiCallLog } from '@context/AiCallLogContext';
+import {
+  CostComparatorTable,
+  DEFAULT_UNLOCK_PASSWORD,
+} from '@components/common/CostComparatorTable';
+import { LockPasswordPromptForm } from '@components/common/LockPasswordPromptForm';
+import {
+  buildCostComparatorRows,
+  filterPricingByProviders,
+  isAboveCostThresholdEur,
+  type CostComparatorRow,
+  type ProviderId,
+} from '@domain/aiCost/costComparator';
 
 const REASONING_LEVELS: OmniaTutorConfig['reasoning'][] = ['none', 'low', 'medium', 'high'];
 
@@ -179,6 +193,198 @@ export function OmniaTutorSetup() {
     ? modelErrors.map((e) => `${e.provider}: ${e.message}`).join(' | ')
     : null;
 
+  /**
+   * Cost comparator: catalogo pricing live (OpenRouter via backend) + cambio EUR cached
+   * (ECB via backend). I provider mostrati sono limitati a quelli effettivamente usabili
+   * dal Tutor (`TUTOR_PROVIDERS` → openai, groq) per non confondere l'utente con righe
+   * non selezionabili dal picker. Il cambio è preso dal `AiCallLogProvider` mountato in
+   * `App.tsx` — niente fetch duplicati.
+   */
+  const pricingCatalog = useLlmPricingCatalog();
+  const { exchangeRate } = useAiCallLog();
+  const tutorAllowedProviders = React.useMemo<ReadonlySet<ProviderId>>(
+    () =>
+      new Set<ProviderId>(
+        TUTOR_PROVIDERS.map((p) => p.id).filter((id): id is ProviderId =>
+          (['openai', 'groq', 'anthropic', 'google'] as const).includes(id as ProviderId)
+        )
+      ),
+    []
+  );
+  /**
+   * Highlight della riga del modello attualmente scelto. La key del catalogo OpenRouter è
+   * `provider/model` (es. `openai/gpt-4o`); il provider del catalogo Tutor è uno solo, ma
+   * dato che la lista pricing è multi-provider preferiamo non assumerlo: cerchiamo per
+   * `endsWith('/' + config.model)` per matchare a prescindere dal prefisso.
+   */
+  const selectedPricingKey = React.useMemo(() => {
+    const id = String(config.model || '').trim();
+    if (!id) return null;
+    const match = pricingCatalog.items.find(
+      (it) => it.modelId === id || it.rawId.endsWith(`/${id}`)
+    );
+    return match ? match.rawId : null;
+  }, [config.model, pricingCatalog.items]);
+
+  /**
+   * Whitelist dei modelli "selezionabili dalla griglia": coincide con il catalogo
+   * Tutor live (`useAvailableLlmModels`). Modelli pricing non esposti dalla nostra
+   * API key (es. modelli OpenRouter di terzi) restano visibili ma inerti, con tooltip
+   * di spiegazione — fail-early UX coerente con la policy "no silent fallback".
+   *
+   * Match `provider/model` con la stessa convenzione di `LlmPricingEntry.rawId`.
+   */
+  const selectableTutorKeys = React.useMemo<ReadonlySet<string>>(() => {
+    const set = new Set<string>();
+    for (const opt of modelOptions) set.add(`${opt.provider}/${opt.id}`);
+    return set;
+  }, [modelOptions]);
+
+  /**
+   * Soglia oltre la quale un modello richiede sblocco con password (€/M token totali,
+   * input + output). Centralizzata qui perché vale per **tutti** i selettori della
+   * pagina — sia la `CostComparatorTable` che il `ModelTreePicker` sopra — e non ha
+   * senso lasciarne una copia per componente. Quando si vorrà rendere configurabile
+   * (per es. da policy di workspace) basterà sostituire questa costante con un valore
+   * letto dal config globale.
+   */
+  const COST_LOCK_THRESHOLD_EUR = 10;
+
+  /**
+   * Catalogo pricing pre-filtrato e già "ridotto a row comparabili" (input/output €/M,
+   * barWidthPercent, isFree). Usato per due scopi:
+   *  1. La tabella sotto lo riceve via `items=` e lo ricostruisce. (Doppio lavoro
+   *     trascurabile: ~150 entries, render una volta sola.)
+   *  2. Il **gate del picker**: dato un `modelId` proveniente dal `ModelTreePicker`
+   *     dobbiamo sapere se quel modello supera la soglia; serve la `CostComparatorRow`
+   *     completa per riusare `isAboveCostThresholdEur` (stessa fonte di verità della
+   *     tabella, niente regola duplicata).
+   */
+  const pricingRows = React.useMemo<ReadonlyArray<CostComparatorRow>>(() => {
+    const filtered = filterPricingByProviders(pricingCatalog.items, tutorAllowedProviders);
+    return buildCostComparatorRows(filtered, exchangeRate?.usdToEur ?? null);
+  }, [pricingCatalog.items, tutorAllowedProviders, exchangeRate?.usdToEur]);
+
+  /**
+   * Lookup `modelId → CostComparatorRow`. Match permissivo perché il `ModelTreePicker`
+   * usa solo l'id del modello (es. `gpt-4o`) mentre il catalogo pricing indicizza per
+   * `provider/model` (es. `openai/gpt-4o`). Casi: (a) match esatto su `modelId`,
+   * (b) fallback su `key.endsWith('/' + modelId)` per gestire i modelli OpenRouter
+   * con slash interni nel nome (es. `meta-llama/llama-3-70b`).
+   */
+  const findPricingRowForModel = React.useCallback(
+    (modelId: string): CostComparatorRow | null => {
+      const id = modelId.trim();
+      if (!id) return null;
+      return (
+        pricingRows.find((r) => r.modelId === id || r.key.endsWith(`/${id}`)) ?? null
+      );
+    },
+    [pricingRows]
+  );
+
+  /**
+   * Set di `row.key` (= `provider/model`) sbloccati nella sessione corrente. Vive in
+   * `OmniaTutorSetup` (non nella tabella) perché lo stesso unlock vale sia per la
+   * selezione dalla griglia che per quella dal picker — sbloccando una volta, l'utente
+   * non viene richiesto di nuovo finché non lascia la pagina.
+   */
+  const [unlockedKeys, setUnlockedKeys] = React.useState<ReadonlySet<string>>(
+    () => new Set<string>()
+  );
+
+  /**
+   * Selezione "in attesa di sblocco": settata quando l'utente prova a scegliere un
+   * modello sopra soglia non ancora sbloccato. Finché è non-null la pagina mostra il
+   * `LockPasswordPromptForm` sotto la riga del picker; alla password corretta diventa
+   * la nuova `config.model` e si chiude da sola.
+   */
+  type PendingUnlock = {
+    readonly rowKey: string;
+    readonly modelId: string;
+    readonly providerId: ProviderId;
+  };
+  const [pendingUnlock, setPendingUnlock] = React.useState<PendingUnlock | null>(null);
+
+  /**
+   * Gate condiviso da picker e griglia: applica la regola "modelli sopra soglia
+   * richiedono password". Esce subito (`persist`) per i modelli economici, free o
+   * fuori catalogo pricing — questi non li possiamo classificare, e il design del
+   * lock è "nessun falso positivo": è un cancello solo quando siamo sicuri.
+   */
+  const requestSelectModel = React.useCallback(
+    (modelId: string) => {
+      if (!modelId || modelId === config.model) {
+        setPendingUnlock(null);
+        return;
+      }
+      const row = findPricingRowForModel(modelId);
+      const needsUnlock =
+        row !== null &&
+        isAboveCostThresholdEur(row, COST_LOCK_THRESHOLD_EUR) &&
+        !unlockedKeys.has(row.key);
+      if (needsUnlock) {
+        setPendingUnlock({
+          rowKey: row.key,
+          modelId,
+          providerId: row.providerId,
+        });
+        return;
+      }
+      setPendingUnlock(null);
+      persist({ ...config, model: modelId });
+    },
+    [config, findPricingRowForModel, persist, unlockedKeys]
+  );
+
+  /**
+   * Submit del prompt password: aggiunge la rowKey agli sbloccati (così persiste per
+   * tutta la sessione e copre anche futuri click sulla griglia per lo stesso modello)
+   * e committa la selezione. Restituisce `false` se la password è errata, così il
+   * form mostra l'errore inline senza chiudersi.
+   */
+  const handlePendingUnlockSubmit = React.useCallback(
+    (password: string): boolean => {
+      if (!pendingUnlock) return false;
+      if (password !== DEFAULT_UNLOCK_PASSWORD) return false;
+      const target = pendingUnlock;
+      setUnlockedKeys((prev) => {
+        const next = new Set(prev);
+        next.add(target.rowKey);
+        return next;
+      });
+      setPendingUnlock(null);
+      persist({ ...config, model: target.modelId });
+      return true;
+    },
+    [pendingUnlock, persist, config]
+  );
+
+  const handlePendingUnlockCancel = React.useCallback(() => {
+    setPendingUnlock(null);
+  }, []);
+
+  const handleUnlockFromTable = React.useCallback((rowKey: string) => {
+    setUnlockedKeys((prev) => {
+      const next = new Set(prev);
+      next.add(rowKey);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Selezione dalla griglia → passa per lo stesso gate del picker. La tabella di
+   * solito blocca le righe lockate prima di emettere `onSelect`, quindi qui in
+   * pratica vediamo solo righe già sbloccate o sotto soglia; tenere comunque il
+   * gate è **defense in depth** (no logiche duplicate, una sola fonte di verità).
+   */
+  const handleSelectFromGrid = React.useCallback(
+    (entry: { providerId: string; modelId: string }) => {
+      requestSelectModel(entry.modelId);
+    },
+    [requestSelectModel]
+  );
+
   return (
     <div className="space-y-6 max-w-2xl text-slate-100">
       {missingModelBanner ? (
@@ -226,7 +432,7 @@ export function OmniaTutorSetup() {
                 ? 'Caricamento modelli disponibili…'
                 : 'Scegli un modello'
             }
-            onChange={(modelId) => persist({ ...config, model: modelId })}
+            onChange={(modelId) => requestSelectModel(modelId)}
           />
           {config.model && !modelOptions.some((o) => o.id === config.model) ? (
             <span className="block text-[10px] leading-tight text-amber-300">
@@ -281,6 +487,20 @@ export function OmniaTutorSetup() {
             }
           />
         </label>
+        {pendingUnlock ? (
+          <div
+            role="region"
+            aria-label="Sblocco modello premium"
+            className="sm:col-span-12 rounded-md border border-amber-700/60 bg-amber-950/25 px-3 py-2"
+          >
+            <LockPasswordPromptForm
+              modelId={pendingUnlock.modelId}
+              providerId={pendingUnlock.providerId}
+              onSubmit={handlePendingUnlockSubmit}
+              onCancel={handlePendingUnlockCancel}
+            />
+          </div>
+        ) : null}
       </div>
 
       <label className="block space-y-1">
@@ -303,6 +523,29 @@ export function OmniaTutorSetup() {
         <SafetyEditor
           safety={config.safety ?? {}}
           onChange={(safety) => persist({ ...config, safety })}
+        />
+      </div>
+
+      {/*
+        Cost comparator: tabella €/M token dei modelli disponibili (catalogo OpenRouter via backend).
+        Sempre montata al fondo della pagina LLM settings; gestisce internamente loading/error/empty.
+      */}
+      <div className="pt-2">
+        <CostComparatorTable
+          items={pricingCatalog.items}
+          usdToEur={exchangeRate?.usdToEur ?? null}
+          allowedProviders={tutorAllowedProviders}
+          selectedKey={selectedPricingKey}
+          updatedAt={pricingCatalog.meta.updatedAt}
+          loading={pricingCatalog.loading}
+          refreshing={pricingCatalog.refreshing}
+          error={pricingCatalog.error}
+          onRefresh={pricingCatalog.refresh}
+          onSelect={handleSelectFromGrid}
+          selectableKeys={selectableTutorKeys}
+          costLockThresholdEur={COST_LOCK_THRESHOLD_EUR}
+          unlockedKeys={unlockedKeys}
+          onUnlock={handleUnlockFromTable}
         />
       </div>
     </div>

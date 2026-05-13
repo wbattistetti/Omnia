@@ -95,4 +95,53 @@ describe('buildConversationalPrompt', () => {
     const ucs = [makeUseCase(), makeUseCase({ id: 'uc-2', sort_order: 1 })];
     expect(buildConversationalPrompt(ucs)).toBe(buildConversationalPrompt(ucs));
   });
+
+  describe('includeLog option', () => {
+    /**
+     * Quando `includeLog` è OFF (default) non DEVE comparire nessuna istruzione di logging
+     * né nessun campo `"log":` nel JSON: i task pubblicati senza il toggle attivo si
+     * affidano al "vecchio" prompt e l'output deve restare bit-identico.
+     */
+    it("by default omits both the textual instruction and the JSON 'log' field", () => {
+      const prompt = buildConversationalPrompt([
+        makeUseCase({ id: 'uc-a', label: 'Saluto' }),
+      ]);
+      expect(prompt).not.toContain('Logging use case');
+      expect(prompt).not.toContain('"log"');
+      expect(prompt).not.toContain('Usecase: ');
+    });
+
+    it("with includeLog=true: each JSON entry has 'log: \"Usecase: <label>\"'", () => {
+      const prompt = buildConversationalPrompt(
+        [makeUseCase({ id: 'uc-a', label: 'Saluto cliente' })],
+        { includeLog: true }
+      );
+      expect(prompt).toContain('"log": "Usecase: Saluto cliente"');
+    });
+
+    it("with includeLog=true: textual instruction is injected in front of the catalog blocks (not the global header)", () => {
+      const prompt = buildConversationalPrompt(
+        [makeUseCase({ id: 'uc-a', label: 'Saluto' })],
+        { includeLog: true }
+      );
+      const headerIdx = prompt.indexOf('Catalogo use case (JSON)');
+      const instructionIdx = prompt.indexOf('Logging use case');
+      const firstBlockIdx = prompt.indexOf('### Use case 1');
+      expect(headerIdx).toBeGreaterThan(-1);
+      expect(instructionIdx).toBeGreaterThan(headerIdx);
+      expect(firstBlockIdx).toBeGreaterThan(instructionIdx);
+      /**
+       * Lo snippet di esempio per il caso "non riconosciuto" deve usare il prefisso
+       * `nuovo_` per essere distinguibile a colpo d'occhio dai trace dei use case censiti.
+       */
+      expect(prompt).toMatch(/Usecase:\s*nuovo_/);
+    });
+
+    it('is deterministic also with includeLog=true', () => {
+      const ucs = [makeUseCase(), makeUseCase({ id: 'uc-2', sort_order: 1 })];
+      expect(buildConversationalPrompt(ucs, { includeLog: true })).toBe(
+        buildConversationalPrompt(ucs, { includeLog: true })
+      );
+    });
+  });
 });

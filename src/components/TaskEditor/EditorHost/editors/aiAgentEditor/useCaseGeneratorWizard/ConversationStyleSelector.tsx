@@ -12,8 +12,8 @@
  *  - Niente checkbox né editing testuale: pill di sola selezione singola.
  *  - Le pill sono limitate agli stili che hanno conversazioni (vedi
  *    `listGeneratedStyleIds`) — non si può filtrare/uplodare uno stile vuoto.
- *  - Supporta uno styleId «sentinel» legacy (`__legacy__`) per le conversazioni
- *    persistite prima dell'introduzione del campo `styleId`.
+ *  - Non mostra sentinel tecnici: le conversazioni legacy senza `styleId` vengono già
+ *    normalizzate dal domain helper sullo stile default («Cortese»).
  *
  * Stato: completamente controllato dal padre (`value` + `onChange`).
  */

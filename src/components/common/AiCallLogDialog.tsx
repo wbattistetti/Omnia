@@ -37,7 +37,7 @@ import {
   buildAiCallReportTree,
   type AiCallReportSortMode,
 } from '../../domain/aiCalls/aiCallReportTree';
-import { TreeNodeRow, formatUsd, formatEur } from './aiCallReport/aiCallReportRendering';
+import { TreeNodeRow, formatEur } from './aiCallReport/aiCallReportRendering';
 
 const STORAGE_KEY_SORT = 'omnia.aiCallLog.sortMode';
 const STORAGE_KEY_EXPANDED = 'omnia.aiCallLog.expanded';
@@ -175,7 +175,6 @@ export function AiCallLogDialog({ open, onClose }: AiCallLogDialogProps): React.
         <DialogFooter
           exchangeRateUsdToEur={exchangeRate?.usdToEur ?? null}
           totalCalls={tree.aggregates.callCount}
-          totalUsd={tree.aggregates.costUsd}
           totalEur={tree.aggregates.costEur}
           taskGroups={tree.nodes.length}
         />
@@ -212,8 +211,8 @@ function DialogHeader({
           Storico chiamate IA
         </h2>
         <p className="mt-0.5 text-[11px] text-slate-400">
-          Raggruppate per macro-task. Espandi un nodo per vedere le singole chiamate (USD ed EUR
-          al cambio ECB).
+          Raggruppate per macro-task. Espandi un nodo per vedere le singole chiamate (costi
+          in EUR al cambio ECB; USD canonico nel tooltip cella).
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -362,13 +361,11 @@ function DialogBody({
 function DialogFooter({
   exchangeRateUsdToEur,
   totalCalls,
-  totalUsd,
   totalEur,
   taskGroups,
 }: {
   exchangeRateUsdToEur: number | null;
   totalCalls: number;
-  totalUsd: number;
   totalEur: number | null;
   taskGroups: number;
 }): React.ReactElement {
@@ -380,7 +377,6 @@ function DialogFooter({
       <span className="flex items-center gap-3 tabular-nums">
         <span>
           Totale:{' '}
-          <span className="font-bold text-violet-200">{formatUsd(totalUsd)}</span>{' '}
           <span className="font-bold text-violet-200">{formatEur(totalEur)}</span>
         </span>
         <span>

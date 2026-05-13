@@ -78,6 +78,11 @@ export interface AIAgentTaskSnapshot {
    * Stile target di Upload (single per ora). `null` se non scelto → Upload disabilitato.
    */
   agentConversationDeployStyleId: string | null;
+  /**
+   * Toggle "Logga Use Case" (vedi `Task.agentLogUseCase` in `taskTypes.ts`). Default
+   * `false` per non alterare il comportamento dei task già pubblicati.
+   */
+  agentLogUseCase: boolean;
 }
 
 /**
@@ -143,6 +148,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       typeof r?.agentConversationDeployStyleId === 'string'
         ? r.agentConversationDeployStyleId
         : null,
+    agentLogUseCase: r?.agentLogUseCase === true,
   };
 }
 
