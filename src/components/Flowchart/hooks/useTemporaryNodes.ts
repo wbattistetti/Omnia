@@ -9,6 +9,11 @@ import { diagFlowLink } from '../utils/flowTempLinkDiag';
 import { getSourceHandleCenterInFlow } from '../utils/sourceHandleCenterInFlow';
 import type { ReactFlowStoreLike } from '../utils/waitForHandleBounds';
 import { getEmptyCustomNodeMinWidthFromNodeRowCss } from '../utils/emptyCustomNodeMinWidth';
+import {
+  computeTempNodePaneDropPosition,
+  targetHandleIdForTempEdge,
+  theoreticalHandleCenterFlow,
+} from '../utils/tempNodePaneDropPosition';
 
 export function useTemporaryNodes(
       setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
@@ -67,8 +72,6 @@ export function useTemporaryNodes(
       const realNodeWidth = getEmptyCustomNodeMinWidthFromNodeRowCss(fontSizes.nodeRow);
       /** Default altezza approssimata nodo vuoto per targetY prima della misura DOM. */
       const realNodeHeight = 80;
-      /** Se il puntatore è entro questa distanza in px dall’asse X dell’handle sorgente, il drop è “in colonna”. */
-      const VERTICAL_DROP_SCREEN_EPS_PX = 15;
 
       const sourceNodeId = connectionMenuRef.current?.sourceNodeId;
       const sourceHandleIdFromRef = (connectionMenuRef.current?.sourceHandleId as string) || 'bottom';
@@ -76,32 +79,41 @@ export function useTemporaryNodes(
 
       let position: { x: number; y: number };
       let verticalColumnDrop = false;
+      let horizontalRowDrop = false;
 
       if (sourceNode) {
-        const sw = sourceNode.measured?.width ?? sourceNode.width ?? 220;
-        const sh = sourceNode.measured?.height ?? sourceNode.height ?? 80;
-        /** Fallback se gli internals non sono ancora disponibili. */
-        const theoreticalSourceCenter = {
-          x: sourceNode.position.x + sw / 2,
-          y: sourceNode.position.y + sh,
-        };
+        const drop = computeTempNodePaneDropPosition({
+          clientX: event.clientX,
+          clientY: event.clientY,
+          posFlow,
+          sourceNode,
+          sourceNodeId,
+          sourceHandleId: sourceHandleIdFromRef,
+          storeApi,
+          reactFlowInstance,
+          realNodeWidth,
+          realNodeHeight,
+        });
+        position = drop.position;
+        verticalColumnDrop = drop.verticalColumnDrop;
+        horizontalRowDrop = drop.horizontalRowDrop;
+
         const measuredSourceCenter =
           sourceNodeId != null
             ? getSourceHandleCenterInFlow(storeApi, sourceNodeId, sourceHandleIdFromRef)
             : null;
-        const sourceCenterFlow = measuredSourceCenter ?? theoreticalSourceCenter;
-
+        const sw = sourceNode.measured?.width ?? sourceNode.width ?? 220;
+        const sh = sourceNode.measured?.height ?? sourceNode.height ?? 80;
         const toScreen = reactFlowInstance.flowToScreenPosition as
           | ((p: { x: number; y: number }) => { x: number; y: number })
           | undefined;
+        const sourceCenterFlow =
+          measuredSourceCenter ??
+          theoreticalHandleCenterFlow(sourceNode, sw, sh, sourceHandleIdFromRef);
         let hScreen: { x: number; y: number } | null = null;
         if (typeof toScreen === 'function') {
           hScreen = toScreen.call(reactFlowInstance, sourceCenterFlow);
-          verticalColumnDrop = Math.abs(event.clientX - hScreen.x) <= VERTICAL_DROP_SCREEN_EPS_PX;
         }
-        /** Allinea la colonna all’asse X reale dell’handle sorgente (non position+width/2). */
-        const anchorCenterX = verticalColumnDrop ? sourceCenterFlow.x : posFlow.x;
-        position = { x: anchorCenterX - realNodeWidth / 2, y: posFlow.y };
         diagFlowLink('tempNode:position', {
           sourceNodeId,
           clientX: event.clientX,
@@ -109,16 +121,16 @@ export function useTemporaryNodes(
           posFlow,
           sw,
           sh,
-          theoreticalSourceCenter,
           measuredSourceCenter,
           sourceCenterFlow,
           usedMeasuredCenter: !!measuredSourceCenter,
           hScreen,
-          deltaScreenX:
-            hScreen !== null ? Math.abs(event.clientX - hScreen.x) : null,
+          deltaScreenX: hScreen !== null ? Math.abs(event.clientX - hScreen.x) : null,
+          deltaScreenY: hScreen !== null ? Math.abs(event.clientY - hScreen.y) : null,
           verticalColumnDrop,
-          epsPx: VERTICAL_DROP_SCREEN_EPS_PX,
-          anchorCenterX,
+          horizontalRowDrop,
+          anchorCenterX: verticalColumnDrop ? sourceCenterFlow.x : posFlow.x,
+          anchorTopY: horizontalRowDrop ? sourceCenterFlow.y - realNodeHeight / 2 : posFlow.y,
           realNodeWidth,
           position,
           tempNodeId,
@@ -151,6 +163,7 @@ export function useTemporaryNodes(
         source: connectionMenuRef.current.sourceNodeId || '',
         sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
         target: tempNodeId,
+        targetHandle: targetHandleIdForTempEdge(sourceHandleIdFromRef),
         style: { stroke: '#8b5cf6' },
         type: 'custom',
         data: {
@@ -185,6 +198,7 @@ export function useTemporaryNodes(
         sourceNodeId: connectionMenuRef.current.sourceNodeId as string,
         sourceHandleId: (connectionMenuRef.current.sourceHandleId as string) || 'bottom',
         verticalColumnDrop,
+        horizontalRowDrop,
       };
 
     } catch (error) {

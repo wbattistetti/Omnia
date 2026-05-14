@@ -11,7 +11,6 @@ import ReactFlow, {
   applyNodeChanges,
   applyEdgeChanges,
   useStoreApi,
-  internalsSymbol,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { debug, error as logError } from '../../utils/logger';
@@ -53,10 +52,11 @@ import { useCompilationErrors } from '../../context/CompilationErrorsContext';
 import { useFlowchartState } from '../../context/FlowchartStateContext';
 import { useCrossFlowRowMoveOrchestrator } from './hooks/useCrossFlowRowMoveOrchestrator';
 import { useCrossNodeSubflowPortalMove } from './hooks/useCrossNodeSubflowPortalMove';
-import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from './edges/utils/edgeRouting';
+import { VHV_COLLINEAR_EPS_PX } from './edges/utils/edgeRouting';
 import { waitForHandleBounds } from './utils/waitForHandleBounds';
 import { diagFlowLink } from './utils/flowTempLinkDiag';
 import { computeLinkMidScreenFromConnection } from './utils/computeLinkMidScreenFromConnection';
+import { computeLinkMidScreenForTempEdgeUnified } from './utils/edgeIntellisenseAnchorFromHandles';
 import { incrementEditorOpenMetric } from '@features/performance';
 import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
 
@@ -597,7 +597,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       withNodeLock(async () => {
         try {
           const result = await createTemporaryNode(event);
-          const { tempEdgeId, tempNodeId, sourceNodeId, sourceHandleId, verticalColumnDrop } = result;
+          const { tempEdgeId, tempNodeId, sourceNodeId, sourceHandleId, verticalColumnDrop, horizontalRowDrop } = result;
 
           diagFlowLink('onConnectEnd:afterCreateTemp', {
             tempEdgeId,
@@ -629,53 +629,24 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             return;
           }
 
-          const nodeInternals: Map<string, any> = storeApi.getState().nodeInternals;
-          const srcInternal = nodeInternals.get(sourceNodeId);
-          const tgtInternal = nodeInternals.get(tempNodeId);
-
-          const srcHandles = srcInternal?.[internalsSymbol as any]?.handleBounds?.source as Array<{ id: string; x: number; y: number; width: number; height: number }> | undefined;
-          const tgtHandles = tgtInternal?.[internalsSymbol as any]?.handleBounds?.target as Array<{ id: string; x: number; y: number; width: number; height: number }> | undefined;
-
-          const srcHandle = srcHandles?.find(h => h.id === sourceHandleId) ?? srcHandles?.[0];
-          const tgtHandle = tgtHandles?.find(h => h.id === 'top-target') ?? tgtHandles?.[0];
-
-          diagFlowLink('openForEdge:internals', {
-            hasSrcInternal: !!srcInternal,
-            hasTgtInternal: !!tgtInternal,
-            sourceSourceHandleIds: srcHandles?.map((h) => h.id) ?? [],
-            targetTargetHandleIds: tgtHandles?.map((h) => h.id) ?? [],
-            pickedSourceHandleId: srcHandle?.id ?? null,
-            pickedTargetHandleId: tgtHandle?.id ?? null,
-            sourceHandleIdRequested: sourceHandleId,
+          const anchorResult = computeLinkMidScreenForTempEdgeUnified({
+            storeApi,
+            reactFlowInstance,
+            sourceNodeId,
+            tempNodeId,
+            sourceHandleId,
           });
 
-          if (srcHandle && tgtHandle && srcInternal && tgtInternal) {
-            const readCenters = () => {
-              const srcP = srcInternal[internalsSymbol as any]?.positionAbsolute ?? srcInternal.positionAbsolute;
-              const tgtP = tgtInternal[internalsSymbol as any]?.positionAbsolute ?? tgtInternal.positionAbsolute;
-              return {
-                sx: (srcP?.x ?? 0) + srcHandle.x + srcHandle.width / 2,
-                sy: (srcP?.y ?? 0) + srcHandle.y + srcHandle.height / 2,
-                tx: (tgtP?.x ?? 0) + tgtHandle.x + tgtHandle.width / 2,
-                ty: (tgtP?.y ?? 0) + tgtHandle.y + tgtHandle.height / 2,
-                srcPos: srcP,
-                tgtPos: tgtP,
-              };
-            };
-
-            const { sx, sy, tx, ty, srcPos, tgtPos } = readCenters();
-
-            const anchorFlow = intellisenseAnchorFlowFromHandles(sx, sy, tx, ty);
-            const linkMidScreen = reactFlowInstance.flowToScreenPosition(anchorFlow);
+          if (anchorResult) {
+            const { centers, anchorFlow, linkMidScreen } = anchorResult;
             diagFlowLink('openForEdge:anchor', {
-              srcPos,
-              tgtPos,
-              sx,
-              sy,
-              tx,
-              ty,
-              deltaFlowX: Math.abs(tx - sx),
+              sx: centers.sx,
+              sy: centers.sy,
+              tx: centers.tx,
+              ty: centers.ty,
+              deltaFlowX: Math.abs(centers.tx - centers.sx),
               verticalColumnDrop,
+              horizontalRowDrop,
               vhvCollinearEps: VHV_COLLINEAR_EPS_PX,
               anchorFlow,
               linkMidScreen,

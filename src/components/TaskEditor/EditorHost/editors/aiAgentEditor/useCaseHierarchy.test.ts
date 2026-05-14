@@ -9,6 +9,7 @@ import {
   normalizeUseCaseSiblingOrder,
   normalizeUseCaseSortOrderAlphabetically,
   normalizeUseCaseSortOrderLogical,
+  reorderUseCaseSibling,
 } from './useCaseHierarchy';
 
 function uc(id: string, label: string, parent_id: string | null, sort_order: number): AIAgentUseCase {
@@ -73,6 +74,57 @@ describe('normalizeUseCaseSortOrderAlphabetically', () => {
     expect(byId.get('r2')?.sort_order).toBe(1);
     expect(byId.get('c1')?.sort_order).toBe(0);
     expect(byId.get('c2')?.sort_order).toBe(1);
+  });
+});
+
+describe('reorderUseCaseSibling', () => {
+  it('moves a root sibling before another and reindexes sort_order', () => {
+    const input: AIAgentUseCase[] = [
+      uc('a', 'A', null, 0),
+      uc('b', 'B', null, 1),
+      uc('c', 'C', null, 2),
+    ];
+    const out = reorderUseCaseSibling(input, 'c', 'a', 'before');
+    const byId = new Map(out.map((x) => [x.id, x]));
+    expect(byId.get('c')?.sort_order).toBe(0);
+    expect(byId.get('a')?.sort_order).toBe(1);
+    expect(byId.get('b')?.sort_order).toBe(2);
+  });
+
+  it('moves a root sibling after another', () => {
+    const input: AIAgentUseCase[] = [
+      uc('a', 'A', null, 0),
+      uc('b', 'B', null, 1),
+      uc('c', 'C', null, 2),
+    ];
+    const out = reorderUseCaseSibling(input, 'a', 'b', 'after');
+    const byId = new Map(out.map((x) => [x.id, x]));
+    expect(byId.get('b')?.sort_order).toBe(0);
+    expect(byId.get('a')?.sort_order).toBe(1);
+    expect(byId.get('c')?.sort_order).toBe(2);
+  });
+
+  it('reorders only within the same parent_id', () => {
+    const input: AIAgentUseCase[] = [
+      uc('p', 'P', null, 0),
+      uc('c1', 'C1', 'p', 0),
+      uc('c2', 'C2', 'p', 1),
+      uc('x', 'X', null, 1),
+    ];
+    const out = reorderUseCaseSibling(input, 'c2', 'c1', 'before');
+    const byId = new Map(out.map((x) => [x.id, x]));
+    expect(byId.get('c2')?.sort_order).toBe(0);
+    expect(byId.get('c1')?.sort_order).toBe(1);
+    expect(byId.get('p')?.sort_order).toBe(0);
+    expect(byId.get('x')?.sort_order).toBe(1);
+  });
+
+  it('returns a copy unchanged when parents differ', () => {
+    const input: AIAgentUseCase[] = [uc('a', 'A', null, 0), uc('b', 'B', 'a', 0)];
+    const out = reorderUseCaseSibling(input, 'a', 'b', 'before');
+    expect(out).not.toBe(input);
+    expect(out.find((x) => x.id === 'a')?.sort_order).toBe(0);
+    expect(out.find((x) => x.id === 'b')?.sort_order).toBe(0);
   });
 });
 

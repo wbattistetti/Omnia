@@ -28,6 +28,7 @@ import {
   type PropagateCorrectionStyleResult,
   regenerateAIAgentUseCaseApi,
   regenerateAIAgentUseCaseTurnApi,
+  generalizeAIAgentUseCaseMetaApi,
 } from '@services/aiAgentDesignApi';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
@@ -1477,6 +1478,61 @@ export function useAIAgentEditorController({
     ]
   );
 
+  const handleGeneralizeUseCaseMeta = React.useCallback(
+    async (useCaseId: string): Promise<AIAgentUseCase | null> => {
+      const uc = useCases.find((u) => u.id === useCaseId);
+      if (!uc) {
+        setUseCaseComposerError('Use case non trovato.');
+        return null;
+      }
+      setUseCaseComposerError(null);
+      setUseCaseComposerBusy(true);
+      try {
+        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+        const { label: nextLabel, payoff: nextPayoff } = await generalizeAIAgentUseCaseMetaApi({
+          label: uc.label ?? '',
+          payoff: typeof uc.payoff === 'string' ? uc.payoff : '',
+          provider,
+          model,
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId: useCaseGlobalStyleId,
+          callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_GENERALIZE_META),
+        });
+        const merged: AIAgentUseCase = {
+          ...uc,
+          label: nextLabel,
+          payoff: nextPayoff,
+          designer_edit_confirmed: true,
+          designer_label_vote: 'up',
+          designer_payoff_vote: 'up',
+        };
+        setUseCases((prev) =>
+          normalizeUseCaseSiblingOrder(
+            prev.map((u) => (u.id === useCaseId ? merged : u)),
+            useCaseSiblingSortModeRef.current
+          )
+        );
+        setDirty(true);
+        return merged;
+      } catch (e) {
+        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        return null;
+      } finally {
+        setUseCaseComposerBusy(false);
+      }
+    },
+    [
+      useCases,
+      provider,
+      model,
+      globalStyleContract,
+      useCaseGlobalStyleId,
+      buildCallMeta,
+      setUseCases,
+    ]
+  );
+
   /**
    * Wizard passo 2: riscrivi le frasi esempio ancora alla baseline IA usando quelle modificate come riferimento di stile.
    */
@@ -2091,6 +2147,7 @@ export function useAIAgentEditorController({
     handleGenerateUseCaseBundle,
     handleCreateUseCase,
     handleRegenerateUseCase,
+    handleGeneralizeUseCaseMeta,
     handlePropagateExamplePhraseStyle,
     handleCompleteCorrection,
     globalStyleContract,

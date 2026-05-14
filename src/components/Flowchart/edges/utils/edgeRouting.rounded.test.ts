@@ -22,6 +22,20 @@ describe('rounded ortho paths', () => {
     expect(d).toContain('L');
   });
 
+  it('VHV collapses to source-column trunk for bottom→top when dy >= dx', () => {
+    const ports = { sourcePosition: 'bottom', targetPosition: 'top' };
+    const d = getRoundedVHVPath(10, 0, 90, 200, 8, ports);
+    expect(d).not.toContain('Q');
+    expect(d).toBe('M 10,0 L 10,200 L 90,200');
+  });
+
+  it('HVH collapses to source-row trunk for right→left when dx >= dy', () => {
+    const ports = { sourcePosition: 'right', targetPosition: 'left' };
+    const d = getRoundedHVHPath(200, 30, 0, 10, 8, ports);
+    expect(d).not.toContain('Q');
+    expect(d).toBe('M 200,30 L 0,30 L 0,10');
+  });
+
   it('HVH uses Q for typical elbow', () => {
     const d = getRoundedHVHPath(0, 0, 200, 150, 8);
     expect(d).toContain('Q');

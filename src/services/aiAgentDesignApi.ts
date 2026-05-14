@@ -573,6 +573,83 @@ export async function regenerateAIAgentUseCaseApi(
   }
 }
 
+export interface GeneralizeAIAgentUseCaseMetaParams {
+  label: string;
+  payoff: string;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  globalStyleId?: string;
+  callMeta?: AiCallMeta;
+}
+
+export interface GeneralizeAIAgentUseCaseMetaResult {
+  label: string;
+  payoff: string;
+}
+
+/**
+ * Generalizza titolo e scenario (payoff) con IA, senza modificare dialogue o altri campi.
+ */
+export async function generalizeAIAgentUseCaseMetaApi(
+  params: GeneralizeAIAgentUseCaseMetaParams
+): Promise<GeneralizeAIAgentUseCaseMetaResult> {
+  const {
+    label,
+    payoff,
+    provider,
+    model,
+    outputLanguage,
+    globalStyleContract,
+    globalStyleId,
+  } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'generalize_use_case_meta',
+      label: String(label ?? ''),
+      payoff: String(payoff ?? ''),
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
+      bodyPayload.globalStyleId = globalStyleId.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; label: string; payoff: string }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const gl = typeof body.label === 'string' ? body.label.trim() : '';
+    const gp = typeof body.payoff === 'string' ? body.payoff.trim() : '';
+    if (!gl || !gp) {
+      throw new Error('Risposta non valida: label o payoff mancanti.');
+    }
+    return { label: gl, payoff: gp };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface CreateAIAgentUseCaseParams {
   useCase: AIAgentUseCase;
   allUseCases: AIAgentUseCase[];

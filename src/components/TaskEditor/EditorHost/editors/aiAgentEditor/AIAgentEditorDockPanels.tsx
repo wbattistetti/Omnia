@@ -165,6 +165,7 @@ export function EditorUseCasesPanel() {
     onClearUseCaseComposerError,
     onCreateUseCase,
     onRegenerateUseCase,
+    onGeneralizeUseCaseMeta,
     onRegenerateAgentMessage,
     onAnnotateAgentMessageForJson,
     onDeleteUseCase,
@@ -248,6 +249,7 @@ export function EditorUseCasesPanel() {
       onDismissError={onClearUseCaseComposerError}
       onCreateUseCase={onCreateUseCase}
       onRegenerateUseCase={onRegenerateUseCase}
+      onGeneralizeUseCaseMeta={onGeneralizeUseCaseMeta}
       onRegenerateAgentMessage={onRegenerateAgentMessage}
       onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
       onDeleteUseCase={onDeleteUseCase}

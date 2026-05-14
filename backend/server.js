@@ -19,6 +19,7 @@ const {
   generateUseCaseBundleExtend,
   createUseCase,
   regenerateUseCase,
+  generalizeUseCaseMeta,
   regenerateTurn,
   propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,
@@ -6646,6 +6647,25 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, use_case: updated });
+    }
+
+    if (action === 'generalize_use_case_meta') {
+      const metaLabel = typeof body.label === 'string' ? body.label : '';
+      const metaPayoff = typeof body.payoff === 'string' ? body.payoff : '';
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] generalize_use_case_meta`, { provider, model });
+      const { label: gl, payoff: gp } = await generalizeUseCaseMeta({
+        label: metaLabel,
+        payoff: metaPayoff,
+        outputLanguage,
+        globalStyleContract,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_GENERALIZE_META',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({ success: true, label: gl, payoff: gp });
     }
 
     if (action === 'create_use_case') {

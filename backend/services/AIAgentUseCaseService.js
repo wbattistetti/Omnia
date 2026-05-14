@@ -563,6 +563,95 @@ async function regenerateUseCase({
   return normalizeUseCase(parsed.use_case, globalStyleId);
 }
 
+/** System dedicato: solo label + payoff (no dialogue). */
+const GENERALIZE_USE_CASE_META_SYSTEM = `You help OMNIA designers generalize use case metadata for reuse across similar domains.
+Respond with a single valid JSON object only (no markdown fences, no commentary).
+The JSON must contain exactly two string keys: "label" and "payoff".
+When OUTPUT_LANGUAGE is set in the user message, write both strings in that language.
+Do not invent new clinical facts; keep the same intent, constraints, and decision points as the input.
+Remove or replace overly tenant-specific proper names with role-based or generic wording when it improves reuse.`;
+
+function buildGeneralizeUseCaseMetaUserMessage(outputLanguage, label, payoff, globalStyleContract) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const styleBlock = buildGlobalStyleBlock(globalStyleContract);
+  const safeLabel = typeof label === 'string' ? label : '';
+  const safePayoff = typeof payoff === 'string' ? payoff : '';
+  return `${lang}Generalize this use case metadata.
+
+Current tree TITLE ("label"):
+${JSON.stringify(safeLabel)}
+
+Current SCENARIO narrative ("payoff"):
+${JSON.stringify(safePayoff)}
+
+${styleBlock}
+
+1) "label": short UI title (max ~120 characters), precise but domain-generalized where obvious.
+2) "payoff": clear reusable scenario narrative — same intent and constraints, template-friendly language, no new invented facts.
+
+Return JSON: { "label": "<string>", "payoff": "<string>" } only. Valid JSON only.`;
+}
+
+/**
+ * LLM: generalizza titolo e scenario (payoff) senza toccare dialogue o altri campi.
+ * @param {object} params
+ * @param {string} params.label
+ * @param {string} params.payoff
+ * @param {string} [params.outputLanguage]
+ * @param {string} [params.globalStyleContract]
+ * @param {string} [params.provider]
+ * @param {string} [params.model]
+ * @param {import('./AIProviderService')} params.aiProviderService
+ */
+async function generalizeUseCaseMeta({
+  label,
+  payoff,
+  outputLanguage,
+  globalStyleContract,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  const messages = [
+    { role: 'system', content: GENERALIZE_USE_CASE_META_SYSTEM },
+    {
+      role: 'user',
+      content: buildGeneralizeUseCaseMetaUserMessage(outputLanguage, label, payoff, globalStyleContract),
+    },
+  ];
+  const maxTokens = provider === 'openai' ? 2048 : 4096;
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.35,
+    maxTokens,
+    timeout: REGENERATE_USE_CASE_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  const parsed = JSON.parse(jsonStr);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid JSON: expected object with label and payoff');
+  }
+  const outLabel = typeof parsed.label === 'string' ? parsed.label.trim() : '';
+  const outPayoff = typeof parsed.payoff === 'string' ? parsed.payoff.trim() : '';
+  if (!outLabel || !outPayoff) {
+    throw new Error('Invalid response: label and payoff must be non-empty strings');
+  }
+  if (outLabel.length > 500 || outPayoff.length > 32000) {
+    throw new Error('Invalid response: label or payoff exceeds maximum length');
+  }
+  return { label: outLabel, payoff: outPayoff };
+}
+
 function buildCreateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps, globalStyleContract) {
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
@@ -1407,6 +1496,7 @@ module.exports = {
   generateUseCaseBundleExtend,
   createUseCase,
   regenerateUseCase,
+  generalizeUseCaseMeta,
   regenerateTurn,
   propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,

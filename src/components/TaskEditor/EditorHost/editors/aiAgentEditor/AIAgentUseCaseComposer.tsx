@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Copy,
   FileJson,
+  Globe,
   GitBranch,
   Loader2,
   MessageSquareText,
@@ -36,6 +37,8 @@ import {
   LABEL_AGENT_MSG_STRIP_TOKENS,
   LABEL_AGENT_MSG_WRAP_TOKEN,
   LABEL_GENERATE_USE_CASES,
+  LABEL_GENERALIZE_USE_CASE_META_CONFIRM,
+  LABEL_GENERALIZE_USE_CASE_META_PENDING,
   LABEL_REGENERATE_AGENT_EXAMPLE,
   LABEL_REGENERATE_USE_CASE_FOR_SCENARIO,
 } from './constants';
@@ -46,9 +49,13 @@ import {
 } from './parseRootUseCaseDraft';
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import {
+  computeAgentTokenSelectionPopoverAction,
   messageHasSlotBrackets,
   stripAgentMessageSlotBrackets,
+  unwrapBracketTokenContainingSelection,
+  buildBracketWrapForSelection,
 } from './agentMessageTokenHelpers';
+import { AgentMessageSelectionTokenPopover } from './AgentMessageSelectionTokenPopover';
 import {
   buildVirtualAgentRuntimeCatalogFromUseCases,
   buildVirtualAgentUseCaseConstrainedPromptAppendix,
@@ -91,6 +98,7 @@ import {
   COMPLETE_CORRECTION_VISIBILITY_THRESHOLD,
 } from './useCaseSubstantialEdits';
 import { VoteThumbPair } from './VoteThumbPair';
+import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
 import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHighlightedText';
 import { CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE } from './useCaseGeneratorWizard/CompletaCorrezioneCallout';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
@@ -103,6 +111,7 @@ import {
 } from '@services/aiAgentDesignApi';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
+import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
@@ -122,6 +131,8 @@ export interface AIAgentUseCaseComposerProps {
     creationScope?: 'single' | 'batch';
   }) => Promise<string>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  /** Generalizza titolo e scenario (payoff) via LLM; assente = nessun pulsante. */
+  onGeneralizeUseCaseMeta?: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
   onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   /** IA: tokenizza il messaggio con [slot] e allinea il JSON motore (preview sotto). */
   onAnnotateAgentMessageForJson: (
@@ -212,6 +223,7 @@ export function AIAgentUseCaseComposer({
   onDismissError,
   onCreateUseCase,
   onRegenerateUseCase,
+  onGeneralizeUseCaseMeta,
   onRegenerateAgentMessage,
   onAnnotateAgentMessageForJson: _onAnnotateAgentMessageForJson,
   onDeleteUseCase,
@@ -246,7 +258,7 @@ export function AIAgentUseCaseComposer({
     () => new Set([...assistantPhraseStyleNewIds, ...completeCorrectionNewIds]),
     [assistantPhraseStyleNewIds, completeCorrectionNewIds]
   );
-  const { ordered, depthById } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
+  const { ordered } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
   const dock = useOptionalAIAgentEditorDock();
@@ -394,6 +406,83 @@ export function AIAgentUseCaseComposer({
     start: 0,
     end: 0,
   });
+  /** Viewport anchor (caret fine selezione) per toolbar Tokenizza `position: fixed`. */
+  const [agentMsgTokenAnchor, setAgentMsgTokenAnchor] = React.useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+  /**
+   * Durante drag-select (mouse/touch) la selezione nel DOM cambia ma non mostriamo ancora
+   * «Tokenizza»: solo al rilascio (mouseup/touchend) la toolbar contestuale può comparire.
+   */
+  const [agentMsgPointerSelecting, setAgentMsgPointerSelecting] = React.useState(false);
+
+  const markAgentMsgPointerSelectingMouse = React.useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setAgentMsgPointerSelecting(true);
+  }, []);
+
+  const markAgentMsgPointerSelectingTouch = React.useCallback(() => {
+    setAgentMsgPointerSelecting(true);
+  }, []);
+
+  /** Durante `onGeneralizeUseCaseMeta` mostriamo il messaggio di attesa accanto al globo (riga lista). */
+  const [generalizeMetaPendingUseCaseId, setGeneralizeMetaPendingUseCaseId] = React.useState<
+    string | null
+  >(null);
+
+  const invokeGeneralizeUseCaseMeta = React.useCallback(
+    async (useCaseId: string): Promise<void> => {
+      if (!onGeneralizeUseCaseMeta) return;
+      setGeneralizeMetaPendingUseCaseId(useCaseId);
+      try {
+        await Promise.resolve(onGeneralizeUseCaseMeta(useCaseId));
+      } finally {
+        setGeneralizeMetaPendingUseCaseId((cur) => (cur === useCaseId ? null : cur));
+      }
+    },
+    [onGeneralizeUseCaseMeta]
+  );
+
+  /** Click sul globo apre il menu; solo «Generalizza» avvia l’IA. */
+  const [generalizeGlobeMenuOpenUseCaseId, setGeneralizeGlobeMenuOpenUseCaseId] = React.useState<
+    string | null
+  >(null);
+
+  const confirmGeneralizeFromGlobeMenu = React.useCallback(
+    async (useCaseId: string): Promise<void> => {
+      setGeneralizeGlobeMenuOpenUseCaseId(null);
+      await invokeGeneralizeUseCaseMeta(useCaseId);
+    },
+    [invokeGeneralizeUseCaseMeta]
+  );
+
+  React.useEffect(() => {
+    if (busy) setGeneralizeGlobeMenuOpenUseCaseId(null);
+  }, [busy]);
+
+  React.useEffect(() => {
+    if (generalizeGlobeMenuOpenUseCaseId === null) return;
+    const onMouseDownCapture = (ev: MouseEvent): void => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest(`[data-uc-generalize-popover-root="${generalizeGlobeMenuOpenUseCaseId}"]`)) {
+        return;
+      }
+      setGeneralizeGlobeMenuOpenUseCaseId(null);
+    };
+    document.addEventListener('mousedown', onMouseDownCapture, true);
+    return () => document.removeEventListener('mousedown', onMouseDownCapture, true);
+  }, [generalizeGlobeMenuOpenUseCaseId]);
+
+  React.useEffect(() => {
+    if (generalizeGlobeMenuOpenUseCaseId === null) return;
+    const onKey = (ev: KeyboardEvent): void => {
+      if (ev.key === 'Escape') setGeneralizeGlobeMenuOpenUseCaseId(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [generalizeGlobeMenuOpenUseCaseId]);
 
   /** Modifica payoff / messaggio: vista etichetta+matita, edit con textbox classica e ✓ / ✗ */
   const [payoffEditUseCaseId, setPayoffEditUseCaseId] = React.useState<string | null>(null);
@@ -747,6 +836,7 @@ export function AIAgentUseCaseComposer({
 
   React.useEffect(() => {
     setAgentMsgSelection({ start: 0, end: 0 });
+    setAgentMsgTokenAnchor(null);
   }, [effectiveSelectedId]);
 
   React.useEffect(() => {
@@ -920,8 +1010,37 @@ export function AIAgentUseCaseComposer({
     [busy, childDraftLabel, createUseCase]
   );
 
+  /**
+   * Aggiorna il contenuto del turno assistente per uno use case.
+   *
+   * - `mode: 'commit'` (default): conferma implicita (voti, incluso nelle conversazioni,
+   *   collasso card wizard) come dopo il segno di spunta di conferma messaggio.
+   * - `mode: 'silent'`: solo aggiornamento testo + `userEdited` sul turno (es. tokenizza /
+   *   rimuovi quadre durante l’edit) **senza** collassare la card né forzare i voti in header.
+   */
   const setAssistantTurnContentForUseCase = React.useCallback(
-    (useCaseId: string, turnId: string, content: string) => {
+    (
+      useCaseId: string,
+      turnId: string,
+      content: string,
+      options?: { mode?: 'commit' | 'silent' }
+    ) => {
+      const mode = options?.mode ?? 'commit';
+      if (mode === 'silent') {
+        setUseCases((prev) =>
+          prev.map((u) =>
+            u.id === useCaseId
+              ? {
+                  ...u,
+                  dialogue: u.dialogue.map((turn) =>
+                    turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
+                  ),
+                }
+              : u
+          )
+        );
+        return;
+      }
       setUseCases((prev) =>
         prev.map((u) =>
           u.id === useCaseId
@@ -929,6 +1048,8 @@ export function AIAgentUseCaseComposer({
                 ...u,
                 designer_edit_confirmed: true as const,
                 designer_agent_message_vote: 'up' as const,
+                designer_label_vote: 'up' as const,
+                included_in_conversations: true,
                 dialogue: u.dialogue.map((turn) =>
                   turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
                 ),
@@ -937,22 +1058,29 @@ export function AIAgentUseCaseComposer({
         )
       );
       onClearUseCaseHighlight?.(useCaseId);
+      if (primaryGenerateOnRightOnly) {
+        setCardExpandedById((prev) => ({ ...prev, [useCaseId]: false }));
+        listToolbarCtx?.notifyCardToggle();
+      }
     },
-    [setUseCases, onClearUseCaseHighlight]
-  );
-
-  const setAssistantTurnContent = React.useCallback(
-    (turnId: string, content: string) => {
-      if (!selected) return;
-      setAssistantTurnContentForUseCase(selected.id, turnId, content);
-    },
-    [selected, setAssistantTurnContentForUseCase]
+    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx]
   );
 
   const payoffTextareaRef = React.useRef<HTMLTextAreaElement>(null);
   const agentTextareaRef = React.useRef<HTMLTextAreaElement>(null);
   const payoffTextareaRefsById = React.useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const agentTextareaRefsById = React.useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  /**
+   * Textarea attiva per il messaggio agente in modifica: pannello dettaglio (classic) vs riga
+   * lista (wizard).
+   */
+  const getActiveAgentTextarea = React.useCallback((): HTMLTextAreaElement | null => {
+    if (!agentMsgEditUseCaseId) return null;
+    if (!primaryGenerateOnRightOnly) {
+      return agentTextareaRef.current;
+    }
+    return agentTextareaRefsById.current.get(agentMsgEditUseCaseId) ?? null;
+  }, [agentMsgEditUseCaseId, primaryGenerateOnRightOnly]);
   /** Live assistant text per use case (Annotate JSON / focus safety). */
   const liveAgentContentByIdRef = React.useRef<Record<string, string>>({});
   /** Turn in modifica nel wizard (commit messaggio). */
@@ -979,6 +1107,17 @@ export function AIAgentUseCaseComposer({
     for (const el of payoffTextareaRefsById.current.values()) grow(el, 48);
     for (const el of agentTextareaRefsById.current.values()) grow(el, 64);
   }, []);
+
+  /**
+   * All’apertura dell’edit (click matita / doppio click) le textarea sono appena montate con
+   * `rows={2}`: senza questa sync l’altezza resta bassa finché non si digita. Qui forziamo
+   * l’espansione al contenuto completo prima del paint visibile.
+   */
+  React.useLayoutEffect(() => {
+    if (!payoffEditUseCaseId && !agentMsgEditUseCaseId) return;
+    syncWizardTextareaHeights();
+    syncDetailTextareaHeights();
+  }, [payoffEditUseCaseId, agentMsgEditUseCaseId, syncWizardTextareaHeights, syncDetailTextareaHeights]);
 
   const setPayoffForUseCase = React.useCallback(
     (useCaseId: string, value: string) => {
@@ -1159,11 +1298,61 @@ export function AIAgentUseCaseComposer({
     [assistantTurn, assistantTurn?.content]
   );
 
+  /**
+   * Sincronizza `agentMsgSelection` con il DOM. Richiede che la textarea del messaggio abbia
+   * il focus: evita aggiornamenti spurii quando `selectionchange` globale scatta mentre l’utente
+   * interagisce con altri controlli; mantiene comunque il caso «mouseup fuori dalla textarea»
+   * perché in quel caso il focus resta sulla textarea finché non si clicca altrove.
+   */
   const syncAgentMsgSelection = React.useCallback(() => {
-    const ta = agentTextareaRef.current;
+    const ta = getActiveAgentTextarea();
     if (!ta) return;
+    if (document.activeElement !== ta) return;
     setAgentMsgSelection({ start: ta.selectionStart, end: ta.selectionEnd });
-  }, []);
+  }, [getActiveAgentTextarea]);
+
+  React.useEffect(() => {
+    setAgentMsgSelection({ start: 0, end: 0 });
+    setAgentMsgTokenAnchor(null);
+    setAgentMsgPointerSelecting(false);
+  }, [agentMsgEditUseCaseId]);
+
+  React.useEffect(() => {
+    if (!agentMsgPointerSelecting) return;
+    const end = (): void => {
+      setAgentMsgPointerSelecting(false);
+    };
+    window.addEventListener('mouseup', end, true);
+    window.addEventListener('touchend', end, true);
+    return () => {
+      window.removeEventListener('mouseup', end, true);
+      window.removeEventListener('touchend', end, true);
+    };
+  }, [agentMsgPointerSelecting]);
+
+  /**
+   * `mouseup` sulla textarea non arriva se l’utente rilascia il tasto fuori dal campo dopo un
+   * drag-select; `selectionchange` sul document è emesso quando la selezione nel textarea cambia
+   * (doppio click, Shift+frecce, drag anche con rilascio esterno). Coalesciamo con rAF per non
+   * saturare React durante il drag.
+   */
+  React.useEffect(() => {
+    if (!agentMsgEditUseCaseId || busy) return;
+    let raf = 0;
+    const scheduleSync = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        syncAgentMsgSelection();
+      });
+    };
+    document.addEventListener('selectionchange', scheduleSync);
+    document.addEventListener('mouseup', scheduleSync, true);
+    return () => {
+      document.removeEventListener('selectionchange', scheduleSync);
+      document.removeEventListener('mouseup', scheduleSync, true);
+      cancelAnimationFrame(raf);
+    };
+  }, [agentMsgEditUseCaseId, busy, syncAgentMsgSelection]);
 
   const agentMsgContentForDetailOps = React.useMemo(() => {
     if (!assistantTurn) return '';
@@ -1171,79 +1360,209 @@ export function AIAgentUseCaseComposer({
     return assistantTurn.content;
   }, [assistantTurn, selected, agentMsgEditUseCaseId, agentMsgEditDraft]);
 
+  const agentMsgTokenPopoverAction = React.useMemo(
+    () =>
+      agentMsgEditUseCaseId
+        ? computeAgentTokenSelectionPopoverAction(
+            agentMsgEditDraft,
+            agentMsgSelection.start,
+            agentMsgSelection.end
+          )
+        : ('none' as const),
+    [agentMsgEditUseCaseId, agentMsgEditDraft, agentMsgSelection.start, agentMsgSelection.end]
+  );
+
+  const agentMsgTokenPopoverActionVisible = React.useMemo(() => {
+    if (agentMsgPointerSelecting) return 'none' as const;
+    return agentMsgTokenPopoverAction;
+  }, [agentMsgPointerSelecting, agentMsgTokenPopoverAction]);
+
+  const recalcAgentMsgTokenAnchor = React.useCallback(() => {
+    if (busy || !agentMsgEditUseCaseId || agentMsgPointerSelecting) {
+      setAgentMsgTokenAnchor(null);
+      return;
+    }
+    const action = computeAgentTokenSelectionPopoverAction(
+      agentMsgEditDraft,
+      agentMsgSelection.start,
+      agentMsgSelection.end
+    );
+    if (action === 'none') {
+      setAgentMsgTokenAnchor(null);
+      return;
+    }
+    const ta = getActiveAgentTextarea();
+    if (!ta) {
+      setAgentMsgTokenAnchor(null);
+      return;
+    }
+    const { start, end } = agentMsgSelection;
+    if (start === end) {
+      setAgentMsgTokenAnchor(null);
+      return;
+    }
+    const caretIndex = Math.max(start, end);
+    const pt = getTextareaCaretViewportPoint(ta, caretIndex);
+    if (!pt) {
+      setAgentMsgTokenAnchor(null);
+      return;
+    }
+    const cs = window.getComputedStyle(ta);
+    const lhParsed = Number.parseFloat(cs.lineHeight);
+    const fontSize = Number.parseFloat(cs.fontSize) || 14;
+    const lineHeightPx = Number.isFinite(lhParsed) ? lhParsed : fontSize * 1.25;
+    const topBelowCaret = pt.top + lineHeightPx + 6;
+    setAgentMsgTokenAnchor((prev) => {
+      if (prev && prev.top === topBelowCaret && prev.left === pt.left) return prev;
+      return { top: topBelowCaret, left: pt.left };
+    });
+  }, [
+    busy,
+    agentMsgEditUseCaseId,
+    agentMsgEditDraft,
+    agentMsgPointerSelecting,
+    agentMsgSelection.start,
+    agentMsgSelection.end,
+    getActiveAgentTextarea,
+  ]);
+
+  React.useLayoutEffect(() => {
+    recalcAgentMsgTokenAnchor();
+  }, [recalcAgentMsgTokenAnchor]);
+
+  const queueRecalcAgentMsgTokenAnchor = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      recalcAgentMsgTokenAnchor();
+    });
+  }, [recalcAgentMsgTokenAnchor]);
+
   const canWrapAgentToken = React.useMemo(() => {
-    if (!assistantTurn || busy) return false;
+    if (busy || !agentMsgEditUseCaseId || agentMsgPointerSelecting) return false;
     const { start, end } = agentMsgSelection;
     if (start === end) return false;
-    return agentMsgContentForDetailOps.slice(start, end).trim().length > 0;
-  }, [assistantTurn, busy, agentMsgSelection, agentMsgContentForDetailOps]);
+    return agentMsgTokenPopoverAction === 'tokenize';
+  }, [busy, agentMsgEditUseCaseId, agentMsgPointerSelecting, agentMsgSelection, agentMsgTokenPopoverAction]);
 
   const canStripAgentTokens = React.useMemo(
-    () => Boolean(assistantTurn && messageHasSlotBrackets(agentMsgContentForDetailOps)),
-    [assistantTurn, agentMsgContentForDetailOps]
+    () => Boolean(agentMsgEditUseCaseId && !busy && messageHasSlotBrackets(agentMsgEditDraft)),
+    [agentMsgEditUseCaseId, busy, agentMsgEditDraft]
   );
 
   const handleWrapAgentToken = React.useCallback(() => {
-    if (!assistantTurn || busy || !selected) return;
-    const ta = agentTextareaRef.current;
+    if (!agentMsgEditUseCaseId || busy) return;
+    const turnId = agentMsgEditTurnIdRef.current;
+    if (!turnId) return;
+    const ta = getActiveAgentTextarea();
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     if (start === end) return;
-    const content = agentMsgContentForDetailOps;
-    const sel = content.slice(start, end);
-    if (!sel.trim()) return;
-    const wrapped = `[${sel}]`;
-    const next = content.slice(0, start) + wrapped + content.slice(end);
-    setAssistantTurnContent(assistantTurn.turn_id, next);
-    if (agentMsgEditUseCaseId === selected.id) {
-      setAgentMsgEditDraft(next);
+    const content = agentMsgEditDraft;
+    if (computeAgentTokenSelectionPopoverAction(content, start, end) !== 'tokenize') return;
+    const built = buildBracketWrapForSelection(content, start, end);
+    if (!built) return;
+    const { next, selStart, selEnd } = built;
+    setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, turnId, next, { mode: 'silent' });
+    setAgentMsgEditDraft(next);
+    liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = next;
+    if (selected?.id === agentMsgEditUseCaseId) {
       liveAgentContentRef.current = next;
     }
+    onAssistantPhraseDraftChange?.(agentMsgEditUseCaseId, next);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const el = agentTextareaRef.current;
+        const el = getActiveAgentTextarea();
         if (!el) return;
         el.focus();
-        const hi = start + wrapped.length;
-        el.setSelectionRange(start, hi);
+        el.setSelectionRange(selStart, selEnd);
         syncDetailTextareaHeights();
-        setAgentMsgSelection({ start, end: hi });
+        syncWizardTextareaHeights();
+        setAgentMsgSelection({ start: selStart, end: selEnd });
       });
     });
   }, [
-    assistantTurn,
-    busy,
-    selected,
-    agentMsgContentForDetailOps,
     agentMsgEditUseCaseId,
-    setAssistantTurnContent,
+    busy,
+    agentMsgEditDraft,
+    getActiveAgentTextarea,
+    selected?.id,
+    setAssistantTurnContentForUseCase,
     syncDetailTextareaHeights,
+    syncWizardTextareaHeights,
+    onAssistantPhraseDraftChange,
+  ]);
+
+  const handleUnwrapAgentTokenAtSelection = React.useCallback(() => {
+    if (!agentMsgEditUseCaseId || busy) return;
+    const turnId = agentMsgEditTurnIdRef.current;
+    if (!turnId) return;
+    const ta = getActiveAgentTextarea();
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const content = agentMsgEditDraft;
+    const result = unwrapBracketTokenContainingSelection(content, start, end);
+    if (!result) return;
+    const { next, selStart, selEnd } = result;
+    setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, turnId, next, { mode: 'silent' });
+    setAgentMsgEditDraft(next);
+    liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = next;
+    if (selected?.id === agentMsgEditUseCaseId) {
+      liveAgentContentRef.current = next;
+    }
+    onAssistantPhraseDraftChange?.(agentMsgEditUseCaseId, next);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = getActiveAgentTextarea();
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(selStart, selEnd);
+        syncDetailTextareaHeights();
+        syncWizardTextareaHeights();
+        setAgentMsgSelection({ start: selStart, end: selEnd });
+      });
+    });
+  }, [
+    agentMsgEditUseCaseId,
+    busy,
+    agentMsgEditDraft,
+    getActiveAgentTextarea,
+    selected?.id,
+    setAssistantTurnContentForUseCase,
+    syncDetailTextareaHeights,
+    syncWizardTextareaHeights,
+    onAssistantPhraseDraftChange,
   ]);
 
   const handleStripAgentTokens = React.useCallback(() => {
-    if (!assistantTurn || busy || !selected) return;
-    const content = agentMsgContentForDetailOps;
+    if (!agentMsgEditUseCaseId || busy) return;
+    const turnId = agentMsgEditTurnIdRef.current;
+    if (!turnId) return;
+    const content = agentMsgEditDraft;
     if (!messageHasSlotBrackets(content)) return;
     const next = stripAgentMessageSlotBrackets(content);
-    setAssistantTurnContent(assistantTurn.turn_id, next);
-    if (agentMsgEditUseCaseId === selected.id) {
-      setAgentMsgEditDraft(next);
+    setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, turnId, next, { mode: 'silent' });
+    setAgentMsgEditDraft(next);
+    liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = next;
+    if (selected?.id === agentMsgEditUseCaseId) {
       liveAgentContentRef.current = next;
     }
+    onAssistantPhraseDraftChange?.(agentMsgEditUseCaseId, next);
     requestAnimationFrame(() => {
       syncDetailTextareaHeights();
+      syncWizardTextareaHeights();
       syncAgentMsgSelection();
     });
   }, [
-    assistantTurn,
-    busy,
-    selected,
-    agentMsgContentForDetailOps,
     agentMsgEditUseCaseId,
-    setAssistantTurnContent,
-    syncDetailTextareaHeights,
+    busy,
+    agentMsgEditDraft,
+    selected?.id,
+    setAssistantTurnContentForUseCase,
     syncAgentMsgSelection,
+    syncDetailTextareaHeights,
+    syncWizardTextareaHeights,
+    onAssistantPhraseDraftChange,
   ]);
 
   const handleScenarioRegenerateClick = React.useCallback(async () => {
@@ -1553,7 +1872,6 @@ export function AIAgentUseCaseComposer({
                 ) : null}
                 {filteredOrdered.map((u, rowIndex) => {
                   const rowBaseline = fieldBaselineByUseCaseId[u.id];
-                  const depth = depthById[u.id] ?? 0;
                   const active = u.id === effectiveSelectedId;
                   const editingTitle = editingTitleId === u.id;
                   const creatingChild = creatingChildParentId === u.id;
@@ -1583,20 +1901,26 @@ export function AIAgentUseCaseComposer({
                       : UC_LIST_ZEBRA_CLASSIC_ODD;
                   const liSurface = searchHighlight
                     ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-50/90 ring-2 ring-amber-300/50 dark:bg-amber-950/20 dark:ring-amber-400/40'
-                    : `overflow-hidden rounded-md ${zebraRow}`;
+                    : `rounded-md ${zebraRow}`;
                   return (
                     <li
                       key={u.id}
                       className={`group/uc-row ${liSurface}${dimWhenExcludedClass}`}
                     >
                       <div
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            if (u.id !== effectiveSelectedId) setSelectedId(u.id);
-                          }
+                        onDoubleClick={(e) => {
+                          if (!primaryGenerateOnRightOnly || busy) return;
+                          const el = e.target as HTMLElement;
+                          if (el.closest('input')) return;
+                          if (el.closest('[data-uc-chevron]')) return;
+                          if (el.closest('[data-uc-head-toolbar]')) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setCardExpandedById((prev) => {
+                            const isOpen = prev[u.id] !== false;
+                            return { ...prev, [u.id]: !isOpen };
+                          });
+                          listToolbarCtx?.notifyCardToggle();
                         }}
                         onClick={() => {
                           if (u.id !== effectiveSelectedId) setSelectedId(u.id);
@@ -1605,7 +1929,6 @@ export function AIAgentUseCaseComposer({
                           u.designer_label_vote,
                           active
                         )}`}
-                        style={{ paddingLeft: `${4 + depth * 8}px` }}
                       >
                         {/*
                           Checkbox "incluso nelle conversazioni" (sempre presente, default
@@ -1639,6 +1962,7 @@ export function AIAgentUseCaseComposer({
                         {primaryGenerateOnRightOnly ? (
                           <button
                             type="button"
+                            data-uc-chevron
                             className="mt-[1px] shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
                             title={cardExpanded ? 'Collassa' : 'Espandi'}
                             aria-expanded={cardExpanded}
@@ -1712,15 +2036,15 @@ export function AIAgentUseCaseComposer({
                             </button>
                           </div>
                         ) : (
-                          <>
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-0.5">
                             <button
                               type="button"
                               title={descriptionTooltip || undefined}
-                              className={`min-w-0 flex flex-1 flex-wrap items-start gap-x-1 gap-y-0.5 text-left text-sm leading-snug ${fieldTextClass(
+                              className={`min-w-0 max-w-full text-left text-sm leading-snug ${fieldTextClass(
                                 u.designer_label_vote,
                                 u.label ?? '',
                                 fieldBaselineByUseCaseId[u.id]?.label
-                              )} ${active ? 'font-semibold' : ''}`}
+                              )} ${active ? 'font-semibold' : ''} inline-flex flex-wrap items-center gap-x-1 gap-y-0.5`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
@@ -1745,14 +2069,17 @@ export function AIAgentUseCaseComposer({
                               ) : null}
                             </button>
                             {/*
-                              Cluster destro: pollici di validazione + matita modifica etichetta.
-                              Quando il use case è già validato/invalidato il cluster resta SEMPRE
-                              visibile (`opacity-100`) — il pollice diventa indicatore di stato.
-                              Senza voto, fade-in solo su hover/focus per non rumorire la lista.
+                              Toolbar unica (pollici, matita, [+ classico], globo con conferma, cestino):
+                              visibile solo su hover/focus header; resta aperta durante menu «Generalizza» o
+                              generalizzazione in corso (messaggio sotto il globo).
                             */}
                             <div
-                              className={`ml-auto mt-[1px] flex shrink-0 items-center gap-0.5 transition-opacity group-hover/uc-head:opacity-100 group-focus-within/uc-head:opacity-100 ${
-                                u.designer_label_vote === undefined ? 'opacity-0' : 'opacity-100'
+                              data-uc-head-toolbar
+                              className={`mt-[1px] flex shrink-0 items-center gap-0.5 transition-opacity ${
+                                generalizeMetaPendingUseCaseId === u.id ||
+                                generalizeGlobeMenuOpenUseCaseId === u.id
+                                  ? 'pointer-events-auto opacity-100'
+                                  : 'pointer-events-none opacity-0 group-hover/uc-head:pointer-events-auto group-hover/uc-head:opacity-100 group-focus-within/uc-head:pointer-events-auto group-focus-within/uc-head:opacity-100'
                               }`}
                             >
                               <VoteThumbPair
@@ -1788,6 +2115,58 @@ export function AIAgentUseCaseComposer({
                                   <Plus size={12} aria-hidden />
                                 </button>
                               ) : null}
+                              {onGeneralizeUseCaseMeta ? (
+                                <span
+                                  className="relative inline-flex shrink-0 flex-col items-center"
+                                  {...{ 'data-uc-generalize-popover-root': u.id }}
+                                >
+                                  <button
+                                    type="button"
+                                    title="Generalizzazione titolo e scenario — apre il menu"
+                                    aria-label="Menu generalizza use case"
+                                    aria-expanded={generalizeGlobeMenuOpenUseCaseId === u.id}
+                                    disabled={busy || generalizeMetaPendingUseCaseId === u.id}
+                                    className="shrink-0 rounded p-0.5 text-slate-400 hover:text-violet-300 disabled:opacity-40"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (busy || generalizeMetaPendingUseCaseId === u.id) return;
+                                      setGeneralizeGlobeMenuOpenUseCaseId((cur) =>
+                                        cur === u.id ? null : u.id
+                                      );
+                                    }}
+                                  >
+                                    <Globe size={12} aria-hidden />
+                                  </button>
+                                  {generalizeGlobeMenuOpenUseCaseId === u.id &&
+                                  generalizeMetaPendingUseCaseId !== u.id ? (
+                                    <div
+                                      className="absolute left-1/2 top-full z-[60] mt-0.5 min-w-[7.5rem] -translate-x-1/2 rounded-md border border-slate-600/70 bg-slate-950 px-1 py-1 shadow-lg shadow-black/50"
+                                      role="menu"
+                                    >
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        disabled={busy}
+                                        className="w-full rounded px-2 py-1 text-left text-[10px] font-semibold text-violet-100 hover:bg-violet-900/50 disabled:opacity-40"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void confirmGeneralizeFromGlobeMenu(u.id);
+                                        }}
+                                      >
+                                        {LABEL_GENERALIZE_USE_CASE_META_CONFIRM}
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                  {generalizeMetaPendingUseCaseId === u.id ? (
+                                    <div
+                                      className="absolute left-1/2 top-full z-[60] mt-0.5 w-max max-w-[14rem] -translate-x-1/2 rounded-md border border-violet-700/45 bg-slate-950 px-2 py-1 text-center text-[10px] font-medium italic text-violet-200/95"
+                                      aria-live="polite"
+                                    >
+                                      {LABEL_GENERALIZE_USE_CASE_META_PENDING}
+                                    </div>
+                                  ) : null}
+                                </span>
+                              ) : null}
                               <button
                                 type="button"
                                 title="Elimina questo scenario e i figli"
@@ -1802,14 +2181,11 @@ export function AIAgentUseCaseComposer({
                                 <Trash2 size={14} aria-hidden />
                               </button>
                             </div>
-                          </>
+                          </div>
                         )}
                       </div>
                       {creatingChild ? (
-                        <div
-                          className="border-t border-slate-700/45 px-2 py-2 bg-slate-950/40"
-                          style={{ paddingLeft: `${4 + (depth + 1) * 8}px` }}
-                        >
+                        <div className="border-t border-slate-700/45 px-2 py-2 bg-slate-950/40">
                           <input
                             type="text"
                             value={childDraftLabel}
@@ -1889,36 +2265,53 @@ export function AIAgentUseCaseComposer({
                                   </div>
                                 </div>
                               ) : (
-                                <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
-                                  {scenarioFieldLabel}
-                                  <p
-                                    className={`min-w-0 flex-1 cursor-default ${UC_SCENARIO_BODY_TEXT} whitespace-pre-wrap ${fieldTextClass(
-                                      u.designer_payoff_vote,
-                                      (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
-                                      rowBaseline?.payoff
-                                    )}`}
-                                  >
-                                    {(u.payoff ?? '').trim() ? (
-                                      u.payoff
-                                    ) : (
-                                      <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
-                                    )}
-                                  </p>
-                                  <VoteThumbPair
-                                    vote={u.designer_payoff_vote}
-                                    disabled={busy}
-                                    outerBtnClass={UC_SCENARIO_VOTE_BTN}
-                                    onVote={(choice) => toggleDesignerFieldVote(u.id, 'payoff', choice)}
-                                  />
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    title="Modifica scenario"
-                                    className={UC_SCENARIO_ROW_EDIT_BTN}
-                                    onClick={() => beginPayoffEdit(u.id, u.payoff ?? '')}
-                                  >
-                                    <Pencil size={12} aria-hidden />
-                                  </button>
+                                <div
+                                  className="group/payoff-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
+                                  onDoubleClick={(e) => {
+                                    if (busy) return;
+                                    if ((e.target as HTMLElement).closest('button')) return;
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    beginPayoffEdit(u.id, u.payoff ?? '');
+                                  }}
+                                >
+                                  <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                                    {scenarioFieldLabel}
+                                    <div className="min-w-0 flex-1 text-sm leading-snug">
+                                      <span
+                                        className={`inline whitespace-pre-wrap align-baseline ${UC_SCENARIO_BODY_TEXT} ${fieldTextClass(
+                                          u.designer_payoff_vote,
+                                          (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
+                                          rowBaseline?.payoff
+                                        )}`}
+                                      >
+                                        {(u.payoff ?? '').trim() ? (
+                                          u.payoff
+                                        ) : (
+                                          <span className="text-slate-500">
+                                            — passa il mouse e usa la matita a destra
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                                        <VoteThumbPair
+                                          vote={u.designer_payoff_vote}
+                                          disabled={busy}
+                                          outerBtnClass={UC_SCENARIO_VOTE_BTN}
+                                          onVote={(choice) => toggleDesignerFieldVote(u.id, 'payoff', choice)}
+                                        />
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          title="Modifica scenario"
+                                          className={UC_SCENARIO_ROW_EDIT_BTN}
+                                          onClick={() => beginPayoffEdit(u.id, u.payoff ?? '')}
+                                        >
+                                          <Pencil size={12} aria-hidden />
+                                        </button>
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1941,20 +2334,27 @@ export function AIAgentUseCaseComposer({
                                       : '';
                                   if (tokenizedForRow.trim().length > 0) {
                                     return (
-                                      <div className="flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
-                                        {agentMsgFieldLabel}
-                                        <TokenizedHighlightedText
-                                          text={tokenizedForRow}
-                                          className="min-w-0 flex-1 font-mono text-sm leading-snug whitespace-pre-wrap text-current"
-                                        />
-                                        <VoteThumbPair
-                                          vote={u.designer_agent_message_vote}
-                                          disabled={busy}
-                                          outerBtnClass={UC_AGENT_VOTE_BTN}
-                                          onVote={(choice) =>
-                                            toggleDesignerFieldVote(u.id, 'agentMessage', choice)
-                                          }
-                                        />
+                                      <div className="flex w-full min-w-0 rounded px-0.5 py-0">
+                                        <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                                          {agentMsgFieldLabel}
+                                          <div className="min-w-0 flex-1 font-mono text-sm leading-snug text-current">
+                                            <TokenizedHighlightedText
+                                              text={tokenizedForRow}
+                                              inlineFlow
+                                              className="inline min-w-0 whitespace-pre-wrap align-baseline"
+                                            />
+                                            <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                                              <VoteThumbPair
+                                                vote={u.designer_agent_message_vote}
+                                                disabled={busy}
+                                                outerBtnClass={UC_AGENT_VOTE_BTN}
+                                                onVote={(choice) =>
+                                                  toggleDesignerFieldVote(u.id, 'agentMessage', choice)
+                                                }
+                                              />
+                                            </span>
+                                          </div>
+                                        </div>
                                       </div>
                                     );
                                   }
@@ -1963,7 +2363,8 @@ export function AIAgentUseCaseComposer({
                                   {agentMsgEditUseCaseId === u.id ? (
                                     <div className="flex flex-wrap items-start gap-2">
                                       {agentMsgFieldLabel}
-                                      <BracketTokenHighlightedTextarea
+                                      <div className="flex min-w-0 flex-1 flex-col">
+                                        <BracketTokenHighlightedTextarea
                                         ref={(el) => {
                                           if (el) agentTextareaRefsById.current.set(u.id, el);
                                           else agentTextareaRefsById.current.delete(u.id);
@@ -1974,7 +2375,10 @@ export function AIAgentUseCaseComposer({
                                           setAgentMsgEditDraft(v);
                                           liveAgentContentByIdRef.current[u.id] = v;
                                           onAssistantPhraseDraftChange?.(u.id, v);
-                                          requestAnimationFrame(() => syncWizardTextareaHeights());
+                                          requestAnimationFrame(() => {
+                                            syncWizardTextareaHeights();
+                                            syncAgentMsgSelection();
+                                          });
                                         }}
                                         disabled={busy}
                                         rows={2}
@@ -1983,6 +2387,11 @@ export function AIAgentUseCaseComposer({
                                         aria-label="Messaggio agente"
                                         placeholder="Testo esempio per il messaggio agente…"
                                         containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
+                                        onMouseDown={markAgentMsgPointerSelectingMouse}
+                                        onTouchStart={markAgentMsgPointerSelectingTouch}
+                                        onMouseUp={syncAgentMsgSelection}
+                                        onSelect={syncAgentMsgSelection}
+                                        onKeyUp={syncAgentMsgSelection}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Escape') {
                                             e.preventDefault();
@@ -1993,7 +2402,18 @@ export function AIAgentUseCaseComposer({
                                             commitAgentMsgEdit();
                                           }
                                         }}
+                                        onScroll={queueRecalcAgentMsgTokenAnchor}
                                       />
+                                        {agentMsgTokenPopoverActionVisible !== 'none' && !busy ? (
+                                          <AgentMessageSelectionTokenPopover
+                                            action={agentMsgTokenPopoverActionVisible}
+                                            disabled={busy}
+                                            onTokenize={handleWrapAgentToken}
+                                            onUntokenize={handleUnwrapAgentTokenAtSelection}
+                                            fixedAnchor={agentMsgTokenAnchor}
+                                          />
+                                        ) : null}
+                                      </div>
                                       <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
                                         <button
                                           type="button"
@@ -2016,47 +2436,71 @@ export function AIAgentUseCaseComposer({
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="group/agentmsg-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
-                                      {agentMsgFieldLabel}
-                                      <p
-                                        className={`min-w-0 flex-1 cursor-default font-mono text-sm leading-snug whitespace-pre-wrap ${fieldTextClass(
-                                          u.designer_agent_message_vote,
-                                          rowAssistant.content,
-                                          rowBaseline?.assistantContent
-                                        )}`}
-                                      >
-                                        {rowAssistant.content.trim() ? (
-                                          wizardSearchSeed.trim() ? (
-                                            <SeedHighlightedText
-                                              text={rowAssistant.content}
-                                              seed={wizardSearchSeed}
-                                            />
+                                    <div
+                                      className="group/agentmsg-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
+                                      onDoubleClick={(e) => {
+                                        if (busy || !rowAssistant) return;
+                                        if ((e.target as HTMLElement).closest('button')) return;
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        beginAgentMsgEdit(
+                                          u.id,
+                                          rowAssistant.turn_id,
+                                          rowAssistant.content
+                                        );
+                                      }}
+                                    >
+                                      <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                                        {agentMsgFieldLabel}
+                                        <div
+                                          className={`min-w-0 flex-1 font-mono text-sm leading-snug ${fieldTextClass(
+                                            u.designer_agent_message_vote,
+                                            rowAssistant.content,
+                                            rowBaseline?.assistantContent
+                                          )}`}
+                                        >
+                                          {rowAssistant.content.trim() ? (
+                                            wizardSearchSeed.trim() ? (
+                                              <span className="inline min-w-0 whitespace-pre-wrap align-baseline">
+                                                <SeedHighlightedText
+                                                  text={rowAssistant.content}
+                                                  seed={wizardSearchSeed}
+                                                />
+                                              </span>
+                                            ) : (
+                                              <BracketTokenHighlightedText
+                                                text={rowAssistant.content}
+                                                className="inline min-w-0 whitespace-pre-wrap align-baseline"
+                                              />
+                                            )
                                           ) : (
-                                            <BracketTokenHighlightedText text={rowAssistant.content} />
-                                          )
-                                        ) : (
-                                          <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
-                                        )}
-                                      </p>
-                                      <VoteThumbPair
-                                        vote={u.designer_agent_message_vote}
-                                        disabled={busy}
-                                        outerBtnClass={UC_AGENT_VOTE_BTN}
-                                        onVote={(choice) =>
-                                          toggleDesignerFieldVote(u.id, 'agentMessage', choice)
-                                        }
-                                      />
-                                      <button
-                                        type="button"
-                                        disabled={busy}
-                                        title="Modifica messaggio"
-                                        className={UC_AGENT_ROW_EDIT_BTN}
-                                        onClick={() =>
-                                          beginAgentMsgEdit(u.id, rowAssistant.turn_id, rowAssistant.content)
-                                        }
-                                      >
-                                        <Pencil size={12} aria-hidden />
-                                      </button>
+                                            <span className="inline whitespace-pre-wrap text-slate-500">
+                                              — passa il mouse e usa la matita a destra
+                                            </span>
+                                          )}
+                                          <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                                            <VoteThumbPair
+                                              vote={u.designer_agent_message_vote}
+                                              disabled={busy}
+                                              outerBtnClass={UC_AGENT_VOTE_BTN}
+                                              onVote={(choice) =>
+                                                toggleDesignerFieldVote(u.id, 'agentMessage', choice)
+                                              }
+                                            />
+                                            <button
+                                              type="button"
+                                              disabled={busy}
+                                              title="Modifica messaggio"
+                                              className={UC_AGENT_ROW_EDIT_BTN}
+                                              onClick={() =>
+                                                beginAgentMsgEdit(u.id, rowAssistant.turn_id, rowAssistant.content)
+                                              }
+                                            >
+                                              <Pencil size={12} aria-hidden />
+                                            </button>
+                                          </span>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                 </>
@@ -2146,52 +2590,69 @@ export function AIAgentUseCaseComposer({
                         </div>
                       </div>
                     ) : (
-                      <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1">
-                        {scenarioFieldLabel}
-                        <p
-                          className={`min-w-0 flex-1 ${UC_SCENARIO_BODY_TEXT} whitespace-pre-wrap ${fieldTextClass(
-                            selected.designer_payoff_vote,
-                            selected.payoff ?? '',
-                            fieldBaselineByUseCaseId[selected.id]?.payoff
-                          )}`}
-                        >
-                          {(selected.payoff ?? '').trim() ? (
-                            selected.payoff
-                          ) : (
-                            <span className="text-slate-500">— passa il mouse sulla riga e usa la matita a destra</span>
-                          )}
-                        </p>
-                        {scenarioDirty ? (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void handleScenarioRegenerateClick()}
-                            title={LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-violet-500/50 bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-violet-100 hover:bg-violet-800/50 disabled:opacity-40"
+                      <div
+                        className="group/payoff-row flex w-full min-w-0 cursor-pointer"
+                        onDoubleClick={(e) => {
+                          if (busy) return;
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          beginPayoffEdit(selected.id, selected.payoff ?? '');
+                        }}
+                      >
+                        <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                          {scenarioFieldLabel}
+                          <div
+                            className={`min-w-0 flex-1 text-sm leading-snug ${UC_SCENARIO_BODY_TEXT} ${fieldTextClass(
+                              selected.designer_payoff_vote,
+                              selected.payoff ?? '',
+                              fieldBaselineByUseCaseId[selected.id]?.payoff
+                            )}`}
                           >
-                            {busy ? (
-                              <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
-                            ) : (
-                              <RefreshCw size={12} className="shrink-0" aria-hidden />
-                            )}
-                            {LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
-                          </button>
-                        ) : null}
-                        <VoteThumbPair
-                          vote={selected.designer_payoff_vote}
-                          disabled={busy}
-                          outerBtnClass={UC_SCENARIO_VOTE_BTN}
-                          onVote={(choice) => toggleDesignerFieldVote(selected.id, 'payoff', choice)}
-                        />
-                        <button
-                          type="button"
-                          disabled={busy}
-                          title="Modifica scenario"
-                          className={UC_SCENARIO_ROW_EDIT_BTN}
-                          onClick={() => beginPayoffEdit(selected.id, selected.payoff ?? '')}
-                        >
-                          <Pencil size={12} aria-hidden />
-                        </button>
+                            <span className="inline whitespace-pre-wrap align-baseline">
+                              {(selected.payoff ?? '').trim() ? (
+                                selected.payoff
+                              ) : (
+                                <span className="text-slate-500">
+                                  — passa il mouse sulla riga e usa la matita a destra
+                                </span>
+                              )}
+                            </span>
+                            <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                              <VoteThumbPair
+                                vote={selected.designer_payoff_vote}
+                                disabled={busy}
+                                outerBtnClass={UC_SCENARIO_VOTE_BTN}
+                                onVote={(choice) => toggleDesignerFieldVote(selected.id, 'payoff', choice)}
+                              />
+                              <button
+                                type="button"
+                                disabled={busy}
+                                title="Modifica scenario"
+                                className={UC_SCENARIO_ROW_EDIT_BTN}
+                                onClick={() => beginPayoffEdit(selected.id, selected.payoff ?? '')}
+                              >
+                                <Pencil size={12} aria-hidden />
+                              </button>
+                            </span>
+                          </div>
+                          {scenarioDirty ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleScenarioRegenerateClick()}
+                              title={LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
+                              className="inline-flex shrink-0 items-center gap-1 self-start rounded-md border border-violet-500/50 bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-violet-100 hover:bg-violet-800/50 disabled:opacity-40"
+                            >
+                              {busy ? (
+                                <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
+                              ) : (
+                                <RefreshCw size={12} className="shrink-0" aria-hidden />
+                              )}
+                              {LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2201,6 +2662,7 @@ export function AIAgentUseCaseComposer({
                       agentMsgEditUseCaseId === selected.id ? (
                         <div className="flex flex-wrap items-start gap-2">
                           {agentMsgFieldLabel}
+                          <div className="flex min-w-0 flex-1 flex-col">
                           <BracketTokenHighlightedTextarea
                             ref={agentTextareaRef}
                             value={agentMsgEditDraft}
@@ -2209,8 +2671,13 @@ export function AIAgentUseCaseComposer({
                               liveAgentContentRef.current = v;
                               setAgentMsgEditDraft(v);
                               onAssistantPhraseDraftChange?.(selected.id, v);
-                              requestAnimationFrame(() => syncDetailTextareaHeights());
+                              requestAnimationFrame(() => {
+                                syncDetailTextareaHeights();
+                                syncAgentMsgSelection();
+                              });
                             }}
+                            onMouseDown={markAgentMsgPointerSelectingMouse}
+                            onTouchStart={markAgentMsgPointerSelectingTouch}
                             onMouseUp={syncAgentMsgSelection}
                             onSelect={syncAgentMsgSelection}
                             onKeyUp={syncAgentMsgSelection}
@@ -2219,7 +2686,7 @@ export function AIAgentUseCaseComposer({
                             autoFocus
                             spellCheck={false}
                             aria-label="Messaggio agente"
-                            placeholder="Seleziona testo e usa Token per creare [slot]. Senza quadre rimuove il markup."
+                            placeholder="Seleziona testo: al rilascio del mouse compare Tokenizza o Rimuovi token; oppure usa i pulsanti Token / Senza quadre."
                             containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
                             onKeyDown={(e) => {
                               if (e.key === 'Escape') {
@@ -2231,7 +2698,18 @@ export function AIAgentUseCaseComposer({
                                 commitAgentMsgEdit();
                               }
                             }}
+                            onScroll={queueRecalcAgentMsgTokenAnchor}
                           />
+                            {agentMsgTokenPopoverActionVisible !== 'none' && !busy ? (
+                              <AgentMessageSelectionTokenPopover
+                                action={agentMsgTokenPopoverActionVisible}
+                                disabled={busy}
+                                onTokenize={handleWrapAgentToken}
+                                onUntokenize={handleUnwrapAgentTokenAtSelection}
+                                fixedAnchor={agentMsgTokenAnchor}
+                              />
+                            ) : null}
+                          </div>
                           <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
                             <button
                               type="button"
@@ -2254,40 +2732,62 @@ export function AIAgentUseCaseComposer({
                           </div>
                         </div>
                       ) : (
-                        <div className="group/agentmsg-row flex w-full min-w-0 items-center gap-x-1">
-                          {agentMsgFieldLabel}
-                          <p
-                            className={`min-w-0 flex-1 font-mono text-sm leading-snug whitespace-pre-wrap ${fieldTextClass(
-                              selected.designer_agent_message_vote,
-                              assistantTurn.content,
-                              fieldBaselineByUseCaseId[selected.id]?.assistantContent
-                            )}`}
-                          >
-                            {assistantTurn.content.trim() ? (
-                              <BracketTokenHighlightedText text={assistantTurn.content} />
-                            ) : (
-                              <span className="text-slate-500">— passa il mouse sulla riga e usa la matita a destra</span>
-                            )}
-                          </p>
-                          <VoteThumbPair
-                            vote={selected.designer_agent_message_vote}
-                            disabled={busy}
-                            outerBtnClass={UC_AGENT_VOTE_BTN}
-                            onVote={(choice) =>
-                              toggleDesignerFieldVote(selected.id, 'agentMessage', choice)
-                            }
-                          />
-                          <button
-                            type="button"
-                            disabled={busy}
-                            title="Modifica messaggio"
-                            className={UC_AGENT_ROW_EDIT_BTN}
-                            onClick={() =>
-                              beginAgentMsgEdit(selected.id, assistantTurn.turn_id, assistantTurn.content)
-                            }
-                          >
-                            <Pencil size={12} aria-hidden />
-                          </button>
+                        <div
+                          className="group/agentmsg-row flex w-full min-w-0 cursor-pointer"
+                          onDoubleClick={(e) => {
+                            if (busy) return;
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            beginAgentMsgEdit(
+                              selected.id,
+                              assistantTurn.turn_id,
+                              assistantTurn.content
+                            );
+                          }}
+                        >
+                          <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                            {agentMsgFieldLabel}
+                            <div
+                              className={`min-w-0 flex-1 font-mono text-sm leading-snug ${fieldTextClass(
+                                selected.designer_agent_message_vote,
+                                assistantTurn.content,
+                                fieldBaselineByUseCaseId[selected.id]?.assistantContent
+                              )}`}
+                            >
+                              {assistantTurn.content.trim() ? (
+                                <BracketTokenHighlightedText
+                                  text={assistantTurn.content}
+                                  className="inline min-w-0 whitespace-pre-wrap align-baseline"
+                                />
+                              ) : (
+                                <span className="inline whitespace-pre-wrap text-slate-500">
+                                  — passa il mouse sulla riga e usa la matita a destra
+                                </span>
+                              )}
+                              <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                                <VoteThumbPair
+                                  vote={selected.designer_agent_message_vote}
+                                  disabled={busy}
+                                  outerBtnClass={UC_AGENT_VOTE_BTN}
+                                  onVote={(choice) =>
+                                    toggleDesignerFieldVote(selected.id, 'agentMessage', choice)
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  title="Modifica messaggio"
+                                  className={UC_AGENT_ROW_EDIT_BTN}
+                                  onClick={() =>
+                                    beginAgentMsgEdit(selected.id, assistantTurn.turn_id, assistantTurn.content)
+                                  }
+                                >
+                                  <Pencil size={12} aria-hidden />
+                                </button>
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       )
                     ) : (

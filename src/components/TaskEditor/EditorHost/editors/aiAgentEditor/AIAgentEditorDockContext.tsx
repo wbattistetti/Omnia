@@ -72,6 +72,8 @@ export interface AIAgentEditorDockContextValue {
     creationScope?: 'single' | 'batch';
   }) => Promise<string>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  /** Generalizza titolo e scenario (payoff) via LLM, senza rigenerare il dialogo. */
+  onGeneralizeUseCaseMeta: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
   /** Risolve con il nuovo testo assistente quando la rigenerazione ha successo (per baseline UI). */
   onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   onAnnotateAgentMessageForJson: (

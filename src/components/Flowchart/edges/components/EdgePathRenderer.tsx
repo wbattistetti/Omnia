@@ -11,6 +11,7 @@ import {
   getRoundedVHVPath,
   getRoundedHVHPath,
   ORTHO_CORNER_RADIUS_PX,
+  type OrthoPortHint,
 } from '../utils/edgeRouting';
 
 export interface EdgePathRendererProps {
@@ -94,18 +95,40 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       ];
       edgePath = buildPathFromVertices(allVertices);
     } else {
+      const portHint: OrthoPortHint = { sourcePosition, targetPosition };
       // Otherwise, use link style
       switch (linkStyle) {
       case LinkStyle.AutoOrtho:
-        edgePath = getRoundedAutoOrthoPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
+        edgePath = getRoundedAutoOrthoPath(
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          ORTHO_CORNER_RADIUS_PX,
+          portHint,
+        );
         break;
 
       case LinkStyle.VHV:
-        edgePath = getRoundedVHVPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
+        edgePath = getRoundedVHVPath(
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          ORTHO_CORNER_RADIUS_PX,
+          portHint,
+        );
         break;
 
       case LinkStyle.HVH:
-        edgePath = getRoundedHVHPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
+        edgePath = getRoundedHVHPath(
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          ORTHO_CORNER_RADIUS_PX,
+          portHint,
+        );
         break;
 
       case LinkStyle.Bezier:
@@ -122,9 +145,23 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       case LinkStyle.Step: {
         const preferHV = Math.abs(sourceX - targetX) > Math.abs(sourceY - targetY);
         if (preferHV) {
-          edgePath = getRoundedHVHPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
+          edgePath = getRoundedHVHPath(
+            sourceX,
+            sourceY,
+            targetX,
+            targetY,
+            ORTHO_CORNER_RADIUS_PX,
+            portHint,
+          );
         } else {
-          edgePath = getRoundedVHVPath(sourceX, sourceY, targetX, targetY, ORTHO_CORNER_RADIUS_PX);
+          edgePath = getRoundedVHVPath(
+            sourceX,
+            sourceY,
+            targetX,
+            targetY,
+            ORTHO_CORNER_RADIUS_PX,
+            portHint,
+          );
         }
         break;
       }

@@ -26,6 +26,11 @@ export interface TokenizedHighlightedTextProps {
   strike?: boolean;
   /** Default `runtime`. Vedi descrizione del modulo. */
   mode?: TokenizedHighlightedTextMode;
+  /**
+   * Se true il contenitore è uno `span` (flusso inline) invece di `p`, così la frase può
+   * proseguire sulla stessa riga di controlli (toolbar) senza forzare un blocco a tutta larghezza.
+   */
+  inlineFlow?: boolean;
 }
 
 /** True per i nomi token generici del fallback compilatore: `slot`, `slot1`, `slot2`, ... */
@@ -38,6 +43,7 @@ export function TokenizedHighlightedText({
   className,
   strike = false,
   mode = 'runtime',
+  inlineFlow = false,
 }: TokenizedHighlightedTextProps): React.ReactElement {
   const runtimeSegments = React.useMemo(
     () => (mode === 'runtime' ? splitTokenizedText(text) : []),
@@ -52,9 +58,11 @@ export function TokenizedHighlightedText({
     .filter(Boolean)
     .join(' ');
 
+  const Root: 'p' | 'span' = inlineFlow ? 'span' : 'p';
+
   if (mode === 'literal') {
     return (
-      <p className={baseClass}>
+      <Root className={baseClass}>
         {literalSegments.map((s, i) => {
           if (s.kind === 'literal') {
             return (
@@ -69,12 +77,12 @@ export function TokenizedHighlightedText({
           }
           return <span key={i}>{s.text}</span>;
         })}
-      </p>
+      </Root>
     );
   }
 
   return (
-    <p className={baseClass}>
+    <Root className={baseClass}>
       {runtimeSegments.map((s, i) => {
         if (s.kind === 'token') {
           const generic = isGenericSlotName(s.name);
@@ -98,6 +106,6 @@ export function TokenizedHighlightedText({
         }
         return <span key={i}>{s.text}</span>;
       })}
-    </p>
+    </Root>
   );
 }

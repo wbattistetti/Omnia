@@ -292,6 +292,27 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     ]
   );
 
+  const runGeneralizeUseCaseMeta = React.useCallback(
+    async (useCaseId: string) => {
+      const merged = await c.handleGeneralizeUseCaseMeta(useCaseId);
+      if (merged) {
+        captureUseCaseListAiBaseline(
+          normalizeUseCaseSiblingOrder(
+            c.useCases.map((u) => (u.id === useCaseId ? merged : u)),
+            c.useCaseSiblingSortMode
+          )
+        );
+      }
+      return merged;
+    },
+    [
+      c.handleGeneralizeUseCaseMeta,
+      c.useCases,
+      c.useCaseSiblingSortMode,
+      captureUseCaseListAiBaseline,
+    ]
+  );
+
   /** Passo 2 wizard — orchestrazione azioni AI conversazioni (assemble + proofread). */
   const conversationActions = useAIAgentConversationActions({
     provider,
@@ -1095,6 +1116,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onGenerateUseCaseBundle: runGenerateUseCaseBundle,
     onCreateUseCase: c.handleCreateUseCase,
     onRegenerateUseCase: runRegenerateUseCase,
+    onGeneralizeUseCaseMeta: runGeneralizeUseCaseMeta,
     onRegenerateAgentMessage: c.handleRegenerateAgentMessage,
     onAnnotateAgentMessageForJson: c.handleAnnotateAgentMessageForJson,
     onDeleteUseCase: c.handleDeleteUseCase,

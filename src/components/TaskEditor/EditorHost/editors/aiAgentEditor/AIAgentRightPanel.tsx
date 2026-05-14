@@ -29,6 +29,7 @@ export interface AIAgentRightPanelProps {
     creationScope?: 'single' | 'batch';
   }) => Promise<string>;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  onGeneralizeUseCaseMeta?: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
   onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   onAnnotateAgentMessageForJson: (
     useCaseId: string,
@@ -64,6 +65,7 @@ export function AIAgentRightPanel({
   onClearUseCaseComposerError,
   onCreateUseCase,
   onRegenerateUseCase,
+  onGeneralizeUseCaseMeta,
   onRegenerateAgentMessage,
   onAnnotateAgentMessageForJson,
   onDeleteUseCase,
@@ -100,6 +102,7 @@ export function AIAgentRightPanel({
       onDismissError={onClearUseCaseComposerError}
       onCreateUseCase={onCreateUseCase}
       onRegenerateUseCase={onRegenerateUseCase}
+      onGeneralizeUseCaseMeta={onGeneralizeUseCaseMeta}
       onRegenerateAgentMessage={onRegenerateAgentMessage}
       onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
       onDeleteUseCase={onDeleteUseCase}

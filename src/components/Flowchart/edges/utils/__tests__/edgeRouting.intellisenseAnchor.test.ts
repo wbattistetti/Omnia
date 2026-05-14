@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { intellisenseAnchorFlowFromHandles, VHV_COLLINEAR_EPS_PX } from '../edgeRouting';
+import {
+  intellisenseAnchorFlowFromHandles,
+  orthoPortHintFromHandleIds,
+  VHV_COLLINEAR_EPS_PX,
+} from '../edgeRouting';
 
 describe('intellisenseAnchorFlowFromHandles', () => {
   it('uses source X and vertical midpoint when handles are collinear in X', () => {
@@ -12,6 +16,13 @@ describe('intellisenseAnchorFlowFromHandles', () => {
 
   it('uses VHV midpoint on horizontal leg when X delta exceeds epsilon', () => {
     const anchor = intellisenseAnchorFlowFromHandles(0, 0, 100, 200);
+    expect(anchor.x).toBe(50);
+    expect(anchor.y).toBe(100);
+  });
+
+  it('uses geometric center for bottom→top stack when dy >= dx (misaligned node centers)', () => {
+    const ports = orthoPortHintFromHandleIds('bottom', 'top-target');
+    const anchor = intellisenseAnchorFlowFromHandles(10, 0, 90, 200, ports);
     expect(anchor.x).toBe(50);
     expect(anchor.y).toBe(100);
   });

@@ -14,10 +14,18 @@ export const LABEL_CREATING_ONE_USE_CASE = 'Sto creando il nuovo use case…';
 export const LABEL_CREATING_MULTIPLE_USE_CASES = 'Sto creando i nuovi use case…';
 /** Shown when scenario text diverges from last AI baseline — refines label + message to match. */
 export const LABEL_REGENERATE_USE_CASE_FOR_SCENARIO = 'Rigenera use case';
+/** Messaggio accanto al globo / sotto il menu mentre la generalizzazione IA è in corso. */
+export const LABEL_GENERALIZE_USE_CASE_META_PENDING = 'Sto generalizzando, attendi …';
+/** Conferma nel menu a tendina del globo (evita generalizzazioni accidentali). */
+export const LABEL_GENERALIZE_USE_CASE_META_CONFIRM = 'Generalizza';
 /** Shown when assistant example is empty after generation — retry LLM for that turn. */
 export const LABEL_REGENERATE_AGENT_EXAMPLE = 'Rigenera esempio messaggio';
 /** Wraps current textarea selection in [...] as a runtime slot. */
 export const LABEL_AGENT_MSG_WRAP_TOKEN = 'Token';
+/** Floating selection menu — wrap selection in a single slot. */
+export const LABEL_AGENT_MSG_SELECTION_TOKENIZE = 'Tokenizza';
+/** Floating selection menu — remove brackets for the slot that contains the selection. */
+export const LABEL_AGENT_MSG_SELECTION_UNTOKEN = 'Rimuovi token';
 /** Strips all [...] wrappers from the assistant message (plain text again). */
 export const LABEL_AGENT_MSG_STRIP_TOKENS = 'Senza quadre';
 /** Calls LLM to wrap runtime fragments in [slot] and refresh motor JSON preview. */

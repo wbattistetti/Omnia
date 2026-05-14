@@ -1,18 +1,89 @@
 /**
- * Orthogonal edge routing utilities
- * Provides functions for generating orthogonal (90-degree) edge paths
+ * Orthogonal edge routing utilities.
+ * Vertical stack (bottom↔top): trunk on the **source** handle X (parent center),
+ * then a short horizontal to the target if Δx > ε — avoids a midpoint X that misaligns the start.
  */
 
 /**
- * Generates a Vertical-Horizontal-Vertical (VHV) orthogonal path
- * Pattern: Down/Up → Right/Left → Down/Up
- *
- * @param sx - Source X coordinate
- * @param sy - Source Y coordinate
- * @param tx - Target X coordinate
- * @param ty - Target Y coordinate
- * @returns SVG path string in compact format
+ * Optional React Flow handle positions ('bottom' | 'top' | 'left' | 'right').
+ * When provided, routing can prefer a straight segment for aligned stacks.
  */
+export type OrthoPortHint = {
+  sourcePosition?: string | null;
+  targetPosition?: string | null;
+};
+
+/**
+ * Derive side names from React Flow handle ids (e.g. `top-target` → `top`).
+ */
+export function orthoPortHintFromHandleIds(
+  sourceHandle?: string | null,
+  targetHandle?: string | null,
+): OrthoPortHint | undefined {
+  const sp = handleIdToSide(sourceHandle);
+  const tp = handleIdToSide(targetHandle);
+  if (!sp || !tp) return undefined;
+  return { sourcePosition: sp, targetPosition: tp };
+}
+
+function handleIdToSide(id?: string | null): string | undefined {
+  if (id == null) return undefined;
+  const t = String(id).trim();
+  if (!t) return undefined;
+  const base = t.endsWith('-target') ? t.slice(0, -'-target'.length) : t;
+  const allowed = new Set(['top', 'bottom', 'left', 'right']);
+  return allowed.has(base) ? base : undefined;
+}
+
+function normalizeSide(p?: string | null): string | undefined {
+  if (p == null) return undefined;
+  const s = String(p).trim().toLowerCase();
+  if (!s) return undefined;
+  const allowed = new Set(['top', 'bottom', 'left', 'right']);
+  return allowed.has(s) ? s : undefined;
+}
+
+/**
+ * True when handles are a vertical stack (bottom→top or top→bottom) and |dy| ≥ |dx|,
+ * so a trunk-first path (vertical at source X, short horizontal to target) beats full VHV.
+ */
+export function isStraightVerticalStackFlow(
+  ports: OrthoPortHint | undefined,
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+): boolean {
+  if (!ports) return false;
+  const sp = normalizeSide(ports.sourcePosition);
+  const tp = normalizeSide(ports.targetPosition);
+  if (!sp || !tp) return false;
+  const verticalPair =
+    (sp === 'bottom' && tp === 'top') || (sp === 'top' && tp === 'bottom');
+  if (!verticalPair) return false;
+  return Math.abs(ty - sy) >= Math.abs(tx - sx);
+}
+
+/**
+ * True for left↔right ports when |dx| ≥ |dy| — trunk on source Y, short vertical to target if needed.
+ */
+export function isStraightHorizontalBridgeFlow(
+  ports: OrthoPortHint | undefined,
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+): boolean {
+  if (!ports) return false;
+  const sp = normalizeSide(ports.sourcePosition);
+  const tp = normalizeSide(ports.targetPosition);
+  if (!sp || !tp) return false;
+  const horizontalPair =
+    (sp === 'right' && tp === 'left') || (sp === 'left' && tp === 'right');
+  if (!horizontalPair) return false;
+  return Math.abs(tx - sx) >= Math.abs(ty - sy);
+}
+
 /** Sotto questa distanza orizzontale (coord. flow/screen) il VHV collassa in un segmento verticale. */
 export const VHV_COLLINEAR_EPS_PX = 12;
 
@@ -20,6 +91,24 @@ export const VHV_COLLINEAR_EPS_PX = 12;
 export const ORTHO_CORNER_RADIUS_PX = 8;
 
 const MIN_FILLET_PX = 0.5;
+
+/** Vertical stack: vertical leg at source X, optional horizontal run to target X. */
+function verticalStackDominantPath(sx: number, sy: number, tx: number, ty: number): string {
+  if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+    const x = (sx + tx) / 2;
+    return `M ${x},${sy} L ${x},${ty}`;
+  }
+  return `M ${sx},${sy} L ${sx},${ty} L ${tx},${ty}`;
+}
+
+/** Horizontal stack: horizontal leg at source Y, optional vertical run to target Y. */
+function horizontalStackDominantPath(sx: number, sy: number, tx: number, ty: number): string {
+  if (Math.abs(ty - sy) <= VHV_COLLINEAR_EPS_PX) {
+    const y = (sy + ty) / 2;
+    return `M ${sx},${y} L ${tx},${y}`;
+  }
+  return `M ${sx},${sy} L ${tx},${sy} L ${tx},${ty}`;
+}
 
 function balanceCornerRadiiOnSpan(r1: number, r2: number, span: number): [number, number] {
   if (span <= MIN_FILLET_PX) return [0, 0];
@@ -29,36 +118,80 @@ function balanceCornerRadiiOnSpan(r1: number, r2: number, span: number): [number
 }
 
 /**
- * Restituisce il punto medio sulla polilinea VHV generata da getVHVPath.
- * Usato per allineare l'editor di condizione al segmento realmente disegnato.
+ * Punto flow di fallback per etichetta edge in stile VHV (allineato al path effettivo).
  */
-export function midpointOnVHVPath(
-  sx: number, sy: number,
-  tx: number, ty: number,
+export function defaultVHVLabelFallbackFlow(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  ports?: OrthoPortHint,
 ): { x: number; y: number } {
+  if (isStraightVerticalStackFlow(ports, sx, sy, tx, ty)) {
+    if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+      return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+    }
+    return { x: sx, y: (sy + ty) / 2 };
+  }
   if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
-    // segmento verticale: la linea corre a x = (sx+tx)/2
     return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
   }
-  // VHV: tre segmenti verticale-orizzontale-verticale; il midpoint cade sul tratto orizzontale
+  const midY = (sy + ty) / 2;
+  return { x: tx, y: (midY + ty) / 2 };
+}
+
+/**
+ * Restituisce il punto medio sulla polilinea VHV generata da getVHVPath (stessa geometria con `ports`).
+ */
+export function midpointOnVHVPath(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  ports?: OrthoPortHint,
+): { x: number; y: number } {
+  if (isStraightVerticalStackFlow(ports, sx, sy, tx, ty)) {
+    if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+      return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+    }
+    return { x: sx, y: (sy + ty) / 2 };
+  }
+  if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
+    return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+  }
   const midY = (sy + ty) / 2;
   return { x: (sx + tx) / 2, y: midY };
 }
 
 /**
- * Punto flow per ancorare l’editor condizione: colonna verticale → X handle sorgente, Y metà segmento;
- * altrimenti centro polilinea VHV come il path disegnato.
+ * Punto flow per ancorare l'editor condizione / intellisense sul link.
  */
 export function intellisenseAnchorFlowFromHandles(
-  sx: number, sy: number, tx: number, ty: number,
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  ports?: OrthoPortHint,
 ): { x: number; y: number } {
+  if (isStraightVerticalStackFlow(ports, sx, sy, tx, ty)) {
+    return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+  }
   if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
     return { x: sx, y: (sy + ty) / 2 };
   }
-  return midpointOnVHVPath(sx, sy, tx, ty);
+  return midpointOnVHVPath(sx, sy, tx, ty, ports);
 }
 
-export function getVHVPath(sx: number, sy: number, tx: number, ty: number): string {
+export function getVHVPath(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  ports?: OrthoPortHint,
+): string {
+  if (isStraightVerticalStackFlow(ports, sx, sy, tx, ty)) {
+    return verticalStackDominantPath(sx, sy, tx, ty);
+  }
   if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
     const x = (sx + tx) / 2;
     return `M ${x},${sy} L ${x},${ty}`;
@@ -67,17 +200,16 @@ export function getVHVPath(sx: number, sy: number, tx: number, ty: number): stri
   return `M ${sx},${sy} L ${sx},${midY} L ${tx},${midY} L ${tx},${ty}`;
 }
 
-/**
- * Generates a Horizontal-Vertical-Horizontal (HVH) orthogonal path
- * Pattern: Right/Left → Down/Up → Right/Left
- *
- * @param sx - Source X coordinate
- * @param sy - Source Y coordinate
- * @param tx - Target X coordinate
- * @param ty - Target Y coordinate
- * @returns SVG path string in compact format
- */
-export function getHVHPath(sx: number, sy: number, tx: number, ty: number): string {
+export function getHVHPath(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  ports?: OrthoPortHint,
+): string {
+  if (isStraightHorizontalBridgeFlow(ports, sx, sy, tx, ty)) {
+    return horizontalStackDominantPath(sx, sy, tx, ty);
+  }
   const midX = (sx + tx) / 2;
   return `M ${sx},${sy} L ${midX},${sy} L ${midX},${ty} L ${tx},${ty}`;
 }
@@ -86,26 +218,21 @@ export function getHVHPath(sx: number, sy: number, tx: number, ty: number): stri
  * Automatically selects between VHV and HVH based on geometry
  * - If vertical distance (dy) > horizontal distance (dx) → uses VHV
  * - Otherwise → uses HVH
- *
- * This ensures the path follows the longer dimension first for better visual flow.
- *
- * @param sx - Source X coordinate
- * @param sy - Source Y coordinate
- * @param tx - Target X coordinate
- * @param ty - Target Y coordinate
- * @returns SVG path string in compact format
  */
-export function getAutoOrthoPath(sx: number, sy: number, tx: number, ty: number): string {
+export function getAutoOrthoPath(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  ports?: OrthoPortHint,
+): string {
   const dx = Math.abs(tx - sx);
   const dy = Math.abs(ty - sy);
 
   if (dy > dx) {
-    // Vertical distance is greater → use VHV (Vertical-Horizontal-Vertical)
-    return getVHVPath(sx, sy, tx, ty);
-  } else {
-    // Horizontal distance is greater or equal → use HVH (Horizontal-Vertical-Horizontal)
-    return getHVHPath(sx, sy, tx, ty);
+    return getVHVPath(sx, sy, tx, ty, ports);
   }
+  return getHVHPath(sx, sy, tx, ty, ports);
 }
 
 /**
@@ -116,14 +243,18 @@ export function getRoundedVHVPath(
   sy: number,
   tx: number,
   ty: number,
-  radius: number = ORTHO_CORNER_RADIUS_PX
+  radius: number = ORTHO_CORNER_RADIUS_PX,
+  ports?: OrthoPortHint,
 ): string {
+  if (isStraightVerticalStackFlow(ports, sx, sy, tx, ty)) {
+    return verticalStackDominantPath(sx, sy, tx, ty);
+  }
   if (Math.abs(tx - sx) <= VHV_COLLINEAR_EPS_PX) {
     const x = (sx + tx) / 2;
     return `M ${x},${sy} L ${x},${ty}`;
   }
   if (Math.abs(sy - ty) < MIN_FILLET_PX) {
-    return getVHVPath(sx, sy, tx, ty);
+    return getVHVPath(sx, sy, tx, ty, ports);
   }
 
   const midY = (sy + ty) / 2;
@@ -138,7 +269,7 @@ export function getRoundedVHVPath(
   [r1, r2] = balanceCornerRadiiOnSpan(r1, r2, Math.abs(dx));
 
   if (r1 < MIN_FILLET_PX || r2 < MIN_FILLET_PX) {
-    return getVHVPath(sx, sy, tx, ty);
+    return getVHVPath(sx, sy, tx, ty, ports);
   }
 
   const yBefore1 = midY - r1 * signV1;
@@ -157,10 +288,14 @@ export function getRoundedHVHPath(
   sy: number,
   tx: number,
   ty: number,
-  radius: number = ORTHO_CORNER_RADIUS_PX
+  radius: number = ORTHO_CORNER_RADIUS_PX,
+  ports?: OrthoPortHint,
 ): string {
+  if (isStraightHorizontalBridgeFlow(ports, sx, sy, tx, ty)) {
+    return horizontalStackDominantPath(sx, sy, tx, ty);
+  }
   if (Math.abs(sy - ty) < MIN_FILLET_PX) {
-    return getHVHPath(sx, sy, tx, ty);
+    return getHVHPath(sx, sy, tx, ty, ports);
   }
 
   const midX = (sx + tx) / 2;
@@ -176,7 +311,7 @@ export function getRoundedHVHPath(
   [r1, r2] = balanceCornerRadiiOnSpan(r1, r2, Math.abs(dy));
 
   if (r1 < MIN_FILLET_PX || r2 < MIN_FILLET_PX) {
-    return getHVHPath(sx, sy, tx, ty);
+    return getHVHPath(sx, sy, tx, ty, ports);
   }
 
   const xBefore1 = midX - r1 * signH1;
@@ -195,12 +330,13 @@ export function getRoundedAutoOrthoPath(
   sy: number,
   tx: number,
   ty: number,
-  radius: number = ORTHO_CORNER_RADIUS_PX
+  radius: number = ORTHO_CORNER_RADIUS_PX,
+  ports?: OrthoPortHint,
 ): string {
   const dx = Math.abs(tx - sx);
   const dy = Math.abs(ty - sy);
   if (dy > dx) {
-    return getRoundedVHVPath(sx, sy, tx, ty, radius);
+    return getRoundedVHVPath(sx, sy, tx, ty, radius, ports);
   }
-  return getRoundedHVHPath(sx, sy, tx, ty, radius);
+  return getRoundedHVHPath(sx, sy, tx, ty, radius, ports);
 }

@@ -93,6 +93,44 @@ export function normalizeUseCaseSortOrderAlphabetically(
 }
 
 /**
+ * Sposta `draggedId` prima o dopo `targetId` tra **fratelli** con lo stesso `parent_id`.
+ * Riassegna `sort_order` 0..n-1 nel gruppo. Se i due non condividono il parent o non esistono,
+ * restituisce una copia shallow dell'array invariato.
+ */
+export function reorderUseCaseSibling(
+  useCases: readonly AIAgentUseCase[],
+  draggedId: string,
+  targetId: string,
+  position: 'before' | 'after'
+): AIAgentUseCase[] {
+  if (draggedId === targetId) return [...useCases];
+  const dragged = useCases.find((u) => u.id === draggedId);
+  const target = useCases.find((u) => u.id === targetId);
+  if (!dragged || !target || dragged.parent_id !== target.parent_id) {
+    return [...useCases];
+  }
+  const parentId = dragged.parent_id;
+  const siblings = useCases
+    .filter((u) => u.parent_id === parentId)
+    .sort((a, b) => a.sort_order - b.sort_order || String(a.label).localeCompare(String(b.label)));
+  const ids = siblings.map((u) => u.id);
+  const fromIdx = ids.indexOf(draggedId);
+  const targetIdx = ids.indexOf(targetId);
+  if (fromIdx < 0 || targetIdx < 0) return [...useCases];
+  const without = ids.filter((id) => id !== draggedId);
+  let insertAt = position === 'before' ? targetIdx : targetIdx + 1;
+  if (fromIdx < targetIdx) insertAt -= 1;
+  const bounded = Math.max(0, Math.min(insertAt, without.length));
+  const nextOrder = [...without.slice(0, bounded), draggedId, ...without.slice(bounded)];
+  const orderMap = new Map(nextOrder.map((id, i) => [id, i]));
+  return useCases.map((u) =>
+    u.parent_id === parentId && orderMap.has(u.id)
+      ? { ...u, sort_order: orderMap.get(u.id) ?? 0, parent_id: parentId }
+      : u
+  );
+}
+
+/**
  * Returns `rootId` plus every descendant id reachable via `parent_id` links.
  */
 export function collectUseCaseSubtreeIds(
