@@ -73,8 +73,11 @@ export const AGENT_WIZARD_STEPS_META: readonly AgentWizardStepMeta[] = [
     displayNumber: 3,
     label: 'Backend',
     title: 'Definisci i backend',
-    tutorial:
-      'Dichiara gli strumenti (API/backend) che l\u2019agente potr\u00e0 chiamare. Puoi saltare questo passo se l\u2019agente \u00e8 puramente conversazionale.',
+    /**
+     * Vuoto di proposito: niente didascalia sotto il titolo (allineato a Prompts e fig. 2 UX).
+     * Il pulsante «Aggiungi backend» vive nell’header dello shell wizard.
+     */
+    tutorial: '',
     icon: PlugZap,
   },
   {

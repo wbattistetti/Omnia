@@ -1,6 +1,8 @@
 /**
  * Gate opzionale: prima di ogni POST /design/ai-agent-generate mostra un modale di conferma.
- * Attiva con `VITE_OMNIA_AI_AGENT_GENERATE_CONFIRM=1` (o `true`) nel front.
+ * **Disattivo di default.** Attiva solo se imposti esplicitamente `VITE_OMNIA_AI_AGENT_GENERATE_CONFIRM=1`
+ * (o `true`) in `.env.local` / `.env.development` — non usare in produzione salvo necessità.
+ * Il rate limit su «raffiche» di richieste è separato: vedi burst su Express (`backend/.env`).
  */
 
 export const AI_AGENT_GENERATE_CONFIRM_EVENT = 'omnia:ai-agent-generate-confirm' as const;

@@ -93,6 +93,7 @@ describe('buildPropagateCorrectionUserMessage', () => {
     expect(msg).toContain('"useCaseId":"t1"');
     expect(msg).toContain('TARGET_IDS_ORDER');
     expect(msg).toContain('["t1"]');
+    expect(msg).toContain('style_synthesis');
   });
 
   it('emits the single-target hint when exactly one target is requested', () => {
@@ -127,5 +128,6 @@ describe('PROPAGATE_CORRECTION_SYSTEM', () => {
     expect(PROPAGATE_CORRECTION_SYSTEM).toMatch(/new_assistant_content/);
     expect(PROPAGATE_CORRECTION_SYSTEM).toMatch(/is_new/);
     expect(PROPAGATE_CORRECTION_SYSTEM).toMatch(/style_synthesis/);
+    expect(PROPAGATE_CORRECTION_SYSTEM).toMatch(/bullet/);
   });
 });

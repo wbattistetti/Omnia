@@ -145,6 +145,11 @@ export interface AIAgentEditorDockContextValue {
    */
   registerBackendsAddManualHandler: (handler: (() => void) | null) => void;
   invokeBackendsAddManual: () => void;
+  /**
+   * Wizard passo Backend (3/5): il pulsante «Aggiungi backend» è nello shell header;
+   * il pannello non duplica la stessa riga in cima.
+   */
+  hideBackendsPanelInlineAddButton?: boolean;
 
   /** Presente dopo il mount dell’editor quando il generatore guidato è disponibile. */
   useCaseGeneratorWizard: UseCaseGeneratorWizardModel | null;

@@ -369,14 +369,18 @@ export function useNodeRowManagement({
             }
         }
 
-        // Inserisci una riga solo se l'ultima riga è valida (testo non vuoto e tipo risolto).
-        // Usa resolveTaskType (heuristics.type, task repo, legacy row.type) — non `(row as any).type`.
-        const last = updatedRows[updatedRows.length - 1];
-        const lastHasText = Boolean(last && (last.text || '').trim().length > 0);
-        const lastResolvedType = last ? resolveTaskType(last) : TaskType.UNDEFINED;
-        const lastHasConcreteType = lastResolvedType !== TaskType.UNDEFINED;
-        const lastValid = !last || (lastHasText && lastHasConcreteType);
-        if (!lastValid && updatedRows.length > 0) return;
+        // In coda: non appendere un'altra riga se l'ultima è ancora bozza (testo vuoto o tipo UNDEFINED).
+        // In mezzo alla lista: consenti sempre (es. click sulla linea tratteggiata tra righe già compilate)
+        // anche se in fondo c'è una riga bozza tipo "Dove abiti" senza tipo ancora scelto.
+        const isAppendAtEnd = adjustedIndex === updatedRows.length;
+        if (isAppendAtEnd) {
+            const last = updatedRows[updatedRows.length - 1];
+            const lastHasText = Boolean(last && (last.text || '').trim().length > 0);
+            const lastResolvedType = last ? resolveTaskType(last) : TaskType.UNDEFINED;
+            const lastHasConcreteType = lastResolvedType !== TaskType.UNDEFINED;
+            const lastValid = !last || (lastHasText && lastHasConcreteType);
+            if (!lastValid && updatedRows.length > 0) return;
+        }
 
         const newRowId = makeRowId();
         // ✅ LAZY: Crea solo la riga, SENZA task (il task verrà creato solo quando si apre l'editor)

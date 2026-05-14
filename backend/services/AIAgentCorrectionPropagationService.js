@@ -23,7 +23,14 @@ const PROPAGATE_CORRECTION_SYSTEM = `You are an OMNIA design-time editor that le
 DIRECTIONAL_EXAMPLES are pairs ORIGINAL → MODIFIED authored by the user: study the DIRECTION of the change (concise vs verbose, formal vs casual, more empathetic, less hedging, different bracket habits, …) — do NOT just imitate the surface tone.
 TARGETS are assistant example lines still at the IA baseline that the user has NOT touched. Rewrite each TARGET applying the SAME kind of transformation observed in DIRECTIONAL_EXAMPLES, while preserving the scenario meaning of that target (do not change what the agent is doing, only how it says it).
 Bracket rules: variable semantic fragments only; in Italian keep articles/prepositions outside brackets (e.g. \`alle [ora_disponibile]\`, not \`[alle 14]\`).
-Respond with one JSON object only: { "style_synthesis": string (Italian, 2–6 sentences: describe the editorial pattern you inferred from DIRECTIONAL_EXAMPLES — tone, length, formality, empathy, bracket habits — without repeating the examples verbatim), "updates": [ { "use_case_id": string, "new_assistant_content": string, "is_new": true } ] }.
+
+The field "style_synthesis" (Italian) is a SHORT editorial note for the human designer. It MUST be a bullet list only:
+- Use 2 to 4 bullet lines. Each line starts with "- " (hyphen + space).
+- Each bullet names ONE concrete stylistic shift you observed (e.g. "più sintetico e diretto", "tono più colloquiale", "meno ripetizioni di cortesia").
+- Do NOT write long paragraphs or generic filler. Do NOT state obvious invariants (e.g. that key facts stay the same).
+- Prefer directions the product cares about: (1) drying verbose text into crisp, immediate wording; (2) colloquializing for a more human, natural tone when that is what the examples show.
+
+Respond with one JSON object only: { "style_synthesis": string (Italian, bullet list 2–4 items as above), "updates": [ { "use_case_id": string, "new_assistant_content": string, "is_new": true } ] }.
 Emit exactly one update per id in TARGET_IDS_ORDER, in that order. Each "new_assistant_content" must be non-empty. The "style_synthesis" field must always be present (use an empty string only if impossible).`;
 
 /**
@@ -65,7 +72,7 @@ ${styleBlock}
 
 TARGET_IDS_ORDER (emit updates in this exact order): ${JSON.stringify(targetIdsOrder)}${singleHint}
 
-Return JSON only: { "updates": [ { "use_case_id": "<id>", "new_assistant_content": "...", "is_new": true } ] }`;
+Return JSON only: { "style_synthesis": string (Italian bullet list 2–4 lines, each starting with "- "), "updates": [ { "use_case_id": "<id>", "new_assistant_content": "...", "is_new": true } ] }`;
 }
 
 /**

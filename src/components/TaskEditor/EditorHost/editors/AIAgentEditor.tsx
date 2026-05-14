@@ -6,7 +6,7 @@ import React from 'react';
 import type { EditorProps } from '../types';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
-import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
+import { Bot, Loader2, Maximize2, Minimize2, Plus, Sparkles } from 'lucide-react';
 import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import {
@@ -736,7 +736,24 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   ) : null;
 
   const globalHeaderAction = isWizardTaskStep ? null : headerAction;
-  const wizardStepHeaderAction = isWizardTaskStep ? headerAction : null;
+  const isWizardBackendStep = c.agentWizardCurrentStep === 2;
+  const wizardBackendHeaderAddButton = (
+    <button
+      type="button"
+      onClick={invokeBackendsAddManual}
+      aria-label="Aggiungi backend manuale"
+      title="Aggiungi una riga backend manuale in fondo all'elenco"
+      className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 px-2 py-0.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-900/55"
+    >
+      <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      Aggiungi backend
+    </button>
+  );
+  const wizardStepHeaderAction = isWizardTaskStep
+    ? headerAction
+    : isWizardBackendStep
+      ? wizardBackendHeaderAddButton
+      : null;
 
   /**
    * Dialog «Crea prompt conversazionale»: state e mount risiedono nel root dell'editor (non
@@ -1111,6 +1128,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
     registerBackendsAddManualHandler,
     invokeBackendsAddManual,
+    hideBackendsPanelInlineAddButton: c.agentWizardCurrentStep === 2,
 
     useCaseGeneratorWizard: useCaseGenWizard,
 

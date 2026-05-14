@@ -32,10 +32,11 @@
  */
 
 import React from 'react';
-import { Loader2, Sparkles, X as XIcon } from 'lucide-react';
+import { ChevronDown, Loader2, Sparkles, X as XIcon } from 'lucide-react';
 import {
   useUseCaseWizardListToolbarOptional,
   type UseCaseWizardListToolbarContextValue,
+  type CorrectionPreviewRow,
 } from './UseCaseWizardListToolbarContext';
 import {
   COMPLETE_CORRECTION_VISIBILITY_THRESHOLD,
@@ -67,17 +68,74 @@ export function CompletaCorrezioneCallout(): React.ReactElement | null {
   return <CalloutBody ctx={ctx} />;
 }
 
+function CorrectionPreviewAccordion({
+  rows,
+  openId,
+  setOpenId,
+}: {
+  rows: readonly CorrectionPreviewRow[];
+  openId: string | null;
+  setOpenId: React.Dispatch<React.SetStateAction<string | null>>;
+}): React.ReactElement {
+  return (
+    <div className="space-y-1.5">
+      {rows.map((row) => {
+        const open = openId === row.useCaseId;
+        const summaryCurrent = row.current?.trim() ? row.current : '—';
+        const bodyProposed = row.proposed?.trim() ? row.proposed : '—';
+        const title = row.useCaseLabel?.trim() || 'Caso d’uso';
+        return (
+          <div
+            key={row.useCaseId}
+            className="overflow-hidden rounded-md border border-slate-600/40 bg-slate-950/35"
+          >
+            <button
+              type="button"
+              onClick={() => setOpenId((prev) => (prev === row.useCaseId ? null : row.useCaseId))}
+              className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-[11px] font-semibold text-slate-100 transition-colors hover:bg-slate-800/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70"
+              aria-expanded={open}
+            >
+              <span className="min-w-0 flex-1 truncate" title={title}>
+                {title}
+              </span>
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className={`shrink-0 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {open ? (
+              <div className="space-y-3 border-t border-slate-700/50 px-2.5 pb-2.5 pt-2.5">
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Ora è così:
+                  </p>
+                  <div className="max-h-48 overflow-y-auto rounded border border-slate-600/45 bg-slate-950/50 px-2 py-1.5 text-[11px] leading-relaxed text-slate-200 whitespace-pre-wrap">
+                    {summaryCurrent}
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-200/90">
+                    La modificherei così:
+                  </p>
+                  <div className="max-h-48 overflow-y-auto rounded border border-emerald-700/35 bg-emerald-950/20 px-2 py-1.5 text-[11px] leading-relaxed text-emerald-50 whitespace-pre-wrap">
+                    {bodyProposed}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function CalloutBody({
   ctx,
 }: {
   ctx: UseCaseWizardListToolbarContextValue;
 }): React.ReactElement {
-  /**
-   * Animation key: incrementata SOLO al passaggio false→true della visibilità.
-   * Forza il remount del wrapper così la `@keyframes omnia-callout-attention-blink`
-   * riparte da capo. Variazioni del count restando ≥ soglia non riavviano l'effetto
-   * (sarebbe rumore visivo).
-   */
   const visibleStable =
     ctx.pendingCorrectionsCount >= COMPLETE_CORRECTION_VISIBILITY_THRESHOLD &&
     !ctx.correctionsDismissed;
@@ -92,11 +150,6 @@ function CalloutBody({
 
   const busy = ctx.correctionsBusy;
 
-  /**
-   * Click su «Correggi»: lancia il trigger async del context. Il context wrappa
-   * la chiamata in try/finally su `correctionsBusy`. L'errore non viene catturato
-   * qui (lo gestisce il controller a monte → toast).
-   */
   const onClickCorreggi = React.useCallback((): void => {
     void ctx.triggerConsolidateCorrections();
   }, [ctx]);
@@ -137,6 +190,80 @@ function CalloutBody({
     prevPreviewLoadingRef.current = now;
   }, [preview]);
 
+  const [openAccordionId, setOpenAccordionId] = React.useState<string | null>(null);
+  const stablePreviewRowIds = React.useMemo(() => {
+    if (!preview || preview.loading || preview.rows.length === 0) return '';
+    return preview.rows.map((r) => r.useCaseId).join('\x1e');
+  }, [preview, preview?.loading, preview?.rows]);
+
+  React.useEffect(() => {
+    if (!preview || preview.loading) {
+      setOpenAccordionId(null);
+      return;
+    }
+    if (!stablePreviewRowIds) {
+      setOpenAccordionId(null);
+      return;
+    }
+    const ids = preview.rows.map((r) => r.useCaseId);
+    setOpenAccordionId((prev) => (prev && ids.includes(prev) ? prev : ids[0]!));
+  }, [preview, preview?.loading, stablePreviewRowIds]);
+
+  const count = ctx.pendingCorrectionsCount;
+  const headline =
+    count === 1
+      ? 'Hai modificato 1 messaggio.'
+      : `Hai modificato ${count} messaggi.`;
+
+  const actionButtons = (
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
+      <button
+        type="button"
+        onClick={onClickDismiss}
+        disabled={busy}
+        className={[
+          'inline-flex h-8 items-center justify-center gap-1 rounded-md border px-2.5 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-400/80',
+          busy
+            ? 'cursor-not-allowed border-slate-700/60 bg-slate-900/40 text-slate-500'
+            : 'border-slate-600/70 bg-slate-900/60 text-slate-200 hover:bg-slate-800/70',
+        ].join(' ')}
+        title="Nascondi il suggerimento e procedi con le correzioni a mano"
+      >
+        <XIcon size={12} aria-hidden />
+        <span>Procedo io manualmente</span>
+      </button>
+      <button
+        type="button"
+        onClick={onClickCorreggi}
+        disabled={busy}
+        className={[
+          'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/80',
+          busy
+            ? 'cursor-wait border-amber-500/40 bg-amber-500/10 text-amber-200/80'
+            : 'border-amber-500/65 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30',
+        ].join(' ')}
+        aria-busy={busy}
+        title={
+          busy
+            ? 'Sto propagando lo stile delle tue correzioni ai messaggi non ancora rivisti…'
+            : 'Riscrivi gli altri messaggi imitando lo stile delle tue correzioni'
+        }
+      >
+        {busy ? (
+          <>
+            <Loader2 size={13} aria-hidden className="animate-spin" />
+            <span>Sto correggendo i messaggi rimanenti…</span>
+          </>
+        ) : (
+          <>
+            <Sparkles size={13} aria-hidden />
+            <span>Correggi</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+
   return (
     <div
       key={animationKey}
@@ -144,137 +271,61 @@ function CalloutBody({
       aria-label="Suggerimento di correzione automatica"
       className="animate-omnia-callout-attention mb-3 rounded-md border border-amber-500/55 bg-amber-950/35 px-3 py-2.5 text-amber-100 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.18)]"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+      <div className="flex gap-2.5">
         <Sparkles
           size={16}
           aria-hidden
           className="mt-0.5 shrink-0 text-amber-300"
         />
-        <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-semibold leading-snug text-amber-100">
-            Hai modificato {ctx.pendingCorrectionsCount}{' '}
-            {ctx.pendingCorrectionsCount === 1 ? 'messaggio' : 'messaggi'} in modo
-            sostanziale.
-          </p>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-amber-200/90">
-            Posso usare le tue correzioni come esempio di stile e riscrivere
-            automaticamente gli altri messaggi che non hai ancora rivisto, in modo
-            che adottino la stessa forma. Le tue modifiche restano invariate.
-          </p>
-        </div>
-        {/*
-          Gruppo CTA: a destra su layout largo (sm:), sotto su layout stretto.
-          Su mobile/strettissimo entrambi i pulsanti restano full-width per
-          essere comodamente tappabili.
-        */}
-        <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:items-center">
-          <button
-            type="button"
-            onClick={onClickDismiss}
-            disabled={busy}
-            className={[
-              'inline-flex h-7 items-center justify-center gap-1 rounded-md border px-2 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-400/80',
-              busy
-                ? 'cursor-not-allowed border-slate-700/60 bg-slate-900/40 text-slate-500'
-                : 'border-slate-600/70 bg-slate-900/60 text-slate-200 hover:bg-slate-800/70',
-            ].join(' ')}
-            title="Nascondi il suggerimento e procedi con le correzioni a mano"
-          >
-            <XIcon size={12} aria-hidden />
-            <span>Procedo io manualmente</span>
-          </button>
-          <button
-            type="button"
-            onClick={onClickCorreggi}
-            disabled={busy}
-            className={[
-              'inline-flex h-7 items-center justify-center gap-1.5 rounded-md border px-2.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/80',
-              busy
-                ? 'cursor-wait border-amber-500/40 bg-amber-500/10 text-amber-200/80'
-                : 'border-amber-500/65 bg-amber-500/20 text-amber-100 hover:bg-amber-500/30',
-            ].join(' ')}
-            aria-busy={busy}
-            title={
-              busy
-                ? 'Sto propagando lo stile delle tue correzioni ai messaggi non ancora rivisti…'
-                : 'Riscrivi gli altri messaggi imitando lo stile delle tue correzioni'
-            }
-          >
-            {busy ? (
-              <>
-                <Loader2 size={13} aria-hidden className="animate-spin" />
-                <span>Sto correggendo i messaggi rimanenti…</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={13} aria-hidden />
-                <span>Correggi</span>
-              </>
-            )}
-          </button>
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-[12px] font-semibold leading-snug text-amber-100">{headline}</p>
+
+          {preview !== null ? (
+            <>
+              <div
+                key={previewResultAnimKey}
+                className={
+                  previewResultAnimKey > 0
+                    ? 'rounded-lg border border-slate-500/50 bg-slate-950/55 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] animate-omnia-callout-attention'
+                    : 'rounded-lg border border-slate-500/50 bg-slate-950/55 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+                }
+              >
+                {preview.error ? (
+                  <p className="mb-2 text-[11px] leading-snug text-red-300">{preview.error}</p>
+                ) : null}
+                <label htmlFor="omnia-correzione-anteprima-sintesi" className="sr-only">
+                  Sintesi modifiche di stile (IA)
+                </label>
+                <textarea
+                  id="omnia-correzione-anteprima-sintesi"
+                  value={preview.synthesis}
+                  onChange={onSynthesisChange}
+                  readOnly={preview.loading}
+                  rows={5}
+                  aria-busy={preview.loading}
+                  className="min-h-[88px] w-full resize-y rounded-md border border-slate-500/60 bg-slate-900/80 px-2 py-1.5 text-[11px] leading-relaxed text-slate-100 placeholder:text-slate-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 read-only:cursor-default read-only:border-slate-600/50"
+                />
+                <div className="mt-2.5">{actionButtons}</div>
+              </div>
+
+              {!preview.loading && preview.rows.length > 0 ? (
+                <>
+                  <p className="pt-1 text-[11px] font-medium leading-snug text-amber-100/95">
+                    Seguendo lo stile, correggerei così:
+                  </p>
+                  <CorrectionPreviewAccordion
+                    rows={preview.rows}
+                    openId={openAccordionId}
+                    setOpenId={setOpenAccordionId}
+                  />
+                </>
+              ) : null}
+            </>
+          ) : (
+            <div className="pt-0.5">{actionButtons}</div>
+          )}
         </div>
       </div>
-      {preview !== null ? (
-        <div className="mt-3 border-t border-amber-500/35 pt-2.5">
-          {preview.error ? (
-            <p className="mb-2 text-[11px] leading-snug text-red-300">{preview.error}</p>
-          ) : null}
-          <div
-            key={previewResultAnimKey}
-            className={
-              previewResultAnimKey > 0
-                ? 'rounded-md animate-omnia-callout-attention'
-                : 'rounded-md'
-            }
-          >
-            <label htmlFor="omnia-correzione-anteprima-sintesi" className="sr-only">
-              Sintesi stile suggerito
-            </label>
-            <textarea
-              id="omnia-correzione-anteprima-sintesi"
-              value={preview.synthesis}
-              onChange={onSynthesisChange}
-              readOnly={preview.loading}
-              rows={4}
-              aria-busy={preview.loading}
-              className="min-h-[72px] w-full resize-y rounded-md border border-slate-600/60 bg-slate-950/65 px-2 py-1.5 text-[11px] leading-relaxed text-slate-100 placeholder:text-slate-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400/70 read-only:cursor-default read-only:border-slate-600/45"
-            />
-            <p className="mt-1.5 text-[10px] leading-snug text-slate-400/95">
-              Qui sopra puoi aggiungere altri dettagli o modificare la mia sintesi se non la trovi corretta
-            </p>
-            <div className="mt-2 space-y-1.5">
-              {[0, 1, 2].map((idx) => {
-                const slot = preview.rows[idx];
-                const summaryCurrent = slot?.current?.trim() ? slot.current : '—';
-                const bodyProposed = slot?.proposed?.trim() ? slot.proposed : '—';
-                const title = slot?.useCaseLabel?.trim()
-                  ? ` (${slot.useCaseLabel})`
-                  : '';
-                return (
-                  <details
-                    key={idx}
-                    className="rounded border border-slate-600/35 bg-slate-950/20 px-2 py-1 text-slate-200"
-                    defaultOpen={idx < 2}
-                  >
-                    <summary className="cursor-pointer whitespace-pre-wrap text-[11px] font-medium text-slate-100 [&::-webkit-details-marker]:hidden">
-                      <span className="font-semibold text-amber-200/95">Frase attuale{title}</span>
-                      <span className="block pl-0 text-[11px] font-normal text-slate-200/90">{summaryCurrent}</span>
-                    </summary>
-                    <div className="mt-2 border-t border-dashed border-slate-700/55 pt-2">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-200/85">
-                        Come diventerebbe se corretta
-                      </p>
-                      <div className="rounded border border-emerald-200/40 bg-emerald-50/50 px-2 py-1.5 text-sm text-emerald-950 whitespace-pre-wrap dark:border-emerald-800/30 dark:bg-emerald-950/25 dark:text-emerald-100">
-                        {bodyProposed}
-                      </div>
-                    </div>
-                  </details>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
