@@ -66,6 +66,14 @@ import {
   parseAgentUseCaseTurnFromApi,
 } from '@types/aiAgentUseCases';
 import type { StructuredRefinementOp } from '../components/TaskEditor/EditorHost/editors/aiAgentEditor/structuredRefinementOps';
+import { emitDesignAiLlmBurstFromErrorResponse } from '../utils/aiAgentHighFrequencyAlert';
+import { confirmAiAgentGenerateIfEnabled } from '../utils/aiAgentGenerateConfirmGate';
+import { designAiFetch } from './designAiRequestPipeline';
+
+async function fetchAiAgentDesignAgentGenerate(init: RequestInit): Promise<Response> {
+  await confirmAiAgentGenerateIfEnabled();
+  return designAiFetch('/design/ai-agent-generate', init);
+}
 
 /** Per-section refine bundle (positions relative to that section's baseText only). */
 export interface SectionRefinementBundle {
@@ -139,7 +147,7 @@ export async function extractStructuredDesign(params: {
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
     }
-    const res = await fetch('/design/extract-structure', {
+    const res = await designAiFetch('/design/extract-structure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -149,6 +157,7 @@ export async function extractStructuredDesign(params: {
       | { success: true; structured_design: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -205,7 +214,7 @@ export async function generateAIAgentDesign(
       bodyPayload.compilePlatform = compilePlatform.trim().toLowerCase();
     }
 
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -221,6 +230,7 @@ export async function generateAIAgentDesign(
           system_prompt: string;
         };
     if (!res.ok || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -277,7 +287,7 @@ export async function induceStyleRuleFromCorrectionApi(
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
     }
-    const res = await fetch('/design/ai-agent-induce-style-rule', {
+    const res = await designAiFetch('/design/ai-agent-induce-style-rule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -285,6 +295,7 @@ export async function induceStyleRuleFromCorrectionApi(
     });
     const body = (await res.json()) as { success: true; rule_text: string } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -348,7 +359,7 @@ export async function analyzeDebuggerTurnUseCaseApi(
     if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
       bodyPayload.globalStyleContract = globalStyleContract.trim();
     }
-    const res = await fetch('/design/ai-agent-analyze-debug-turn', {
+    const res = await designAiFetch('/design/ai-agent-analyze-debug-turn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -358,6 +369,7 @@ export async function analyzeDebuggerTurnUseCaseApi(
       | ({ success: true } & Record<string, unknown>)
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -445,7 +457,7 @@ export async function generateAIAgentUseCases(
     if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
       bodyPayload.globalStyleId = globalStyleId.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -460,6 +472,7 @@ export async function generateAIAgentUseCases(
         }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -536,7 +549,7 @@ export async function regenerateAIAgentUseCaseApi(
     if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
       bodyPayload.globalStyleId = globalStyleId.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -544,6 +557,7 @@ export async function regenerateAIAgentUseCaseApi(
     });
     const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -607,7 +621,7 @@ export async function createAIAgentUseCaseApi(
     if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
       bodyPayload.globalStyleId = globalStyleId.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -615,6 +629,7 @@ export async function createAIAgentUseCaseApi(
     });
     const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -687,7 +702,7 @@ export async function propagateExamplePhraseStyleApi(
     if (typeof globalStyleId === 'string' && globalStyleId.trim().length > 0) {
       bodyPayload.globalStyleId = globalStyleId.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -697,6 +712,7 @@ export async function propagateExamplePhraseStyleApi(
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -733,6 +749,231 @@ export async function propagateExamplePhraseStyleApi(
   }
 }
 
+/**
+ * `Completa correzione` (toolbar wizard): propagazione directional dello stile.
+ *
+ * Differenze chiave rispetto a {@link propagateExamplePhraseStyleApi} (legacy callout
+ * `ExamplePhraseStyleCallout`, in via di rimozione):
+ *  - input = coppie esplicite `original → modified` per gli esempi (la "direzione del
+ *    cambiamento" è esplicita per il modello, non implicita nel solo `modified`);
+ *  - target = `original` testo dell'attuale baseline IA (il modello riscrive QUEL
+ *    testo applicando la stessa trasformazione, non genera ex-novo da scenario);
+ *  - output = `{ useCaseId, newAssistantContent, isNew }` — `isNew=true` permette al
+ *    client di applicare il marker visivo `[NEW]` finché l'utente non vota / consolida.
+ */
+const PROPAGATE_CORRECTION_STYLE_TIMEOUT_MS = 300000;
+
+export interface PropagateCorrectionStyleParams {
+  /** Coppie ORIGINAL→MODIFIED dagli use case sostanzialmente modificati dall'utente. */
+  directionalExamples: ReadonlyArray<{
+    useCaseId: string;
+    useCaseLabel: string;
+    original: string;
+    modified: string;
+  }>;
+  /** Use case ancora alla baseline IA: il modello riscriverà `original` applicando la stessa trasformazione. */
+  directionalTargets: ReadonlyArray<{
+    useCaseId: string;
+    useCaseLabel: string;
+    original: string;
+  }>;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  globalStyleContract?: string;
+  callMeta?: AiCallMeta;
+}
+
+export interface PropagateCorrectionStyleResult {
+  updates: ReadonlyArray<{ useCaseId: string; newAssistantContent: string; isNew: true }>;
+  /** Sintesi stile opzionale restituita dal modello (merge lato backend). */
+  styleSynthesis?: string;
+}
+
+function parseStyleSynthesisFromPropagateBody(body: Record<string, unknown>): string | undefined {
+  const raw = body.styleSynthesis ?? body.style_synthesis;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+}
+
+function parsePropagateCorrectionStyleUpdates(
+  rawUpdates: unknown
+): Array<{ useCaseId: string; newAssistantContent: string; isNew: true }> {
+  if (!Array.isArray(rawUpdates)) return [];
+  const updates: Array<{ useCaseId: string; newAssistantContent: string; isNew: true }> = [];
+  for (const row of rawUpdates) {
+    if (!row || typeof row !== 'object') continue;
+    const o = row as Record<string, unknown>;
+    const useCaseId =
+      typeof o.useCaseId === 'string'
+        ? o.useCaseId.trim()
+        : typeof o.use_case_id === 'string'
+          ? o.use_case_id.trim()
+          : '';
+    const newAssistantContent =
+      typeof o.newAssistantContent === 'string'
+        ? o.newAssistantContent.trim()
+        : typeof o.new_assistant_content === 'string'
+          ? o.new_assistant_content.trim()
+          : '';
+    if (useCaseId && newAssistantContent) {
+      updates.push({ useCaseId, newAssistantContent, isNew: true });
+    }
+  }
+  return updates;
+}
+
+export async function propagateCorrectionStyleApi(
+  params: PropagateCorrectionStyleParams
+): Promise<PropagateCorrectionStyleResult> {
+  const {
+    directionalExamples,
+    directionalTargets,
+    provider,
+    model,
+    outputLanguage,
+    globalStyleContract,
+  } = params;
+  if (directionalExamples.length === 0) {
+    throw new Error('Servono esempi directional (original→modified) non vuoti.');
+  }
+  if (directionalTargets.length === 0) {
+    throw new Error('Servono target da rigenerare.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROPAGATE_CORRECTION_STYLE_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'propagate_correction_style',
+      directionalExamples: [...directionalExamples],
+      directionalTargets: [...directionalTargets],
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await res.json()) as
+      | { success: true; updates: unknown }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const okBody = body as { success: true; updates?: unknown } & Record<string, unknown>;
+    const rawUpdates = okBody.updates;
+    if (!Array.isArray(rawUpdates)) {
+      throw new Error('Risposta non valida: updates mancante.');
+    }
+    const updates = parsePropagateCorrectionStyleUpdates(rawUpdates);
+    if (updates.length === 0) {
+      throw new Error('Risposta non valida: nessun aggiornamento utile.');
+    }
+    const styleSynthesis = parseStyleSynthesisFromPropagateBody(okBody);
+    return { updates, ...(styleSynthesis !== undefined ? { styleSynthesis } : {}) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export type PropagateCorrectionStylePreviewParams = PropagateCorrectionStyleParams & {
+  maxPreviewTargets?: number;
+  signal?: AbortSignal;
+};
+
+export type PropagateCorrectionStylePreviewResult = PropagateCorrectionStyleResult;
+
+function mergeAbortSignals(signals: readonly AbortSignal[]): AbortSignal {
+  const merged = new AbortController();
+  for (const s of signals) {
+    if (s.aborted) {
+      merged.abort();
+      return merged.signal;
+    }
+    s.addEventListener('abort', () => merged.abort(), { once: true });
+  }
+  return merged.signal;
+}
+
+/**
+ * Anteprima «Completa correzione»: stessa semantica di {@link propagateCorrectionStyleApi} ma
+ * action `propagate_correction_style_preview` (target limitati lato server, costo ridotto).
+ */
+export async function propagateCorrectionStylePreviewApi(
+  params: PropagateCorrectionStylePreviewParams
+): Promise<PropagateCorrectionStylePreviewResult> {
+  const {
+    directionalExamples,
+    directionalTargets,
+    provider,
+    model,
+    outputLanguage,
+    globalStyleContract,
+    maxPreviewTargets = 3,
+    signal: externalSignal,
+  } = params;
+  if (directionalExamples.length === 0) {
+    throw new Error('Servono esempi directional (original→modified) non vuoti.');
+  }
+  if (directionalTargets.length === 0) {
+    throw new Error('Servono target da rigenerare.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROPAGATE_CORRECTION_STYLE_TIMEOUT_MS);
+  const combinedSignal = mergeAbortSignals(
+    externalSignal !== undefined ? [controller.signal, externalSignal] : [controller.signal]
+  );
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'propagate_correction_style_preview',
+      directionalExamples: [...directionalExamples],
+      directionalTargets: [...directionalTargets],
+      provider: provider.toLowerCase(),
+      model,
+      maxPreviewTargets,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    if (typeof globalStyleContract === 'string' && globalStyleContract.trim().length > 0) {
+      bodyPayload.globalStyleContract = globalStyleContract.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: combinedSignal,
+    });
+    const body = (await res.json()) as
+      | ({ success: true } & Record<string, unknown>)
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const okBody = body as { success: true; updates?: unknown } & Record<string, unknown>;
+    const updates = parsePropagateCorrectionStyleUpdates(okBody.updates);
+    const styleSynthesis = parseStyleSynthesisFromPropagateBody(okBody);
+    return { updates, ...(styleSynthesis !== undefined ? { styleSynthesis } : {}) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface RegenerateAIAgentUseCaseTurnParams {
   useCase: AIAgentUseCase;
   turnId: string;
@@ -759,7 +1000,7 @@ export async function regenerateAIAgentUseCaseTurnApi(
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -767,6 +1008,7 @@ export async function regenerateAIAgentUseCaseTurnApi(
     });
     const body = (await res.json()) as { success: true; turn: unknown } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -828,7 +1070,7 @@ export async function annotateAIAgentAssistantMessageForJsonApi(
     if (typeof assistantMessageText === 'string') {
       bodyPayload.assistantMessageText = assistantMessageText;
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -838,6 +1080,7 @@ export async function annotateAIAgentAssistantMessageForJsonApi(
       | { success: true; content: string; motor: AgentMessageMotorPayload }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -1074,7 +1317,7 @@ export async function assembleAIAgentConversationApi(
         auto: sp.auto === true,
       };
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -1084,6 +1327,7 @@ export async function assembleAIAgentConversationApi(
       | { success: true; conversation: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -1205,7 +1449,7 @@ export async function proofreadAIAgentConversationAgentTurnsApi(
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -1215,6 +1459,7 @@ export async function proofreadAIAgentConversationAgentTurnsApi(
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
@@ -1283,7 +1528,7 @@ export async function tokenizeAIAgentUseCasesApi(
     if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
       bodyPayload.outputLanguage = outputLanguage.trim();
     }
-    const res = await fetch('/design/ai-agent-generate', {
+    const res = await fetchAiAgentDesignAgentGenerate({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
@@ -1293,6 +1538,7 @@ export async function tokenizeAIAgentUseCasesApi(
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
       const msg = err.error || `HTTP ${res.status}`;
       const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';

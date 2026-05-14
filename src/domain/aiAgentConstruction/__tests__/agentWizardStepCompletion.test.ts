@@ -75,13 +75,23 @@ describe('agentWizardStepCompletion — step soft (sempre ✅)', () => {
 });
 
 describe('agentWizardStepCompletion — aggregati', () => {
+  /**
+   * Post-riordino mag 2026 l'ordine ufficiale è:
+   *   0 → Task          (gate STRETTO)
+   *   1 → Prompts       (gate STRETTO, ex-Conversazione)
+   *   2 → Backend       (soft, sempre ✅)
+   *   3 → Dati          (soft)
+   *   4 → Voce          (soft)
+   * Quindi su input `empty` (no descrizione, no use case) i due gate stretti
+   * (posizioni 0 e 1) sono false, gli altri true.
+   */
   it('evaluateAgentWizardCompletion ritorna 5 flag in ordine', () => {
     const flags = evaluateAgentWizardCompletion(empty);
     expect(flags).toHaveLength(5);
-    expect(flags).toEqual([false, true, false, true, true]);
+    expect(flags).toEqual([false, false, true, true, true]);
   });
 
-  it('areAllAgentWizardStepsComplete è false se step 1 o 3 mancano', () => {
+  it('areAllAgentWizardStepsComplete è false se mancano i gate stretti', () => {
     expect(areAllAgentWizardStepsComplete(empty)).toBe(false);
     expect(areAllAgentWizardStepsComplete(taskOnly)).toBe(false);
   });
@@ -92,7 +102,11 @@ describe('agentWizardStepCompletion — aggregati', () => {
 
   it('nextIncompleteAgentWizardStep ritorna il primo step non completato', () => {
     expect(nextIncompleteAgentWizardStep(empty)).toBe(0);
-    expect(nextIncompleteAgentWizardStep(taskOnly)).toBe(2);
+    /**
+     * Con il nuovo ordine il primo step non completato dopo Task è Prompts (idx 1),
+     * non più Backend: il gate stretto «≥1 use case + ≥1 conversazione» è in posizione 1.
+     */
+    expect(nextIncompleteAgentWizardStep(taskOnly)).toBe(1);
     expect(nextIncompleteAgentWizardStep(allDone)).toBe(4);
   });
 });

@@ -36,9 +36,10 @@ export type AgentConstructionPhase = 'wizard' | 'edit';
  * Indici (0-based) dei 5 step del wizard di costruzione iniziale.
  * Volutamente const-enum-like ma come union literal per evitare runtime cost.
  *
+ * Ordine UFFICIALE post-riordino mag 2026:
  * - 0 → Task description
- * - 1 → Backend
- * - 2 → Conversazione (use case + dialoghi + prompt)
+ * - 1 → Prompts (use case + dialoghi + stile conversazionale)
+ * - 2 → Backend
  * - 3 → Dati (slot inferiti)
  * - 4 → Voce
  */

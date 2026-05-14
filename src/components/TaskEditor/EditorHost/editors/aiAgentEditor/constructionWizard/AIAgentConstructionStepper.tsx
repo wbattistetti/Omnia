@@ -189,7 +189,8 @@ export function AIAgentConstructionStepper({
               <button
                 type="button"
                 aria-current={costsActive ? 'page' : undefined}
-                aria-label="Costi del task: report dei costi IA filtrato per questo task"
+                aria-label="Costi di design del task: report delle chiamate IA effettuate in fase di costruzione, filtrato per questo task"
+                title="Apre il pannello dei costi di design: quanto ti è costato (in chiamate IA) costruire questo task"
                 onClick={onSelectCosts}
                 className={
                   'flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ' +
@@ -199,7 +200,7 @@ export function AIAgentConstructionStepper({
                 }
               >
                 <DollarSign size={13} aria-hidden className="opacity-90" />
-                <span>Costi</span>
+                <span>Costi di design</span>
               </button>
             </li>
           </>

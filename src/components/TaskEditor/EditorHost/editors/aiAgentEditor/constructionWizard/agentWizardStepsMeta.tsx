@@ -30,6 +30,16 @@ export interface AgentWizardStepMeta {
   readonly icon: LucideIcon;
 }
 
+/**
+ * Ordine UFFICIALE (post-riordino):
+ *   1) Task     2) Prompts     3) Backend     4) Dati     5) Voce
+ *
+ * Il vecchio ordine aveva «Backend» al 2° posto e «Conversazione» al 3°: lo step
+ * sui prompt arriva ora subito dopo la descrizione del task perch\u00e9 \u00e8 quello che
+ * forma davvero l\u2019identit\u00e0 conversazionale dell\u2019agente. I `displayNumber` e
+ * gli `index` rispecchiano l\u2019ordine in array; `STEP_COMPLETION_RULES` in
+ * `agentWizardStepCompletion.ts` segue lo stesso allineamento posizionale.
+ */
 export const AGENT_WIZARD_STEPS_META: readonly AgentWizardStepMeta[] = [
   {
     index: 0,
@@ -47,20 +57,25 @@ export const AGENT_WIZARD_STEPS_META: readonly AgentWizardStepMeta[] = [
   {
     index: 1,
     displayNumber: 2,
+    label: 'Prompts',
+    title: 'Definisci lo stile conversazionale',
+    /**
+     * Volutamente vuoto: l\u2019header tutorial sotto il titolo \u00e8 stato eliminato su
+     * richiesta esplicita (Img 1, mag 2026). Il sub-wizard del passo (lista use case
+     * + bubble conversazioni + JSON) ha gi\u00e0 i propri label contestuali e non serve
+     * una riga di guida ridondante.
+     */
+    tutorial: '',
+    icon: MessagesSquare,
+  },
+  {
+    index: 2,
+    displayNumber: 3,
     label: 'Backend',
     title: 'Definisci i backend',
     tutorial:
       'Dichiara gli strumenti (API/backend) che l\u2019agente potr\u00e0 chiamare. Puoi saltare questo passo se l\u2019agente \u00e8 puramente conversazionale.',
     icon: PlugZap,
-  },
-  {
-    index: 2,
-    displayNumber: 3,
-    label: 'Conversazione',
-    title: 'Definisci lo stile conversazionale',
-    tutorial:
-      'Crea i casi d\u2019uso e le conversazioni di esempio. Da qui emergono lo stile e gli slot dei dati raccolti dall\u2019agente.',
-    icon: MessagesSquare,
   },
   {
     index: 3,

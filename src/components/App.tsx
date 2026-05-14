@@ -29,6 +29,8 @@ import { GlobalTestPanelProvider } from '@context/GlobalTestPanelContext';
 import { GlobalTestPanel } from '@components/GlobalTestPanel/GlobalTestPanel';
 import { ApplyEditorChrome } from '@components/settings/ApplyEditorChrome';
 import { ConvaiProvisionPayloadModal } from '@components/DialogueEngine/ConvaiProvisionPayloadModal';
+import { AiAgentHighFrequencyDialog } from './common/AiAgentHighFrequencyDialog';
+import { AiAgentGenerateConfirmDialog } from './common/AiAgentGenerateConfirmDialog';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -153,6 +155,10 @@ function AppInner() {
       <GlobalTestPanel />
 
       <ConvaiProvisionPayloadModal />
+
+      <AiAgentHighFrequencyDialog />
+
+      <AiAgentGenerateConfirmDialog />
     </GlobalTestPanelProvider>
   );
 }

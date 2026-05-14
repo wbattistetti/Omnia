@@ -17,6 +17,13 @@ import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { UseCaseGeneratorWizardModel } from './useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 import type { UseCaseSiblingSortMode } from './useCaseHierarchy';
 
+/** Triade `(purpose, taskId, taskLabel)` serializzabile verso `/design/*` — allineato a {@link AiCallMeta}. */
+export type AIAgentPropagatorCallMeta = {
+  readonly purpose?: string;
+  readonly taskId?: string;
+  readonly taskLabel?: string;
+};
+
 export interface AIAgentEditorDockContextValue {
   instanceId: string | undefined;
   hasAgentGeneration: boolean;
@@ -151,6 +158,26 @@ export interface AIAgentEditorDockContextValue {
 
   /** Passo 2 wizard: propaga stile dalle frasi modificate al resto (LLM). */
   onPropagateExamplePhraseStyle: () => void | Promise<void>;
+  /**
+   * Toolbar wizard «Completa correzione»: chiama `propagate_correction_style` con coppie
+   * directional `(original→modified)` per gli esempi e l'`original` di ogni target.
+   * Vedi {@link AIAgentUseCaseComposerProps.onCompleteCorrection} per la firma.
+   */
+  onCompleteCorrection: (params: {
+    directionalExamples: ReadonlyArray<{
+      useCaseId: string;
+      useCaseLabel: string;
+      original: string;
+      modified: string;
+    }>;
+    directionalTargets: ReadonlyArray<{
+      useCaseId: string;
+      useCaseLabel: string;
+      original: string;
+    }>;
+  }) => Promise<{
+    updates: ReadonlyArray<{ useCaseId: string; newAssistantContent: string }>;
+  } | null>;
   /** Use case il cui messaggio assistente è stato appena aggiornato da «Aggiorna stile». */
   assistantPhraseStyleNewIds: readonly string[];
 
@@ -252,6 +279,15 @@ export interface AIAgentEditorDockContextValue {
    */
   agentLogUseCase: boolean;
   setAgentLogUseCase: (next: boolean) => void;
+
+  /**
+   * Parametri per propagazione/anteprima stile correzioni nel composer (mirror di Omnia Tutor +
+   * `globalStyleContract` del controller).
+   */
+  useCasePropagatorProvider: string;
+  useCasePropagatorModel: string;
+  useCasePropagatorGlobalStyleContract: string;
+  buildUseCasePropagatorCallMeta: (purpose: string) => AIAgentPropagatorCallMeta;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

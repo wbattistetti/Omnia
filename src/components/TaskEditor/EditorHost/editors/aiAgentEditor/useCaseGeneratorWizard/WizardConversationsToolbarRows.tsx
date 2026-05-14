@@ -9,8 +9,8 @@
  * - Destra (`ml-auto`): toggle «Mostra Tokens» che attiva la versione tokenizzata nelle bubble
  *   agente (placeholder `[token]` evidenziati in giallo nella bubble view).
  *
- * Il contatore totale «(N)» è stato spostato nel label dello stepper del pill (es.
- * `2. Conversazioni (5)`): qui non viene più ripetuto per eliminare ridondanza.
+ * Il contatore totale è nel pill dello stepper (es. `n Conversazioni` con n ≥ 0);
+ * qui non viene più ripetuto.
  *
  * Storia: precedentemente esisteva un toggle Riga 2 «Mostra usecases / Mostra conversazioni»
  * e un toggle «tokenizzazione» separato. Lo switch usecases/conversazioni è stato rimosso

@@ -7,6 +7,21 @@ import React from 'react';
 
 export type WizardBulkFoldState = 'expanded' | 'collapsed' | 'mixed';
 
+export type CorrectionPreviewRow = {
+  readonly useCaseId: string;
+  readonly useCaseLabel: string;
+  readonly current: string;
+  readonly proposed: string;
+};
+
+/** Stato anteprima «Completa correzione» nel pannello DX; `null` = niente anteprima attiva. */
+export type CorrectionPreviewState = {
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly synthesis: string;
+  readonly rows: readonly CorrectionPreviewRow[];
+};
+
 export type UseCaseWizardListHandlers = {
   expandAll: () => void;
   collapseAll: () => void;
@@ -32,6 +47,46 @@ export interface UseCaseWizardListToolbarContextValue {
    */
   searchSeed: string;
   setSearchSeed: (next: string) => void;
+  /**
+   * Numero di **campi** (scenario / messaggio agente) sostanzialmente modificati dall'utente
+   * rispetto all'ultima baseline IA (≥ 3 parole cambiate per campo, vedi
+   * `useCaseSubstantialEdits.ts`). Pubblicato dal composer; usato dal callout DX
+   * «Completa correzione» per la visibilità quando supera la soglia visiva.
+   */
+  pendingCorrectionsCount: number;
+  setPendingCorrectionsCount: (next: number) => void;
+  /**
+   * Handler registrato dal composer per "consolidare" le correzioni: il draft corrente
+   * di ogni campo modificato diventa la nuova baseline IA, azzerando il count. È `null`
+   * finché il composer non si è ancora montato (la toolbar in quel caso non chiama).
+   *
+   * **Async**: l'handler ritorna una `Promise<void>` che si risolve a operazione AI
+   * completata (o fallita). Il `triggerConsolidateCorrections` del context wrappa la
+   * chiamata e gestisce lo stato `correctionsBusy` automaticamente — l'UI non deve
+   * più tracciare il busy a parte.
+   */
+  registerConsolidateCorrectionsHandler: (handler: (() => Promise<void>) | null) => void;
+  triggerConsolidateCorrections: () => Promise<void>;
+  /**
+   * `true` mentre il servizio AI di propagazione stile è in volo (entrato in
+   * `triggerConsolidateCorrections` e non ancora settled). Usato dal callout per
+   * sostituire il pulsante «Correggi» con uno spinner non interrompibile.
+   */
+  correctionsBusy: boolean;
+  /**
+   * `true` quando l'utente ha cliccato «Procedo io manualmente» nel callout: il
+   * callout resta nascosto finché il `pendingCorrectionsCount` non scende sotto soglia
+   * e poi risale (rearm automatico — vedi `useEffect` interno). Non persistito: vive
+   * solo nella sessione del provider (cioè finché il pannello use case è montato).
+   */
+  correctionsDismissed: boolean;
+  /** Nasconde il callout (manual dismiss). Riarmo automatico al prossimo ciclo soglia. */
+  dismissCorrections: () => void;
+
+  correctionPreviewState: CorrectionPreviewState | null;
+  setCorrectionPreviewState: React.Dispatch<
+    React.SetStateAction<CorrectionPreviewState | null>
+  >;
 }
 
 const UseCaseWizardListToolbarContext =
@@ -48,7 +103,42 @@ export function UseCaseWizardListToolbarProvider({
   const [bulkFold, setBulkFold] = React.useState<WizardBulkFoldState>('expanded');
   /** Seed search committato (commit esplicito su Enter / clear) — vedi JSDoc del context. */
   const [searchSeed, setSearchSeedRaw] = React.useState<string>('');
+  /**
+   * Conteggio "campi sostanzialmente modificati" pubblicato dal composer. Il callout
+   * «Completa correzione» nel pannello DX lo legge per la visibilità.
+   */
+  const [pendingCorrectionsCount, setPendingCorrectionsCountRaw] = React.useState<number>(0);
+  const [correctionsBusy, setCorrectionsBusy] = React.useState<boolean>(false);
+  /**
+   * Dismissal "soft" del callout: se l'utente clicca «Procedo io manualmente» il
+   * callout si nasconde, ma deve poter riapparire se l'utente continua a fare
+   * correzioni sostanziali. Strategia di rearm: ogni volta che `pendingCorrectionsCount`
+   * passa da `< THRESHOLD` a `>= THRESHOLD` resetto il flag a `false` (vedi
+   * `useEffect` sotto). Threshold qui è cablato a `1` per essere conservativo:
+   * il callout vero usa `COMPLETE_CORRECTION_VISIBILITY_THRESHOLD` come soglia di
+   * **visibilità**, ma il rearm conta come "transizione 0 → ≥1" perché ogni nuova
+   * tornata di edit parte da zero (post-consolidamento o post-edit ricorrente).
+   */
+  const [correctionsDismissed, setCorrectionsDismissed] = React.useState<boolean>(false);
+  const [correctionPreviewState, setCorrectionPreviewState] =
+    React.useState<CorrectionPreviewState | null>(null);
   const handlersRef = React.useRef<UseCaseWizardListHandlers | null>(null);
+  const consolidateHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
+  const wasOverThresholdRef = React.useRef<boolean>(false);
+
+  /**
+   * Rearm automatico del dismissal: appena il count torna a 0 (consolidamento
+   * andato a buon fine, o l'utente ha annullato edit) resetto `correctionsDismissed`
+   * così al prossimo superamento di soglia il callout ricompare. NB: il setter è
+   * stable; questo `useEffect` non scatena loop.
+   */
+  React.useEffect(() => {
+    const isOver = pendingCorrectionsCount > 0;
+    if (!isOver && wasOverThresholdRef.current) {
+      setCorrectionsDismissed(false);
+    }
+    wasOverThresholdRef.current = isOver;
+  }, [pendingCorrectionsCount]);
 
   const registerHandlers = React.useCallback((handlers: UseCaseWizardListHandlers | null) => {
     handlersRef.current = handlers;
@@ -85,6 +175,47 @@ export function UseCaseWizardListToolbarProvider({
     setSearchSeedRaw(typeof next === 'string' ? next.trim() : '');
   }, []);
 
+  /**
+   * Stable setter del count: ignora valori non finiti / negativi (fail-loud non serve
+   * qui — il dato è derivato; basta il clamp difensivo). Identità stabile per evitare
+   * loop nel `useEffect` del composer che chiama questo setter ad ogni cambio dati.
+   */
+  const setPendingCorrectionsCount = React.useCallback((next: number): void => {
+    if (!Number.isFinite(next) || next < 0) {
+      setPendingCorrectionsCountRaw(0);
+      return;
+    }
+    setPendingCorrectionsCountRaw(Math.floor(next));
+  }, []);
+
+  const registerConsolidateCorrectionsHandler = React.useCallback(
+    (handler: (() => Promise<void>) | null): void => {
+      consolidateHandlerRef.current = handler;
+    },
+    []
+  );
+
+  /**
+   * Wrappa la chiamata all'handler async del composer: gestisce il busy flag in modo
+   * idempotente con `try/finally` (anche se l'handler rejects, il busy torna `false`).
+   * L'errore non viene risollevato: la propagazione errori è già in carico al
+   * controller (`useAIAgentEditorController.handleCompleteCorrection` → toast).
+   */
+  const triggerConsolidateCorrections = React.useCallback(async (): Promise<void> => {
+    const fn = consolidateHandlerRef.current;
+    if (!fn) return;
+    setCorrectionsBusy(true);
+    try {
+      await fn();
+    } finally {
+      setCorrectionsBusy(false);
+    }
+  }, []);
+
+  const dismissCorrections = React.useCallback((): void => {
+    setCorrectionsDismissed(true);
+  }, []);
+
   const value = React.useMemo<UseCaseWizardListToolbarContextValue>(
     () => ({
       showScenario,
@@ -99,6 +230,15 @@ export function UseCaseWizardListToolbarProvider({
       notifyCardToggle,
       searchSeed,
       setSearchSeed,
+      pendingCorrectionsCount,
+      setPendingCorrectionsCount,
+      registerConsolidateCorrectionsHandler,
+      triggerConsolidateCorrections,
+      correctionsBusy,
+      correctionsDismissed,
+      dismissCorrections,
+      correctionPreviewState,
+      setCorrectionPreviewState,
     }),
     [
       showScenario,
@@ -112,6 +252,14 @@ export function UseCaseWizardListToolbarProvider({
       notifyCardToggle,
       searchSeed,
       setSearchSeed,
+      pendingCorrectionsCount,
+      setPendingCorrectionsCount,
+      registerConsolidateCorrectionsHandler,
+      triggerConsolidateCorrections,
+      correctionsBusy,
+      correctionsDismissed,
+      dismissCorrections,
+      correctionPreviewState,
     ]
   );
 

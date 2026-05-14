@@ -1120,6 +1120,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onClearUseCaseHighlight: clearUseCaseHighlight,
 
     onPropagateExamplePhraseStyle: runPropagateExamplePhraseStyle,
+    onCompleteCorrection: c.handleCompleteCorrection,
     assistantPhraseStyleNewIds,
     onAssistantPhraseDraftChange,
 
@@ -1152,6 +1153,15 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentConversationDeployStyleId: c.setAgentConversationDeployStyleId,
     agentLogUseCase: c.agentLogUseCase,
     setAgentLogUseCase: c.setAgentLogUseCase,
+
+    useCasePropagatorProvider: provider,
+    useCasePropagatorModel: typeof model === 'string' ? model : '',
+    useCasePropagatorGlobalStyleContract: c.globalStyleContract,
+    buildUseCasePropagatorCallMeta: (purpose: string) => ({
+      purpose,
+      taskId: typeof c.instanceId === 'string' && c.instanceId ? c.instanceId : undefined,
+      taskLabel: typeof task?.label === 'string' && task.label ? task.label : undefined,
+    }),
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;
@@ -1182,10 +1192,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * verticale), appare una scrollbar orizzontale invece di un layout rotto.
    */
   const editorInner = (
-    <div className="h-full w-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden min-w-[720px]">
+    <div className="h-full w-full flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 overflow-hidden min-w-[720px]">
       {!effectiveHideHeader && (
         <div
-          className="flex items-center gap-2 px-4 py-2 border-b border-slate-800 shrink-0"
+          className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 shrink-0 dark:border-slate-800"
           style={{ borderLeftColor: headerColor, borderLeftWidth: 4 }}
         >
           <Bot size={20} style={{ color: headerColor }} />
@@ -1207,7 +1217,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
             </span>
           ) : null}
           <div className="ml-auto flex min-w-0 items-center gap-3">
-            <span className="text-xs text-slate-500 truncate">Task {c.instanceId}</span>
+            <span className="text-xs text-slate-600 truncate dark:text-slate-500">Task {c.instanceId}</span>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               {globalHeaderAction}
               {c.hasAgentGeneration && showRightPanel ? (
@@ -1251,7 +1261,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
                     : 'Espandi editor a tutto schermo'
                 }
                 aria-pressed={fullscreenPref.enabled}
-                className="inline-flex items-center justify-center rounded-md border border-slate-700/70 bg-slate-900/60 px-1.5 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                className="inline-flex items-center justify-center rounded-md border border-slate-300/90 bg-white/90 px-1.5 py-1.5 text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700/70 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               >
                 {fullscreenPref.enabled ? (
                   <Minimize2 size={14} aria-hidden />
@@ -1316,7 +1326,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * dei pannelli del wizard rimane attiva).
    */
   const editorBody = (
-    <div className="h-full w-full overflow-x-auto overflow-y-hidden bg-slate-950">
+    <div className="h-full w-full overflow-x-auto overflow-y-hidden bg-slate-100 dark:bg-slate-950">
       {editorInner}
     </div>
   );
@@ -1331,7 +1341,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   if (fullscreenPref.enabled && typeof document !== 'undefined') {
     return createPortal(
       <div
-        className="fixed left-0 right-0 bottom-0 z-50 flex flex-col bg-slate-950"
+        className="fixed left-0 right-0 bottom-0 z-50 flex flex-col bg-slate-100 dark:bg-slate-950"
         style={{ top: appToolbarBottom ?? 0 }}
         role="region"
         aria-label="AI Agent editor a tutto schermo"

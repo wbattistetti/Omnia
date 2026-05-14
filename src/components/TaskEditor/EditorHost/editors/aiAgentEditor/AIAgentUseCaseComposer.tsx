@@ -54,7 +54,7 @@ import {
   buildVirtualAgentUseCaseConstrainedPromptAppendix,
   serializeVirtualAgentRuntimeCatalog,
 } from '@domain/aiAgentUseCase/virtualAgentRuntimeCatalog';
-import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
+import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import {
   type AiTripletFieldBaseline,
   UC_USE_CASE_LIST_SCROLL,
@@ -63,11 +63,19 @@ import {
   UC_AGENT_VOTE_BTN,
   UC_CLASSIC_TEXTAREA_AGENT,
   UC_CLASSIC_TEXTAREA_SCENARIO,
+  UC_SCENARIO_BODY_TEXT,
+  UC_SCENARIO_PANEL_SURFACE,
   UC_HEAD_VOTE_BTN,
+  UC_LIST_ZEBRA_CLASSIC_EVEN,
+  UC_LIST_ZEBRA_CLASSIC_ODD,
+  UC_LIST_ZEBRA_WIZARD_EVEN,
+  UC_LIST_ZEBRA_WIZARD_ODD,
   UC_PILL_AGENT_MSG,
   UC_PILL_SCENARIO,
   UC_SCENARIO_ROW_EDIT_BTN,
   UC_SCENARIO_VOTE_BTN,
+  UC_WIZARD_CARD_BODY,
+  UC_WIZARD_SCENARIO_BLOCK,
   fieldTextClass,
   useCaseHeaderBgClass,
 } from './useCaseComposerPresentation';
@@ -77,13 +85,24 @@ import {
   type DesignerVoteField,
 } from './useCaseComposerDesignerVotes';
 import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
+import {
+  countSubstantialEditsAcrossUseCases,
+  isSubstantialEdit,
+  COMPLETE_CORRECTION_VISIBILITY_THRESHOLD,
+} from './useCaseSubstantialEdits';
 import { VoteThumbPair } from './VoteThumbPair';
 import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHighlightedText';
+import { CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE } from './useCaseGeneratorWizard/CompletaCorrezioneCallout';
+import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import {
   BracketTokenHighlightedText,
   BracketTokenHighlightedTextarea,
 } from './BracketTokenHighlightedTextarea';
-import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
+import {
+  propagateCorrectionStylePreviewApi,
+} from '@services/aiAgentDesignApi';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
+import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
@@ -131,6 +150,29 @@ export interface AIAgentUseCaseComposerProps {
   assistantPhraseStyleNewIds?: readonly string[];
   /** Wizard: bozza messaggio assistente → piano stile (testo non ancora committato in useCases). */
   onAssistantPhraseDraftChange?: (useCaseId: string | null, draftText: string | null) => void;
+  /**
+   * Toolbar wizard «Completa correzione»: invocato dal context quando l'utente preme il
+   * pulsante. Il composer costruisce il payload directional `(original, modified)` dai
+   * propri `useCases` + baseline IA e delega questa callback al parent (chiama l'API LLM
+   * via `useAIAgentEditorController.handleCompleteCorrection`). Il parent NON tocca
+   * `useCases` né `fieldBaselineByUseCaseId`: lo fa il composer dopo aver ricevuto gli
+   * updates, così il marker `[NEW]` e la nuova baseline restano coerenti localmente.
+   */
+  onCompleteCorrection?: (params: {
+    directionalExamples: ReadonlyArray<{
+      useCaseId: string;
+      useCaseLabel: string;
+      original: string;
+      modified: string;
+    }>;
+    directionalTargets: ReadonlyArray<{
+      useCaseId: string;
+      useCaseLabel: string;
+      original: string;
+    }>;
+  }) => Promise<{
+    updates: ReadonlyArray<{ useCaseId: string; newAssistantContent: string }>;
+  } | null>;
   /**
    * Notifica esterna quando la selezione lista cambia (lift-up). Usato dal wizard per il pannello
    * «Mostra JSON»: il preview Monaco mostra il JSON dello use case selezionato.
@@ -184,14 +226,41 @@ export function AIAgentUseCaseComposer({
   onClearUseCaseHighlight,
   assistantPhraseStyleNewIds = [],
   onAssistantPhraseDraftChange,
+  onCompleteCorrection,
   onSelectionChange,
   controlledSelectionId,
   showTokenizedAgentMessage = false,
   tokenizedByUseCaseId,
 }: AIAgentUseCaseComposerProps) {
-  const phraseStyleNewSet = React.useMemo(() => new Set(assistantPhraseStyleNewIds), [assistantPhraseStyleNewIds]);
+  /**
+   * Marker locale `[NEW]` aggiunto dal flow «Completa correzione» (toolbar). Vive nel
+   * composer (non viene propagato al parent) perché lega vita-e-morte alla baseline:
+   * appena la baseline viene riallineata al `newAssistantContent` lo set non serve più
+   * — ma manteniamo il badge finché lo use case non viene votato/edita di nuovo.
+   * L'unione con `assistantPhraseStyleNewIds` (legacy callout) conserva il render esistente.
+   */
+  const [completeCorrectionNewIds, setCompleteCorrectionNewIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const phraseStyleNewSet = React.useMemo(
+    () => new Set([...assistantPhraseStyleNewIds, ...completeCorrectionNewIds]),
+    [assistantPhraseStyleNewIds, completeCorrectionNewIds]
+  );
   const { ordered, depthById } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
+  const listToolbarCtx = useUseCaseWizardListToolbarOptional();
+  const dock = useOptionalAIAgentEditorDock();
+  /** `dock` dal parent è un oggetto nuovo a ogni render: non va nelle deps dell'effect anteprima. */
+  const dockRef = React.useRef(dock);
+  dockRef.current = dock;
+  /**
+   * Setter stabile (useState nel provider). L'oggetto `listToolbarCtx` cambia identità a ogni
+   * aggiornamento di `correctionPreviewState` (useMemo del provider): se era nelle deps
+   * dell'effect anteprima → abort in loop e UI bloccata su «sto analizzando…».
+   */
+  const setCorrectionPreviewState = listToolbarCtx?.setCorrectionPreviewState ?? null;
+  const pendingCorrectionsCountToolbar = listToolbarCtx?.pendingCorrectionsCount ?? 0;
+  const correctionsDismissedToolbar = listToolbarCtx?.correctionsDismissed ?? false;
   /**
    * Etichette campo «Scenario» / «Messaggio agente»: in modalità wizard
    * (`primaryGenerateOnRightOnly`) usiamo **icone-only** colorate con il **colore del font**
@@ -221,7 +290,6 @@ export function AIAgentUseCaseComposer({
   ) : (
     <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
   );
-  const listToolbarCtx = useUseCaseWizardListToolbarOptional();
   const wizardShowScenario =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
   const wizardShowMessage =
@@ -356,6 +424,326 @@ export function AIAgentUseCaseComposer({
   }, [effectiveSelectedId, primaryGenerateOnRightOnly]);
 
   useUseCaseFieldBaselineSync(ordered, useCases, setFieldBaselineByUseCaseId);
+
+  /**
+   * Pubblica al `UseCaseWizardListToolbarContext` quante correzioni sostanziali
+   * (≥ 3 parole cambiate per campo, vedi `useCaseSubstantialEdits.ts`) sono pendenti
+   * rispetto all'ultima baseline IA. Include **bozze** aperte nelle textarea (scenario /
+   * messaggio agente): finché l'utente non preme ✓ il `useCases` resta al valore
+   * committato e il conteggio sarebbe zero — il callout DX non comparirebbe mai durante
+   * l'edit. Solo nella vista wizard (`primaryGenerateOnRightOnly`): fuori wizard no-op.
+   */
+  React.useEffect(() => {
+    if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
+    const items = ordered.map((u) => {
+      const ast = u.dialogue.find((t) => t.role === 'assistant');
+      const committedAgent = ast?.content ?? '';
+      const agentMessage =
+        agentMsgEditUseCaseId === u.id ? agentMsgEditDraft : committedAgent;
+      const scenario =
+        payoffEditUseCaseId === u.id ? payoffEditDraft : (u.payoff ?? '');
+      return {
+        id: u.id,
+        current: { scenario, agentMessage },
+        baseline: fieldBaselineByUseCaseId[u.id],
+      };
+    });
+    listToolbarCtx.setPendingCorrectionsCount(countSubstantialEditsAcrossUseCases(items));
+  }, [
+    primaryGenerateOnRightOnly,
+    listToolbarCtx,
+    ordered,
+    useCases,
+    fieldBaselineByUseCaseId,
+    payoffEditUseCaseId,
+    payoffEditDraft,
+    agentMsgEditUseCaseId,
+    agentMsgEditDraft,
+  ]);
+
+  /**
+   * Registra al context l'handler «Completa correzione»: costruisce il payload directional
+   * `(original, modified)` dalle baseline IA + draft correnti dei messaggi agente, delega
+   * la chiamata LLM al parent (`onCompleteCorrection`), poi applica i risultati localmente:
+   *
+   *  1. sostituisce il `content` dell'ultimo turno assistente per ogni target rigenerato;
+   *  2. riallinea la baseline IA degli **esempi** al loro draft corrente (così il count
+   *     non li conteggia più come "modificati") e dei **target** al `newAssistantContent`
+   *     ricevuto dall'LLM (così non vengono ri-toccati al prossimo round);
+   *  3. registra i target nel set locale `completeCorrectionNewIds` per renderizzare il
+   *     badge giallo `[NEW]` nei pill (riusa il rendering esistente di `phraseStyleNewSet`).
+   *
+   * Se non ci sono esempi o target da propagare, l'handler è no-op.
+   * Se i `targets` sono vuoti (tutti già toccati) non c'è nulla da rigenerare: no-op.
+   * Errori dell'API risalgono al parent (`useAIAgentEditorController.handleCompleteCorrection`)
+   * che li espone via `useCaseComposerError`.
+   */
+  React.useEffect(() => {
+    if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
+    /**
+     * Handler **async**: il context wrappa la chiamata e gestisce il busy flag
+     * (`triggerConsolidateCorrections` setta `correctionsBusy` true → false a
+     * settle). Restituiamo la stessa promise dell'IIFE per propagare il completamento
+     * (e gli eventuali reject) al chiamante.
+     */
+    const handler = async (): Promise<void> => {
+      await (async () => {
+        if (typeof onCompleteCorrection !== 'function') return;
+        const directionalExamples: Array<{
+          useCaseId: string;
+          useCaseLabel: string;
+          original: string;
+          modified: string;
+        }> = [];
+        const directionalTargets: Array<{
+          useCaseId: string;
+          useCaseLabel: string;
+          original: string;
+        }> = [];
+        for (const u of ordered) {
+          const baseline = fieldBaselineByUseCaseId[u.id];
+          if (!baseline) continue;
+          const ast = u.dialogue.find((t) => t.role === 'assistant');
+          const committedAgent = ast?.content ?? '';
+          const current =
+            agentMsgEditUseCaseId === u.id ? agentMsgEditDraft : committedAgent;
+          if (!current.trim() || !baseline.assistantContent.trim()) continue;
+          if (
+            isSubstantialEdit(current, baseline.assistantContent)
+          ) {
+            directionalExamples.push({
+              useCaseId: u.id,
+              useCaseLabel: u.label,
+              original: baseline.assistantContent,
+              modified: current,
+            });
+          } else if (current === baseline.assistantContent) {
+            directionalTargets.push({
+              useCaseId: u.id,
+              useCaseLabel: u.label,
+              original: current,
+            });
+          }
+        }
+        if (directionalExamples.length === 0 || directionalTargets.length === 0) return;
+        const result = await onCompleteCorrection({
+          directionalExamples,
+          directionalTargets,
+        });
+        if (!result || result.updates.length === 0) return;
+
+        const newContentByUseCaseId = new Map<string, string>();
+        for (const u of result.updates) newContentByUseCaseId.set(u.useCaseId, u.newAssistantContent);
+        const exampleContentByUseCaseId = new Map(
+          directionalExamples.map((ex) => [ex.useCaseId, ex.modified])
+        );
+
+        setUseCases((prev) =>
+          prev.map((u) => {
+            const apiNew = newContentByUseCaseId.get(u.id);
+            const exModified = exampleContentByUseCaseId.get(u.id);
+            const content = apiNew ?? exModified;
+            if (content === undefined) return u;
+            const assistantTurnId = u.dialogue.find((x) => x.role === 'assistant')?.turn_id;
+            if (!assistantTurnId) return u;
+            return {
+              ...u,
+              dialogue: u.dialogue.map((t) =>
+                t.role === 'assistant' && t.turn_id === assistantTurnId
+                  ? { ...t, content, motor_snapshot: undefined }
+                  : t
+              ),
+            };
+          })
+        );
+
+        setFieldBaselineByUseCaseId((prev) => {
+          const next: Record<string, AiTripletFieldBaseline> = { ...prev };
+          for (const ex of directionalExamples) {
+            const cur = next[ex.useCaseId];
+            if (cur) next[ex.useCaseId] = { ...cur, assistantContent: ex.modified };
+          }
+          for (const u of result.updates) {
+            const cur = next[u.useCaseId];
+            if (cur) next[u.useCaseId] = { ...cur, assistantContent: u.newAssistantContent };
+          }
+          return next;
+        });
+
+        setCompleteCorrectionNewIds(
+          (prev) => new Set([...prev, ...result.updates.map((u) => u.useCaseId)])
+        );
+        setAgentMsgEditUseCaseId(null);
+      })();
+    };
+    listToolbarCtx.registerConsolidateCorrectionsHandler(handler);
+    return () => {
+      listToolbarCtx.registerConsolidateCorrectionsHandler(null);
+    };
+  }, [
+    primaryGenerateOnRightOnly,
+    listToolbarCtx,
+    ordered,
+    fieldBaselineByUseCaseId,
+    onCompleteCorrection,
+    setUseCases,
+    agentMsgEditUseCaseId,
+    agentMsgEditDraft,
+  ]);
+
+  /**
+   * Anteprima propagazione correzione nel callout DX: richiede stessi directional payload
+   * del consolidamento quando il callout è visibile (`pendingCorrectionsCount` sopra soglia,
+   * non dismissato).
+   *
+   * **Non** parte mentre l’utente sta ancora scrivendo nelle textarea inline (scenario /
+   * messaggio agente): solo dopo il commit (`useCases` aggiornato e editor chiuso) si
+   * ricalcola il payload e si lancia la richiesta. Il conteggio «correzioni pendenti»
+   * continua a includere le bozze (callout visibile durante l’edit); l’anteprima IA si
+   * aggiorna invece solo su dati committati.
+   */
+  React.useEffect(() => {
+    if (!primaryGenerateOnRightOnly || !setCorrectionPreviewState) return;
+
+    const dockNow = dockRef.current;
+    if (!dockNow) {
+      setCorrectionPreviewState(null);
+      return;
+    }
+
+    const correctionsCalloutVisible =
+      pendingCorrectionsCountToolbar >= COMPLETE_CORRECTION_VISIBILITY_THRESHOLD &&
+      !correctionsDismissedToolbar;
+
+    if (!correctionsCalloutVisible) {
+      setCorrectionPreviewState(null);
+      return;
+    }
+
+    if (agentMsgEditUseCaseId !== null || payoffEditUseCaseId !== null) {
+      setCorrectionPreviewState(null);
+      return;
+    }
+
+    const directionalExamples: Array<{
+      useCaseId: string;
+      useCaseLabel: string;
+      original: string;
+      modified: string;
+    }> = [];
+    const directionalTargets: Array<{
+      useCaseId: string;
+      useCaseLabel: string;
+      original: string;
+    }> = [];
+    for (const u of ordered) {
+      const baseline = fieldBaselineByUseCaseId[u.id];
+      if (!baseline) continue;
+      const ast = u.dialogue.find((t) => t.role === 'assistant');
+      const committedAgent = ast?.content ?? '';
+      const current = committedAgent;
+      if (!current.trim() || !baseline.assistantContent.trim()) continue;
+      if (isSubstantialEdit(current, baseline.assistantContent)) {
+        directionalExamples.push({
+          useCaseId: u.id,
+          useCaseLabel: u.label,
+          original: baseline.assistantContent,
+          modified: current,
+        });
+      } else if (current === baseline.assistantContent) {
+        directionalTargets.push({
+          useCaseId: u.id,
+          useCaseLabel: u.label,
+          original: current,
+        });
+      }
+    }
+
+    if (directionalExamples.length === 0 || directionalTargets.length === 0) {
+      setCorrectionPreviewState(null);
+      return;
+    }
+
+    const previewTargetSlice = directionalTargets.slice(0, 3);
+    const aiModel = dockNow.useCasePropagatorModel.trim();
+    if (!aiModel) {
+      setCorrectionPreviewState({
+        loading: false,
+        error: 'Configura un modello IA in Omnia Tutor per vedere un’anteprima.',
+        synthesis: '',
+        rows: [],
+      });
+      return;
+    }
+
+    const abort = new AbortController();
+    const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+
+    void (async (): Promise<void> => {
+      setCorrectionPreviewState({
+        loading: true,
+        error: null,
+        synthesis: CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE,
+        rows: [],
+      });
+      try {
+        const result = await propagateCorrectionStylePreviewApi({
+          directionalExamples,
+          directionalTargets,
+          provider: dockNow.useCasePropagatorProvider,
+          model: aiModel,
+          outputLanguage,
+          globalStyleContract:
+            dockNow.useCasePropagatorGlobalStyleContract.trim() || undefined,
+          maxPreviewTargets: 3,
+          callMeta: dockNow.buildUseCasePropagatorCallMeta(
+            AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION_PREVIEW
+          ),
+          signal: abort.signal,
+        });
+        if (abort.signal.aborted) return;
+        const updateById = new Map<string, string>();
+        for (const u of result.updates) {
+          updateById.set(u.useCaseId, u.newAssistantContent);
+        }
+        const rows = previewTargetSlice.map((t) => ({
+          useCaseId: t.useCaseId,
+          useCaseLabel: t.useCaseLabel,
+          current: t.original,
+          proposed: updateById.get(t.useCaseId) ?? '',
+        }));
+        setCorrectionPreviewState({
+          loading: false,
+          error: null,
+          synthesis: typeof result.styleSynthesis === 'string' ? result.styleSynthesis : '',
+          rows,
+        });
+      } catch (e) {
+        if (abort.signal.aborted) return;
+        setCorrectionPreviewState({
+          loading: false,
+          error: e instanceof Error ? e.message : String(e),
+          synthesis: '',
+          rows: [],
+        });
+      }
+    })();
+
+    return () => abort.abort();
+  }, [
+    primaryGenerateOnRightOnly,
+    setCorrectionPreviewState,
+    pendingCorrectionsCountToolbar,
+    correctionsDismissedToolbar,
+    ordered,
+    fieldBaselineByUseCaseId,
+    agentMsgEditUseCaseId,
+    payoffEditUseCaseId,
+    dock?.instanceId,
+    dock?.useCasePropagatorProvider,
+    dock?.useCasePropagatorModel,
+    dock?.useCasePropagatorGlobalStyleContract,
+  ]);
 
   React.useEffect(() => {
     setAgentMsgSelection({ start: 0, end: 0 });
@@ -1157,13 +1545,13 @@ export function AIAgentUseCaseComposer({
                     invece di un `<ul>` vuoto, così l'utente capisce che la lista non è
                     vuota davvero — basta cancellare il seed (X o Esc nella search box).
                   */
-                  <li className="px-3 py-6 text-center text-xs text-slate-500">
+                  <li className="px-3 py-6 text-center text-xs text-slate-600 dark:text-slate-500">
                     Nessuno use case corrisponde a «
-                    <span className="font-mono text-slate-300">{wizardSearchSeed}</span>
+                    <span className="font-mono text-slate-700 dark:text-slate-300">{wizardSearchSeed}</span>
                     ». Pulisci la ricerca per vederli tutti.
                   </li>
                 ) : null}
-                {filteredOrdered.map((u) => {
+                {filteredOrdered.map((u, rowIndex) => {
                   const rowBaseline = fieldBaselineByUseCaseId[u.id];
                   const depth = depthById[u.id] ?? 0;
                   const active = u.id === effectiveSelectedId;
@@ -1185,15 +1573,21 @@ export function AIAgentUseCaseComposer({
                    */
                   const includedInConv = isUseCaseIncludedInConversations(u);
                   const dimWhenExcludedClass = includedInConv ? '' : ' opacity-50';
+                  const searchHighlight = highlightIdSet.has(u.id);
+                  const zebraRow = primaryGenerateOnRightOnly
+                    ? rowIndex % 2 === 0
+                      ? UC_LIST_ZEBRA_WIZARD_EVEN
+                      : UC_LIST_ZEBRA_WIZARD_ODD
+                    : rowIndex % 2 === 0
+                      ? UC_LIST_ZEBRA_CLASSIC_EVEN
+                      : UC_LIST_ZEBRA_CLASSIC_ODD;
+                  const liSurface = searchHighlight
+                    ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-50/90 ring-2 ring-amber-300/50 dark:bg-amber-950/20 dark:ring-amber-400/40'
+                    : `overflow-hidden rounded-md ${zebraRow}`;
                   return (
                     <li
                       key={u.id}
-                      className={
-                        (highlightIdSet.has(u.id)
-                          ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-950/20 ring-2 ring-amber-400/40'
-                          : 'overflow-hidden rounded-md border border-slate-600/45 bg-slate-950/30') +
-                        dimWhenExcludedClass
-                      }
+                      className={`group/uc-row ${liSurface}${dimWhenExcludedClass}`}
                     >
                       <div
                         role="button"
@@ -1439,11 +1833,11 @@ export function AIAgentUseCaseComposer({
                       ) : null}
                       {showWizardBody ? (
                         <div
-                          className="border-t border-slate-700/45 px-2 py-2 space-y-2 bg-slate-950/25"
+                          className={UC_WIZARD_CARD_BODY}
                           onClick={(e) => e.stopPropagation()}
                         >
                           {wizardShowScenario ? (
-                            <div className="rounded-md ring-1 ring-violet-500/25 bg-slate-950/40 px-2 py-1">
+                            <div className={`relative ${UC_WIZARD_SCENARIO_BLOCK}`}>
                               {payoffEditUseCaseId === u.id ? (
                                 <div className="flex flex-wrap items-start gap-2">
                                   {scenarioFieldLabel}
@@ -1498,7 +1892,7 @@ export function AIAgentUseCaseComposer({
                                 <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1 rounded px-0.5 py-0">
                                   {scenarioFieldLabel}
                                   <p
-                                    className={`min-w-0 flex-1 cursor-default text-xs leading-snug whitespace-pre-wrap ${fieldTextClass(
+                                    className={`min-w-0 flex-1 cursor-default ${UC_SCENARIO_BODY_TEXT} whitespace-pre-wrap ${fieldTextClass(
                                       u.designer_payoff_vote,
                                       (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
                                       rowBaseline?.payoff
@@ -1703,7 +2097,7 @@ export function AIAgentUseCaseComposer({
             <div className="flex flex-1 min-h-0 flex-col overflow-hidden self-stretch">
               {selected ? (
                 <div className="flex flex-1 min-h-0 flex-col overflow-auto gap-3 px-0.5 py-1 min-h-0">
-                  <div className="rounded-lg ring-1 ring-violet-500/35 bg-slate-950/40 px-2 py-1">
+                  <div className={`relative rounded-lg ${UC_SCENARIO_PANEL_SURFACE}`}>
                     {payoffEditUseCaseId === selected.id ? (
                       <div className="flex flex-wrap items-start gap-2">
                         {scenarioFieldLabel}
@@ -1755,7 +2149,7 @@ export function AIAgentUseCaseComposer({
                       <div className="group/payoff-row flex w-full min-w-0 items-center gap-x-1">
                         {scenarioFieldLabel}
                         <p
-                          className={`min-w-0 flex-1 text-xs leading-snug whitespace-pre-wrap ${fieldTextClass(
+                          className={`min-w-0 flex-1 ${UC_SCENARIO_BODY_TEXT} whitespace-pre-wrap ${fieldTextClass(
                             selected.designer_payoff_vote,
                             selected.payoff ?? '',
                             fieldBaselineByUseCaseId[selected.id]?.payoff

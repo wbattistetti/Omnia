@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { GraduationCap, Loader2, Sparkles, Trash2, X } from 'lucide-react';
+import { Braces, GraduationCap, Loader2, Sparkles, Trash2, X } from 'lucide-react';
 import { getUseCaseGeneratorWizardStepConfig, USE_CASE_GENERATOR_WIZARD_STEPS } from '@domain/useCaseGeneratorWizard/config';
 import type { UseCaseGeneratorWizardStepId } from '@domain/useCaseGeneratorWizard/types';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
@@ -23,6 +23,9 @@ import { WizardStepOneListToolbarControls } from './WizardStepOneListToolbar';
 import { WizardConversationsTabsControls } from './WizardConversationsToolbarRows';
 import { ClearAllWizardOutputDialog } from './ClearAllWizardOutputDialog';
 import { ConversationalJsonPanel } from './ConversationalJsonPanel';
+import { CompletaCorrezioneCallout } from './CompletaCorrezioneCallout';
+import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarContext';
+import { isCompletaCorrezioneCalloutSurfaceActive } from '../useCaseSubstantialEdits';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
@@ -40,22 +43,41 @@ const STEP_COLOR_THEME: Record<
   }
 > = {
   use_case_list: {
+    /**
+     * Pill attivo: bordo `border-2` + ring `ring-2` per renderlo nettamente più
+     * marcato dello stato hover (richiesta esplicita Img 4 mag 2026: "bordo più
+     * spesso"). Lo step inattivo resta a `border` (1px) — la differenza visiva
+     * fra attivo/inattivo deve essere immediata.
+     */
     active:
-      'border-violet-400/95 bg-violet-950/55 text-amber-100 shadow-[0_0_22px_rgba(139,92,246,0.32)] ring-1 ring-inset ring-violet-300/25',
-    inactiveHover: 'hover:border-violet-500/50 hover:bg-violet-950/25',
-    workspace: 'bg-gradient-to-br from-violet-950/12 via-slate-950 to-slate-950',
+      'border-2 border-violet-300 bg-violet-950/60 text-amber-100 shadow-[0_0_22px_rgba(139,92,246,0.38)] ring-2 ring-inset ring-violet-400/55',
+    inactiveHover:
+      'hover:border-violet-500/50 hover:bg-violet-100/70 dark:hover:bg-violet-950/25',
+    workspace:
+      'bg-gradient-to-br from-violet-50/90 via-slate-50 to-slate-100 dark:from-violet-950/12 dark:via-slate-950 dark:to-slate-950',
   },
   conversations: {
     active:
-      'border-sky-400/95 bg-sky-950/50 text-sky-50 shadow-[0_0_22px_rgba(56,189,248,0.30)] ring-1 ring-inset ring-sky-300/25',
-    inactiveHover: 'hover:border-sky-500/50 hover:bg-sky-950/25',
-    workspace: 'bg-gradient-to-br from-sky-950/12 via-slate-950 to-slate-950',
+      'border-2 border-emerald-300 bg-emerald-950/55 text-emerald-50 shadow-[0_0_22px_rgba(52,211,153,0.34)] ring-2 ring-inset ring-emerald-400/55',
+    inactiveHover:
+      'hover:border-emerald-500/50 hover:bg-emerald-100/70 dark:hover:bg-emerald-950/25',
+    workspace:
+      'bg-gradient-to-br from-emerald-50/90 via-slate-50 to-slate-100 dark:from-emerald-950/12 dark:via-slate-950 dark:to-slate-950',
   },
   tokenization: {
+    /**
+     * Step legacy non più visibile come pill (filtrato in render). Manteniamo lo
+     * style in mappa per evitare type-error sull'`UseCaseGeneratorWizardStepId`
+     * exhaustive: `STEP_COLOR_THEME[wizard.currentStepId]` è ancora valutato
+     * altrove (es. workspace background dello shell), e il branch `tokenization`
+     * resta raggiungibile via `wizard.toggleShowJsonPanel` interno.
+     */
     active:
-      'border-amber-400/95 bg-amber-950/40 text-amber-50 shadow-[0_0_22px_rgba(245,158,11,0.28)] ring-1 ring-inset ring-amber-300/25',
-    inactiveHover: 'hover:border-amber-500/45 hover:bg-amber-950/20',
-    workspace: 'bg-gradient-to-br from-amber-950/10 via-slate-950 to-slate-950',
+      'border-2 border-amber-300 bg-amber-950/45 text-amber-50 shadow-[0_0_22px_rgba(245,158,11,0.32)] ring-2 ring-inset ring-amber-400/55',
+    inactiveHover:
+      'hover:border-amber-500/45 hover:bg-amber-100/70 dark:hover:bg-amber-950/20',
+    workspace:
+      'bg-gradient-to-br from-amber-50/90 via-slate-50 to-slate-100 dark:from-amber-950/10 dark:via-slate-950 dark:to-slate-950',
   },
 };
 
@@ -219,6 +241,8 @@ export function ViewSkaGenerator({
   createConversationBusy = false,
   onProofreadConversationAgentTurns,
   proofreadConversationBusy = false,
+  onTokenizeUseCases,
+  tokenizeUseCasesBusy = false,
   onClearAllWizardOutput,
   onClearWizardConversations,
   onClearWizardTokenization,
@@ -278,6 +302,19 @@ export function ViewSkaGenerator({
 
   /** Passo 1 con lista: tutto in {@link UseCaseListStepReviewCard} (stile incluso). */
   const unifiedUseCaseListReview = isStepOne && stepOneHasUseCases;
+  const listToolbarCtx = useUseCaseWizardListToolbarOptional();
+  /**
+   * Il callout «Completa correzione» sostituisce la review card / tutorial rapido nel DX:
+   * stessa condizione di montaggio del callout (vedi {@link isCompletaCorrezioneCalloutSurfaceActive}).
+   */
+  const correctionReplacesUseCaseTutorial =
+    unifiedUseCaseListReview &&
+    listToolbarCtx !== null &&
+    isCompletaCorrezioneCalloutSurfaceActive({
+      pendingCorrectionsCount: listToolbarCtx.pendingCorrectionsCount,
+      correctionsDismissed: listToolbarCtx.correctionsDismissed,
+      correctionsBusy: listToolbarCtx.correctionsBusy,
+    });
   /** Passo 2: review-card dedicata (istruzione + 3 pulsanti contestuali). */
   const unifiedConversationsReview = isStepConversations;
   /** Passo 3: non ha più una review-card di tokenizzazione; il pannello DX mostra il nastro JSON. */
@@ -388,14 +425,38 @@ export function ViewSkaGenerator({
         confirmLabel={clearDialogConfirmLabel}
       />
       <div className={`relative flex h-full min-h-0 flex-col overflow-hidden ${stepTheme.workspace}`}>
-        <div className="shrink-0 border-b border-slate-700/65 bg-gradient-to-b from-slate-900/95 to-slate-950/90">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-2 py-2.5">
+        <div className="shrink-0 border-b border-slate-200/90 bg-gradient-to-b from-slate-50 via-slate-100 to-slate-100 dark:border-slate-700/65 dark:from-slate-900/95 dark:via-slate-950 dark:to-slate-950/90">
+          {/*
+            Riga 1 (single-line per il passo «Casi d'uso»): tab strip a sinistra +
+            mini-toolbar contestuale a destra. Per gli altri step la mini-toolbar
+            resta su una RIGA 2 separata (vedi `<ContextualToolbarRow>` sotto)
+            perché i controlli sono troppo voluminosi (es. pill stile del passo
+            Conversazioni). `flex-nowrap` + `overflow-x-auto` garantiscono che
+            non si spezzi mai in due righe (richiesta esplicita Img 4 mag 2026).
+          */}
+          <div className="flex flex-nowrap items-center gap-x-2 overflow-x-auto px-2 py-2.5">
             <div
-              className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-2"
+              className="flex shrink-0 items-center gap-x-2"
               role="tablist"
               aria-label="Passi generatore use case"
             >
-              {USE_CASE_GENERATOR_WIZARD_STEPS.map((step, index) => {
+              {USE_CASE_GENERATOR_WIZARD_STEPS
+                /**
+                 * `tokenization` non è più un pill cliccabile dello stepper: l'accesso al
+                 * pannello JSON di destra avviene tramite l'icona inline {JS} che vive nel
+                 * pill «Casi d'uso» (vedi `JsonInlineButton` qui sotto). Lo step
+                 * resta nel config/wizard model perché altri pezzi di codice ancora lo
+                 * referenziano (es. clear scope), ma non viene mostrato come tab.
+                 */
+                .filter((s) => s.id !== 'tokenization')
+                .map((step) => {
+                /**
+                 * `index` deve essere quello reale della config completa (non quello del
+                 * filtrato), perché `wizard.stepIndex` / `wizard.selectStep(i)` / `wizard.canSelectStep(i)`
+                 * lavorano su indici della pipeline originale (use_case_list=0,
+                 * conversations=1, tokenization=2).
+                 */
+                const index = USE_CASE_GENERATOR_WIZARD_STEPS.findIndex((s) => s.id === step.id);
                 const active = index === wizard.stepIndex;
                 const selectable = wizard.canSelectStep(index);
                 const theme = STEP_COLOR_THEME[step.id];
@@ -412,23 +473,18 @@ export function ViewSkaGenerator({
                       ? typeof onClearWizardConversations === 'function' &&
                         wizard.conversations.length > 0
                       : false;
+                const showInlineJsonButton = step.id === 'use_case_list' && useCaseCount > 0;
+                const conversationsLen = wizard.conversations.length;
                 /**
-                 * Counter inline al titolo del passo (assorbe la vecchia label «N Usecases:»
-                 * / «N Conversazioni» che erano duplicate nella riga 2).
-                 * `null` quando il dato non è ancora disponibile → la pill resta solo «titolo».
+                 * Testo pill: niente prefisso «1.» / «2.» (richiesta UX). «Casi d'uso» + (N)
+                 * solo se N>0; «Conversazioni» sempre come «n Conversazioni» (n può essere 0).
                  */
+                const displayTitle =
+                  step.id === 'conversations'
+                    ? `${conversationsLen} Conversazioni`
+                    : step.title;
                 const stepCountBadge =
-                  step.id === 'use_case_list'
-                    ? useCaseCount > 0
-                      ? String(useCaseCount)
-                      : null
-                    : step.id === 'conversations'
-                      ? wizard.conversations.length > 0
-                        ? String(wizard.conversations.length)
-                        : null
-                      : useCaseCount > 0
-                        ? String(useCaseCount)
-                        : null;
+                  step.id === 'use_case_list' && useCaseCount > 0 ? String(useCaseCount) : null;
                 return (
                   <React.Fragment key={step.id}>
                     {active ? (
@@ -443,18 +499,41 @@ export function ViewSkaGenerator({
                           type="button"
                           role="tab"
                           aria-selected
-                          title={step.title}
+                          title={displayTitle}
                           onClick={() => wizard.selectStep(index)}
                           className="inline-flex shrink-0 items-center rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/80"
                         >
-                          <span className="tabular-nums opacity-90">{index + 1}.</span>
-                          <span className="ml-1 leading-tight">{step.title}</span>
+                          <span className="leading-tight">{displayTitle}</span>
                           {stepCountBadge ? (
                             <span className="ml-1.5 tabular-nums opacity-75">
                               ({stepCountBadge})
                             </span>
                           ) : null}
                         </button>
+                        {showInlineJsonButton ? (
+                          <JsonInlineButton
+                            active={wizard.showJsonPanel}
+                            busy={tokenizeUseCasesBusy}
+                            onClick={() => {
+                              /**
+                               * Behavior:
+                               *  - chiudi se aperto;
+                               *  - apri + ricompila se chiuso (così il pannello mostra
+                               *    sempre l'ultima proiezione canonica → JSON allineata).
+                               * Errori della compilazione restano in carico al toast/log
+                               * del controller (non li sopprimiamo qui).
+                               */
+                              if (wizard.showJsonPanel) {
+                                wizard.toggleShowJsonPanel();
+                                return;
+                              }
+                              wizard.toggleShowJsonPanel();
+                              if (typeof onTokenizeUseCases === 'function') {
+                                void onTokenizeUseCases();
+                              }
+                            }}
+                          />
+                        ) : null}
                         {canClear ? (
                           <StepClearButton
                             ref={clearRef}
@@ -473,7 +552,7 @@ export function ViewSkaGenerator({
                         disabled={!selectable}
                         title={
                           selectable
-                            ? step.title
+                            ? displayTitle
                             : 'Completa il passo precedente per sbloccare questo punto della pipeline.'
                         }
                         onClick={() => wizard.selectStep(index)}
@@ -481,12 +560,11 @@ export function ViewSkaGenerator({
                           'flex max-w-[180px] items-center rounded-lg border px-3 py-1 text-left text-[11px] font-semibold tracking-wide transition-all',
                           STEP_PILL_MIN_HEIGHT,
                           selectable
-                            ? `cursor-pointer border-slate-600/80 bg-slate-900/90 text-amber-100/85 ${theme.inactiveHover}`
-                            : 'cursor-not-allowed border-slate-700/60 bg-slate-950/80 text-slate-500 opacity-45 grayscale-[0.35]',
+                            ? `cursor-pointer border-slate-300/90 bg-white/95 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/90 dark:text-amber-100/85 dark:shadow-none ${theme.inactiveHover}`
+                            : 'cursor-not-allowed border-slate-200/90 bg-slate-100/90 text-slate-400 opacity-70 dark:border-slate-700/60 dark:bg-slate-950/80 dark:text-slate-500 dark:opacity-45 dark:grayscale-[0.35]',
                         ].join(' ')}
                       >
-                        <span className="tabular-nums text-violet-300/95">{index + 1}.</span>
-                        <span className="ml-1 leading-tight">{step.title}</span>
+                        <span className="leading-tight">{displayTitle}</span>
                         {stepCountBadge ? (
                           <span className="ml-1.5 tabular-nums opacity-70">
                             ({stepCountBadge})
@@ -498,23 +576,44 @@ export function ViewSkaGenerator({
                 );
               })}
             </div>
+            {/*
+              Mini-toolbar INLINE per il passo Casi d'uso: «prolungamento» visivo
+              del pill attivo (stessa palette, stesso ring inset). Vive in flusso
+              flex sulla stessa riga dei tab — `flex-1 min-w-0` la fa espandere
+              verso destra fino a riempire lo spazio disponibile, e il suo
+              `overflow-x-auto` interno gestisce l'overflow quando la riga è
+              stretta. Per gli altri step la mini-toolbar resta su una RIGA 2
+              separata (vedi `<ContextualToolbarRow>` sotto).
+            */}
+            {isStepOne && showListToolbarRow ? (
+              <div
+                className={`flex min-w-0 flex-1 flex-nowrap items-center gap-x-2 overflow-x-auto rounded-md border px-2 py-1 ${THEME_TOOLBAR_BG.use_case_list}`}
+                role="toolbar"
+                aria-label="Controlli del passo Casi d'uso"
+              >
+                <WizardStepOneListToolbarControls
+                  wizard={wizard}
+                  canShowJsonToggle={canShowJsonToggle}
+                  expandTheme="violet"
+                />
+              </div>
+            ) : null}
           </div>
           {/*
             Riga 2 (toolbar contestuale): controlli che dipendono dal tab attivo.
-            È una RIGA separata sotto i tab — non più inline dentro la pill — così la
-            riga dei tab resta breve e la toolbar prende il colore-tema del passo attivo
-            (verde per Casi d'uso, sky per Conversazioni, ambra per legacy).
-            Quando il passo non ha controlli contestuali (o sono nascosti) la riga non
-            viene resa: niente spazio sprecato.
+            Per il passo Casi d'uso la mini-toolbar è già inline nella riga 1 sopra;
+            qui restano gli altri step (Conversazioni con le pill stile, ecc.).
           */}
-          <ContextualToolbarRow
-            stepId={wizard.currentStepId}
-            wizard={wizard}
-            showListControls={showListToolbarRow}
-            canShowJsonToggle={canShowJsonToggle}
-            themeKey={wizard.currentStepId}
-            conversationsToolbarSlot={conversationsToolbarSlot}
-          />
+          {!isStepOne ? (
+            <ContextualToolbarRow
+              stepId={wizard.currentStepId}
+              wizard={wizard}
+              showListControls={showListToolbarRow}
+              canShowJsonToggle={canShowJsonToggle}
+              themeKey={wizard.currentStepId}
+              conversationsToolbarSlot={conversationsToolbarSlot}
+            />
+          ) : null}
         </div>
 
         {/*
@@ -542,7 +641,7 @@ export function ViewSkaGenerator({
             aria-orientation="vertical"
             aria-label="Ridimensiona pannello destro"
             tabIndex={0}
-            className="flex w-2 shrink-0 cursor-col-resize touch-none flex-col items-stretch justify-center border-x border-slate-700/75 bg-slate-900/45 select-none hover:bg-violet-950/30"
+            className="flex w-2 shrink-0 cursor-col-resize touch-none flex-col items-stretch justify-center border-x border-slate-300/80 bg-slate-200/45 select-none hover:bg-violet-200/50 dark:border-slate-700/75 dark:bg-slate-900/45 dark:hover:bg-violet-950/30"
             onPointerDown={onAsideResizePointerDown}
             onPointerMove={onAsideResizePointerMove}
             onPointerUp={finishAsideResize}
@@ -551,12 +650,14 @@ export function ViewSkaGenerator({
             <span className="mx-auto h-12 w-1 rounded-full bg-slate-500/90" aria-hidden />
           </div>
           <aside
-            className="flex min-w-[250px] max-w-[60vw] shrink-0 flex-col border-slate-800 bg-gradient-to-b from-slate-900/55 to-slate-950/90"
+            className="flex min-w-[250px] max-w-[60vw] shrink-0 flex-col border-slate-200 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100/95 dark:border-slate-800 dark:from-slate-900/55 dark:via-slate-950 dark:to-slate-950/90"
             style={{ width: rightAsideWidthPx }}
             aria-label={
               showJsonRightPanel
                 ? 'Anteprima JSON conversazionale dello use case selezionato'
-                : 'Tutorial e azioni del passo'
+                : correctionReplacesUseCaseTutorial
+                  ? 'Completa correzione messaggi'
+                  : 'Tutorial e azioni del passo'
             }
           >
             {showJsonRightPanel ? (
@@ -581,8 +682,15 @@ export function ViewSkaGenerator({
                   </h2>
                 </div>
               </div>
+            ) : correctionReplacesUseCaseTutorial ? (
+              <div className="shrink-0 border-b border-violet-500/25 bg-slate-50/95 px-4 py-2.5 dark:bg-slate-950/90">
+                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-violet-400/85">
+                  <Sparkles className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
+                  <span>Completa correzione</span>
+                </div>
+              </div>
             ) : (
-              <div className="shrink-0 border-b border-violet-500/25 bg-slate-950/90 px-4 py-2.5">
+              <div className="shrink-0 border-b border-violet-500/25 bg-slate-50/95 px-4 py-2.5 dark:bg-slate-950/90">
                 <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-violet-400/85">
                   <GraduationCap className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
                   <span>Guida rapida</span>
@@ -593,38 +701,50 @@ export function ViewSkaGenerator({
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               {unifiedUseCaseListReview ? (
                 <>
-                  <UseCaseListStepReviewCard
-                    useCaseCount={useCaseCount}
-                    panelHeading={stepCfg.panelHeading}
-                    showStyleHint={Boolean(
-                      wizard.currentStepId === 'use_case_list' &&
-                        wizard.examplePhraseStylePlan.showStyleCta &&
-                        typeof onApplyExamplePhraseStyle === 'function'
-                    )}
-                    styleBusy={examplePhraseStyleBusy}
-                    styleBusyLabel={examplePhraseStyleBusyLabel}
-                    onApplyStyle={onApplyExamplePhraseStyle}
-                    bundleFeedback={bundleFeedback}
-                    onDismissBundleFeedback={onDismissBundleFeedback}
-                    generateBusy={generateBusy}
-                    onGenerateMore={onGenerateUseCaseBundle}
-                    canGenerateMore={typeof onGenerateUseCaseBundle === 'function'}
-                    onAdvanceStep={onAdvanceWizardStep}
-                    canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
-                    advanceStepAnchorRef={advanceStepAnchorRef}
-                  />
-                  {wizard.showNoChangesTutorial ? (
-                    <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
-                      <p className="leading-relaxed">{wizard.tutorialIfNoChanges}</p>
-                      <button
-                        type="button"
-                        className="mt-2 text-[11px] text-amber-200 underline hover:text-amber-50"
-                        onClick={wizard.dismissNoChangesTutorial}
-                      >
-                        Chiudi
-                      </button>
-                    </div>
-                  ) : null}
+                  {/*
+                    Callout «Completa correzione»: quando attivo sostituisce la review card
+                    tutorial nel DX (stessa logica `correctionReplacesUseCaseTutorial`).
+                  */}
+                  <CompletaCorrezioneCallout />
+                  {correctionReplacesUseCaseTutorial ? null : (
+                    <>
+                      <UseCaseListStepReviewCard
+                        useCaseCount={useCaseCount}
+                        panelHeading={stepCfg.panelHeading}
+                        /**
+                         * Vecchio CTA inline «Omogeneizza messaggi» disattivato dalla
+                         * v3 della propagazione stile: l'entry point è il callout
+                         * {@link CompletaCorrezioneCallout} nel pannello DX «Guida rapida»,
+                         * che chiama `propagate_correction_style` con coppie
+                         * `(original, modified)` esplicite.
+                         */
+                        showStyleHint={false}
+                        styleBusy={examplePhraseStyleBusy}
+                        styleBusyLabel={examplePhraseStyleBusyLabel}
+                        onApplyStyle={onApplyExamplePhraseStyle}
+                        bundleFeedback={bundleFeedback}
+                        onDismissBundleFeedback={onDismissBundleFeedback}
+                        generateBusy={generateBusy}
+                        onGenerateMore={onGenerateUseCaseBundle}
+                        canGenerateMore={typeof onGenerateUseCaseBundle === 'function'}
+                        onAdvanceStep={onAdvanceWizardStep}
+                        canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
+                        advanceStepAnchorRef={advanceStepAnchorRef}
+                      />
+                      {wizard.showNoChangesTutorial ? (
+                        <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
+                          <p className="leading-relaxed">{wizard.tutorialIfNoChanges}</p>
+                          <button
+                            type="button"
+                            className="mt-2 text-[11px] text-amber-200 underline hover:text-amber-50"
+                            onClick={wizard.dismissNoChangesTutorial}
+                          >
+                            Chiudi
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
                 </>
               ) : unifiedConversationsReview ? (
                 <>
@@ -693,7 +813,7 @@ export function ViewSkaGenerator({
             </div>
 
             {showFooterGenerateInitial ? (
-              <div className="shrink-0 border-t border-violet-500/25 bg-slate-950/80 px-3 py-3">
+              <div className="shrink-0 border-t border-violet-500/25 bg-slate-50/95 px-3 py-3 dark:bg-slate-950/80">
                 <ViewSkaGenerateButton
                   generateBusy={generateBusy}
                   onGenerateUseCaseBundle={onGenerateUseCaseBundle}
@@ -720,8 +840,8 @@ export function ViewSkaGenerator({
  *   collassa e scenario/frasi appartengono al pill «Casi d'uso», ripeterli qui era
  *   ridondante. La compilazione prompt/JSON vive nel pannello DX ed è derivata dagli use case.
  *
- * Il conteggio totale (use case / conversazioni) è stato spostato nel label
- * del pill (es. `1. Casi d'uso (4)`), quindi qui NON è più ripetuto.
+ * Il conteggio totale use case resta nel pill come `Casi d'uso (N)`; le conversazioni
+ * come `n Conversazioni` (n incluso 0). Qui NON è più ripetuto.
  */
 /**
  * Riga 2 dello stepper: toolbar contestuale del tab attivo, sotto la riga dei tab.
@@ -737,10 +857,19 @@ export function ViewSkaGenerator({
  * cofano» (visibile solo nel JSON conversazionale) e il JSON è già accessibile dal
  * pannello DX nei passi dedicati.
  */
+/**
+ * Tinte della mini-toolbar (riga 2): «prolungamento» visivo del pill attivo
+ * sopra di essa. Tonalità un gradino più cariche delle precedenti — su
+ * richiesta esplicita Img 4 mag 2026: deve essere chiaro che la mini-toolbar
+ * appartiene allo step selezionato, senza essere assordante.
+ *
+ * Nota: la palette di `conversations` è passata da sky a emerald per allinearsi
+ * al nuovo color tema dei pill (vedi `STEP_COLOR_THEME` sopra).
+ */
 const THEME_TOOLBAR_BG: Record<UseCaseGeneratorWizardStepId, string> = {
-  use_case_list: 'border-violet-400/30 bg-violet-950/35',
-  conversations: 'border-sky-400/30 bg-sky-950/30',
-  tokenization: 'border-amber-400/30 bg-amber-950/25',
+  use_case_list: 'border-violet-400/55 bg-violet-950/55 ring-1 ring-inset ring-violet-400/20',
+  conversations: 'border-emerald-400/55 bg-emerald-950/45 ring-1 ring-inset ring-emerald-400/20',
+  tokenization: 'border-amber-400/55 bg-amber-950/40 ring-1 ring-inset ring-amber-400/20',
 };
 
 function ContextualToolbarRow({
@@ -767,20 +896,26 @@ function ContextualToolbarRow({
      * conversazioni esistenti. Lo `slot` è opzionale: quando non c'è (es. nessuna
      * conversazione ancora) il blocco a sinistra resta vuoto e i cluster occupano
      * naturalmente lo spazio.
+     *
+     * `overflow-x-auto` + `flex-nowrap`: la riga resta single-line; se il contenuto
+     * eccede la larghezza disponibile lo scroll orizzontale gestisce l'overflow
+     * senza spezzare la barra in due righe (richiesta esplicita mag 2026).
      */
     return (
       <div
-        className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-t px-3 py-1.5 ${themeBg}`}
+        className={`flex min-w-0 flex-nowrap items-center gap-x-3 overflow-x-auto border-t px-3 py-1.5 ${themeBg}`}
         role="toolbar"
         aria-label="Controlli del passo Conversazioni"
       >
         {conversationsToolbarSlot ? (
           <>
-            {conversationsToolbarSlot}
-            <span aria-hidden className="h-5 w-px bg-sky-400/30" />
+            <div className="shrink-0">{conversationsToolbarSlot}</div>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-emerald-400/30" />
           </>
         ) : null}
-        <WizardConversationsTabsControls wizard={wizard} />
+        <div className="shrink-0">
+          <WizardConversationsTabsControls wizard={wizard} />
+        </div>
       </div>
     );
   }
@@ -789,7 +924,7 @@ function ContextualToolbarRow({
     if (!showListControls) return null;
     return (
       <div
-        className={`flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-t px-3 py-1.5 ${themeBg}`}
+        className={`flex min-w-0 flex-nowrap items-center gap-x-2 overflow-x-auto border-t px-3 py-1.5 ${themeBg}`}
         role="toolbar"
         aria-label="Controlli del passo Casi d'uso"
       >
@@ -854,6 +989,53 @@ const StepClearButton = React.forwardRef<
 });
 
 /**
+ * Pulsante inline `{JS}` nel pill «Casi d'uso»: apre/chiude il pannello JSON di destra
+ * (controllato da `wizard.showJsonPanel`). Quando il pannello passa da chiuso ad aperto,
+ * il chiamante avvia anche la compilazione fresca degli use case in background, in modo
+ * che la proiezione JSON visualizzata sia sempre allineata al testo canonico più recente.
+ *
+ * Sostituisce, dal mag 2026, il vecchio terzo step «Prompt e JSON» della pipeline:
+ * lo stepper resta a due passi visibili (Casi d'uso, Conversazioni) e l'accesso al JSON
+ * è una micro-azione contestuale al passo Casi d'uso.
+ */
+function JsonInlineButton({
+  active,
+  busy,
+  onClick,
+}: {
+  active: boolean;
+  busy: boolean;
+  onClick: () => void;
+}): React.ReactElement {
+  const title = active
+    ? 'Chiudi il pannello JSON'
+    : 'Apre il pannello per verificare i Json (compila gli use case prima di mostrarli)';
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={title}
+      title={title}
+      onClick={onClick}
+      disabled={busy}
+      className={[
+        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/80',
+        active
+          ? 'border-violet-400/85 bg-violet-900/55 text-violet-50 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]'
+          : 'border-violet-500/40 bg-violet-950/25 text-violet-200 hover:border-violet-400/65 hover:bg-violet-900/40 hover:text-violet-100',
+        busy ? 'cursor-wait opacity-70' : '',
+      ].join(' ')}
+    >
+      {busy ? (
+        <Loader2 size={13} aria-hidden className="animate-spin" />
+      ) : (
+        <Braces size={13} aria-hidden />
+      )}
+    </button>
+  );
+}
+
+/**
  * Sub-pannello destro on-demand «Mostra JSON» (Passo 1): header coerente con il resto del
  * wizard + Monaco read-only ({@link ConversationalJsonPanel}).
  *
@@ -871,7 +1053,7 @@ function ConversationalJsonRightPanel({
 }): React.ReactElement {
   return (
     <>
-      <div className="shrink-0 border-b border-violet-500/25 bg-slate-950/90 px-4 py-2.5">
+      <div className="shrink-0 border-b border-violet-500/25 bg-slate-50/95 px-4 py-2.5 dark:bg-slate-950/90">
         <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-violet-400/85">
           <GraduationCap className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
           <span>Anteprima JSON</span>

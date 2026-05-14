@@ -129,7 +129,7 @@ export function EditorDatiPanel() {
   } = useAIAgentEditorDock();
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-slate-950/80">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-slate-100/95 dark:bg-slate-950/80">
       <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
         {proposedFields.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
@@ -182,6 +182,7 @@ export function EditorUseCasesPanel() {
     useCaseHighlightIds,
     onClearUseCaseHighlight,
     onPropagateExamplePhraseStyle,
+    onCompleteCorrection,
     assistantPhraseStyleNewIds,
     onAssistantPhraseDraftChange,
     onAssembleConversation,
@@ -263,6 +264,7 @@ export function EditorUseCasesPanel() {
       onClearUseCaseHighlight={onClearUseCaseHighlight}
       assistantPhraseStyleNewIds={assistantPhraseStyleNewIds}
       onAssistantPhraseDraftChange={onAssistantPhraseDraftChange}
+      onCompleteCorrection={onCompleteCorrection}
       onSelectionChange={setSelectedUseCaseId}
       controlledSelectionId={selectedUseCaseId}
       showTokenizedAgentMessage={Boolean(useCaseGeneratorWizard?.showTokenizedInBubbles)}
@@ -503,7 +505,7 @@ export function EditorUseCasesPanel() {
     ).some(Boolean);
 
     return (
-      <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">
+      <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-100/95 dark:bg-slate-950/80">
         <UseCaseWizardListToolbarProvider>
           <ViewSkaGenerator
             wizard={useCaseGeneratorWizard}
@@ -558,5 +560,5 @@ export function EditorUseCasesPanel() {
     );
   }
 
-  return <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-950/80">{composer}</div>;
+  return <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-100/95 dark:bg-slate-950/80">{composer}</div>;
 }

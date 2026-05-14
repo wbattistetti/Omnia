@@ -9,7 +9,7 @@ Post-unificazione layout: il Task Editor AI Agent ha un **unico shell**, il
 `AIAgentEditorDockShell` (Dockview classic) è stato rimosso: tutti i task — sia nuovi
 sia legacy con `hasAgentGeneration=true` — sono renderizzati nel wizard.
 
-- **Stepper**: 5 step lineari (Task → Backend → Conversazione → Dati → Voce) + bottone
+- **Stepper**: 5 step lineari (Task → Prompts → Backend → Dati → Voce) + bottone
   "Costi" e slot opzionale "Deploy" a destra.
 - **Pannelli interni**: i `Editor*Panel` di `AIAgentEditorDockPanels.tsx` sono ancora
   usati, ma istanziati direttamente dal renderer dello step (non più tramite Dockview).

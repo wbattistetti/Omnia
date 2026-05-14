@@ -29,6 +29,10 @@ const {
   homogenizeConversationAgentTurns,
   proofreadConversationAgentTurns,
 } = require('./services/AIAgentConversationService');
+const {
+  propagateCorrectionStyle,
+  propagateCorrectionStylePreview,
+} = require('./services/AIAgentCorrectionPropagationService');
 const { tokenizeUseCases } = require('./services/AIAgentTokenizationService');
 const {
   assertAiCallContract,
@@ -48,6 +52,7 @@ const TASK_TYPE_AI_AGENT = TaskTypeEnum.AIAgent;
 // ✅ ENTERPRISE MIDDLEWARE
 const CircuitBreakerManager = require('./middleware/CircuitBreakerManager');
 const RateLimiter = require('./middleware/RateLimiter');
+const { createDesignAiLlmBurstGuardFromEnv } = require('./lib/aiAgentGenerateBurstGuard');
 const { bookFromAgendaRuntimeTrace } = require('./middleware/bookFromAgendaRuntimeTrace');
 const AIHealthChecker = require('./health/AIHealthChecker');
 const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalog/catalogRoutes');
@@ -76,6 +81,63 @@ function logError(tag, err, meta) {
   try { console.error(`[${new Date().toISOString()}][ERROR][${tag}]`, JSON.stringify(out)); }
   catch { console.error(`[ERROR][${tag}]`, out); }
 }
+
+/**
+ * Rate limit solo per `propagate_correction_style_preview`: evita burn costi se il FE
+ * rifà l’effect in loop. Finestra mobile per `taskId` (fallback IP).
+ */
+const PREVIEW_PROPAGATION_WINDOW_MS = 60_000;
+const PREVIEW_PROPAGATION_MAX_PER_WINDOW = 10;
+/** @type {Map<string, number[]>} taskKey → timestamps ms */
+const previewPropagationTimestampsByKey = new Map();
+
+function tryConsumePreviewPropagationSlot(taskKey) {
+  const now = Date.now();
+  const key = taskKey && String(taskKey).trim() ? String(taskKey).trim() : '__no_task__';
+  let arr = previewPropagationTimestampsByKey.get(key);
+  if (!arr) {
+    arr = [];
+    previewPropagationTimestampsByKey.set(key, arr);
+  }
+  const cutoff = now - PREVIEW_PROPAGATION_WINDOW_MS;
+  while (arr.length > 0 && arr[0] < cutoff) arr.shift();
+  if (arr.length >= PREVIEW_PROPAGATION_MAX_PER_WINDOW) {
+    const oldest = arr[0];
+    return { ok: false, retryAfterMs: Math.max(0, oldest + PREVIEW_PROPAGATION_WINDOW_MS - now) };
+  }
+  arr.push(now);
+  return { ok: true, retryAfterMs: 0 };
+}
+
+/** Burst condiviso per tutte le rotte design-time che invocano LLM (stesso contatore per IP). */
+const designAiLlmBurstGuard = createDesignAiLlmBurstGuardFromEnv();
+
+/**
+ * Consuma uno slot del burst guard; se esaurito risponde 429 e ritorna true.
+ * @returns {boolean} true se la risposta è già stata inviata (429).
+ */
+function respondDesignAiLlmBurst429(req, res, requestId) {
+  const burstKey = String(req.ip || req.socket?.remoteAddress || 'unknown');
+  const burst = designAiLlmBurstGuard.tryConsume(burstKey);
+  if (!burst.ok) {
+    const sec = Math.max(1, Math.ceil(burst.retryAfterMs / 1000));
+    logWarn('DESIGN_AI_LLM_BURST', {
+      requestId,
+      path: req.path,
+      burstKey,
+      inWindow: burst.inWindow,
+      retryAfterMs: burst.retryAfterMs,
+    });
+    res.status(429).json({
+      success: false,
+      error: `Troppe richieste di progettazione IA in breve tempo (${burst.inWindow} nella finestra). Riprova tra circa ${sec}s.`,
+      code: 'DESIGN_AI_LLM_BURST',
+    });
+    return true;
+  }
+  return false;
+}
+
 app.use(cors());
 // Increase body size limits to allow large DDT payloads
 app.use(express.json({ limit: '200mb' }));
@@ -6470,6 +6532,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
   const requestId = Date.now();
   try {
     const body = req.body || {};
+
+    if (respondDesignAiLlmBurst429(req, res, requestId)) return;
+
     const {
       action,
       userDesc,
@@ -6631,6 +6696,118 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, updates: result.updates });
+    }
+
+    if (action === 'propagate_correction_style') {
+      const directionalExamples = Array.isArray(body.directionalExamples)
+        ? body.directionalExamples
+        : [];
+      const directionalTargets = Array.isArray(body.directionalTargets)
+        ? body.directionalTargets
+        : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] propagate_correction_style`, {
+        provider,
+        model,
+        examples: directionalExamples.length,
+        targets: directionalTargets.length,
+      });
+      const result = await propagateCorrectionStyle({
+        directionalExamples,
+        directionalTargets,
+        outputLanguage,
+        globalStyleContract,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_COMPLETE_CORRECTION',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({ success: true, updates: result.updates, styleSynthesis: result.styleSynthesis || '' });
+    }
+
+    if (action === 'propagate_correction_style_preview') {
+      const directionalExamples = Array.isArray(body.directionalExamples)
+        ? body.directionalExamples
+        : [];
+      const directionalTargets = Array.isArray(body.directionalTargets)
+        ? body.directionalTargets
+        : [];
+      const maxPreviewTargets =
+        typeof body.maxPreviewTargets === 'number' && Number.isFinite(body.maxPreviewTargets)
+          ? body.maxPreviewTargets
+          : 3;
+      const previewThrottleKey =
+        typeof callMeta.taskId === 'string' && callMeta.taskId.trim()
+          ? callMeta.taskId.trim()
+          : `ip:${String(req.ip || 'unknown')}`;
+      const slot = tryConsumePreviewPropagationSlot(previewThrottleKey);
+      if (!slot.ok) {
+        const sec = Math.max(1, Math.ceil(slot.retryAfterMs / 1000));
+        logWarn('AI_AGENT_USE_CASES', {
+          requestId,
+          event: 'propagate_correction_style_preview_throttled',
+          key: previewThrottleKey,
+          retryAfterSec: sec,
+        });
+        return res.status(429).json({
+          success: false,
+          error: `Troppe anteprime di correzione in poco tempo. Riprova tra circa ${sec}s.`,
+        });
+      }
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] propagate_correction_style_preview`, {
+        provider,
+        model,
+        examples: directionalExamples.length,
+        targets: directionalTargets.length,
+        maxPreviewTargets,
+      });
+      const mockPreview =
+        process.env.OMNIA_MOCK_PROPAGATE_CORRECTION_PREVIEW === '1' ||
+        /^true$/i.test(String(process.env.OMNIA_MOCK_PROPAGATE_CORRECTION_PREVIEW || ''));
+      if (mockPreview) {
+        const slice = directionalTargets.slice(0, maxPreviewTargets);
+        const updates = slice
+          .map((t) => {
+            const useCaseId = typeof t.useCaseId === 'string' ? t.useCaseId : '';
+            const original = typeof t.original === 'string' ? t.original : '';
+            if (!useCaseId) return null;
+            return {
+              useCaseId,
+              newAssistantContent: original ? `${original} [MOCK]` : '[MOCK]',
+            };
+          })
+          .filter(Boolean);
+        logInfo('AI_AGENT_USE_CASES_MOCK', {
+          requestId,
+          action: 'propagate_correction_style_preview',
+          updatesCount: updates.length,
+        });
+        return res.json({
+          success: true,
+          updates,
+          styleSynthesis:
+            '[Mock LLM] Nessuna chiamata OpenAI. Rimuovi OMNIA_MOCK_PROPAGATE_CORRECTION_PREVIEW per produzione.',
+        });
+      }
+      const result = await propagateCorrectionStylePreview({
+        directionalExamples,
+        directionalTargets,
+        outputLanguage,
+        globalStyleContract,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_COMPLETE_CORRECTION_PREVIEW',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+        maxPreviewTargets,
+      });
+      return res.json({
+        success: true,
+        updates: result.updates,
+        styleSynthesis: result.styleSynthesis || '',
+      });
     }
 
     if (action === 'regenerate_turn') {
@@ -6888,6 +7065,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
 app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
   const requestId = Date.now();
   try {
+    if (respondDesignAiLlmBurst429(req, res, requestId)) return;
     const body = req.body || {};
     const {
       wrongText,
@@ -6955,6 +7133,7 @@ app.post('/design/ai-agent-induce-style-rule', async (req, res) => {
 app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
   const requestId = Date.now();
   try {
+    if (respondDesignAiLlmBurst429(req, res, requestId)) return;
     const body = req.body || {};
     const {
       userTurn,
@@ -7027,6 +7206,7 @@ app.post('/design/ai-agent-analyze-debug-turn', async (req, res) => {
 app.post('/design/extract-structure', async (req, res) => {
   const requestId = Date.now();
   try {
+    if (respondDesignAiLlmBurst429(req, res, requestId)) return;
     const body = req.body || {};
     const description = body.description ?? body.userDesc;
     const { provider, model } = assertAiCallContract({
@@ -7083,6 +7263,7 @@ app.post('/design/extract-structure', async (req, res) => {
 app.post('/design/advancement-dsl-translate', async (req, res) => {
   const requestId = Date.now();
   try {
+    if (respondDesignAiLlmBurst429(req, res, requestId)) return;
     const body = req.body || {};
     const {
       naturalLanguage,

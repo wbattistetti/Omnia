@@ -79,4 +79,6 @@ export interface AIAgentDesignApiError {
   success: false;
   error: string;
   rawSnippet?: string;
+  /** Es. burst guard condiviso sulle rotte design LLM (`DESIGN_AI_LLM_BURST` o legacy). */
+  code?: string;
 }

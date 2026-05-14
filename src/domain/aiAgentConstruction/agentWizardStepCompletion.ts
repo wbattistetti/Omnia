@@ -4,15 +4,22 @@
  * Single source of truth per «quando uno step è ✅». Funzioni pure, testabili in isolamento,
  * nessuna dipendenza React. Le regole sono definite dal prodotto (regole D del design):
  *
- *   Step 1 — Task         → descrizione del task non vuota (gate STRETTO)
- *   Step 2 — Backend      → SEMPRE ✅ (soft, mock-data deferred)
- *   Step 3 — Conversazione→ ≥1 use case + ≥1 conversazione (gate STRETTO)
- *   Step 4 — Dati         → SEMPRE ✅ (soft, deferred)
- *   Step 5 — Voce         → SEMPRE ✅ (default voice precaricata)
+ *   Step 1 — Task     → descrizione del task non vuota (gate STRETTO)
+ *   Step 2 — Prompts  → ≥1 use case + ≥1 conversazione (gate STRETTO)
+ *   Step 3 — Backend  → SEMPRE ✅ (soft, mock-data deferred)
+ *   Step 4 — Dati     → SEMPRE ✅ (soft, deferred)
+ *   Step 5 — Voce     → SEMPRE ✅ (default voice precaricata)
  *
- * Solo i due gate stretti (1 e 3) possono trattenere il flusso. Gli step soft permettono
+ * Solo i due gate stretti (1 e 2) possono trattenere il flusso. Gli step soft permettono
  * comunque di aprire la pagina per personalizzare (visibili e navigabili) ma non bloccano
  * l'auto-transizione `wizard → edit` quando tutti sono ✅.
+ *
+ * NB: i nomi delle funzioni `isStep2BackendComplete` / `isStep3ConversationComplete`
+ * descrivono il **concetto** (Backend / Conversazione), non la **posizione** nello
+ * stepper. Dopo il riordino di mag 2026 (Prompts spostato dal 3° al 2° posto, Backend
+ * dal 2° al 3°) il mapping posizionale è stato aggiornato in `STEP_COMPLETION_RULES`.
+ * I nomi delle funzioni restano invariati per coerenza semantica e per non rompere
+ * test/usage esistenti.
  *
  * Nota di evoluzione: quando in futuro vorrai rendere stretti anche gli altri step
  * (es. richiedere almeno un backend dichiarato, o slot tipizzati, o voce esplicita),
@@ -64,11 +71,16 @@ export function isStep5VoiceComplete(_input: AgentWizardCompletionInput): boolea
   return true;
 }
 
-/** Mapping ordinato 0..4 → predicato di completamento dello step. */
+/**
+ * Mapping ordinato 0..4 → predicato di completamento dello step.
+ *
+ * Allineato all'ordine UFFICIALE post-riordino mag 2026:
+ *   0 → Task     1 → Prompts (= Conversazione) 2 → Backend  3 → Dati  4 → Voce
+ */
 const STEP_COMPLETION_RULES: ReadonlyArray<(input: AgentWizardCompletionInput) => boolean> = [
   isStep1TaskComplete,
-  isStep2BackendComplete,
   isStep3ConversationComplete,
+  isStep2BackendComplete,
   isStep4DataComplete,
   isStep5VoiceComplete,
 ];

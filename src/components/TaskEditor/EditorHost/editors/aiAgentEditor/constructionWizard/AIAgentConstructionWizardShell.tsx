@@ -76,6 +76,9 @@ export interface AIAgentConstructionWizardShellProps {
 /**
  * Mappa indice step → renderer dello step (factory `() => ReactElement`).
  *
+ * Ordine ufficiale post-riordino:
+ *   0 Task → 1 Prompts → 2 Backend → 3 Dati → 4 Voce
+ *
  * Usiamo factory functions e non `ComponentType` perché alcuni pannelli
  * (`EditorBackendsPanel`, `EditorIaRuntimePanel`) hanno firma `IDockviewPanelProps`
  * imposta dal contratto Dockview ma ne ignorano i props (`void _props`). In modalità
@@ -86,8 +89,8 @@ export interface AIAgentConstructionWizardShellProps {
  */
 const STEP_RENDERERS: ReadonlyArray<() => React.ReactElement> = [
   () => <EditorUnifiedDescriptionPanel />,
-  () => <EditorBackendsPanel {...({} as unknown as React.ComponentProps<typeof EditorBackendsPanel>)} />,
   () => <EditorUseCasesPanel />,
+  () => <EditorBackendsPanel {...({} as unknown as React.ComponentProps<typeof EditorBackendsPanel>)} />,
   () => <EditorDatiPanel />,
   () => <EditorIaRuntimePanel {...({} as unknown as React.ComponentProps<typeof EditorIaRuntimePanel>)} />,
 ];

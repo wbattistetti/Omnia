@@ -23,6 +23,9 @@ import {
   generateAIAgentUseCases,
   annotateAIAgentAssistantMessageForJsonApi,
   propagateExamplePhraseStyleApi,
+  propagateCorrectionStyleApi,
+  type PropagateCorrectionStyleParams,
+  type PropagateCorrectionStyleResult,
   regenerateAIAgentUseCaseApi,
   regenerateAIAgentUseCaseTurnApi,
 } from '@services/aiAgentDesignApi';
@@ -1548,6 +1551,54 @@ export function useAIAgentEditorController({
   );
 
   /**
+   * Toolbar wizard «Completa correzione»: chiama l'endpoint directional
+   * (`propagate_correction_style`) passando coppie (original→modified) per gli
+   * esempi e l'`original` di ogni target. Il caller (composer) costruisce il
+   * payload usando `useCaseSubstantialEdits.ts` + `fieldBaselineByUseCaseId`.
+   *
+   * Questo controller helper si limita alla chiamata HTTP + propagazione errori:
+   * NON tocca `setUseCases` né `fieldBaselineByUseCaseId` (responsabilità del
+   * composer, che ha la baseline e i marker [NEW] da gestire localmente).
+   *
+   * Riusa `useCasePhraseStylePropagationBusy` come lock: si tratta della stessa
+   * famiglia di operazioni (propagazione stile via LLM) ed evita due concorrenti
+   * sullo stesso task. Il flag `useCasePhraseStyleBatchProgress` non è più
+   * settato perché il backend itera internamente i target ma non emette progress
+   * incrementale al client (single fetch atomica): mostriamo solo "busy".
+   */
+  const handleCompleteCorrection = React.useCallback(
+    async (params: {
+      directionalExamples: PropagateCorrectionStyleParams['directionalExamples'];
+      directionalTargets: PropagateCorrectionStyleParams['directionalTargets'];
+    }): Promise<PropagateCorrectionStyleResult | null> => {
+      const { directionalExamples, directionalTargets } = params;
+      if (directionalExamples.length === 0 || directionalTargets.length === 0) return null;
+      setUseCaseComposerError(null);
+      setUseCasePhraseStylePropagationBusy(true);
+      try {
+        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+        const result = await propagateCorrectionStyleApi({
+          directionalExamples,
+          directionalTargets,
+          provider,
+          model,
+          outputLanguage,
+          globalStyleContract,
+          callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION),
+        });
+        setDirty(true);
+        return result;
+      } catch (e) {
+        setUseCaseComposerError(e instanceof Error ? e.message : String(e));
+        return null;
+      } finally {
+        setUseCasePhraseStylePropagationBusy(false);
+      }
+    },
+    [provider, model, globalStyleContract]
+  );
+
+  /**
    * Regenerate a single assistant dialogue turn (e.g. empty after failed create); adds an assistant shell if missing.
    */
   const handleRegenerateAgentMessage = React.useCallback(
@@ -2041,6 +2092,7 @@ export function useAIAgentEditorController({
     handleCreateUseCase,
     handleRegenerateUseCase,
     handlePropagateExamplePhraseStyle,
+    handleCompleteCorrection,
     globalStyleContract,
     persistAgentUseCaseWizardState,
     agentUseCaseWizardStateJson,

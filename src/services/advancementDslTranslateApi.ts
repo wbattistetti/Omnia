@@ -2,6 +2,9 @@
  * Client for POST /design/advancement-dsl-translate (Node design-time).
  */
 
+import { designAiFetch } from './designAiRequestPipeline';
+import { emitDesignAiLlmBurstFromErrorResponse } from '../utils/aiAgentHighFrequencyAlert';
+
 /** `unifiedBackend` = script unico che restituisce un oggetto su tutti i SEND (ricalcolo backend). */
 export type AdvancementTranslateMode = 'singleParam' | 'unifiedBackend';
 
@@ -30,13 +33,14 @@ export interface AdvancementDslTranslateResponse {
 export async function translateAdvancementDsl(
   body: AdvancementDslTranslateRequest
 ): Promise<AdvancementDslTranslateResponse> {
-  const res = await fetch('/design/advancement-dsl-translate', {
+  const res = await designAiFetch('/design/advancement-dsl-translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as AdvancementDslTranslateResponse;
+  const data = (await res.json().catch(() => ({}))) as AdvancementDslTranslateResponse & { code?: string };
   if (!res.ok) {
+    emitDesignAiLlmBurstFromErrorResponse(res, data);
     return {
       success: false,
       error: data.error || res.statusText || 'advancement-dsl-translate failed',

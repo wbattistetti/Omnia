@@ -24,7 +24,6 @@
 import React from 'react';
 import {
   BookOpen,
-  Braces,
   Maximize2,
   MessageSquareText,
   Minimize2,
@@ -177,7 +176,13 @@ function UseCaseListSearchInput({
         e.preventDefault();
         commit();
       }}
-      className="relative inline-flex h-7 items-center"
+      /**
+       * `min-w-0 flex-1` rende l'input l'unico elemento elastico della toolbar:
+       * quando la riga è larga occupa lo spazio massimo (180px circa), quando è
+       * stretta si comprime fino a un minimo decoroso (vedi `min-w-[120px]` sul
+       * `<input>` sotto). Tutti gli altri controlli sono `shrink-0`.
+       */
+      className="relative inline-flex h-7 min-w-0 flex-1 items-center"
     >
       <Search
         size={12}
@@ -197,7 +202,7 @@ function UseCaseListSearchInput({
         placeholder="cerca nei messaggi…"
         aria-label="Testo da cercare nei messaggi degli use case"
         title="Scrivi e premi Invio per evidenziare le occorrenze nei messaggi"
-        className="h-7 w-44 rounded-md border border-slate-700/70 bg-slate-900/60 pl-6 pr-6 text-[12px] text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40"
+        className="h-7 w-full min-w-[120px] max-w-[260px] rounded-md border border-slate-700/70 bg-slate-900/60 pl-6 pr-6 text-[12px] text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40"
       />
       {hasDraft ? (
         <button
@@ -213,6 +218,16 @@ function UseCaseListSearchInput({
     </form>
   );
 }
+
+/**
+ * NB (mag 2026): il pulsante «Completa correzione» è stato **rimosso** dalla toolbar
+ * e sostituito dal callout {@link CompletaCorrezioneCallout}, montato nel **pannello
+ * destro** «Guida rapida» sopra la review card (passo Casi d'uso con lista già
+ * presente), per non rubare altezza verticale sotto lo stepper.
+ * Il context (`pendingCorrectionsCount`, `triggerConsolidateCorrections`,
+ * `correctionsBusy`, `correctionsDismissed`) è invariato — solo l'UI di trigger
+ * è cambiata.
+ */
 
 function LabeledInlineToggle({
   active,
@@ -331,32 +346,52 @@ export function WizardStepOneListToolbarControls({
       ? 'text-amber-300 bg-amber-500/15'
       : 'text-violet-300 bg-violet-500/15';
 
+  /**
+   * Single toggle Espandi/Collassa. Stato:
+   *   - `bulkFold === 'expanded'`  → la lista è completamente espansa, l'unica
+   *     azione utile è collassare. Mostriamo «Collassa» + Minimize2.
+   *   - altrimenti (`'collapsed'` o `'mixed'`) → mostriamo «Espandi» + Maximize2.
+   *
+   * Sostituisce la coppia di pulsanti separati: meno rumore visivo, e il toggle
+   * resta semantically corretto (è sempre un'azione "porta tutto allo stato opposto
+   * dell'attuale"). Tooltip chiarisce sempre l'azione che il click eseguirà.
+   */
+  const isFullyExpanded = bulkFold === 'expanded';
+  const expandCollapseToggle = (
+    <button
+      type="button"
+      title={
+        isFullyExpanded
+          ? 'Collassa tutte le card'
+          : 'Espandi tutte le card'
+      }
+      aria-label={isFullyExpanded ? 'Collassa tutte le card' : 'Espandi tutte le card'}
+      onClick={isFullyExpanded ? triggerCollapseAll : triggerExpandAll}
+      className={[
+        'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+        expandActiveClass,
+      ].join(' ')}
+    >
+      {isFullyExpanded ? (
+        <Minimize2 size={13} aria-hidden />
+      ) : (
+        <Maximize2 size={13} aria-hidden />
+      )}
+      <span>{isFullyExpanded ? 'Collassa' : 'Espandi'}</span>
+    </button>
+  );
+
   return (
     <>
       <div
-        className="inline-flex items-center gap-1 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] p-0.5"
+        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-violet-400/15 bg-violet-500/[0.04] p-0.5"
         role="group"
         aria-label="Espansione lista use case"
       >
-        <LabeledInlineToggle
-          active={bulkFold === 'expanded'}
-          onClick={triggerExpandAll}
-          title="Espandi tutte le card"
-          activeClass={expandActiveClass}
-          icon={<Maximize2 size={13} aria-hidden />}
-          label="Espandi"
-        />
-        <LabeledInlineToggle
-          active={bulkFold === 'collapsed'}
-          onClick={triggerCollapseAll}
-          title="Collassa tutte le card"
-          activeClass={expandActiveClass}
-          icon={<Minimize2 size={13} aria-hidden />}
-          label="Collassa"
-        />
+        {expandCollapseToggle}
       </div>
       <div
-        className="inline-flex items-center gap-1 rounded-lg border border-slate-600/20 bg-slate-900/30 p-0.5"
+        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-600/20 bg-slate-900/30 p-0.5"
         role="group"
         aria-label="Campi visibili nello use case"
       >
@@ -377,6 +412,7 @@ export function WizardStepOneListToolbarControls({
           label="Messaggio"
         />
       </div>
+      {/* (rimosso) CompletaCorrezioneButton: la CTA vive ora nel callout sotto la toolbar (vedi `CompletaCorrezioneCallout`). */}
       {dock ? (
         <button
           type="button"
@@ -393,7 +429,7 @@ export function WizardStepOneListToolbarControls({
           }
           aria-label="Ordina alfabeticamente"
           className={[
-            'inline-flex h-7 min-w-8 items-center justify-center rounded-md px-1.5 text-[13px] font-black leading-none tracking-tight transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+            'inline-flex h-7 min-w-8 shrink-0 items-center justify-center rounded-md px-1.5 text-[13px] font-black leading-none tracking-tight transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
             dock.useCaseSiblingSortMode === 'alphabetical'
               ? 'bg-violet-500/15 text-violet-200'
               : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300',
@@ -402,6 +438,10 @@ export function WizardStepOneListToolbarControls({
           <span aria-hidden>A↓B</span>
         </button>
       ) : null}
+      {/*
+        Search input: l'unico elemento "elastico" della toolbar; può ridursi se la
+        riga è stretta (vedi container `flex` senza wrap in `ContextualToolbarRow`).
+      */}
       <UseCaseListSearchInput ctx={ctx} />
       {/*
         Toggle «Mostra JSON» ({}) e «Mostra Tokens» ([x]) rimossi dalla toolbar:

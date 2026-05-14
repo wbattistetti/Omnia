@@ -26,6 +26,8 @@ export const AI_CALL_PURPOSE = {
   CONVERSATION_SUGGESTED: 'CONVERSATION_SUGGESTED',
   CONVERSATION_PROOFREAD: 'CONVERSATION_PROOFREAD',
   USE_CASE_TOKENIZE: 'USE_CASE_TOKENIZE',
+  USE_CASE_COMPLETE_CORRECTION: 'USE_CASE_COMPLETE_CORRECTION',
+  USE_CASE_COMPLETE_CORRECTION_PREVIEW: 'USE_CASE_COMPLETE_CORRECTION_PREVIEW',
   TRAINING_PHRASES_GENERATE: 'TRAINING_PHRASES_GENERATE',
   TEXT_TRANSLATE: 'TEXT_TRANSLATE',
 } as const;
@@ -43,6 +45,10 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.CONVERSATION_SUGGESTED]: 'Conversazione esplorativa nuovi use case',
   [AI_CALL_PURPOSE.CONVERSATION_PROOFREAD]: 'Correzione ortografica frasi modificate',
   [AI_CALL_PURPOSE.USE_CASE_TOKENIZE]: 'Tokenizzazione use case',
+  [AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION]:
+    'Completa correzione: propagazione directional dello stile sui messaggi agente',
+  [AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION_PREVIEW]:
+    'Anteprima correzione: sintesi stile e prime bozze (max 3 messaggi)',
   [AI_CALL_PURPOSE.TRAINING_PHRASES_GENERATE]: 'Generazione training phrases intent',
   [AI_CALL_PURPOSE.TEXT_TRANSLATE]: 'Traduzione testo',
 });
