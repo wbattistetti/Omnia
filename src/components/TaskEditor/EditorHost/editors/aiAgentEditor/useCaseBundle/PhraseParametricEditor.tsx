@@ -38,18 +38,16 @@ export interface PhraseParametricEditorProps {
 function dimensionHeaderCell(d: AIAgentPhraseParametricDimension): React.ReactNode {
   if (d.kind === 'catalog') {
     return (
-      <span className="flex items-center gap-0.5 whitespace-nowrap text-sm font-medium text-slate-200">
-        <Variable className="h-4 w-4 shrink-0 text-sky-400/90" aria-hidden />
-        <span>{d.label || d.catalogKey || '—'}</span>
+      <span className="whitespace-nowrap text-sm font-medium text-slate-200">
+        {d.label || d.catalogKey || '—'}
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-0.5 whitespace-nowrap text-sm font-medium text-slate-200">
-      <Variable className="h-4 w-4 shrink-0 text-amber-400/85" aria-hidden />
-      <span className={d.label.trim() ? '' : 'text-slate-500'}>
-        {d.label.trim() || 'Parametro libero'}
-      </span>
+    <span
+      className={`whitespace-nowrap text-sm font-medium text-slate-200 ${d.label.trim() ? '' : 'text-slate-500'}`}
+    >
+      {d.label.trim() || 'Parametro libero'}
     </span>
   );
 }

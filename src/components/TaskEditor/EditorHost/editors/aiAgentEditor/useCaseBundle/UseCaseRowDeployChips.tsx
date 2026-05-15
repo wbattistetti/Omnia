@@ -1,10 +1,11 @@
 /**
- * Indicatori minimi per riga use case nella lista composer: escluso / incompleto, oppure
- * accesso «Vedi compilato» quando disponibile. Stato deploy dettagliato (chip) rimosso dalla UI.
+ * Indicatori minimi per riga use case nella lista composer: incompleto, oppure
+ * accesso «Vedi compilato» quando disponibile. L’esclusione è già visibile da checkbox
+ * disattivata + header di voto / colore riga — nessun chip «escluso» duplicato.
  */
 
 import React from 'react';
-import { Eye, Ban, AlertCircle } from 'lucide-react';
+import { Eye, AlertCircle } from 'lucide-react';
 import type { UseCaseDeployRowStats } from './useCaseBundleDeployStats';
 
 export interface UseCaseRowDeployChipsProps {
@@ -17,15 +18,7 @@ export function UseCaseRowDeployChips({
   onInspectCompiled,
 }: UseCaseRowDeployChipsProps): React.ReactElement | null {
   if (!stats.included) {
-    return (
-      <span
-        className="inline-flex items-center gap-0.5 rounded border border-slate-600/80 bg-slate-900/80 px-1 py-0.5 text-[9px] font-medium text-slate-400"
-        title="Escluso da conversazioni e prompt finale"
-      >
-        <Ban className="h-2.5 w-2.5 shrink-0" aria-hidden />
-        escluso
-      </span>
-    );
+    return null;
   }
 
   if (!stats.projectable) {

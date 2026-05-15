@@ -7,6 +7,7 @@ import React from 'react';
 import type { Task } from '../../../../../types/taskTypes';
 import type { ToolbarButton } from '../../../../../dock/types';
 import BackendCallEditor from '../BackendCallEditor';
+import { BackendCallEmbeddedLayout } from './BackendCallEmbeddedLayout';
 
 function InlineToolbarStrip({ buttons }: { buttons: ToolbarButton[] }) {
   const visible = buttons.filter((b) => b.visible !== false);
@@ -77,17 +78,14 @@ export function EmbeddedBackendCallEditor({
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
 
   return (
-    <div className="flex flex-col min-h-[320px] max-h-[min(70vh,520px)] overflow-hidden bg-transparent">
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-[5px] py-0">
-        <InlineToolbarStrip buttons={toolbarButtons} />
-        <BackendCallEditor
-          task={task}
-          hideHeader
-          hideEndpointRow
-          endpointExternalRevision={endpointExternalRevision}
-          onToolbarUpdate={(btns) => setToolbarButtons(btns)}
-        />
-      </div>
-    </div>
+    <BackendCallEmbeddedLayout toolbar={<InlineToolbarStrip buttons={toolbarButtons} />}>
+      <BackendCallEditor
+        task={task}
+        hideHeader
+        hideEndpointRow
+        endpointExternalRevision={endpointExternalRevision}
+        onToolbarUpdate={(btns) => setToolbarButtons(btns)}
+      />
+    </BackendCallEmbeddedLayout>
   );
 }

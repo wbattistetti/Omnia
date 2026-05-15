@@ -13,7 +13,6 @@ import {
   Trash2,
   Circle,
   Brackets,
-  ArrowLeft,
   Pencil,
   StickyNote,
   Table2,
@@ -50,12 +49,15 @@ import {
 import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
 import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
 import {
+  BackendReceiveArrowIcon,
   BackendSendArrowIcon,
   resolveSendArrowKind,
   sendArrowTitle,
   type SendArrowGlyphKind,
 } from './BackendSendArrowIcon';
 import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
+import { BackendMappingDominioValoriPanel } from './backendMappingDominioValori';
+import { backendDominioValoriLabelInsetPx } from './backendMappingDominioValoriLayout';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
 
@@ -138,72 +140,6 @@ function siblingDropLineIndentPx(depth: number): number {
 
 function childDropLineIndentPx(depth: number): number {
   return (depth + 1) * ROW_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX;
-}
-
-/** Inline grid sotto la riga backend per valori di esempio (hint / tooltip). */
-function BackendMappingSampleValuesBlock({
-  values,
-  onChange,
-  entryId,
-  onClose,
-}: {
-  values: string[];
-  onChange: (next: string[]) => void;
-  entryId: string;
-  onClose?: () => void;
-}) {
-  const rows = values.length > 0 ? values : [''];
-  return (
-    <div className="mt-1 w-full min-w-0 space-y-1 rounded-md border border-sky-600/35 bg-slate-950/80 px-2 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-medium text-sky-200/80">Valori (esempio)</p>
-        {onClose ? (
-          <button
-            type="button"
-            className="shrink-0 rounded p-0.5 text-slate-500 hover:bg-slate-800 hover:text-sky-200"
-            title="Chiudi"
-            aria-label="Chiudi pannello valori"
-            onClick={onClose}
-          >
-            <X className="w-3.5 h-3.5" strokeWidth={2} />
-          </button>
-        ) : null}
-      </div>
-      {rows.map((val, i) => (
-        <div key={`${entryId}-sv-${i}`} className="flex gap-1">
-          <input
-            className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[10px] text-amber-100 placeholder:text-slate-600"
-            value={val}
-            title={val.trim() || undefined}
-            placeholder="Valore"
-            onChange={(e) => {
-              const next = [...rows];
-              next[i] = e.target.value;
-              onChange(next);
-            }}
-          />
-          <button
-            type="button"
-            className="shrink-0 rounded px-1 text-[10px] text-slate-500 hover:text-red-400"
-            aria-label="Rimuovi valore"
-            onClick={() => {
-              const next = rows.filter((_, j) => j !== i);
-              onChange(next.length > 0 ? next : []);
-            }}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        className="text-[10px] text-sky-400 hover:underline"
-        onClick={() => onChange([...rows, ''])}
-      >
-        + Aggiungi valore
-      </button>
-    </div>
-  );
 }
 
 export interface FlowMappingTreeProps {
@@ -588,6 +524,19 @@ function MappingTreeRow({
       ? resolveSendArrowKind(node.entry.apiField, node.entry)
       : 'filledSolid';
 
+  const receiveOptional =
+    variant === 'backend' && backendColumn === 'receive' && node.entry && !isGroupOnly
+      ? Boolean(node.entry.sendBindingOptional)
+      : false;
+
+  const dominioValoriAlignPx =
+    variant === 'backend' && node.entry && !isGroupOnly
+      ? backendDominioValoriLabelInsetPx({
+          showAdvancementUi,
+          hasOpenApiDrift: Boolean(node.entry.openapiDescriptionDrift),
+        })
+      : 0;
+
   return (
     <div className="select-none" {...ifaceRowAttrs}>
       {(showBefore || showIfaceBefore || showReorderBefore) && (
@@ -653,7 +602,9 @@ function MappingTreeRow({
               : variant === 'backend' && backendColumn === 'send'
                 ? sendArrowTitle(sendGlyphKind)
                 : variant === 'backend' && backendColumn === 'receive'
-                  ? 'Parametro in ingresso (da API)'
+                  ? receiveOptional
+                    ? 'Parametro in ingresso (da API). Opzionale.'
+                    : 'Parametro in ingresso (da API). Obbligatorio.'
                   : 'Parametro'
           }
         >
@@ -662,13 +613,9 @@ function MappingTreeRow({
           ) : variant === 'interface' ? (
             <span className="w-3.5 h-3.5 inline-block" aria-hidden />
           ) : variant === 'backend' && backendColumn === 'send' ? (
-            <BackendSendArrowIcon kind={sendGlyphKind} />
+            <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} />
           ) : variant === 'backend' && backendColumn === 'receive' ? (
-            <ArrowLeft
-              className="w-[1.125rem] h-[1.125rem] text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]"
-              strokeWidth={3.1}
-              aria-hidden
-            />
+            <BackendReceiveArrowIcon optional={receiveOptional} />
           ) : (
             <Brackets className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
           )}
@@ -736,8 +683,8 @@ function MappingTreeRow({
               <button
                 type="button"
                 className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'values' ? 'text-sky-300' : 'text-slate-400 hover:text-sky-200'}`}
-                title="Valori di esempio"
-                aria-label="Valori di esempio"
+                title="Dominio valori (hint / mock)"
+                aria-label="Dominio valori"
                 onClick={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
               >
                 <Table2 className="w-3.5 h-3.5" strokeWidth={2} />
@@ -848,11 +795,12 @@ function MappingTreeRow({
         )}
 
         {variant === 'backend' && node.entry && rowExtra === 'values' && (
-          <BackendMappingSampleValuesBlock
+          <BackendMappingDominioValoriPanel
             values={node.entry.sampleValues ?? []}
             onChange={(sampleValues) => patchEntry({ sampleValues })}
             entryId={node.entry.id}
             onClose={() => setRowExtra('none')}
+            alignInsetPx={dominioValoriAlignPx}
           />
         )}
       </div>
@@ -1323,5 +1271,6 @@ export function FlowMappingTree({
   );
 }
 
+/* eslint-disable react-refresh/only-export-components -- costanti DND esposte per consumer legacy */
 export { DND_TYPE, DND_NEW_BACKEND_PARAM, DND_FLOWROW_VAR };
 export type { FlowInterfaceDropPayload } from './flowInterfaceDragTypes';

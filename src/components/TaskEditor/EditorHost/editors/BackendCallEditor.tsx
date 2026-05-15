@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Columns2,
   Calculator,
+  FileJson,
 } from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
@@ -44,7 +45,10 @@ import {
   isBackendMockRowAnyInputFilled,
 } from '../../../../domain/backendTest/backendMockRowCompletion';
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
-import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
+import {
+  applyFlatJsonBodyExampleToBackendTask,
+  runBackendCallReadApiForTask,
+} from '../../../../services/runBackendCallReadApiForTask';
 import { resolvePortalConnectionIdForUrl } from '@domain/portalAuth/resolvePortalConnectionId';
 import { ConnectPortalModal } from '@components/portalAuth/ConnectPortalModal';
 import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalConnections';
@@ -321,6 +325,10 @@ export default function BackendCallEditor({
   const [readApiBusy, setReadApiBusy] = React.useState(false);
   /** Errore Read API / validazione: inline sotto URL/metodo (no alert). */
   const [readApiError, setReadApiError] = React.useState<string | null>(null);
+  /** Fallback senza OpenAPI: esempio JSON → righe SEND (stesso merge di Read API). */
+  const [jsonSnippetDraft, setJsonSnippetDraft] = React.useState('');
+  const [jsonSnippetBusy, setJsonSnippetBusy] = React.useState(false);
+  const [jsonSnippetError, setJsonSnippetError] = React.useState<string | null>(null);
   const [bulkApiTestBusy, setBulkApiTestBusy] = React.useState(false);
   const [bulkTestNonce, setBulkTestNonce] = React.useState(0);
 
@@ -752,6 +760,43 @@ export default function BackendCallEditor({
     instanceId,
     projectId,
   ]);
+
+  const handleCreateInterfaceFromJson = React.useCallback(async () => {
+    if (!instanceId) return;
+    setJsonSnippetError(null);
+    setJsonSnippetBusy(true);
+    try {
+      const result = applyFlatJsonBodyExampleToBackendTask(instanceId, projectId, jsonSnippetDraft);
+      if (!result.ok) {
+        setJsonSnippetError(result.error);
+        return;
+      }
+      setSwaggerInputContract(result.inputNames);
+      const storedTask = taskRepository.getTask(instanceId);
+      if (storedTask) {
+        const outs = Array.isArray((storedTask as Task).outputs) ? (storedTask as Task).outputs! : [];
+        const outApi = outs
+          .map((o) => String((o as { apiField?: string }).apiField || '').trim())
+          .filter(Boolean);
+        setSwaggerOutputContract(outApi);
+        setConfig(buildConfigFromTask(storedTask));
+        setBackendToolDescription(String((storedTask as Task).backendToolDescription ?? ''));
+        setOpenapiDescriptionSnapshots((prev) => ({
+          inputs: {},
+          outputs: prev?.outputs ?? {},
+        }));
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent<{ taskId: string }>('omnia:backend-read-api-complete', {
+            detail: { taskId: instanceId },
+          })
+        );
+      }
+    } finally {
+      setJsonSnippetBusy(false);
+    }
+  }, [buildConfigFromTask, instanceId, jsonSnippetDraft, projectId]);
 
   const updateMockTableColumns = React.useCallback(() => {
     setConfig((prev) => ({
@@ -1566,12 +1611,12 @@ export default function BackendCallEditor({
       <div
         className={
           hideEndpointRow
-            ? 'flex-1 min-h-0 overflow-auto px-0 py-0'
-            : 'flex-1 min-h-0 overflow-auto p-3'
+            ? 'flex flex-1 min-h-0 flex-col overflow-hidden px-0 py-0'
+            : 'flex flex-1 min-h-0 flex-col overflow-hidden p-3'
         }
       >
         {!hideEndpointRow && (
-          <div className="mb-3 space-y-2">
+          <div className="mb-3 shrink-0 space-y-2">
             <div className="flex min-w-0 flex-col gap-0.5">
               <label
                 className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
@@ -1609,12 +1654,52 @@ export default function BackendCallEditor({
                 className="w-full min-w-0 px-2 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            {!openapiSpecUrlNonEmpty && (
+              <div className="rounded-md border border-sky-500/35 bg-sky-950/30 px-3 py-2 space-y-2">
+                <div className="flex items-center gap-2 text-sky-200/95">
+                  <FileJson size={16} className="shrink-0 opacity-90" aria-hidden />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Parser JSON (fallback)</span>
+                </div>
+                <p className="text-[11px] leading-snug text-slate-400">
+                  Senza Spec URL OpenAPI: incolla un esempio di <strong className="text-slate-300">body JSON</strong> come
+                  oggetto flat (solo valori primitivi di primo livello; oggetti e array sono ignorati). Chiavi con valore{' '}
+                  <code className="text-slate-300">null</code> o stringa vuota diventano parametri SEND{' '}
+                  <strong className="text-slate-300">opzionali</strong>. Tipi UI: tutti testo. RECEIVE e runtime non
+                  cambiano.
+                </p>
+                <textarea
+                  aria-label="Esempio JSON per generare i parametri SEND"
+                  style={controlStyle}
+                  value={jsonSnippetDraft}
+                  onChange={(e) => {
+                    setJsonSnippetDraft(e.target.value);
+                    if (jsonSnippetError) setJsonSnippetError(null);
+                  }}
+                  placeholder={'{\n  "nome": "Mario",\n  "eta": 30,\n  "note": ""\n}'}
+                  rows={6}
+                  className="w-full min-h-[7rem] resize-y rounded border border-slate-600 bg-slate-900/80 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={jsonSnippetBusy}
+                    onClick={() => void handleCreateInterfaceFromJson()}
+                    className="rounded bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {jsonSnippetBusy ? 'Creazione…' : 'Crea interfaccia'}
+                  </button>
+                  {jsonSnippetError ? (
+                    <span className="text-xs text-red-300">{jsonSnippetError}</span>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
-          <>
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
             <BackendCallMockTable
               bulkTestNonce={bulkTestNonce}
               endpointInvocationFallback={literalFallbackFromSend}
@@ -1666,9 +1751,9 @@ export default function BackendCallEditor({
                 return v;
               }}
             />
-          </>
+          </div>
         ) : (
-        <div className="flex-1 min-h-[320px] min-w-0 flex flex-col min-h-0 overflow-auto">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <InterfaceMappingEditor
             variant="backend"
             showVariantToggle={false}
@@ -1688,7 +1773,7 @@ export default function BackendCallEditor({
             onOutputVariableCreated={handleOutputVariableCreated}
             showInterfacePalette={false}
             compactBackendPanels
-            className="bg-transparent"
+            className="min-h-0 min-w-0 flex-1 bg-transparent"
             flowDropTarget={
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }

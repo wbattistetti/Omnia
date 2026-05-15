@@ -367,3 +367,123 @@ export async function runBackendCallReadApiForTask(
     return { ok: false, error: msg };
   }
 }
+
+function isPlainObjectRecord(x: unknown): x is Record<string, unknown> {
+  return Boolean(x && typeof x === 'object' && !Array.isArray(x));
+}
+
+/**
+ * Parser fallback (nessun OpenAPI): oggetto JSON flat, solo valori primitivi di primo livello.
+ * Oggetti e array annidati vengono ignorati. `""` e `null` → parametro opzionale (sendBinding).
+ */
+export function parseFlatJsonBodyExampleForSendKeys(raw: string): {
+  keys: string[];
+  optionalApiParams: string[];
+  error?: string;
+} {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { keys: [], optionalApiParams: [], error: 'Incolla un esempio JSON (oggetto con chiavi di primo livello).' };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return { keys: [], optionalApiParams: [], error: 'JSON non valido: sintassi errata.' };
+  }
+  if (!isPlainObjectRecord(parsed)) {
+    return {
+      keys: [],
+      optionalApiParams: [],
+      error: 'Il JSON deve essere un oggetto { ... }, non un array o un valore singolo.',
+    };
+  }
+  const keys: string[] = [];
+  const optionalApiParams: string[] = [];
+  for (const k of Object.keys(parsed)) {
+    const name = String(k || '').trim();
+    if (!name) continue;
+    const v = parsed[k];
+    if (v !== null && typeof v === 'object') {
+      continue;
+    }
+    keys.push(name);
+    if (v === '' || v === null) {
+      optionalApiParams.push(name);
+    }
+  }
+  if (keys.length === 0) {
+    return {
+      keys: [],
+      optionalApiParams: [],
+      error:
+        'Nessun campo primitivo di primo livello (stringa, numero, boolean, null). Oggetti e array sono ignorati.',
+    };
+  }
+  return { keys, optionalApiParams };
+}
+
+/**
+ * Applica un esempio JSON flat ai soli SEND del task Backend Call (stesso merge di {@link rebuildInputRows}).
+ * Non modifica RECEIVE. `openapiSpecUrl` sul task resta com’è (tipicamente vuoto in fallback).
+ */
+export function applyFlatJsonBodyExampleToBackendTask(
+  instanceId: string,
+  projectId: string | undefined,
+  rawJson: string
+): { ok: true; inputNames: string[] } | { ok: false; error: string } {
+  const parsed = parseFlatJsonBodyExampleForSendKeys(rawJson);
+  if (parsed.error) {
+    return { ok: false, error: parsed.error };
+  }
+  const task = taskRepository.getTask(instanceId);
+  if (!task) {
+    return { ok: false, error: 'Task non trovato.' };
+  }
+  const prevInputs = filterRows((task as Task & { inputs?: unknown }).inputs);
+  const sendBinding: OpenApiSendBindingRules = { optionalApiParams: parsed.optionalApiParams };
+  const used = new Set<string>();
+  const nextInputs = rebuildInputRows(prevInputs, parsed.keys, {}, used, sendBinding, undefined);
+
+  const contentHash = hashString(rawJson.trim());
+  const ep = (task as Task & { endpoint?: { url?: string; method?: string } }).endpoint;
+  const op = String(ep?.url || '').trim();
+  const methodRaw = String(ep?.method || 'GET').trim().toUpperCase();
+  const method =
+    methodRaw === 'GET' || methodRaw === 'POST' || methodRaw === 'PUT' || methodRaw === 'DELETE' || methodRaw === 'PATCH'
+      ? methodRaw
+      : 'GET';
+  const fpSeed = op || 'json-snippet';
+  const fp = structuralFingerprint(method, fpSeed);
+
+  const openapiInputUiKindByApiName: Record<string, string> = {};
+  for (const k of parsed.keys) {
+    openapiInputUiKindByApiName[k] = 'text';
+  }
+
+  taskRepository.updateTask(
+    instanceId,
+    {
+      inputs: nextInputs,
+      backendCallSpecMeta: {
+        schemaVersion: 1,
+        lastImportedAt: new Date().toISOString(),
+        contentHash,
+        importState: 'ok',
+        lastError: undefined,
+        structuralFingerprint: fp,
+        openapiOperationId: null,
+        openapiDescriptionSnapshots: { inputs: {}, outputs: {} },
+        openapiInputUiKindByApiName,
+        openapiInputEnumByApiName: {},
+        openapiSendBinding: sendBinding,
+        openApiMethodLocked: false,
+        openApiMethodLockUrlSnapshot: null,
+        openApiLockedHttpMethod: null,
+      },
+    } as Partial<Task>,
+    projectId
+  );
+
+  return { ok: true, inputNames: parsed.keys };
+}

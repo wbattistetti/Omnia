@@ -277,6 +277,7 @@ function ManualBackendAccordion({
   }, [entry.endpointUrl, entry.id, entry.label, onPatch, showIdentity]);
 
   const httpMethodOpenApiUi = React.useMemo(() => {
+    void endpointRev;
     const t = taskRepository.getTask(entry.id);
     const meta = (t as Task & { backendCallSpecMeta?: BackendCallSpecMeta })?.backendCallSpecMeta;
     const urlTrim = entry.endpointUrl.trim();
@@ -336,11 +337,11 @@ function ManualBackendAccordion({
 
   return (
     <div
-      className="rounded-lg border border-slate-700/90 bg-slate-900/60 overflow-hidden"
+      className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-700/90 bg-slate-900/60"
       data-convai-tool-backend-id={entry.id}
     >
       <div
-        className={`flex flex-wrap items-center gap-2 border-b border-slate-800/80 bg-slate-950/70 ${wizardUi ? 'px-3 py-2' : 'px-2 py-1.5'}`}
+        className={`flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-800/80 bg-slate-950/70 ${wizardUi ? 'px-3 py-2' : 'px-2 py-1.5'}`}
       >
         <button
           type="button"
@@ -463,7 +464,7 @@ function ManualBackendAccordion({
         </button>
       </div>
       {expanded && editorTask ? (
-        <div className="px-0 pt-1 pb-0 border-t border-slate-800/50 min-h-0">
+        <div className="flex h-[min(65vh,520px)] min-h-[240px] flex-col overflow-hidden border-t border-slate-800/50 pt-1">
           <EmbeddedBackendCallEditor
             key={editorTask.id}
             task={editorTask}

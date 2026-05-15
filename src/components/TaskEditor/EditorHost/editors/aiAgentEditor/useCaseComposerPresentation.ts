@@ -84,8 +84,8 @@ export function fieldTextClass(
   current: string,
   baseline: string | undefined
 ): string {
-  if (vote === 'up') return 'text-emerald-400';
-  if (vote === 'down') return 'text-red-400';
+  if (vote === 'up') return 'text-emerald-700 dark:text-emerald-100';
+  if (vote === 'down') return 'text-rose-900 dark:text-rose-100';
   return aiFieldToneClass(current, baseline);
 }
 
@@ -112,8 +112,8 @@ export function useCaseHeaderBgClass(
   }
   if (vote === 'down') {
     return active
-      ? 'bg-[hsl(2_18%_86%)] hover:bg-[hsl(2_20%_82%)] dark:bg-[hsl(2_16%_28%)] dark:hover:bg-[hsl(2_18%_32%)]'
-      : 'bg-[hsl(2_16%_91%)] hover:bg-[hsl(2_18%_87%)] dark:bg-[hsl(2_14%_24%)] dark:hover:bg-[hsl(2_16%_28%)]';
+      ? 'bg-[hsl(2_22%_82%)] hover:bg-[hsl(2_24%_78%)] dark:bg-[hsl(2_22%_30%)] dark:hover:bg-[hsl(2_24%_34%)]'
+      : 'bg-[hsl(2_18%_88%)] hover:bg-[hsl(2_20%_84%)] dark:bg-[hsl(2_18%_26%)] dark:hover:bg-[hsl(2_20%_30%)]';
   }
   return active
     ? 'bg-slate-200/90 dark:bg-[hsl(220_14%_22%)]'

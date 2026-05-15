@@ -57,6 +57,13 @@ export interface MappingBlockProps {
   backendMappingDropTarget?: { flowCanvasId: string; zone: 'send' | 'receive' };
   /** When true, tree body grows with the column (Interface double-column layout). */
   fillBodyHeight?: boolean;
+  /**
+   * Con `fillBodyHeight`: niente scroll sul corpo del blocco — solo `overflow-hidden` così lo scroll
+   * resta ai figli (es. lista parametri Backend); evita doppia scrollbar.
+   * Con `containBodyOverflow` il corpo è anche `flex flex-col min-h-0` così i figli `flex-1` riempiono
+   * l’altezza e `overflow-y-auto` mostra la scrollbar solo in presenza di overflow reale.
+   */
+  containBodyOverflow?: boolean;
   /** Thinner border, no shadow-inner — embedded backend panels without double-frame look. */
   flat?: boolean;
 }
@@ -76,6 +83,7 @@ export function MappingBlock({
   flowDropTarget,
   backendMappingDropTarget,
   fillBodyHeight = false,
+  containBodyOverflow = false,
   flat = false,
 }: MappingBlockProps) {
   const { headerClass, borderClass, label } = ACCENT[accent];
@@ -119,7 +127,9 @@ export function MappingBlock({
       <div
         className={
           fillBodyHeight
-            ? `min-h-0 min-w-0 flex-1 ${bodyPad} overflow-y-auto overflow-x-hidden`
+            ? containBodyOverflow
+              ? `flex min-h-0 min-w-0 flex-1 flex-col ${bodyPad} overflow-hidden`
+              : `min-h-0 min-w-0 flex-1 ${bodyPad} overflow-y-auto overflow-x-hidden`
             : `min-h-0 min-w-0 ${bodyPad} overflow-y-auto overflow-x-hidden ${BODY_MAX_H}`
         }
       >

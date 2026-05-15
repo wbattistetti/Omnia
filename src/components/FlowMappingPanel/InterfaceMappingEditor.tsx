@@ -461,7 +461,11 @@ export function InterfaceMappingEditor({
       <div
         className={`flex-1 min-h-0 flex flex-col ${
           compactBackendPanels && variant === 'backend' ? 'p-0' : 'p-3'
-        } ${interfaceFlowTitle && variant === 'interface' ? 'overflow-hidden min-h-0' : 'overflow-y-auto'} ${innerClassName}`}
+        } ${
+          variant === 'backend' || (interfaceFlowTitle && variant === 'interface')
+            ? 'min-h-0 overflow-hidden'
+            : 'overflow-y-auto'
+        } ${innerClassName}`}
       >
         {showLayoutHint ? (
           <p className="text-[10px] text-slate-500 mb-2">
@@ -494,6 +498,7 @@ export function InterfaceMappingEditor({
                   flat={compactBackendPanels}
                   rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
                   fillBodyHeight
+                  containBodyOverflow
                   backendMappingDropTarget={
                     flowDropTarget?.flowCanvasId
                       ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'send' }
@@ -516,8 +521,10 @@ export function InterfaceMappingEditor({
                         {backendSendAdvancementOverlay.renderPanel(advancementOpenKey)}
                       </BackendSendAdvancementOverlayPanel>
                     ) : null}
-                    {backendSendBodyPrefix}
-                    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                    {backendSendBodyPrefix ? (
+                      <div className="shrink-0">{backendSendBodyPrefix}</div>
+                    ) : null}
+                    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-gutter:auto]">
                       <FlowMappingTree
                         variant="backend"
                         entries={backendSend}
@@ -548,6 +555,7 @@ export function InterfaceMappingEditor({
                 flat={compactBackendPanels}
                 rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
                 fillBodyHeight
+                containBodyOverflow
                 backendMappingDropTarget={
                   flowDropTarget?.flowCanvasId
                     ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'receive' }
@@ -560,24 +568,26 @@ export function InterfaceMappingEditor({
                   />
                 }
               >
-                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                  <FlowMappingTree
-                    variant="backend"
-                    entries={backendReceive}
-                    onEntriesChange={onBackendReceiveChange}
-                    apiOptions={apiOptions}
-                    variableOptions={variableOptions}
-                    listIdPrefix={recvPrefix}
-                    enableBackendParamDrop
-                    showApiFields={showApiFields}
-                    projectId={projectId}
-                    flowCanvasId={flowDropTarget?.flowCanvasId}
-                    siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
-                    backendColumn="receive"
-                    onCreateOutputVariable={onCreateOutputVariable}
-                    onOutputVariableCreated={onOutputVariableCreated}
-                    backendKnownVariableIds={backendVariableIdSet}
-                  />
+                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-gutter:auto]">
+                    <FlowMappingTree
+                      variant="backend"
+                      entries={backendReceive}
+                      onEntriesChange={onBackendReceiveChange}
+                      apiOptions={apiOptions}
+                      variableOptions={variableOptions}
+                      listIdPrefix={recvPrefix}
+                      enableBackendParamDrop
+                      showApiFields={showApiFields}
+                      projectId={projectId}
+                      flowCanvasId={flowDropTarget?.flowCanvasId}
+                      siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
+                      backendColumn="receive"
+                      onCreateOutputVariable={onCreateOutputVariable}
+                      onOutputVariableCreated={onOutputVariableCreated}
+                      backendKnownVariableIds={backendVariableIdSet}
+                    />
+                  </div>
                 </div>
               </MappingBlock>
             }

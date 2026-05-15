@@ -1,60 +1,58 @@
 /**
- * Freccia SEND “a blocco”: un solo contorno chiuso — asta rettangolare + punta triangolare senza segmenti separati.
- * Opzionale = solo contorno (interno vuoto); obbligatorio = fill + contorno sottile; runtime = asta spezzata (due poligoni + gap).
+ * Icone riga SEND/RECEIVE nel mapping Backend Call (Lucide).
+ * SEND: ArrowBigRight (design) / ArrowBigRightDash (runtime); filled vs outline = obbligatorio vs opzionale.
+ * RECEIVE: ArrowBigLeft arancione; filled vs outline come sopra (flag opzionale su entry se presente).
  */
 
 import React from 'react';
+import { ArrowBigLeft, ArrowBigRight, ArrowBigRightDash } from 'lucide-react';
 
-const STROKE = 0.72;
-const EDGE = 'currentColor';
-const INNER = 'rgba(45, 212, 191, 0.42)';
+/** Blu SEND (#4A90E2). */
+export const BACKEND_SEND_MAPPING_ICON_COLOR = '#4A90E2';
+/** Arancione RECEIVE (#F5A623). */
+export const BACKEND_RECEIVE_MAPPING_ICON_COLOR = '#F5A623';
 
-/** Geometria base (freccia →): pentagono [bl-sx]–[base dx basso]–[punta]–[base dx alto]–[al-sx]. */
-const XL = 0.85;
-const X_SHAFT_RIGHT = 8.35;
-const TIP_X = 14.85;
-const Y_TOP = 3.75;
-const Y_BOT = 8.25;
-
-/** Spezzatura runtime: fine primo blocco asta / inizio secondo (gap tra i due). */
-const X_BREAK_LEFT = 3.95;
-const X_BREAK_RIGHT = 5.35;
-
-function pathContinuous(): string {
-  return `M ${XL} ${Y_BOT} L ${X_SHAFT_RIGHT} ${Y_BOT} L ${TIP_X} 6 L ${X_SHAFT_RIGHT} ${Y_TOP} L ${XL} ${Y_TOP} Z`;
-}
-
-/** Due poligoni chiusi: segmento asta sinistro + (segmento destro + punta). */
-function pathBroken(): string {
-  const leftShaft = `M ${XL} ${Y_TOP} L ${X_BREAK_LEFT} ${Y_TOP} L ${X_BREAK_LEFT} ${Y_BOT} L ${XL} ${Y_BOT} Z`;
-  const rightAndHead = `M ${X_BREAK_RIGHT} ${Y_TOP} L ${X_SHAFT_RIGHT} ${Y_TOP} L ${TIP_X} 6 L ${X_SHAFT_RIGHT} ${Y_BOT} L ${X_BREAK_RIGHT} ${Y_BOT} Z`;
-  return `${leftShaft} ${rightAndHead}`;
-}
+/** Larghezza ×1.5 rispetto al ciclo precedente (39→59); altezza ridotta (meno “alte”). */
+const GLYPH_W = 59;
+const GLYPH_H = 22;
+const GLYPH_CLASS = `h-[22px] w-[59px] shrink-0`;
+const SEND_SHADOW = 'drop-shadow-[0_0_5px_rgba(74,144,226,0.35)]';
+const RECV_SHADOW = 'drop-shadow-[0_0_5px_rgba(245,166,35,0.4)]';
 
 export type SendArrowGlyphKind = 'filledSolid' | 'outlineSolid' | 'filledBroken' | 'outlineBroken';
 
 export function BackendSendArrowIcon({ kind, title }: { kind: SendArrowGlyphKind; title?: string }) {
+  const runtime = kind === 'filledBroken' || kind === 'outlineBroken';
   const filled = kind === 'filledSolid' || kind === 'filledBroken';
-  const broken = kind === 'filledBroken' || kind === 'outlineBroken';
-  const d = broken ? pathBroken() : pathContinuous();
-
+  const Icon = runtime ? ArrowBigRightDash : ArrowBigRight;
+  const c = BACKEND_SEND_MAPPING_ICON_COLOR;
   return (
-    <svg
-      className="w-[1.28rem] h-[1.05rem] text-teal-400 drop-shadow-[0_0_5px_rgba(45,212,191,0.35)] shrink-0"
-      viewBox="0 0 16 12"
+    <Icon
+      className={`${GLYPH_CLASS} ${SEND_SHADOW}`}
+      width={GLYPH_W}
+      height={GLYPH_H}
+      strokeWidth={2.15}
+      fill={filled ? c : 'none'}
+      stroke={c}
+      title={title}
       aria-hidden={title ? undefined : true}
-      role={title ? 'img' : undefined}
-    >
-      {title ? <title>{title}</title> : null}
-      <path
-        d={d}
-        fill={filled ? INNER : 'none'}
-        stroke={EDGE}
-        strokeWidth={STROKE}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
+    />
+  );
+}
+
+export function BackendReceiveArrowIcon({ optional }: { optional: boolean }) {
+  const c = BACKEND_RECEIVE_MAPPING_ICON_COLOR;
+  const filled = !optional;
+  return (
+    <ArrowBigLeft
+      className={`${GLYPH_CLASS} ${RECV_SHADOW}`}
+      width={GLYPH_W}
+      height={GLYPH_H}
+      strokeWidth={2.15}
+      fill={filled ? c : 'none'}
+      stroke={c}
+      aria-hidden
+    />
   );
 }
 

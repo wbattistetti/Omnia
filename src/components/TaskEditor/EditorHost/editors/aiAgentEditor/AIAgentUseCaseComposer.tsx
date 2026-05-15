@@ -1387,9 +1387,9 @@ export function AIAgentUseCaseComposer({
    *  - le conversazioni gi\u00e0 generate per questo use case vengono SOLO nascoste in vista (non
    *    cancellate dallo storage), e il use case viene escluso dal JSON proiettato per il
    *    system prompt;
-   *  - resta invece SEMPRE visibile in lista (con dim + badge "Escluso") e continua ad essere
-   *    passato come `existingUseCases` a tutti i contesti dove l'IA propone nuovi use case
-   *    (no duplicati).
+   *  - resta invece SEMPRE visibile in lista (checkbox disattivata; eventuale header rosso se
+   *    invalidato) e continua ad essere passato come `existingUseCases` a tutti i contesti dove
+   *    l'IA propone nuovi use case (no duplicati).
    */
   const setUseCaseIncludedInConversations = React.useCallback(
     (useCaseId: string, included: boolean) => {
@@ -2184,13 +2184,10 @@ export function AIAgentUseCaseComposer({
                     cardExpanded &&
                     (wizardShowScenario || wizardShowMessage);
                   /**
-                   * Quando il use case \u00e8 escluso dalle conversazioni: dim sull'intera card
-                   * (opacity-50) per segnalare visivamente lo stato. La card resta interattiva
-                   * (puoi rimettere la spunta) e l'header non viene compresso \u2014 \u00e8 ben
-                   * differenziato da disabled (cursor-not-allowed) o hidden (display:none).
+                   * Esclusione conversazioni: niente opacity sulla card (pessima leggibilità
+                   * del titolo su header colorato). Stato chiaro da checkbox + voto/header.
                    */
                   const includedInConv = isUseCaseIncludedInConversations(u);
-                  const dimWhenExcludedClass = includedInConv ? '' : ' opacity-50';
                   const searchHighlight = highlightIdSet.has(u.id);
                   const zebraRow = primaryGenerateOnRightOnly
                     ? rowIndex % 2 === 0
@@ -2211,7 +2208,7 @@ export function AIAgentUseCaseComposer({
                     (u.parent_id ?? null) !== (nextInFiltered.parent_id ?? null);
                   return (
                     <React.Fragment key={u.id}>
-                    <li data-uc-row-id={u.id} className={`group/uc-row ${liSurface}${dimWhenExcludedClass}`}>
+                    <li data-uc-row-id={u.id} className={`group/uc-row ${liSurface}`}>
                       <UseCaseRowDnDWrapper
                         useCaseId={u.id}
                         parentId={u.parent_id ?? null}
@@ -2370,14 +2367,6 @@ export function AIAgentUseCaseComposer({
                               }}
                             >
                               <span className="min-w-0 break-words whitespace-normal">{u.label || u.id}</span>
-                              {!includedInConv ? (
-                                <span
-                                  className="ml-1 shrink-0 rounded bg-slate-700/70 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-300"
-                                  title="Questo use case non viene usato nelle conversazioni n\u00e9 nel prompt conversazionale finale (resta in lista per non essere ri-proposto come nuovo dall'IA)"
-                                >
-                                  Escluso
-                                </span>
-                              ) : null}
                               <UseCaseRowDeployChips
                                 stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
                                 onInspectCompiled={
