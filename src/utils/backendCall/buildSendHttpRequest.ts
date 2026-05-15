@@ -14,6 +14,8 @@ export type BuiltBackendHttpRequest = {
   headers: Record<string, string>;
   /** Corpo JSON per POST/PUT/PATCH; null se non applicabile. */
   bodyJson: string | null;
+  /** OAuth PortalConnection — il proxy designer aggiunge Authorization Bearer. */
+  portalConnectionId?: string;
 };
 
 function buildValuesByApiParam(
@@ -58,6 +60,7 @@ export function buildSendHttpRequest(params: {
   endpointUrl: string;
   method: string;
   endpointHeaders?: Record<string, string>;
+  portalConnectionId?: string;
   sendEntries: MappingEntry[];
   rowInputs: Record<string, unknown>;
 }): BuiltBackendHttpRequest {
@@ -99,7 +102,13 @@ export function buildSendHttpRequest(params: {
     }
     const qs = sp.toString();
     const url = qs ? `${basePath}?${qs}` : basePath;
-    return { url, method: methodUp, headers, bodyJson: null };
+    return {
+      url,
+      method: methodUp,
+      headers,
+      bodyJson: null,
+      portalConnectionId: params.portalConnectionId,
+    };
   }
 
   let urlWithOptionalQuery = basePath;
@@ -111,5 +120,11 @@ export function buildSendHttpRequest(params: {
     headers['Content-Type'] = 'application/json';
   }
   const bodyJson = stableJsonStringify(remainingForBodyOrQuery);
-  return { url: urlWithOptionalQuery, method: methodUp, headers, bodyJson };
+  return {
+    url: urlWithOptionalQuery,
+    method: methodUp,
+    headers,
+    bodyJson,
+    portalConnectionId: params.portalConnectionId,
+  };
 }

@@ -153,22 +153,22 @@ export function AIAgentConstructionStepper({
                 onClick={() => {
                   if (isEnabled) onSelectStep(meta.index);
                 }}
-                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${stateClass} ${glowClass}`}
+                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${stateClass} ${glowClass}`}
               >
                 <span
-                  className="flex h-5 w-5 items-center justify-center rounded-full bg-black/25 text-[11px] font-semibold"
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-black/25 text-xs font-semibold"
                   aria-hidden
                 >
                   {isComplete ? (
-                    <Check size={12} className="text-emerald-300" />
+                    <Check size={14} className="text-emerald-300" />
                   ) : !isEnabled ? (
-                    <Lock size={11} />
+                    <Lock size={13} />
                   ) : (
                     meta.displayNumber
                   )}
                 </span>
-                <Icon size={13} aria-hidden className="opacity-80" />
-                <span>{meta.label}</span>
+                <Icon size={15} aria-hidden className="opacity-80" />
+                <span className={isCurrent ? 'text-base font-semibold' : 'text-sm'}>{meta.label}</span>
               </button>
             </li>
           );
@@ -193,7 +193,7 @@ export function AIAgentConstructionStepper({
                 title="Apre il pannello dei costi di design: quanto ti è costato (in chiamate IA) costruire questo task"
                 onClick={onSelectCosts}
                 className={
-                  'flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ' +
+                  'flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ' +
                   (costsActive
                     ? 'bg-amber-700 text-white border-amber-500 shadow ring-2 ring-amber-400/40'
                     : 'bg-slate-800 text-amber-200 border-slate-700 hover:bg-slate-700')

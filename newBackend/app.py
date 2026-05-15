@@ -1,9 +1,39 @@
+from newBackend.core.load_env import load_omnia_env_files
+
+_loaded_env = load_omnia_env_files()
+if _loaded_env:
+    print(f"[INFO] FastAPI env loaded from: {', '.join(_loaded_env)}")
+
+from newBackend.portal_auth.startup_policy import apply_portal_oauth_startup_policy
+
+apply_portal_oauth_startup_policy()
+
+try:
+    from newBackend.portal_auth import oauth_google as _oauth_google
+
+    if _oauth_google.google_oauth_configured():
+        print("[INFO] Google OAuth portal: configurato (OMNIA_GOOGLE_OAUTH_CLIENT_ID)")
+    else:
+        print(
+            "[WARN] Google OAuth portal: NON configurato — imposta "
+            "OMNIA_GOOGLE_OAUTH_CLIENT_ID e OMNIA_GOOGLE_OAUTH_CLIENT_SECRET "
+            "in backend/.env (poi riavvia dev:beNew)"
+        )
+except Exception:
+    pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from newBackend.api.api_codegen import router as cond_router
 from newBackend.api.api_nlp import router as nlp_router
 from newBackend.api.api_proxy_express import router as proxy_router
 from newBackend.api.api_openapi_proxy import router as openapi_proxy_router
+
+try:
+    from newBackend.api.api_portal_auth import router as portal_auth_router
+except Exception as _portal_auth_import_err:
+    portal_auth_router = None
+    print(f"[WARN] portal_auth router import failed: {_portal_auth_import_err}")
 from newBackend.api.api_nlp_config import router as nlp_config_router
 from newBackend.api.api_factory import router as factory_router
 from newBackend.api.api_tasks import router as tasks_router
@@ -146,6 +176,9 @@ app.include_router(cond_router)
 app.include_router(nlp_router)
 app.include_router(proxy_router)
 app.include_router(openapi_proxy_router)
+if portal_auth_router is not None:
+    app.include_router(portal_auth_router)
+    print("[INFO] portal_auth_router included (OAuth /api/auth/portal/*)")
 app.include_router(factory_router)
 app.include_router(nlp_config_router)
 

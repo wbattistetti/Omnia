@@ -1233,13 +1233,21 @@ export function buildOpenApiCandidateUrlList(endpointUrl: string): string[] {
 
 const OPENAPI_PROXY_PATH = '/api/openapi-proxy';
 
+export type FetchOpenApiDocumentOptions = {
+  /** PortalConnection id — proxy aggiunge Authorization Bearer. */
+  connectionId?: string;
+};
+
 /**
  * FastAPI scarica lo spec lato server (niente CORS). Se il backend non risponde, si torna al fetch diretto.
  */
 async function tryFetchOpenApiViaBackendProxy(
-  endpointUrl: string
+  endpointUrl: string,
+  options?: FetchOpenApiDocumentOptions
 ): Promise<{ doc: Record<string, unknown>; sourceUrl: string } | null> {
   const qs = new URLSearchParams({ url: endpointUrl });
+  const cid = (options?.connectionId || '').trim();
+  if (cid) qs.set('connection_id', cid);
   let res: Response;
   try {
     res = await fetch(`${OPENAPI_PROXY_PATH}?${qs.toString()}`, { credentials: 'omit' });
@@ -1262,14 +1270,10 @@ async function tryFetchOpenApiViaBackendProxy(
     return null;
   }
 
-  let detail = `HTTP ${res.status}`;
+  let detail: unknown = `HTTP ${res.status}`;
   try {
     const j = (await res.json()) as { detail?: unknown };
-    if (typeof j.detail === 'string') {
-      detail = j.detail;
-    } else if (j.detail !== undefined) {
-      detail = JSON.stringify(j.detail);
-    }
+    detail = j.detail ?? detail;
   } catch {
     try {
       const t = await res.text();
@@ -1278,7 +1282,33 @@ async function tryFetchOpenApiViaBackendProxy(
       /* ignore */
     }
   }
-  throw new Error(detail);
+
+  const { parsePortalAuthHttpError, inferPortalAuthFromFailedOpenApiFetch } = await import(
+    './portalAuthErrors'
+  );
+  const portalErr =
+    parsePortalAuthHttpError(res.status, detail) ??
+    inferPortalAuthFromFailedOpenApiFetch(endpointUrl, detail, res.status);
+  if (portalErr) throw portalErr;
+
+  if (res.status === 422) {
+    const { parseOpenApiNotFoundDetail, OpenApiNotFoundError, defaultOpenApiNotFoundMessage } =
+      await import('./openApiDiscoveryErrors');
+    const notFound =
+      parseOpenApiNotFoundDetail(detail, Boolean(cid)) ??
+      (cid
+        ? new OpenApiNotFoundError(defaultOpenApiNotFoundMessage(true), true)
+        : null);
+    if (notFound) throw notFound;
+  }
+
+  const detailStr =
+    typeof detail === 'string'
+      ? detail
+      : detail !== undefined
+        ? JSON.stringify(detail)
+        : `HTTP ${res.status}`;
+  throw new Error(detailStr);
 }
 
 /**
@@ -1320,13 +1350,16 @@ async function fetchOpenApiDocumentDirect(
 /**
  * Carica il documento OpenAPI: prima proxy backend (evita CORS), poi fetch diretto come fallback.
  */
-export async function fetchOpenApiDocument(endpointUrl: string): Promise<{ doc: Record<string, unknown>; sourceUrl: string }> {
+export async function fetchOpenApiDocument(
+  endpointUrl: string,
+  options?: FetchOpenApiDocumentOptions
+): Promise<{ doc: Record<string, unknown>; sourceUrl: string }> {
   const trimmed = endpointUrl.trim();
   if (!trimmed) {
     throw new Error('URL non valido');
   }
 
-  const viaProxy = await tryFetchOpenApiViaBackendProxy(trimmed);
+  const viaProxy = await tryFetchOpenApiViaBackendProxy(trimmed, options);
   if (viaProxy) {
     return viaProxy;
   }
@@ -1340,22 +1373,23 @@ export async function fetchOpenApiDocument(endpointUrl: string): Promise<{ doc: 
  */
 export async function fetchOpenApiDocumentOperationalThenManualFallback(
   operationalUrl: string,
-  manualSpecUrl?: string
+  manualSpecUrl?: string,
+  options?: FetchOpenApiDocumentOptions
 ): Promise<{ doc: Record<string, unknown>; sourceUrl: string }> {
   const op = operationalUrl.trim();
   const manual = (manualSpecUrl || '').trim();
   if (op) {
     try {
-      return await fetchOpenApiDocument(op);
+      return await fetchOpenApiDocument(op, options);
     } catch (e) {
       if (manual) {
-        return await fetchOpenApiDocument(manual);
+        return await fetchOpenApiDocument(manual, options);
       }
       throw e;
     }
   }
   if (manual) {
-    return await fetchOpenApiDocument(manual);
+    return await fetchOpenApiDocument(manual, options);
   }
   throw new Error('Inserire endpoint operativo o Spec URL (OpenAPI).');
 }

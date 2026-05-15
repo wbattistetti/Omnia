@@ -1,11 +1,10 @@
 """
 Server-side fetch for OpenAPI/Swagger JSON so the browser avoids CORS when using Read API.
-Mirrors the candidate-path logic in src/services/openApiBackendCallSpec.ts.
+Optional `connection_id` adds Bearer token from a PortalConnection (OAuth).
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
@@ -13,6 +12,14 @@ from urllib.parse import parse_qs, unquote, urlparse
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
+
+from newBackend.portal_auth.openapi_fetch import (
+    attempt_indicates_auth_required,
+    build_auth_headers,
+    probe_openapi_url,
+)
+from newBackend.portal_auth.origin import normalize_origin
+from newBackend.portal_auth.portal_auth_service import PortalAuthError
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +35,11 @@ SPEC_CANDIDATE_PATHS = (
     "/swagger/v1/swagger.json",
     "/swagger-ui/swagger.json",
     "/doc/swagger.json",
+    # n8n / workflow portals (comuni in installazioni self-hosted)
+    "/api/v1/openapi.json",
+    "/api/v1/docs",
+    "/rest/openapi.json",
 )
-
-MAX_BODY_BYTES = 6 * 1024 * 1024
-
-_FETCH_HEADERS = {
-    "Accept": "application/json, */*",
-    "User-Agent": "Omnia-OpenAPI-Proxy/1.0 (+https://github.com/)",
-}
 
 
 def _is_openapi_doc(data: Any) -> bool:
@@ -43,7 +47,6 @@ def _is_openapi_doc(data: Any) -> bool:
 
 
 def _pathname_prefixes(pathname: str) -> list[str]:
-    """Percorsi dal path completo fino ai segmenti padre (es. /api/v1/users → /api/v1/users, /api/v1, /api)."""
     if not pathname or pathname == "/":
         return []
     parts = [p for p in pathname.split("/") if p]
@@ -56,16 +59,11 @@ def _pathname_prefixes(pathname: str) -> list[str]:
 
 
 def _join_origin_spec(origin: str, path_prefix: str, spec_suffix: str) -> str:
-    """origin + path_prefix + /swagger.json senza doppie slash."""
     p = path_prefix.rstrip("/") if path_prefix else ""
     return f"{origin}{p}{spec_suffix}"
 
 
 def _nested_spec_urls_from_query(parsed) -> list[str]:
-    """
-    Redoc/Swagger UI spesso passano lo spec in query, es.:
-    .../redoc/?url=https://petstore.swagger.io/v2/swagger.json
-    """
     if not parsed.query:
         return []
     qs = parse_qs(parsed.query, keep_blank_values=False)
@@ -97,36 +95,13 @@ def _candidate_urls_for_origin_path(origin: str, pathname: str) -> list[str]:
     return urls
 
 
-async def _probe_openapi_url(client: httpx.AsyncClient, url: str) -> tuple[dict[str, Any] | None, str]:
-    """
-    Scarica url e verifica se è un documento OpenAPI/Swagger.
-    Ritorna (doc, motivo) con motivo leggibile per i log (es. HTTP 404, non JSON, …).
-    """
-    try:
-        r = await client.get(url, headers=_FETCH_HEADERS)
-        if r.status_code >= 400:
-            return None, f"HTTP {r.status_code}"
-        if len(r.content) > MAX_BODY_BYTES:
-            return None, f"corpo > {MAX_BODY_BYTES // (1024 * 1024)} MiB"
-        data = r.json()
-        if not isinstance(data, dict):
-            return None, "JSON non oggetto"
-        if _is_openapi_doc(data):
-            return data, "OK"
-        return None, "JSON senza openapi/swagger (es. HTML mascherato o altro JSON)"
-    except json.JSONDecodeError:
-        return None, "non è JSON valido (spesso HTML o testo)"
-    except httpx.TimeoutException:
-        return None, "timeout"
-    except httpx.HTTPError as e:
-        return None, f"errore rete: {e!s}"
-    except ValueError as e:
-        return None, f"risposta non valida: {e!s}"
-
-
 @router.get("/api/openapi-proxy")
 async def proxy_openapi(
     url: str = Query(..., min_length=1, description="URL dell'endpoint o del documento OpenAPI/Swagger"),
+    connection_id: str | None = Query(
+        None,
+        description="PortalConnection id — aggiunge Authorization Bearer",
+    ),
 ) -> JSONResponse:
     raw = url.strip()
     parsed = urlparse(raw)
@@ -136,7 +111,16 @@ async def proxy_openapi(
             detail="URL non valido: servono solo schemi http o https.",
         )
 
+    try:
+        auth_headers = await build_auth_headers(connection_id)
+    except PortalAuthError as e:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": e.code, "message": e.message, "origin": normalize_origin(raw)},
+        ) from e
+
     timeout = httpx.Timeout(45.0, connect=15.0)
+    auth_required = False
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=timeout,
@@ -146,22 +130,24 @@ async def proxy_openapi(
         attempts: list[tuple[str, str]] = []
 
         async def try_one(u: str) -> dict[str, Any] | None:
+            nonlocal auth_required
             if u in tried:
                 return None
             tried.add(u)
-            doc, reason = await _probe_openapi_url(client, u)
+            doc, reason, http_status = await probe_openapi_url(client, u, auth_headers)
             attempts.append((u, reason))
+            if attempt_indicates_auth_required(reason, http_status):
+                auth_required = True
             return doc
 
         doc = await try_one(raw)
         if doc is not None:
-            logger.info("[openapi-proxy] OK seed=%r -> documento da %r", raw, raw)
+            logger.info("[openapi-proxy] OK seed=%r connection=%r", raw, connection_id)
             return JSONResponse(content=doc)
 
         for nested in _nested_spec_urls_from_query(parsed):
             doc = await try_one(nested)
             if doc is not None:
-                logger.info("[openapi-proxy] OK seed=%r -> documento da query ?url= %r", raw, nested)
                 return JSONResponse(content=doc)
             nested_p = urlparse(nested)
             if nested_p.scheme in ("http", "https"):
@@ -169,19 +155,30 @@ async def proxy_openapi(
                 for candidate in _candidate_urls_for_origin_path(nested_origin, nested_p.path or "/"):
                     doc = await try_one(candidate)
                     if doc is not None:
-                        logger.info(
-                            "[openapi-proxy] OK seed=%r -> documento da %r (derivato da ?url=)",
-                            raw,
-                            candidate,
-                        )
                         return JSONResponse(content=doc)
 
         origin = f"{parsed.scheme}://{parsed.netloc}"
         for candidate in _candidate_urls_for_origin_path(origin, parsed.path or "/"):
             doc = await try_one(candidate)
             if doc is not None:
-                logger.info("[openapi-proxy] OK seed=%r -> documento da %r", raw, candidate)
                 return JSONResponse(content=doc)
+
+    if auth_required and not connection_id:
+        try:
+            origin_norm = normalize_origin(raw)
+        except ValueError:
+            origin_norm = f"{parsed.scheme}://{parsed.netloc}"
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "PORTAL_AUTH_REQUIRED",
+                "message": (
+                    "Il portale richiede l’accesso. Connetti il tuo account Google "
+                    "per recuperare le specifiche OpenAPI."
+                ),
+                "origin": origin_norm,
+            },
+        )
 
     max_lines = 50
     body = "\n".join(f"  - {u} -> {r}" for u, r in attempts[:max_lines])
@@ -194,12 +191,28 @@ async def proxy_openapi(
         body,
     )
 
-    raise HTTPException(
-        status_code=422,
-        detail=(
+    authenticated = bool((connection_id or "").strip())
+    sample = ", ".join({r for _, r in attempts[:8]}) or "nessun dettaglio"
+    if authenticated:
+        msg = (
+            "Accesso al portale riuscito, ma non è stato trovato alcun documento OpenAPI/Swagger su questo URL. "
+            "Incolla l’URL diretto del file JSON (es. …/swagger.json o …/v3/api-docs), non solo /webhook. "
+            f"Ultimi tentativi: {sample}. "
+            "Se vedi HTTP 503, il servizio può essere spento o l’URL non è quello dello swagger."
+        )
+    else:
+        msg = (
             "Impossibile caricare OpenAPI. Incolla l’URL del JSON (es. …/v3/api-docs o …/swagger.json), "
             "oppure l’URL base dell’API (non solo la pagina HTML di Redoc/Swagger UI). "
-            "Verifica che il server sia raggiungibile da questa macchina. "
-            "Dettaglio: controlla il terminale del backend Python (log [openapi-proxy])."
-        ),
+            f"Ultimi tentativi: {sample}. "
+            "Dettaglio: log backend Python [openapi-proxy]."
+        )
+    raise HTTPException(
+        status_code=422,
+        detail={
+            "code": "OPENAPI_NOT_FOUND",
+            "message": msg,
+            "authenticated": authenticated,
+            "origin": f"{parsed.scheme}://{parsed.netloc}",
+        },
     )

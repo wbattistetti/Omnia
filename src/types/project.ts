@@ -68,6 +68,10 @@ export interface TaskTemplateItem extends ProjectEntityItem {
 /** @see `domain/backendCatalog/catalogTypes` — inventario backend designer-time (manuali + audit). */
 export type ProjectBackendCatalogBlob = import('../domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob;
 
+/** @see `domain/portalAuth/portalConnectionTypes` — metadati connessioni OAuth portale (no token). */
+export type ProjectPortalConnectionsBlob =
+  import('../domain/portalAuth/portalConnectionTypes').ProjectPortalConnectionsBlob;
+
 export type ProjectData = {
   id?: string;
   name: string;
@@ -85,6 +89,8 @@ export type ProjectData = {
   macrotasks?: { id?: string; name?: string; items: Macrotask[] }[];
   /** Catalogo backend (voci manuali + audit append-only); righe da grafo sono derivate dai task. */
   backendCatalog?: ProjectBackendCatalogBlob;
+  /** Connessioni OAuth verso portali protetti (token solo lato server FastAPI). */
+  portalConnections?: ProjectPortalConnectionsBlob;
   // ...other fields as needed
 };
 

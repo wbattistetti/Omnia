@@ -31,6 +31,7 @@ export type BackendCallMockTableProps = {
   onColumnsChange?: (columns: ColumnDef[]) => void;
   mappingSend: MappingEntry[];
   endpoint: { url: string; method: string; headers?: Record<string, string> };
+  portalConnectionId?: string;
   defaultExecutionMode: BackendExecutionMode;
   /** Etichette variabile per colonna (display). */
   variableLabelByColumn: (internalName: string, zone: 'input' | 'output') => string | undefined;
@@ -59,6 +60,7 @@ export function BackendCallMockTable({
   onColumnsChange,
   mappingSend,
   endpoint,
+  portalConnectionId,
   defaultExecutionMode,
   variableLabelByColumn,
   inputTooltipByInternalName,
@@ -117,6 +119,7 @@ export function BackendCallMockTable({
       endpointUrl: endpoint.url.trim(),
       endpointMethod: endpoint.method,
       endpointHeaders: endpoint.headers,
+      portalConnectionId,
       sendEntries: mappingSend,
       outputDefs,
       endpointInvocationFallback,

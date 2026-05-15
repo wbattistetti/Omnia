@@ -693,13 +693,25 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const [promptFinaleJsMode, setPromptFinaleJsMode] = React.useState(false);
 
-  const backendsAddManualHandlerRef = React.useRef<(() => void) | null>(null);
-  const registerBackendsAddManualHandler = React.useCallback((handler: (() => void) | null) => {
-    backendsAddManualHandlerRef.current = handler;
-  }, []);
-  const invokeBackendsAddManual = React.useCallback(() => {
-    backendsAddManualHandlerRef.current?.();
-  }, []);
+  const backendsAddManualHandlerRef = React.useRef<
+    ((mode: import('@domain/backendCatalog/catalogTypes').ManualBackendCreationMode) => void) | null
+  >(null);
+  const registerBackendsAddManualHandler = React.useCallback(
+    (
+      handler:
+        | ((mode: import('@domain/backendCatalog/catalogTypes').ManualBackendCreationMode) => void)
+        | null
+    ) => {
+      backendsAddManualHandlerRef.current = handler;
+    },
+    []
+  );
+  const invokeBackendsAddManual = React.useCallback(
+    (mode: import('@domain/backendCatalog/catalogTypes').ManualBackendCreationMode = 'import') => {
+      backendsAddManualHandlerRef.current?.(mode);
+    },
+    []
+  );
 
   const showRightPanel =
     c.hasAgentGeneration ||
@@ -758,22 +770,33 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const globalHeaderAction = isWizardTaskStep ? null : headerAction;
   const isWizardBackendStep = c.agentWizardCurrentStep === 2;
-  const wizardBackendHeaderAddButton = (
-    <button
-      type="button"
-      onClick={invokeBackendsAddManual}
-      aria-label="Aggiungi backend manuale"
-      title="Aggiungi una riga backend manuale in fondo all'elenco"
-      className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 px-2 py-0.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-900/55"
-    >
-      <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      Aggiungi backend
-    </button>
+  const wizardBackendHeaderActions = (
+    <div className="inline-flex shrink-0 flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => invokeBackendsAddManual('import')}
+        aria-label="Aggiungi backend da URL OpenAPI"
+        title="Importa da URL: incolla lo swagger, poi Recupera specifiche"
+        className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 px-2.5 py-1 text-sm font-semibold text-violet-100 hover:bg-violet-900/55"
+      >
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        Aggiungi backend
+      </button>
+      <button
+        type="button"
+        onClick={() => invokeBackendsAddManual('emulate')}
+        aria-label="Emula backend senza OpenAPI"
+        title="Definisci manualmente nome, descrizione e URL senza import swagger"
+        className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-600/80 bg-slate-900/90 px-2.5 py-1 text-sm font-semibold text-slate-100 hover:bg-slate-800"
+      >
+        Emula backend
+      </button>
+    </div>
   );
   const wizardStepHeaderAction = isWizardTaskStep
     ? headerAction
     : isWizardBackendStep
-      ? wizardBackendHeaderAddButton
+      ? wizardBackendHeaderActions
       : null;
 
   /**

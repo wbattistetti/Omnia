@@ -45,6 +45,10 @@ import {
 } from '../../../../domain/backendTest/backendMockRowCompletion';
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
 import { runBackendCallReadApiForTask } from '../../../../services/runBackendCallReadApiForTask';
+import { resolvePortalConnectionIdForUrl } from '@domain/portalAuth/resolvePortalConnectionId';
+import { ConnectPortalModal } from '@components/portalAuth/ConnectPortalModal';
+import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalConnections';
+import type { PortalConnectionMeta } from '@domain/portalAuth/portalConnectionTypes';
 import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
 import type {
   BackendInputAdvancementEntry,
@@ -110,6 +114,8 @@ interface BackendCallConfig {
   };
   /** URL documento OpenAPI: Read API lo usa solo se fallisce la discovery sull’endpoint operativo. */
   openapiSpecUrl?: string;
+  /** OAuth PortalConnection per API dietro login. */
+  portalConnectionId?: string;
   // Per ora: struttura semplificata (template locale + eventuali override)
   localTemplateId?: string;
   inputOverrides?: Record<string, string>; // internalName -> readableName (sovrascrive template locale)
@@ -409,6 +415,10 @@ export default function BackendCallEditor({
       typeof (rawTask as { openapiSpecUrl?: string }).openapiSpecUrl === 'string'
         ? (rawTask as { openapiSpecUrl: string }).openapiSpecUrl
         : '';
+    const portalConnectionId =
+      typeof (rawTask as { portalConnectionId?: string }).portalConnectionId === 'string'
+        ? (rawTask as { portalConnectionId: string }).portalConnectionId.trim()
+        : undefined;
 
     const adv = (rawTask as { inputAdvancement?: BackendCallConfig['inputAdvancement'] }).inputAdvancement;
     const advTypes = (rawTask as { inputAdvancementTypes?: BackendCallConfig['inputAdvancementTypes'] })
@@ -435,6 +445,7 @@ export default function BackendCallEditor({
     const cfg: BackendCallConfig = {
       endpoint,
       openapiSpecUrl,
+      ...(portalConnectionId ? { portalConnectionId } : {}),
       inputs,
       outputs,
       ...(mockTable !== undefined ? { mockTable } : {}),
@@ -498,6 +509,26 @@ export default function BackendCallEditor({
     setReadApiError(null);
   }, [config.endpoint.url, config.endpoint.method, config.openapiSpecUrl]);
 
+  const [portalConnectModal, setPortalConnectModal] = React.useState<{ open: boolean; origin: string }>({
+    open: false,
+    origin: '',
+  });
+
+  const mergePortalConnections = React.useCallback(
+    (meta: PortalConnectionMeta) => {
+      if (!projectData || !pdUpdate?.updateDataDirectly) return;
+      const blob = upsertProjectPortalConnection(projectData, meta);
+      pdUpdate.updateDataDirectly({ ...projectData, portalConnections: blob });
+    },
+    [projectData, pdUpdate]
+  );
+
+  const resolvePortalConnectionId = React.useCallback(() => {
+    return resolvePortalConnectionIdForUrl(projectData ?? null, config.endpoint.url, {
+      portalConnectionId: config.portalConnectionId,
+    });
+  }, [projectData, config.endpoint.url, config.portalConnectionId]);
+
   React.useEffect(() => {
     if (instanceId && config) {
       taskRepository.updateTask(
@@ -505,6 +536,7 @@ export default function BackendCallEditor({
         {
           endpoint: config.endpoint,
           openapiSpecUrl: config.openapiSpecUrl ?? '',
+          ...(config.portalConnectionId ? { portalConnectionId: config.portalConnectionId } : {}),
           inputs: config.inputs,
           outputs: config.outputs,
           ...(config.mockTable !== undefined ? { mockTable: config.mockTable } : {}),
@@ -680,8 +712,14 @@ export default function BackendCallEditor({
     try {
       const result = await runBackendCallReadApiForTask(instanceId, projectId, op, config.endpoint.method, {
         openapiSpecUrl: spec || undefined,
+        portalConnectionId: resolvePortalConnectionId(),
       });
       if (!result.ok) {
+        if (result.portalAuth?.origin) {
+          setPortalConnectModal({ open: true, origin: result.portalAuth.origin });
+          setReadApiError(null);
+          return;
+        }
         setReadApiError(result.error);
         return;
       }
@@ -1613,6 +1651,7 @@ export default function BackendCallEditor({
               onColumnsChange={(columns) => setConfig((prev) => ({ ...prev, mockTableColumns: columns }))}
               mappingSend={mappingSend}
               endpoint={config.endpoint}
+              portalConnectionId={config.portalConnectionId || resolvePortalConnectionId()}
               defaultExecutionMode={
                 config.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK
               }
@@ -1675,6 +1714,19 @@ export default function BackendCallEditor({
         </div>
         )}
       </div>
+      {projectId ? (
+        <ConnectPortalModal
+          open={portalConnectModal.open}
+          origin={portalConnectModal.origin}
+          projectId={projectId}
+          onClose={() => setPortalConnectModal({ open: false, origin: '' })}
+          onConnected={(meta) => {
+            mergePortalConnections(meta);
+            setConfig((prev) => ({ ...prev, portalConnectionId: meta.id }));
+            setPortalConnectModal({ open: false, origin: '' });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

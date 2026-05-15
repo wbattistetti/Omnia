@@ -14,7 +14,7 @@ if not exist .venv (
 echo [DEV] Activating venv and installing Python deps if missing...
 call .\.venv\Scripts\activate
 python -m pip install --upgrade pip >nul 2>&1
-pip install fastapi uvicorn[standard] requests >nul 2>&1
+pip install fastapi uvicorn[standard] requests cryptography >nul 2>&1
 
 REM 2) Configure proxy base for FastAPI -> Express
 set EXPRESS_BASE=http://localhost:3100

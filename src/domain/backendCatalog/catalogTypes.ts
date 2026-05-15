@@ -78,6 +78,9 @@ export interface BackendCallSpecMeta {
   openApiLockedHttpMethod?: string | null;
 }
 
+/** Come è stata creata la riga nel catalogo (wizard passo Backend). */
+export type ManualBackendCreationMode = 'import' | 'emulate';
+
 /** Voce manuale nel progetto (`project.backendCatalog.manualEntries`). */
 export interface ManualCatalogEntry {
   id: string;
@@ -91,6 +94,15 @@ export interface ManualCatalogEntry {
   lastStructuralEditAt: string;
   /** Nomi campo da OpenAPI dopo Enter / lettura spec (solo designer-time). */
   openApiFieldNames?: { inputs: string[]; outputs: string[] };
+  /** Connessione OAuth verso l’origin dell’URL (Bearer in Read API / runtime). */
+  portalConnectionId?: string;
+  /**
+   * Wizard: `import` = solo URL fino a «Recupera specifiche»; `emulate` = tutti i campi subito.
+   * Legacy senza campo → trattato come `import` se non ancora rivelato, altrimenti emulate.
+   */
+  creationMode?: ManualBackendCreationMode;
+  /** Import: true dopo primo Recupera OpenAPI ok (mostra Nome/Descrizione). */
+  importSpecRevealed?: boolean;
 }
 
 export interface CatalogFrozenMeta {

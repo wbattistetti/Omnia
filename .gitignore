@@ -22,7 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secret / locale — non committare (template: .env.example, backend/.env.example)
 .env
+.env.local
+backend/.env
+backend/.env.local
 
 # Visual Studio
 .vs/

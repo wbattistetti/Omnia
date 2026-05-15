@@ -105,6 +105,7 @@ export type UseBackendTestRunParams = {
   endpointUrl: string;
   endpointMethod: string;
   endpointHeaders?: Record<string, string>;
+  portalConnectionId?: string;
   sendEntries: MappingEntry[];
   outputDefs: BackendOutputDef[];
   /** Valori striscia endpoint (internalName): uniti a `row.inputs` prima della HTTP; la riga vince. */
@@ -172,6 +173,7 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
         endpointUrl: p.endpointUrl,
         method: p.endpointMethod,
         endpointHeaders: p.endpointHeaders,
+        portalConnectionId: p.portalConnectionId,
         sendEntries: p.sendEntries,
         rowInputs: mergedInputs,
       });

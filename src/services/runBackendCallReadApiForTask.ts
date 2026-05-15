@@ -178,11 +178,18 @@ export type RunBackendCallReadApiResult =
       inputDescriptionsByApiName: Record<string, string>;
       outputDescriptionsByApiName: Record<string, string>;
     }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /** Portale protetto: aprire modale «Connetti al portale». */
+      portalAuth?: { code: string; origin: string };
+    };
 
 /** Opzioni Read API: Spec URL usato solo se fallisce la discovery sull’endpoint operativo. */
 export type RunBackendCallReadApiOptions = {
   openapiSpecUrl?: string;
+  /** PortalConnection — Bearer verso portale protetto (openapi-proxy). */
+  portalConnectionId?: string;
 };
 
 /**
@@ -216,7 +223,12 @@ export async function runBackendCallReadApiForTask(
   const fpSeed = op || manual;
 
   try {
-    const { doc } = await fetchOpenApiDocumentOperationalThenManualFallback(op, manual || undefined);
+    const connectionId = (options?.portalConnectionId || '').trim() || undefined;
+    const { doc } = await fetchOpenApiDocumentOperationalThenManualFallback(
+      op,
+      manual || undefined,
+      connectionId ? { connectionId } : undefined
+    );
     const pathPickUrl = fpSeed;
     const picked = pickOpenApiPathForReadApi(pathPickUrl, doc, method);
     if ('error' in picked) {
@@ -314,7 +326,27 @@ export async function runBackendCallReadApiForTask(
       outputDescriptionsByApiName: { ...outputDesc },
     };
   } catch (e) {
+    const { PortalAuthRequiredError, PortalAuthExpiredError, inferPortalAuthFromFailedOpenApiFetch } =
+      await import('./portalAuthErrors');
+    const { OpenApiNotFoundError } = await import('./openApiDiscoveryErrors');
+    if (e instanceof PortalAuthRequiredError || e instanceof PortalAuthExpiredError) {
+      return { ok: false, error: e.message, portalAuth: { code: e.code, origin: e.origin } };
+    }
+    if (e instanceof OpenApiNotFoundError) {
+      return { ok: false, error: e.message };
+    }
     const msg = e instanceof Error ? e.message : String(e);
+    const hadPortalConnection = Boolean((options?.portalConnectionId || '').trim());
+    const inferred = hadPortalConnection
+      ? null
+      : inferPortalAuthFromFailedOpenApiFetch(op || manual, msg, 422);
+    if (inferred) {
+      return {
+        ok: false,
+        error: inferred.message,
+        portalAuth: { code: inferred.code, origin: inferred.origin },
+      };
+    }
     taskRepository.updateTask(
       instanceId,
       {

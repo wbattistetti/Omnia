@@ -145,7 +145,7 @@ export function AIAgentConstructionWizardShell({
           <header className="border-b border-slate-800 bg-slate-900/40 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex flex-1 min-w-0 items-baseline gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-violet-300">
+                <span className="text-sm font-semibold uppercase tracking-wide text-violet-300">
                   Passo {meta.displayNumber}/{AGENT_WIZARD_STEPS_META.length}
                 </span>
                 <h2 className="text-base font-semibold text-slate-100">{meta.title}</h2>
@@ -161,7 +161,7 @@ export function AIAgentConstructionWizardShell({
              * viene resa: evita duplicazione del testo guida.
              */}
             {meta.tutorial.trim().length > 0 ? (
-              <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
                 {meta.tutorial}
               </p>
             ) : null}

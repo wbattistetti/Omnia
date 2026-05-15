@@ -1,8 +1,10 @@
 /**
  * Designer-time HTTP proxy for Backend Call «Test API» (same JSON contract as VB ApiServer).
- * POST /api/designer/backend-call-test/proxy — body: { "target": { "url", "method", "headers", "bodyJson" } }.
+ * POST /api/designer/backend-call-test/proxy — body: { "target": { "url", "method", "headers", "bodyJson", "portalConnectionId" } }.
  * Response: { ok, status, statusText, bodyText } or { ok:false, status:0, statusText:"ProxyError", bodyText:"", err }.
  */
+
+const { fetchPortalBearerToken } = require('./portalAuthTokenBridge');
 
 const BACKEND_CALL_TEST_ALLOWED = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
 
@@ -77,6 +79,16 @@ function mountBackendCallTestProxy(app) {
         const hn = String(k0 || '').trim();
         if (!hn || isHopByHopHeader(hn)) continue;
         forwardHeaders.set(hn, v0 == null ? '' : String(v0));
+      }
+      const portalConnectionId =
+        typeof target.portalConnectionId === 'string' ? target.portalConnectionId.trim() : '';
+      if (portalConnectionId) {
+        try {
+          const bearer = await fetchPortalBearerToken(portalConnectionId);
+          forwardHeaders.set('Authorization', `Bearer ${bearer}`);
+        } catch (tokErr) {
+          return envelopeErr(401, 'Unauthorized', String(tokErr?.message || tokErr));
+        }
       }
       let bodyString = null;
       if (target.bodyJson !== undefined && target.bodyJson !== null) {

@@ -292,6 +292,14 @@ try:
 except Exception as openapi_proxy_err:
     print(f"[FASTAPI] ⚠️ openapi_proxy_router not loaded: {openapi_proxy_err}")
 
+try:
+    from newBackend.api.api_portal_auth import router as portal_auth_router
+
+    app.include_router(portal_auth_router)
+    print("[FASTAPI] ✅ portal_auth_router included (OAuth portal connections)")
+except Exception as portal_auth_err:
+    print(f"[FASTAPI] ⚠️ portal_auth_router not loaded: {portal_auth_err}")
+
 # --- Condition: suggest minimal variables ---
 @app.post("/api/conditions/suggest-vars")
 def suggest_vars(body: dict = Body(...)):

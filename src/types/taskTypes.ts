@@ -587,6 +587,11 @@ export interface Task {
   openapiSpecUrl?: string;
 
   /**
+   * Backend Call: OAuth verso il portale che ospita l’API (Bearer in Read API e Test API).
+   */
+  portalConnectionId?: string;
+
+  /**
    * Backend Call: valori espliciti per parametri SEND (chiave = internalName), mostrati accanto al metodo HTTP.
    * Si uniscono alle celle mock per Test API (la cella vince su questo fallback); nessun default implicito lato server.
    */

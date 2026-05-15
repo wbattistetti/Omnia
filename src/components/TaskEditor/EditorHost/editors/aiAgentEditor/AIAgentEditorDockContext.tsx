@@ -148,8 +148,12 @@ export interface AIAgentEditorDockContextValue {
    * {@link EditorBackendsPanel} registers the handler; tab strip calls {@link invokeBackendsAddManual}
    * to append a manual backend row (same logic as in-panel «Aggiungi»).
    */
-  registerBackendsAddManualHandler: (handler: (() => void) | null) => void;
-  invokeBackendsAddManual: () => void;
+  registerBackendsAddManualHandler: (
+    handler: ((mode: import('@domain/backendCatalog/catalogTypes').ManualBackendCreationMode) => void) | null
+  ) => void;
+  invokeBackendsAddManual: (
+    mode?: import('@domain/backendCatalog/catalogTypes').ManualBackendCreationMode
+  ) => void;
   /**
    * Wizard passo Backend (3/5): il pulsante «Aggiungi backend» è nello shell header;
    * il pannello non duplica la stessa riga in cima.
