@@ -5,6 +5,7 @@
  */
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 
 function compareLabelsAsc(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: 'base' });
@@ -106,12 +107,13 @@ export function reorderUseCaseSibling(
   if (draggedId === targetId) return [...useCases];
   const dragged = useCases.find((u) => u.id === draggedId);
   const target = useCases.find((u) => u.id === targetId);
-  if (!dragged || !target || dragged.parent_id !== target.parent_id) {
+  const pid = (u: AIAgentUseCase) => u.parent_id ?? null;
+  if (!dragged || !target || pid(dragged) !== pid(target)) {
     return [...useCases];
   }
-  const parentId = dragged.parent_id;
+  const parentId = pid(dragged);
   const siblings = useCases
-    .filter((u) => u.parent_id === parentId)
+    .filter((u) => pid(u) === parentId)
     .sort((a, b) => a.sort_order - b.sort_order || String(a.label).localeCompare(String(b.label)));
   const ids = siblings.map((u) => u.id);
   const fromIdx = ids.indexOf(draggedId);
@@ -124,10 +126,32 @@ export function reorderUseCaseSibling(
   const nextOrder = [...without.slice(0, bounded), draggedId, ...without.slice(bounded)];
   const orderMap = new Map(nextOrder.map((id, i) => [id, i]));
   return useCases.map((u) =>
-    u.parent_id === parentId && orderMap.has(u.id)
+    pid(u) === parentId && orderMap.has(u.id)
       ? { ...u, sort_order: orderMap.get(u.id) ?? 0, parent_id: parentId }
       : u
   );
+}
+
+/**
+ * Applica {@link reorderUseCaseSibling} e riallinea l'array in ordine depth-first così
+ * `normalizeUseCaseSortOrderLogical` (via `setUseCasesUser`) non annulla il nuovo `sort_order`
+ * usando ancora i vecchi indici di prima occorrenza nell'array piatto.
+ */
+export function applySiblingReorderForPersist(
+  useCases: readonly AIAgentUseCase[],
+  draggedId: string,
+  targetId: string,
+  position: 'before' | 'after'
+): AIAgentUseCase[] {
+  const stepped = reorderUseCaseSibling(useCases, draggedId, targetId, position);
+  const dragged = stepped.find((u) => u.id === draggedId);
+  const target = stepped.find((u) => u.id === targetId);
+  const pid = (u: AIAgentUseCase) => u.parent_id ?? null;
+  if (!dragged || !target || pid(dragged) !== pid(target)) {
+    return [...useCases];
+  }
+  const { ordered } = orderUseCasesWithDepth(stepped);
+  return normalizeUseCaseSortOrderLogical(ordered);
 }
 
 /**

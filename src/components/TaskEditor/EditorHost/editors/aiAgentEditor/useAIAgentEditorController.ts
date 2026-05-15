@@ -57,6 +57,7 @@ import {
   LABEL_CREATING_MULTIPLE_USE_CASES,
   LABEL_CREATING_ONE_USE_CASE,
 } from './constants';
+import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContract';
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
@@ -131,6 +132,7 @@ import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/a
 import { useProjectData } from '@context/ProjectDataContext';
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import {
+  applySiblingReorderForPersist,
   collectUseCaseSubtreeIds,
   normalizeUseCaseSiblingOrder,
   type UseCaseSiblingSortMode,
@@ -249,6 +251,9 @@ export function useAIAgentEditorController({
   const [useCaseGlobalStyleId, setUseCaseGlobalStyleIdState] = React.useState<string>(
     DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
   );
+  /** Note designer persistite su `Task.agentUseCaseStyleLearningNotes`, unite al preset stile nelle API. */
+  const [agentUseCaseStyleLearningNotes, setAgentUseCaseStyleLearningNotesState] =
+    React.useState('');
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   /** Solo generazione bundle use case (wizard): non propagare agli altri pulsanti del pannello DX. */
   const [useCaseBundleGenerationBusy, setUseCaseBundleGenerationBusy] = React.useState(false);
@@ -490,6 +495,20 @@ export function useAIAgentEditorController({
     );
   }, []);
 
+  /**
+   * Riordino drag & drop tra fratelli: forza modalità «elenco» (logical) e persiste l'ordine
+   * senza che la normalizzazione per prima occorrenza annulli il nuovo `sort_order`.
+   */
+  const reorderUseCaseSiblingByDrag = React.useCallback(
+    (draggedId: string, targetId: string, position: 'before' | 'after') => {
+      setDirty(true);
+      useCaseSiblingSortModeRef.current = 'logical';
+      setUseCaseSiblingSortModeState('logical');
+      setUseCasesUser((prev) => applySiblingReorderForPersist(prev, draggedId, targetId, position));
+    },
+    [setUseCasesUser]
+  );
+
   const setPreviewStyleId = React.useCallback((id: string) => {
     setDirty(true);
     setPreviewStyleIdState(id);
@@ -516,10 +535,19 @@ export function useAIAgentEditorController({
     );
   }, []);
 
+  const setAgentUseCaseStyleLearningNotes = React.useCallback((next: string) => {
+    setAgentUseCaseStyleLearningNotesState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
   const globalStyleContract = React.useMemo(() => {
     const match = AI_AGENT_GLOBAL_USE_CASE_STYLES.find((x) => x.id === useCaseGlobalStyleId);
-    return match?.contract ?? AI_AGENT_GLOBAL_USE_CASE_STYLES[0].contract;
-  }, [useCaseGlobalStyleId]);
+    const base = match?.contract ?? AI_AGENT_GLOBAL_USE_CASE_STYLES[0].contract;
+    return mergeUseCaseGlobalStyleContract(base, agentUseCaseStyleLearningNotes.trim());
+  }, [useCaseGlobalStyleId, agentUseCaseStyleLearningNotes]);
 
   const setAgentPromptTargetPlatform = React.useCallback((v: AgentPromptPlatformId) => {
     setDirty(true);
@@ -762,6 +790,7 @@ export function useAIAgentEditorController({
         ? storedStyle
         : DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
     );
+    setAgentUseCaseStyleLearningNotesState(b.agentUseCaseStyleLearningNotes);
     const iaRaw = b.agentIaRuntimeOverrideJson.trim();
     if (iaRaw) {
       try {
@@ -846,6 +875,7 @@ export function useAIAgentEditorController({
       previewByStyle,
       previewStyleId,
       agentUseCaseGlobalStyleId: useCaseGlobalStyleId,
+      agentUseCaseStyleLearningNotes,
       initialStateTemplateJson,
       agentRuntimeCompactJson,
       hasAgentGeneration,
@@ -894,6 +924,7 @@ export function useAIAgentEditorController({
     previewByStyle,
     previewStyleId,
     useCaseGlobalStyleId,
+    agentUseCaseStyleLearningNotes,
     initialStateTemplateJson,
     agentRuntimeCompactJson,
     hasAgentGeneration,
@@ -2004,6 +2035,7 @@ export function useAIAgentEditorController({
     previewByStyle,
     previewStyleId,
     agentUseCaseGlobalStyleId: useCaseGlobalStyleId,
+    agentUseCaseStyleLearningNotes,
     initialStateTemplateJson,
     agentRuntimeCompactJson,
     hasAgentGeneration,
@@ -2116,6 +2148,8 @@ export function useAIAgentEditorController({
     setPreviewStyleId,
     useCaseGlobalStyleId,
     setUseCaseGlobalStyleId,
+    agentUseCaseStyleLearningNotes,
+    setAgentUseCaseStyleLearningNotes,
     initialStateTemplateJson,
     setInitialStateTemplateJson,
     agentRuntimeCompactJson,
@@ -2159,6 +2193,7 @@ export function useAIAgentEditorController({
     handleDeleteUseCase,
     useCaseSiblingSortMode,
     setUseCaseSiblingSortMode,
+    reorderUseCaseSiblingByDrag,
     backendPlaceholders,
     insertBackendPathAtSection,
     insertBackendPathInDesign,

@@ -171,6 +171,8 @@ export function EditorUseCasesPanel() {
     onDeleteUseCase,
     useCaseGlobalStyleId,
     setUseCaseGlobalStyleId,
+    agentUseCaseStyleLearningNotes,
+    setAgentUseCaseStyleLearningNotes,
     previewStyleId,
     setPreviewStyleId,
     hasAgentGeneration,
@@ -255,6 +257,8 @@ export function EditorUseCasesPanel() {
       onDeleteUseCase={onDeleteUseCase}
       useCaseGlobalStyleId={useCaseGlobalStyleId}
       onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
+      useCaseStyleLearningNotes={agentUseCaseStyleLearningNotes}
+      onUseCaseStyleLearningNotesChange={setAgentUseCaseStyleLearningNotes}
       previewStyleId={previewStyleId}
       onPreviewStyleIdChange={setPreviewStyleId}
       onGenerateUseCaseBundle={

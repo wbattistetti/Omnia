@@ -85,6 +85,9 @@ export interface AIAgentEditorDockContextValue {
   /** Global style contract for all use-case dialogues. */
   useCaseGlobalStyleId: string;
   setUseCaseGlobalStyleId: (styleId: string) => void;
+  /** Designer notes merged into the preset style contract (`Task.agentUseCaseStyleLearningNotes`). */
+  agentUseCaseStyleLearningNotes: string;
+  setAgentUseCaseStyleLearningNotes: (next: string) => void;
   /** Design-time preview style (persisted with task). */
   previewStyleId: string;
   setPreviewStyleId: (styleId: string) => void;
@@ -197,6 +200,15 @@ export interface AIAgentEditorDockContextValue {
   /** Ordine tra fratelli: dialogo (default) vs alfabetico (toolbar AB). */
   useCaseSiblingSortMode: UseCaseSiblingSortMode;
   setUseCaseSiblingSortMode: (mode: UseCaseSiblingSortMode) => void;
+  /**
+   * Riordino drag & drop tra use case **fratelli** (stesso `parent_id`). Forza ordine «elenco»
+   * e aggiorna `sort_order` in modo persistente con la lista.
+   */
+  reorderUseCaseSiblingByDrag: (
+    draggedId: string,
+    targetId: string,
+    position: 'before' | 'after'
+  ) => void;
 
   /**
    * Passo 2 wizard — Crea/aggiunge una conversazione simulata mescolando use case (LLM).

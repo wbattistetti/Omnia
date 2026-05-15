@@ -463,6 +463,13 @@ export interface Task {
    * @see `parseUseCaseWizardPersistedState` in `@domain/useCaseGeneratorWizard/useCaseWizardPersistedState`.
    */
   agentUseCaseWizardStateJson?: string;
+  /** Preset use-case style id from `AI_AGENT_GLOBAL_USE_CASE_STYLES` (design-time). */
+  agentUseCaseGlobalStyleId?: string;
+  /**
+   * Designer-authored style notes merged into `globalStyleContract` for all use-case LLM calls
+   * (appendix + APIs). Single source of truth with the use-case composer textarea.
+   */
+  agentUseCaseStyleLearningNotes?: string;
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
   /**

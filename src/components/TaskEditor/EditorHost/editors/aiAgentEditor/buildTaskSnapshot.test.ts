@@ -30,6 +30,7 @@ function baseSnapshot(over: Partial<AIAgentTaskSnapshot>): AIAgentTaskSnapshot {
     agentUseCasesJson: '',
     agentUseCaseWizardStateJson: '',
     agentUseCaseGlobalStyleId: '',
+    agentUseCaseStyleLearningNotes: '',
     agentIaRuntimeOverrideJson: '',
     agentImmediateStart: false,
     logicalSteps: [],

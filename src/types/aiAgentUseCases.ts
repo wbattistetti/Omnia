@@ -225,11 +225,12 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
       const id = typeof o.id === 'string' ? o.id.trim() : '';
       if (!id) continue;
       const label = typeof o.label === 'string' ? o.label : 'Use case';
+      const rawParent = o.parent_id;
       const parent_id =
-        o.parent_id === null || o.parent_id === undefined
+        rawParent === null || rawParent === undefined
           ? null
-          : typeof o.parent_id === 'string'
-            ? o.parent_id
+          : typeof rawParent === 'string' && rawParent.trim()
+            ? rawParent.trim()
             : null;
       const sort_order = typeof o.sort_order === 'number' && Number.isFinite(o.sort_order) ? o.sort_order : 0;
       const refinement_prompt =

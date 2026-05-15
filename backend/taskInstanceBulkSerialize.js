@@ -63,6 +63,8 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentLogicalStepsJson',
   'agentUseCasesJson',
   'agentUseCaseWizardStateJson',
+  'agentUseCaseGlobalStyleId',
+  'agentUseCaseStyleLearningNotes',
   'agentPromptTargetPlatform',
   'agentIaRuntimeOverrideJson',
   'agentImmediateStart',

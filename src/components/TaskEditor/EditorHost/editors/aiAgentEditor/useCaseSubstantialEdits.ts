@@ -12,12 +12,149 @@
  *
  * Il conteggio alimenta il callout «Completa correzione» nel pannello DX del wizard.
  *
+ * La distanza si calcola sulle **parole significative** (token whitespace dopo strip
+ * punteggiatura ai bordi, escluso un elenco di funzioni grammaticali IT/EN comuni) così
+ * piccole variazioni su articoli/preposizioni non attivano il gate. La soglia N è
+ * configurabile via `VITE_AGENT_SUBSTANTIAL_EDIT_WORD_THRESHOLD` (intero ≥ 1).
+ *
  * Le funzioni sono pure e indipendenti da React: testabili in isolamento.
  */
 import type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
 /** Soglia minima di "parole cambiate" oltre la quale una modifica è considerata sostanziale. */
 export const DEFAULT_SUBSTANTIAL_EDIT_WORD_THRESHOLD = 3;
+
+/** Env Vite (solo prefisso `VITE_` è esposto al client). */
+export const SUBSTANTIAL_EDIT_WORD_THRESHOLD_ENV_KEY = 'VITE_AGENT_SUBSTANTIAL_EDIT_WORD_THRESHOLD';
+
+/**
+ * Articoli, preposizioni e congiunzioni frequenti (IT + EN) escluse dal conteggio
+ * «significativo». Non è un tokenizer morfologico: evita falsi positivi grossolani.
+ */
+const FUNCTION_WORDS = new Set(
+  [
+    'il',
+    'lo',
+    'la',
+    'i',
+    'gli',
+    'le',
+    'un',
+    'uno',
+    'una',
+    "un'",
+    "un’",
+    'e',
+    'ed',
+    'o',
+    'oppure',
+    'ma',
+    'però',
+    'pero',
+    'di',
+    'del',
+    'della',
+    'dei',
+    'delle',
+    'allo',
+    'alla',
+    'ai',
+    'agli',
+    'alle',
+    'dal',
+    'dallo',
+    'dalla',
+    'dai',
+    'dagli',
+    'dalle',
+    'nel',
+    'nello',
+    'nella',
+    'nei',
+    'negli',
+    'nelle',
+    'sul',
+    'sullo',
+    'sulla',
+    'sui',
+    'sugli',
+    'sulle',
+    'col',
+    'coi',
+    'al',
+    'allo',
+    'alla',
+    'ai',
+    'agli',
+    'alle',
+    'a',
+    'da',
+    'in',
+    'con',
+    'su',
+    'per',
+    'tra',
+    'fra',
+    'che',
+    'non',
+    'se',
+    'come',
+    'si',
+    'ci',
+    'vi',
+    'ne',
+    'the',
+    'a',
+    'an',
+    'and',
+    'or',
+    'but',
+    'of',
+    'to',
+    'in',
+    'on',
+    'at',
+    'by',
+    'for',
+    'from',
+    'with',
+    'as',
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'being',
+    'it',
+    'this',
+    'that',
+    'these',
+    'those',
+  ].map((w) => w.toLowerCase())
+);
+
+function stripEdgePunctuation(word: string): string {
+  return word.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}]+$/u, '');
+}
+
+/**
+ * Risolve la soglia N da env (build-time Vite) o default. Valori non numerici o &lt; 1 → default.
+ */
+export function resolveSubstantialEditWordThreshold(): number {
+  try {
+    const raw =
+      typeof import.meta !== 'undefined' && import.meta.env
+        ? String((import.meta.env as Record<string, string | undefined>)[SUBSTANTIAL_EDIT_WORD_THRESHOLD_ENV_KEY] ?? '')
+            .trim()
+        : '';
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 1) return n;
+  } catch {
+    /* import.meta assente (test non-Vite) */
+  }
+  return DEFAULT_SUBSTANTIAL_EDIT_WORD_THRESHOLD;
+}
 
 /**
  * Soglia di **visibilità** del callout «Completa correzione» nel pannello DX:
@@ -52,6 +189,15 @@ export function isCompletaCorrezioneCalloutSurfaceActive(state: {
  */
 export function tokenizeWords(text: string): readonly string[] {
   return text.split(/\s+/u).filter((w) => w.length > 0);
+}
+
+/**
+ * Token per il confronto sostanziale: come {@link tokenizeWords} ma senza funzioni grammaticali.
+ */
+export function tokenizeSignificantWords(text: string): readonly string[] {
+  return tokenizeWords(text)
+    .map((w) => stripEdgePunctuation(w).toLowerCase())
+    .filter((w) => w.length > 0 && !FUNCTION_WORDS.has(w));
 }
 
 /**
@@ -90,11 +236,14 @@ export function wordEditDistance(a: readonly string[], b: readonly string[]): nu
 export function isSubstantialEdit(
   current: string,
   baseline: string | undefined,
-  threshold: number = DEFAULT_SUBSTANTIAL_EDIT_WORD_THRESHOLD
+  threshold: number = resolveSubstantialEditWordThreshold()
 ): boolean {
   if (baseline === undefined) return false;
   if (current === baseline) return false;
-  const distance = wordEditDistance(tokenizeWords(current), tokenizeWords(baseline));
+  const distance = wordEditDistance(
+    tokenizeSignificantWords(current),
+    tokenizeSignificantWords(baseline)
+  );
   return distance >= threshold;
 }
 
@@ -107,7 +256,7 @@ export type SubstantialEditFields = {
 export function fieldsWithSubstantialEdits(
   current: { scenario: string; agentMessage: string },
   baseline: AiTripletFieldBaseline | undefined,
-  threshold: number = DEFAULT_SUBSTANTIAL_EDIT_WORD_THRESHOLD
+  threshold: number = resolveSubstantialEditWordThreshold()
 ): SubstantialEditFields {
   return {
     scenario: isSubstantialEdit(current.scenario, baseline?.payoff, threshold),
@@ -126,7 +275,7 @@ export function countSubstantialEditsAcrossUseCases(
     current: { scenario: string; agentMessage: string };
     baseline: AiTripletFieldBaseline | undefined;
   }>,
-  threshold: number = DEFAULT_SUBSTANTIAL_EDIT_WORD_THRESHOLD
+  threshold: number = resolveSubstantialEditWordThreshold()
 ): number {
   let count = 0;
   for (const item of items) {

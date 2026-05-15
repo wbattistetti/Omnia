@@ -27,6 +27,7 @@ const baseState: AIAgentPersistState = {
   initialStateTemplateJson: '{}',
   agentRuntimeCompactJson: '',
   agentUseCaseGlobalStyleId: '',
+  agentUseCaseStyleLearningNotes: '',
   hasAgentGeneration: false,
   agentLogicalStepsJson: '[]',
   agentUseCasesJson: '[]',
@@ -36,6 +37,11 @@ const baseState: AIAgentPersistState = {
   agentConstructionPhase: 'wizard',
   agentWizardCurrentStep: 2,
   agentWizardTutorAcknowledged: false,
+  agentConversationStyleExample: '',
+  agentConversationStyleAuto: false,
+  agentConversationStyleSelections: {},
+  agentConversationDeployStyleId: null,
+  agentLogUseCase: false,
 };
 
 describe('phase machine persist roundtrip', () => {

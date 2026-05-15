@@ -24,6 +24,7 @@ import {
   DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID,
 } from '@taskEditor/EditorHost/editors/aiAgentEditor/constants';
 import { buildTaskSnapshotFromRaw } from '@taskEditor/EditorHost/editors/aiAgentEditor/buildTaskSnapshot';
+import { mergeUseCaseGlobalStyleContract } from '@taskEditor/EditorHost/editors/aiAgentEditor/mergeUseCaseGlobalStyleContract';
 import { resolveAiAgentOutputLanguage } from '@taskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentOutputLanguage';
 import {
   OMNIA_ACTIVATE_AI_AGENT_USE_CASES_TAB,
@@ -83,10 +84,10 @@ function resolveGlobalStyleContractForTask(task: Parameters<typeof buildTaskSnap
   const snap = buildTaskSnapshotFromRaw(task);
   const styleId =
     snap.agentUseCaseGlobalStyleId.trim() || DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID;
-  return (
+  const base =
     AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === styleId)?.contract ??
-    AI_AGENT_GLOBAL_USE_CASE_STYLES[0].contract
-  );
+    AI_AGENT_GLOBAL_USE_CASE_STYLES[0].contract;
+  return mergeUseCaseGlobalStyleContract(base, snap.agentUseCaseStyleLearningNotes.trim());
 }
 
 /** Titolo compatto del microbadge (stato IA vs catalogo; agente virtuale non espone ancora UC). */

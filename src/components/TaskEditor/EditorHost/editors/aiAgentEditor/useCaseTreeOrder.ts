@@ -1,5 +1,6 @@
 /**
  * Order hierarchical use cases depth-first (parent before children, siblings by sort_order).
+ * Sanitizes `parent_id`: empty/whitespace → root; unknown id (not in catalog) → root; self → root.
  */
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
@@ -8,8 +9,25 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 export function orderUseCasesWithDepth(
   cases: readonly AIAgentUseCase[]
 ): { ordered: AIAgentUseCase[]; depthById: Record<string, number> } {
+  const ids = new Set(cases.map((c) => c.id));
+  const sanitized: AIAgentUseCase[] = cases.map((c) => {
+    let p: string | null = c.parent_id;
+    if (typeof p === 'string') {
+      const t = p.trim();
+      p = t.length > 0 ? t : null;
+    } else {
+      p = null;
+    }
+    if (p !== null && !ids.has(p)) {
+      p = null;
+    }
+    if (p === c.id) {
+      p = null;
+    }
+    return p === c.parent_id ? c : { ...c, parent_id: p };
+  });
   const byParent = new Map<string | null, AIAgentUseCase[]>();
-  for (const c of cases) {
+  for (const c of sanitized) {
     const p = c.parent_id;
     const arr = byParent.get(p) ?? [];
     arr.push(c);

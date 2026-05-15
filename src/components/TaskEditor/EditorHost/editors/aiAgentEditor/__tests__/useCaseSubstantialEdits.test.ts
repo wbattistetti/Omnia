@@ -11,6 +11,7 @@ import {
   fieldsWithSubstantialEdits,
   isCompletaCorrezioneCalloutSurfaceActive,
   isSubstantialEdit,
+  tokenizeSignificantWords,
   tokenizeWords,
   wordEditDistance,
 } from '../useCaseSubstantialEdits';
@@ -78,7 +79,17 @@ describe('wordEditDistance', () => {
   });
 });
 
+describe('tokenizeSignificantWords', () => {
+  it('rimuove funzioni grammaticali comuni', () => {
+    expect(tokenizeSignificantWords('il gatto e il topo')).toEqual(['gatto', 'topo']);
+    expect(tokenizeSignificantWords('the quick brown fox')).toEqual(['quick', 'brown', 'fox']);
+  });
+});
+
 describe('isSubstantialEdit', () => {
+  it('solo articoli/preposizioni diverse → non sostanziale', () => {
+    expect(isSubstantialEdit('il gatto sul tappeto', 'il gatto sul divano')).toBe(false);
+  });
   it('baseline assente → mai sostanziale', () => {
     expect(isSubstantialEdit('qualunque cosa', undefined)).toBe(false);
   });

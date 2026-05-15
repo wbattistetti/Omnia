@@ -1122,6 +1122,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onDeleteUseCase: c.handleDeleteUseCase,
     useCaseGlobalStyleId: c.useCaseGlobalStyleId,
     setUseCaseGlobalStyleId: c.setUseCaseGlobalStyleId,
+    agentUseCaseStyleLearningNotes: c.agentUseCaseStyleLearningNotes,
+    setAgentUseCaseStyleLearningNotes: c.setAgentUseCaseStyleLearningNotes,
     previewStyleId: c.previewStyleId,
     setPreviewStyleId: c.setPreviewStyleId,
     initialStateTemplateJson: c.initialStateTemplateJson,
@@ -1166,6 +1168,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
     useCaseSiblingSortMode: c.useCaseSiblingSortMode,
     setUseCaseSiblingSortMode: c.setUseCaseSiblingSortMode,
+    reorderUseCaseSiblingByDrag: c.reorderUseCaseSiblingByDrag,
 
     onAssembleConversation: runAssembleConversation,
     assembleConversationBusy: conversationActions.assembleConversationBusy,

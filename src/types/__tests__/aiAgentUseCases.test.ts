@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isUseCaseIncludedInConversations,
+  parseAgentUseCasesJson,
   type AIAgentUseCase,
 } from '../aiAgentUseCases';
 
@@ -38,5 +39,23 @@ describe('isUseCaseIncludedInConversations', () => {
     expect(
       isUseCaseIncludedInConversations(makeUseCase({ included_in_conversations: false }))
     ).toBe(false);
+  });
+});
+
+describe('parseAgentUseCasesJson — parent_id', () => {
+  it('normalizza parent_id stringa vuota o solo spazi a null', () => {
+    const raw = JSON.stringify([
+      {
+        id: 'a',
+        label: 'A',
+        parent_id: '   ',
+        sort_order: 0,
+        dialogue: [],
+        notes: {},
+      },
+    ]);
+    const list = parseAgentUseCasesJson(raw);
+    expect(list).toHaveLength(1);
+    expect(list[0].parent_id).toBeNull();
   });
 });

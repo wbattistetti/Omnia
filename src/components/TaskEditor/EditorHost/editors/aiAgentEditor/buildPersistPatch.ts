@@ -25,6 +25,8 @@ export interface AIAgentPersistState {
   /** JSON string: design-time compact runtime (`runtime_compact` from generate API). */
   agentRuntimeCompactJson: string;
   agentUseCaseGlobalStyleId: string;
+  /** Note designer unite al preset stile per le chiamate LLM use case. */
+  agentUseCaseStyleLearningNotes: string;
   hasAgentGeneration: boolean;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
@@ -68,6 +70,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentInitialStateTemplateJson: state.initialStateTemplateJson,
     agentRuntimeCompactJson: state.agentRuntimeCompactJson,
     agentUseCaseGlobalStyleId: state.agentUseCaseGlobalStyleId,
+    agentUseCaseStyleLearningNotes: state.agentUseCaseStyleLearningNotes,
     /** Implement/freeze removed from UX; always false so old tasks unlock on next save. */
     agentDesignFrozen: false,
     agentDesignHasGeneration: state.hasAgentGeneration,

@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
+  applySiblingReorderForPersist,
   collectUseCaseSubtreeIds,
   normalizeUseCaseSiblingOrder,
   normalizeUseCaseSortOrderAlphabetically,
@@ -125,6 +126,25 @@ describe('reorderUseCaseSibling', () => {
     expect(out).not.toBe(input);
     expect(out.find((x) => x.id === 'a')?.sort_order).toBe(0);
     expect(out.find((x) => x.id === 'b')?.sort_order).toBe(0);
+  });
+});
+
+describe('applySiblingReorderForPersist', () => {
+  it('mantiene il nuovo ordine dopo la normalizzazione per prima occorrenza (array piatto)', () => {
+    const input: AIAgentUseCase[] = [
+      uc('a', 'A', null, 0),
+      uc('b', 'B', null, 1),
+      uc('c', 'C', null, 2),
+    ];
+    const stepped = reorderUseCaseSibling(input, 'c', 'a', 'before');
+    const naive = normalizeUseCaseSortOrderLogical(stepped);
+    expect(naive.find((x) => x.id === 'c')?.sort_order).not.toBe(0);
+
+    const fixed = applySiblingReorderForPersist(input, 'c', 'a', 'before');
+    const afterLogical = normalizeUseCaseSortOrderLogical(fixed);
+    expect(afterLogical.find((x) => x.id === 'c')?.sort_order).toBe(0);
+    expect(afterLogical.find((x) => x.id === 'a')?.sort_order).toBe(1);
+    expect(afterLogical.find((x) => x.id === 'b')?.sort_order).toBe(2);
   });
 });
 
