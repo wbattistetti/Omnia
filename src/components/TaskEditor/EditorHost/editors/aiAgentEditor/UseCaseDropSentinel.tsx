@@ -1,6 +1,10 @@
 /**
- * Fascia droppabile compatta tra due righe use case (stesso parent_id), sostituisce il drop
+ * Fascia droppabile compatta tra righe use case (stesso parent_id), sostituisce il drop
  * sull’`<ul>` per i gap tra elementi lista senza target sulla lista intera.
+ *
+ * Due modalità: inserimento prima della riga successiva (`insertBeforeNext`) o dopo la
+ * riga ancorata (`insertAfterAnchor`), per chiudere il gruppo visibile di fratelli senza
+ * dipendere dalla metà inferiore dell’header.
  */
 
 import React from 'react';
@@ -23,19 +27,20 @@ const SENTINEL_LINE_STYLE: React.CSSProperties = {
 };
 
 export type UseCaseDropSentinelProps = {
-  /** Id della riga sotto il gap: il drop equivale a inserire prima di questo use case. */
-  insertBeforeId: string;
   parentId: string | null;
   enabled: boolean;
   onReorder: (draggedId: string, targetId: string, position: 'before' | 'after') => void;
-};
+} & (
+  | { mode: 'insertBeforeNext'; insertBeforeId: string }
+  | { mode: 'insertAfterAnchor'; insertAfterId: string }
+);
 
-export function UseCaseDropSentinel({
-  insertBeforeId,
-  parentId,
-  enabled,
-  onReorder,
-}: UseCaseDropSentinelProps) {
+export function UseCaseDropSentinel(props: UseCaseDropSentinelProps) {
+  const { parentId, enabled, onReorder, mode } = props;
+  const anchorId =
+    mode === 'insertBeforeNext' ? props.insertBeforeId : props.insertAfterId;
+  const dropPosition: 'before' | 'after' = mode === 'insertBeforeNext' ? 'before' : 'after';
+
   const nodeRef = React.useRef<HTMLDivElement | null>(null);
   const onReorderRef = React.useRef(onReorder);
   onReorderRef.current = onReorder;
@@ -59,7 +64,7 @@ export function UseCaseDropSentinel({
         clearLine();
         return;
       }
-      if (item.id === insertBeforeId) {
+      if (item.id === anchorId) {
         clearLine();
         return;
       }
@@ -83,9 +88,9 @@ export function UseCaseDropSentinel({
     drop(item, monitor) {
       clearLine();
       if (!enabled || monitor.didDrop()) return undefined;
-      if (item.id === insertBeforeId) return undefined;
+      if (item.id === anchorId) return undefined;
       if ((item.parentId ?? null) !== (parentId ?? null)) return undefined;
-      onReorderRef.current(item.id, insertBeforeId, 'before');
+      onReorderRef.current(item.id, anchorId, dropPosition);
       return { handled: true };
     },
     collect: (monitor) => ({

@@ -1,6 +1,7 @@
 /**
- * Riordino use case AI Agent con react-dnd: drag sull’intera card, drop e midpoint solo
- * sull’header (UseCaseRowHeader), linea preview #2563eb. Ghost nascosto con getEmptyImage
+ * Riordino use case AI Agent con react-dnd: drag sull’intera card, drop sull’header
+ * (UseCaseRowHeader); preview sempre sul bordo superiore dell’header (inserimento prima
+ * della riga). Ghost nascosto con getEmptyImage
  * come TaskPalette/TaskItem per hit-test stabile sotto Dockview/overflow.
  */
 
@@ -39,7 +40,8 @@ const DROP_PREVIEW_LINE_STYLE: React.CSSProperties = {
 
 type RowDnDContextValue = {
   connectHeaderDrop: (el: HTMLDivElement | null) => void;
-  headerInsertPreview: 'before' | 'after' | null;
+  /** Preview: linea sempre sul bordo superiore dell’header (inserimento prima di questa riga). */
+  showHeaderInsertLine: boolean;
   isOverHeader: boolean;
 };
 
@@ -58,7 +60,7 @@ export function UseCaseRowHeader({
   if (ctx == null) {
     throw new Error('UseCaseRowHeader must be used inside UseCaseRowDnDWrapper');
   }
-  const showLine = ctx.isOverHeader && ctx.headerInsertPreview != null;
+  const showLine = ctx.isOverHeader && ctx.showHeaderInsertLine;
   return (
     <div
       ref={ctx.connectHeaderDrop}
@@ -70,8 +72,7 @@ export function UseCaseRowHeader({
           style={{
             ...DROP_PREVIEW_LINE_STYLE,
             zIndex: 10001,
-            top: ctx.headerInsertPreview === 'before' ? 0 : undefined,
-            bottom: ctx.headerInsertPreview === 'after' ? 0 : undefined,
+            top: 0,
           }}
           aria-hidden
         />
@@ -89,14 +90,12 @@ export function UseCaseRowDnDWrapper({
   children,
 }: UseCaseRowDnDWrapperProps) {
   const headerDropNodeRef = React.useRef<HTMLDivElement | null>(null);
-  const [headerInsertPreview, setHeaderInsertPreview] = React.useState<'before' | 'after' | null>(
-    null
-  );
+  const [showHeaderInsertLine, setShowHeaderInsertLine] = React.useState(false);
   const onReorderRef = React.useRef(onReorder);
   onReorderRef.current = onReorder;
 
   const clearHeaderPreview = React.useCallback(() => {
-    setHeaderInsertPreview(null);
+    setShowHeaderInsertLine(false);
   }, []);
 
   const [{ isDragging }, drag, dragPreview] = useDrag<
@@ -147,16 +146,18 @@ export function UseCaseRowDnDWrapper({
         clearHeaderPreview();
         return;
       }
-      const rect = headerEl.getBoundingClientRect();
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset) {
         clearHeaderPreview();
         return;
       }
-      const hoverMiddleY = (rect.bottom - rect.top) / 2;
-      const hoverClientY = clientOffset.y - rect.top;
-      const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
-      setHeaderInsertPreview(position);
+      const rect = headerEl.getBoundingClientRect();
+      const inside =
+        clientOffset.x >= rect.left &&
+        clientOffset.x <= rect.right &&
+        clientOffset.y >= rect.top &&
+        clientOffset.y <= rect.bottom;
+      setShowHeaderInsertLine(inside);
     },
     drop(item, monitor) {
       clearHeaderPreview();
@@ -166,13 +167,17 @@ export function UseCaseRowDnDWrapper({
       if (!headerEl) return undefined;
       if (item.id === useCaseId) return undefined;
       if ((item.parentId ?? null) !== (parentId ?? null)) return undefined;
-      const rect = headerEl.getBoundingClientRect();
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset) return undefined;
-      const hoverMiddleY = (rect.bottom - rect.top) / 2;
-      const hoverClientY = clientOffset.y - rect.top;
-      const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
-      onReorderRef.current(item.id, useCaseId, position);
+      const rect = headerEl.getBoundingClientRect();
+      const inside =
+        clientOffset.x >= rect.left &&
+        clientOffset.x <= rect.right &&
+        clientOffset.y >= rect.top &&
+        clientOffset.y <= rect.bottom;
+      if (!inside) return undefined;
+      /** Sempre “prima di questa riga”: preview fissa sopra l’header; dopo la riga → sentinel di coda. */
+      onReorderRef.current(item.id, useCaseId, 'before');
       return { handled: true };
     },
     collect: (monitor) => ({
@@ -198,10 +203,10 @@ export function UseCaseRowDnDWrapper({
   const ctxValue = React.useMemo<RowDnDContextValue>(
     () => ({
       connectHeaderDrop,
-      headerInsertPreview,
+      showHeaderInsertLine,
       isOverHeader,
     }),
-    [connectHeaderDrop, headerInsertPreview, isOverHeader]
+    [connectHeaderDrop, showHeaderInsertLine, isOverHeader]
   );
 
   return (

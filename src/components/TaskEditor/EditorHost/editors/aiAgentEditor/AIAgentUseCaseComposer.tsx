@@ -1990,6 +1990,9 @@ export function AIAgentUseCaseComposer({
                   const showSiblingGapSentinel =
                     nextInFiltered != null &&
                     (u.parent_id ?? null) === (nextInFiltered.parent_id ?? null);
+                  const showTailSentinelAfterRow =
+                    !nextInFiltered ||
+                    (u.parent_id ?? null) !== (nextInFiltered.parent_id ?? null);
                   return (
                     <React.Fragment key={u.id}>
                     <li data-uc-row-id={u.id} className={`group/uc-row ${liSurface}${dimWhenExcludedClass}`}>
@@ -2646,8 +2649,20 @@ export function AIAgentUseCaseComposer({
                     {showSiblingGapSentinel && nextInFiltered ? (
                       <li className="list-none p-0" aria-hidden>
                         <UseCaseDropSentinel
+                          mode="insertBeforeNext"
                           insertBeforeId={nextInFiltered.id}
                           parentId={nextInFiltered.parent_id ?? null}
+                          enabled={useCaseDragEnabled}
+                          onReorder={commitUseCaseSiblingReorder}
+                        />
+                      </li>
+                    ) : null}
+                    {showTailSentinelAfterRow ? (
+                      <li className="list-none p-0" aria-hidden>
+                        <UseCaseDropSentinel
+                          mode="insertAfterAnchor"
+                          insertAfterId={u.id}
+                          parentId={u.parent_id ?? null}
                           enabled={useCaseDragEnabled}
                           onReorder={commitUseCaseSiblingReorder}
                         />
