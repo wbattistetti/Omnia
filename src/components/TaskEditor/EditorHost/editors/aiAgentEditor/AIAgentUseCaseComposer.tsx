@@ -115,8 +115,12 @@ import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
 import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContract';
-import { UseCaseDropSentinel } from './UseCaseDropSentinel';
-import { UseCaseRowDnDWrapper, UseCaseRowHeader } from './UseCaseRowDnDWrapper';
+import {
+  UseCaseDropSentinel,
+  UseCaseListDndShell,
+  UseCaseRowDnDWrapper,
+  UseCaseRowHeader,
+} from './UseCaseListDndKit';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
@@ -1938,6 +1942,10 @@ export function AIAgentUseCaseComposer({
                 hanno flex-shrink:1 e si restringono invece di traboccare → scrollbar inattiva.
                 Con block i <li> crescono liberamente e la scrollbar si attiva.
               */}
+              <UseCaseListDndShell
+                reorderEnabled={useCaseDragEnabled}
+                onReorder={commitUseCaseSiblingReorder}
+              >
               <ul
                 className={`min-h-0 flex-1 overflow-x-hidden p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
               >
@@ -2672,6 +2680,7 @@ export function AIAgentUseCaseComposer({
                   );
                 })}
               </ul>
+              </UseCaseListDndShell>
               </>
               )}
           </div>
