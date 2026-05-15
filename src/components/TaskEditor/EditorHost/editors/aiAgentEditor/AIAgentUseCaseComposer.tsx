@@ -13,6 +13,7 @@ import {
   FileJson,
   Globe,
   GitBranch,
+  GripVertical,
   Loader2,
   MessageSquareText,
   Pencil,
@@ -32,6 +33,7 @@ import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
 } from '@types/aiAgentPreview';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
+import { applySiblingReorderForPersist } from './useCaseHierarchy';
 import {
   AI_AGENT_GLOBAL_USE_CASE_STYLES,
   LABEL_AGENT_MSG_STRIP_TOKENS,
@@ -112,6 +114,9 @@ import {
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
+import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContract';
+import { UseCaseDropSentinel } from './UseCaseDropSentinel';
+import { UseCaseRowDnDWrapper, UseCaseRowHeader } from './UseCaseRowDnDWrapper';
 
 export type { AiTripletFieldBaseline } from './useCaseComposerPresentation';
 
@@ -142,6 +147,9 @@ export interface AIAgentUseCaseComposerProps {
   onDeleteUseCase: (useCaseId: string) => void;
   useCaseGlobalStyleId: string;
   onUseCaseGlobalStyleIdChange: (styleId: string) => void;
+  /** Persistite su `Task.agentUseCaseStyleLearningNotes`, unite al preset stile nelle API. */
+  useCaseStyleLearningNotes?: string;
+  onUseCaseStyleLearningNotesChange?: (next: string) => void;
   previewStyleId?: string;
   onPreviewStyleIdChange?: (styleId: string) => void;
   /** When set, empty state shows a primary CTA (e.g. tab toolbar hidden). */
@@ -229,6 +237,8 @@ export function AIAgentUseCaseComposer({
   onDeleteUseCase,
   useCaseGlobalStyleId,
   onUseCaseGlobalStyleIdChange,
+  useCaseStyleLearningNotes = '',
+  onUseCaseStyleLearningNotesChange = () => {},
   previewStyleId = AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
   onPreviewStyleIdChange = () => {},
   onGenerateUseCaseBundle,
@@ -258,6 +268,10 @@ export function AIAgentUseCaseComposer({
     () => new Set([...assistantPhraseStyleNewIds, ...completeCorrectionNewIds]),
     [assistantPhraseStyleNewIds, completeCorrectionNewIds]
   );
+  /** Pannello note stile: nascosto se vuoto, salvo apertura esplicita o testo persistito. */
+  const [styleLearningNotesEditorOpen, setStyleLearningNotesEditorOpen] = React.useState(false);
+  const showStyleLearningNotesPanel =
+    useCaseStyleLearningNotes.trim().length > 0 || styleLearningNotesEditorOpen;
   const { ordered } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
@@ -336,6 +350,21 @@ export function AIAgentUseCaseComposer({
       return text.includes(lower);
     });
   }, [ordered, wizardSearchSeed]);
+
+  const useCaseDragEnabled = !busy && !wizardSearchSeed;
+
+  const commitUseCaseSiblingReorder = React.useCallback(
+    (draggedId: string, targetId: string, position: 'before' | 'after') => {
+      if (draggedId === targetId) return;
+      if (dock?.reorderUseCaseSiblingByDrag) {
+        dock.reorderUseCaseSiblingByDrag(draggedId, targetId, position);
+      } else {
+        setUseCases((prev) => applySiblingReorderForPersist(prev, draggedId, targetId, position));
+      }
+    },
+    [dock, setUseCases]
+  );
+
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -1650,20 +1679,23 @@ export function AIAgentUseCaseComposer({
     liveAgentContentByIdRef.current = m;
   }, [useCases]);
 
-  const styleContract =
-    AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === useCaseGlobalStyleId)?.contract ?? '';
+  const mergedStyleContractForCatalog = React.useMemo(() => {
+    const base =
+      AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === useCaseGlobalStyleId)?.contract ?? '';
+    return mergeUseCaseGlobalStyleContract(base, useCaseStyleLearningNotes.trim());
+  }, [useCaseGlobalStyleId, useCaseStyleLearningNotes]);
 
   const runtimeCatalogExport = React.useMemo(() => {
     const built = buildVirtualAgentRuntimeCatalogFromUseCases(useCases);
     return {
       catalogJson: serializeVirtualAgentRuntimeCatalog(built),
       appendix: buildVirtualAgentUseCaseConstrainedPromptAppendix(built.entries, {
-        globalStyleContract: styleContract,
+        globalStyleContract: mergedStyleContractForCatalog,
       }),
       skippedCount: built.skipped.length,
       entryCount: built.entries.length,
     };
-  }, [useCases, styleContract]);
+  }, [useCases, mergedStyleContractForCatalog]);
 
   const copyRuntimeCatalogJson = React.useCallback(() => {
     void navigator.clipboard.writeText(runtimeCatalogExport.catalogJson).catch(() => {
@@ -1679,6 +1711,58 @@ export function AIAgentUseCaseComposer({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {showStyleLearningNotesPanel ? (
+        <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL} space-y-1.5`}>
+          <div className="flex items-start justify-between gap-2">
+            <label
+              htmlFor="ai-agent-use-case-style-learning-notes"
+              className="block font-medium text-slate-400"
+            >
+              Note stile (apprendimento)
+            </label>
+            {!useCaseStyleLearningNotes.trim() ? (
+              <button
+                type="button"
+                className="shrink-0 text-[11px] text-slate-500 underline hover:text-slate-300"
+                onClick={() => setStyleLearningNotesEditorOpen(false)}
+              >
+                Chiudi
+              </button>
+            ) : null}
+          </div>
+          <p className="text-slate-500 leading-snug">
+            {
+              "Testo aggiunto al contratto stile del preset per tutte le chiamate IA sugli use case e per l'appendice del catalogo runtime."
+            }
+          </p>
+          <textarea
+            id="ai-agent-use-case-style-learning-notes"
+            rows={3}
+            spellCheck
+            className="w-full min-h-[72px] resize-y rounded-md bg-slate-950/80 border border-slate-600 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
+            placeholder="Esempio: evitare domande retoriche; usare «lei»; …"
+            value={useCaseStyleLearningNotes}
+            onChange={(e) => onUseCaseStyleLearningNotesChange(e.target.value)}
+            onBlur={() => {
+              if (!useCaseStyleLearningNotes.trim()) {
+                setStyleLearningNotesEditorOpen(false);
+              }
+            }}
+            disabled={busy}
+            aria-label="Note stile use case"
+          />
+        </div>
+      ) : (
+        <div className="shrink-0 px-1">
+          <button
+            type="button"
+            className="text-[11px] text-violet-300/95 underline hover:text-violet-200"
+            onClick={() => setStyleLearningNotesEditorOpen(true)}
+          >
+            Aggiungi note di stile (opzionale)
+          </button>
+        </div>
+      )}
       {!primaryGenerateOnRightOnly ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}>
           <div className="flex items-center gap-2">
@@ -1855,7 +1939,7 @@ export function AIAgentUseCaseComposer({
                 Con block i <li> crescono liberamente e la scrollbar si attiva.
               */}
               <ul
-                className={`min-h-0 flex-1 space-y-1 overflow-x-hidden p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
+                className={`min-h-0 flex-1 overflow-x-hidden p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
               >
                 {filteredOrdered.length === 0 && wizardSearchSeed ? (
                   /*
@@ -1902,12 +1986,20 @@ export function AIAgentUseCaseComposer({
                   const liSurface = searchHighlight
                     ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-50/90 ring-2 ring-amber-300/50 dark:bg-amber-950/20 dark:ring-amber-400/40'
                     : `rounded-md ${zebraRow}`;
+                  const nextInFiltered = filteredOrdered[rowIndex + 1];
+                  const showSiblingGapSentinel =
+                    nextInFiltered != null &&
+                    (u.parent_id ?? null) === (nextInFiltered.parent_id ?? null);
                   return (
-                    <li
-                      key={u.id}
-                      className={`group/uc-row ${liSurface}${dimWhenExcludedClass}`}
-                    >
-                      <div
+                    <React.Fragment key={u.id}>
+                    <li data-uc-row-id={u.id} className={`group/uc-row ${liSurface}${dimWhenExcludedClass}`}>
+                      <UseCaseRowDnDWrapper
+                        useCaseId={u.id}
+                        parentId={u.parent_id ?? null}
+                        enabled={useCaseDragEnabled && !editingTitle}
+                        onReorder={commitUseCaseSiblingReorder}
+                      >
+                      <UseCaseRowHeader
                         onDoubleClick={(e) => {
                           if (!primaryGenerateOnRightOnly || busy) return;
                           const el = e.target as HTMLElement;
@@ -1937,7 +2029,7 @@ export function AIAgentUseCaseComposer({
                           conversazioni e al JSON finale del system prompt). Lo stop-propagation
                           evita che il click sulla checkbox selezioni anche la riga.
                         */}
-                        <div className="mt-[2px] flex w-5 shrink-0 items-center justify-center">
+                        <div className="mt-[2px] flex shrink-0 items-center gap-0.5">
                           <input
                             type="checkbox"
                             checked={includedInConv}
@@ -2180,10 +2272,31 @@ export function AIAgentUseCaseComposer({
                               >
                                 <Trash2 size={14} aria-hidden />
                               </button>
+                              <span
+                                aria-label={
+                                  useCaseDragEnabled
+                                    ? 'Riordina trascinando la riga (stesso livello gerarchico)'
+                                    : 'Riordino non disponibile'
+                                }
+                                className={`inline-flex shrink-0 rounded p-0.5 ${
+                                  useCaseDragEnabled
+                                    ? 'cursor-grab text-slate-400 hover:bg-slate-800/90 hover:text-violet-300 active:cursor-grabbing'
+                                    : 'cursor-not-allowed text-slate-600 opacity-50'
+                                }`}
+                                title={
+                                  useCaseDragEnabled
+                                    ? 'Riordina trascinando la riga (stesso livello)'
+                                    : wizardSearchSeed
+                                      ? 'Riordino disattivato durante la ricerca'
+                                      : 'Riordino disattivato durante operazioni in corso'
+                                }
+                              >
+                                <GripVertical size={14} aria-hidden />
+                              </span>
                             </div>
                           </div>
                         )}
-                      </div>
+                      </UseCaseRowHeader>
                       {creatingChild ? (
                         <div className="border-t border-slate-700/45 px-2 py-2 bg-slate-950/40">
                           <input
@@ -2528,7 +2641,19 @@ export function AIAgentUseCaseComposer({
                           ) : null}
                         </div>
                       ) : null}
+                      </UseCaseRowDnDWrapper>
                     </li>
+                    {showSiblingGapSentinel && nextInFiltered ? (
+                      <li className="list-none p-0" aria-hidden>
+                        <UseCaseDropSentinel
+                          insertBeforeId={nextInFiltered.id}
+                          parentId={nextInFiltered.parent_id ?? null}
+                          enabled={useCaseDragEnabled}
+                          onReorder={commitUseCaseSiblingReorder}
+                        />
+                      </li>
+                    ) : null}
+                    </React.Fragment>
                   );
                 })}
               </ul>
