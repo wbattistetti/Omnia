@@ -27,6 +27,7 @@ import { CompletaCorrezioneCallout } from './CompletaCorrezioneCallout';
 import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarContext';
 import { isCompletaCorrezioneCalloutSurfaceActive } from '../useCaseSubstantialEdits';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
 const RIGHT_PANEL_MIN_PX = 250;
@@ -178,6 +179,8 @@ export interface ViewSkaGeneratorProps {
    * Default: array vuoto (il bottone resta nascosto, le frecce DX nascoste).
    */
   useCases?: readonly AIAgentUseCase[];
+  /** Lessico progetto per anteprima JSON `variants[]` con compile semantico. */
+  projectSlotLexicon?: ProjectSlotLexicon;
   /**
    * Messaggio payoff inline da mostrare sotto i 3 pulsanti di creazione conversazione
    * (Passo 2). Usato dal **gate di stile**: se l'utente clicca un pulsante senza aver
@@ -253,6 +256,7 @@ export function ViewSkaGenerator({
   selectedUseCase = null,
   onSelectUseCaseRequest,
   useCases,
+  projectSlotLexicon,
   conversationsPayoffMessage = null,
   conversationsToolbarSlot = null,
   generationStyleContract = '',
@@ -641,7 +645,7 @@ export function ViewSkaGenerator({
               Flex column + overflow-hidden: senza `flex` il composer non è un flex item con altezza
               vincolata → la lista use case cresce col contenuto e non compare mai la scrollbar.
             */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{leftPanel}</div>
+            <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{leftPanel}</div>
           </section>
           <div
             role="separator"
@@ -672,6 +676,7 @@ export function ViewSkaGenerator({
                 selectedUseCase={selectedUseCase}
                 useCases={useCases ?? []}
                 onSelectUseCase={onSelectUseCaseRequest}
+                lexicon={projectSlotLexicon}
               />
             ) : (
               <>
@@ -993,9 +998,9 @@ const StepClearButton = React.forwardRef<
       aria-label={title}
       title={title}
       onClick={onClick}
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-rose-500/45 bg-rose-950/25 text-rose-200 transition-colors hover:border-rose-400/65 hover:bg-rose-900/45 hover:text-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/80"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-rose-500/45 bg-rose-950/25 text-rose-200 transition-colors hover:border-rose-400/65 hover:bg-rose-900/45 hover:text-rose-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/80"
     >
-      <Trash2 size={13} aria-hidden />
+      <Trash2 size={15} aria-hidden />
     </button>
   );
 });
@@ -1031,7 +1036,7 @@ function JsonInlineButton({
       onClick={onClick}
       disabled={busy}
       className={[
-        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/80',
+        'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/80',
         active
           ? 'border-violet-400/85 bg-violet-900/55 text-violet-50 shadow-[inset_0_0_0_1px_rgba(167,139,250,0.35)]'
           : 'border-violet-500/40 bg-violet-950/25 text-violet-200 hover:border-violet-400/65 hover:bg-violet-900/40 hover:text-violet-100',
@@ -1039,9 +1044,9 @@ function JsonInlineButton({
       ].join(' ')}
     >
       {busy ? (
-        <Loader2 size={13} aria-hidden className="animate-spin" />
+        <Loader2 size={15} aria-hidden className="animate-spin" />
       ) : (
-        <Braces size={13} aria-hidden />
+        <Braces size={15} aria-hidden />
       )}
     </button>
   );
@@ -1058,10 +1063,12 @@ function ConversationalJsonRightPanel({
   selectedUseCase,
   useCases,
   onSelectUseCase,
+  lexicon,
 }: {
   selectedUseCase: AIAgentUseCase | null;
   useCases: readonly AIAgentUseCase[];
   onSelectUseCase?: (useCaseId: string) => void;
+  lexicon?: ProjectSlotLexicon;
 }): React.ReactElement {
   return (
     <>
@@ -1076,6 +1083,7 @@ function ConversationalJsonRightPanel({
           selectedUseCase={selectedUseCase}
           useCases={useCases}
           onSelectUseCase={onSelectUseCase}
+          lexicon={lexicon}
         />
       </div>
     </>

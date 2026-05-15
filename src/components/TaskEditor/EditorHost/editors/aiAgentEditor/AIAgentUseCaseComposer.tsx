@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Variable,
   X,
 } from 'lucide-react';
 import {
@@ -29,11 +30,37 @@ import {
   type AIAgentLogicalStep,
   type AIAgentUseCase,
 } from '@types/aiAgentUseCases';
+import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
+import {
+  addParametricCatalogDimension,
+  addParametricFreeDimension,
+  addParametricRow,
+  expandParametricCartesian,
+  patchParametricDimensionLabel,
+  patchParametricRowCell,
+  patchParametricRowPrompt,
+  removeParametricDimension,
+  setPrimaryPhraseParametricEnabled,
+} from '@domain/useCaseBundle/parametricPhraseHelpers';
+import {
+  emptyProjectSlotLexicon,
+  type ProjectSlotLexicon,
+} from '@domain/useCaseBundle/projectSlotLexicon';
+import { StructuralVariantsEditor } from './useCaseBundle/StructuralVariantsEditor';
+import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
+import { UseCaseRowDeployChips } from './useCaseBundle/UseCaseRowDeployChips';
+import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeployStats';
 import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
 } from '@types/aiAgentPreview';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 import { applySiblingReorderForPersist } from './useCaseHierarchy';
+import {
+  addStructuralVariantToPrimaryPhrase,
+  patchStructuralVariant,
+  removeStructuralVariant,
+  syncPrimaryPhraseNaturalFromAssistantTurn,
+} from '@domain/useCaseBundle/phraseVariantHelpers';
 import {
   AI_AGENT_GLOBAL_USE_CASE_STYLES,
   LABEL_AGENT_MSG_STRIP_TOKENS,
@@ -222,6 +249,14 @@ export interface AIAgentUseCaseComposerProps {
   showTokenizedAgentMessage?: boolean;
   /** Mappa `useCaseId → assistant_example_tokenized` (solo wizard). */
   tokenizedByUseCaseId?: Readonly<Record<string, string>>;
+  /** Lessico progetto per chip deploy e anteprima compile varianti. */
+  projectSlotLexicon?: ProjectSlotLexicon;
+  /** Apre «Vedi compilato» per uno use case (barra salute / chip occhio). */
+  onInspectCompiled?: (useCaseId: string) => void;
+}
+
+function isPrimaryPhraseParametricEnabled(uc: AIAgentUseCase): boolean {
+  return Boolean(ensureUseCasePhrases(uc).phrases?.[0]?.parametric?.enabled);
 }
 
 export function AIAgentUseCaseComposer({
@@ -257,6 +292,8 @@ export function AIAgentUseCaseComposer({
   controlledSelectionId,
   showTokenizedAgentMessage = false,
   tokenizedByUseCaseId,
+  projectSlotLexicon = emptyProjectSlotLexicon(),
+  onInspectCompiled,
 }: AIAgentUseCaseComposerProps) {
   /**
    * Marker locale `[NEW]` aggiunto dal flow «Completa correzione» (toolbar). Vive nel
@@ -302,9 +339,9 @@ export function AIAgentUseCaseComposer({
     <span
       title="Scenario"
       aria-label="Scenario"
-      className="shrink-0 inline-flex h-5 w-5 items-center justify-center text-violet-300"
+      className="shrink-0 inline-flex h-6 w-6 items-center justify-center text-violet-300"
     >
-      <BookOpen size={13} aria-hidden />
+      <BookOpen size={15} aria-hidden />
     </span>
   ) : (
     <span className={UC_PILL_SCENARIO}>Scenario</span>
@@ -313,9 +350,9 @@ export function AIAgentUseCaseComposer({
     <span
       title="Messaggio agente"
       aria-label="Messaggio agente"
-      className="shrink-0 inline-flex h-5 w-5 items-center justify-center text-emerald-300"
+      className="shrink-0 inline-flex h-6 w-6 items-center justify-center text-emerald-300"
     >
-      <MessageSquareText size={13} aria-hidden />
+      <MessageSquareText size={15} aria-hidden />
     </span>
   ) : (
     <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
@@ -915,6 +952,21 @@ export function AIAgentUseCaseComposer({
     });
   }, [ordered]);
 
+  /**
+   * Dopo espansione accordion wizard: scroll della lista così la card resti visibile
+   * (due rAF per attendere il layout del corpo espanso).
+   */
+  const scheduleScrollExpandedUseCaseCardIntoView = React.useCallback((useCaseId: string) => {
+    const run = (): void => {
+      const el = document.querySelector(`[data-uc-row-id="${CSS.escape(useCaseId)}"]`);
+      if (!(el instanceof HTMLElement)) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
+  }, []);
+
   React.useEffect(() => {
     if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
     listToolbarCtx.registerHandlers({
@@ -1063,12 +1115,16 @@ export function AIAgentUseCaseComposer({
         setUseCases((prev) =>
           prev.map((u) =>
             u.id === useCaseId
-              ? {
-                  ...u,
-                  dialogue: u.dialogue.map((turn) =>
-                    turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
-                  ),
-                }
+              ? syncPrimaryPhraseNaturalFromAssistantTurn(
+                  {
+                    ...u,
+                    dialogue: u.dialogue.map((turn) =>
+                      turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
+                    ),
+                  },
+                  turnId,
+                  content
+                )
               : u
           )
         );
@@ -1077,16 +1133,20 @@ export function AIAgentUseCaseComposer({
       setUseCases((prev) =>
         prev.map((u) =>
           u.id === useCaseId
-            ? {
-                ...u,
-                designer_edit_confirmed: true as const,
-                designer_agent_message_vote: 'up' as const,
-                designer_label_vote: 'up' as const,
-                included_in_conversations: true,
-                dialogue: u.dialogue.map((turn) =>
-                  turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
-                ),
-              }
+            ? syncPrimaryPhraseNaturalFromAssistantTurn(
+                {
+                  ...u,
+                  designer_edit_confirmed: true as const,
+                  designer_agent_message_vote: 'up' as const,
+                  designer_label_vote: 'up' as const,
+                  included_in_conversations: true,
+                  dialogue: u.dialogue.map((turn) =>
+                    turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
+                  ),
+                },
+                turnId,
+                content
+              )
             : u
         )
       );
@@ -1097,6 +1157,153 @@ export function AIAgentUseCaseComposer({
       }
     },
     [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx]
+  );
+
+  const handleAddStructuralVariant = React.useCallback(
+    (useCaseId: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) => (uc.id === useCaseId ? addStructuralVariantToPrimaryPhrase(uc) : uc))
+      );
+    },
+    [setUseCases]
+  );
+
+  const handlePatchStructuralVariant = React.useCallback(
+    (useCaseId: string, variantId: string, patch: { naturalText?: string; when?: string }) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId ? patchStructuralVariant(uc, variantId, patch) : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handleRemoveStructuralVariant = React.useCallback(
+    (useCaseId: string, variantId: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId ? removeStructuralVariant(uc, variantId) : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const [parametricCartesianErrorById, setParametricCartesianErrorById] = React.useState<
+    Record<string, string>
+  >({});
+
+  const handleTogglePrimaryParametric = React.useCallback(
+    (useCaseId: string, enabled: boolean) => {
+      setParametricCartesianErrorById((m) => {
+        const n = { ...m };
+        delete n[useCaseId];
+        return n;
+      });
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId ? setPrimaryPhraseParametricEnabled(uc, enabled) : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handleAddParametricCatalogDimension = React.useCallback(
+    (useCaseId: string, catalogKey: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId ? addParametricCatalogDimension(uc, catalogKey) : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handleAddParametricFreeDimension = React.useCallback(
+    (useCaseId: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) => (uc.id === useCaseId ? addParametricFreeDimension(uc) : uc))
+      );
+    },
+    [setUseCases]
+  );
+
+  const handleRemoveParametricDimension = React.useCallback(
+    (useCaseId: string, dimensionId: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId ? removeParametricDimension(uc, dimensionId) : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handlePatchParametricDimensionLabel = React.useCallback(
+    (useCaseId: string, dimensionId: string, label: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId
+            ? patchParametricDimensionLabel(uc, dimensionId, label)
+            : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handleAddParametricRow = React.useCallback(
+    (useCaseId: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) => (uc.id === useCaseId ? addParametricRow(uc) : uc))
+      );
+    },
+    [setUseCases]
+  );
+
+  const handlePatchParametricCell = React.useCallback(
+    (useCaseId: string, rowId: string, dimensionId: string, value: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId ? patchParametricRowCell(uc, rowId, dimensionId, value) : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handlePatchParametricPrompt = React.useCallback(
+    (useCaseId: string, rowId: string, promptNaturalText: string) => {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === useCaseId
+            ? patchParametricRowPrompt(uc, rowId, promptNaturalText)
+            : uc
+        )
+      );
+    },
+    [setUseCases]
+  );
+
+  const handleExpandParametricCartesian = React.useCallback(
+    (useCaseId: string) => {
+      const uc = useCases.find((x) => x.id === useCaseId);
+      if (!uc) return;
+      const { uc: nextUc, error } = expandParametricCartesian(uc);
+      if (error) {
+        setParametricCartesianErrorById((m) => ({ ...m, [useCaseId]: error }));
+        return;
+      }
+      setParametricCartesianErrorById((m) => {
+        const n = { ...m };
+        delete n[useCaseId];
+        return n;
+      });
+      setUseCases((prev) => prev.map((u) => (u.id === useCaseId ? nextUc : u)));
+    },
+    [useCases, setUseCases]
   );
 
   const payoffTextareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -1714,7 +1921,7 @@ export function AIAgentUseCaseComposer({
   }, [runtimeCatalogExport.appendix]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
       {!primaryGenerateOnRightOnly && showStyleLearningNotesPanel ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL} space-y-1.5`}>
           <div className="flex items-start justify-between gap-2">
@@ -1942,12 +2149,13 @@ export function AIAgentUseCaseComposer({
                 hanno flex-shrink:1 e si restringono invece di traboccare → scrollbar inattiva.
                 Con block i <li> crescono liberamente e la scrollbar si attiva.
               */}
+              <div className="min-h-0 flex-1 min-w-0 flex flex-col overflow-hidden">
               <UseCaseListDndShell
                 reorderEnabled={useCaseDragEnabled}
                 onReorder={commitUseCaseSiblingReorder}
               >
               <ul
-                className={`min-h-0 flex-1 overflow-x-hidden p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
+                className={`p-1 pb-2 ${UC_USE_CASE_LIST_SCROLL}`}
               >
                 {filteredOrdered.length === 0 && wizardSearchSeed ? (
                   /*
@@ -2019,11 +2227,15 @@ export function AIAgentUseCaseComposer({
                           if (el.closest('[data-uc-head-toolbar]')) return;
                           e.preventDefault();
                           e.stopPropagation();
+                          const wasCollapsed = cardExpandedById[u.id] === false;
                           setCardExpandedById((prev) => {
                             const isOpen = prev[u.id] !== false;
                             return { ...prev, [u.id]: !isOpen };
                           });
                           listToolbarCtx?.notifyCardToggle();
+                          if (wasCollapsed) {
+                            scheduleScrollExpandedUseCaseCardIntoView(u.id);
+                          }
                         }}
                         onClick={() => {
                           if (u.id !== effectiveSelectedId) setSelectedId(u.id);
@@ -2071,11 +2283,15 @@ export function AIAgentUseCaseComposer({
                             aria-expanded={cardExpanded}
                             onClick={(e) => {
                               e.stopPropagation();
+                              const wasCollapsed = cardExpandedById[u.id] === false;
                               setCardExpandedById((prev) => {
                                 const isOpen = prev[u.id] !== false;
                                 return { ...prev, [u.id]: !isOpen };
                               });
                               listToolbarCtx?.notifyCardToggle();
+                              if (wasCollapsed) {
+                                scheduleScrollExpandedUseCaseCardIntoView(u.id);
+                              }
                             }}
                           >
                             {cardExpanded ? (
@@ -2162,6 +2378,14 @@ export function AIAgentUseCaseComposer({
                                   Escluso
                                 </span>
                               ) : null}
+                              <UseCaseRowDeployChips
+                                stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
+                                onInspectCompiled={
+                                  onInspectCompiled
+                                    ? () => onInspectCompiled(u.id)
+                                    : undefined
+                                }
+                              />
                               {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
                                 <span
                                   className="ml-1 shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"
@@ -2458,32 +2682,142 @@ export function AIAgentUseCaseComposer({
                                       : '';
                                   if (tokenizedForRow.trim().length > 0) {
                                     return (
-                                      <div className="flex w-full min-w-0 rounded px-0.5 py-0">
-                                        <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
-                                          {agentMsgFieldLabel}
-                                          <div className="min-w-0 flex-1 font-mono text-sm leading-snug text-current">
-                                            <TokenizedHighlightedText
-                                              text={tokenizedForRow}
-                                              inlineFlow
-                                              className="inline min-w-0 whitespace-pre-wrap align-baseline"
-                                            />
-                                            <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                                              <VoteThumbPair
-                                                vote={u.designer_agent_message_vote}
-                                                disabled={busy}
-                                                outerBtnClass={UC_AGENT_VOTE_BTN}
-                                                onVote={(choice) =>
-                                                  toggleDesignerFieldVote(u.id, 'agentMessage', choice)
-                                                }
+                                      <>
+                                        {isPrimaryPhraseParametricEnabled(u) ? (
+                                          <PhraseParametricEditor
+                                            useCase={u}
+                                            busy={busy}
+                                            cartesianFeedback={parametricCartesianErrorById[u.id] ?? null}
+                                            onAddCatalogDimension={(ck) =>
+                                              handleAddParametricCatalogDimension(u.id, ck)
+                                            }
+                                            onAddFreeDimension={() =>
+                                              handleAddParametricFreeDimension(u.id)
+                                            }
+                                            onRemoveDimension={(dimId) =>
+                                              handleRemoveParametricDimension(u.id, dimId)
+                                            }
+                                            onPatchDimensionLabel={(dimId, label) =>
+                                              handlePatchParametricDimensionLabel(u.id, dimId, label)
+                                            }
+                                            onAddRow={() => handleAddParametricRow(u.id)}
+                                            onPatchCell={(rowId, dimId, v) =>
+                                              handlePatchParametricCell(u.id, rowId, dimId, v)
+                                            }
+                                            onPatchPrompt={(rowId, prompt) =>
+                                              handlePatchParametricPrompt(u.id, rowId, prompt)
+                                            }
+                                            onExpandCartesian={() =>
+                                              handleExpandParametricCartesian(u.id)
+                                            }
+                                          />
+                                        ) : null}
+                                        <div className="flex w-full min-w-0 rounded px-0.5 py-0">
+                                          <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                                            {agentMsgFieldLabel}
+                                            <div className="min-w-0 flex-1 font-mono text-sm leading-snug text-current">
+                                              <TokenizedHighlightedText
+                                                text={tokenizedForRow}
+                                                inlineFlow
+                                                className="inline min-w-0 whitespace-pre-wrap align-baseline"
                                               />
-                                            </span>
+                                              <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                                                <VoteThumbPair
+                                                  vote={u.designer_agent_message_vote}
+                                                  disabled={busy}
+                                                  outerBtnClass={UC_AGENT_VOTE_BTN}
+                                                  onVote={(choice) =>
+                                                    toggleDesignerFieldVote(u.id, 'agentMessage', choice)
+                                                  }
+                                                />
+                                                <button
+                                                  type="button"
+                                                  disabled={busy}
+                                                  aria-pressed={isPrimaryPhraseParametricEnabled(u)}
+                                                  title={
+                                                    isPrimaryPhraseParametricEnabled(u)
+                                                      ? 'Disattiva messaggio parametrico'
+                                                      : 'Rendi il messaggio parametrico'
+                                                  }
+                                                  className={`${UC_AGENT_ROW_EDIT_BTN} ${
+                                                    isPrimaryPhraseParametricEnabled(u)
+                                                      ? 'text-emerald-400'
+                                                      : ''
+                                                  }`}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleTogglePrimaryParametric(
+                                                      u.id,
+                                                      !isPrimaryPhraseParametricEnabled(u)
+                                                    );
+                                                  }}
+                                                >
+                                                  <Variable size={12} aria-hidden />
+                                                </button>
+                                                {!isPrimaryPhraseParametricEnabled(u) ? (
+                                                  <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    title="Aggiungi variante strutturale (formula alternativa nel prompt)"
+                                                    className={UC_AGENT_ROW_EDIT_BTN}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleAddStructuralVariant(u.id);
+                                                    }}
+                                                  >
+                                                    <Plus size={12} aria-hidden />
+                                                  </button>
+                                                ) : null}
+                                              </span>
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
+                                        {!isPrimaryPhraseParametricEnabled(u) ? (
+                                          <StructuralVariantsEditor
+                                            useCase={u}
+                                            busy={busy}
+                                            onPatch={(variantId, patch) =>
+                                              handlePatchStructuralVariant(u.id, variantId, patch)
+                                            }
+                                            onRemove={(variantId) =>
+                                              handleRemoveStructuralVariant(u.id, variantId)
+                                            }
+                                          />
+                                        ) : null}
+                                      </>
                                     );
                                   }
                                   return (
                                 <>
+                                  {rowAssistant && isPrimaryPhraseParametricEnabled(u) ? (
+                                    <PhraseParametricEditor
+                                      useCase={u}
+                                      busy={busy}
+                                      cartesianFeedback={parametricCartesianErrorById[u.id] ?? null}
+                                      onAddCatalogDimension={(ck) =>
+                                        handleAddParametricCatalogDimension(u.id, ck)
+                                      }
+                                      onAddFreeDimension={() =>
+                                        handleAddParametricFreeDimension(u.id)
+                                      }
+                                      onRemoveDimension={(dimId) =>
+                                        handleRemoveParametricDimension(u.id, dimId)
+                                      }
+                                      onPatchDimensionLabel={(dimId, label) =>
+                                        handlePatchParametricDimensionLabel(u.id, dimId, label)
+                                      }
+                                      onAddRow={() => handleAddParametricRow(u.id)}
+                                      onPatchCell={(rowId, dimId, v) =>
+                                        handlePatchParametricCell(u.id, rowId, dimId, v)
+                                      }
+                                      onPatchPrompt={(rowId, prompt) =>
+                                        handlePatchParametricPrompt(u.id, rowId, prompt)
+                                      }
+                                      onExpandCartesian={() =>
+                                        handleExpandParametricCartesian(u.id)
+                                      }
+                                    />
+                                  ) : null}
                                   {agentMsgEditUseCaseId === u.id ? (
                                     <div className="flex flex-wrap items-start gap-2">
                                       {agentMsgFieldLabel}
@@ -2557,6 +2891,42 @@ export function AIAgentUseCaseComposer({
                                         >
                                           <X size={14} aria-hidden />
                                         </button>
+                                        <button
+                                          type="button"
+                                          disabled={busy}
+                                          aria-pressed={isPrimaryPhraseParametricEnabled(u)}
+                                          title={
+                                            isPrimaryPhraseParametricEnabled(u)
+                                              ? 'Disattiva messaggio parametrico'
+                                              : 'Rendi il messaggio parametrico'
+                                          }
+                                          className={`${UC_AGENT_ROW_EDIT_BTN} ${
+                                            isPrimaryPhraseParametricEnabled(u) ? 'text-emerald-400' : ''
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleTogglePrimaryParametric(
+                                              u.id,
+                                              !isPrimaryPhraseParametricEnabled(u)
+                                            );
+                                          }}
+                                        >
+                                          <Variable size={12} aria-hidden />
+                                        </button>
+                                        {!isPrimaryPhraseParametricEnabled(u) ? (
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            title="Aggiungi variante strutturale"
+                                            className={UC_AGENT_ROW_EDIT_BTN}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleAddStructuralVariant(u.id);
+                                            }}
+                                          >
+                                            <Plus size={12} aria-hidden />
+                                          </button>
+                                        ) : null}
                                       </div>
                                     </div>
                                   ) : (
@@ -2622,11 +2992,61 @@ export function AIAgentUseCaseComposer({
                                             >
                                               <Pencil size={12} aria-hidden />
                                             </button>
+                                            <button
+                                              type="button"
+                                              disabled={busy}
+                                              aria-pressed={isPrimaryPhraseParametricEnabled(u)}
+                                              title={
+                                                isPrimaryPhraseParametricEnabled(u)
+                                                  ? 'Disattiva messaggio parametrico'
+                                                  : 'Rendi il messaggio parametrico'
+                                              }
+                                              className={`${UC_AGENT_ROW_EDIT_BTN} ${
+                                                isPrimaryPhraseParametricEnabled(u)
+                                                  ? 'text-emerald-400'
+                                                  : ''
+                                              }`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleTogglePrimaryParametric(
+                                                  u.id,
+                                                  !isPrimaryPhraseParametricEnabled(u)
+                                                );
+                                              }}
+                                            >
+                                              <Variable size={12} aria-hidden />
+                                            </button>
+                                            {!isPrimaryPhraseParametricEnabled(u) ? (
+                                              <button
+                                                type="button"
+                                                disabled={busy}
+                                                title="Aggiungi variante strutturale (formula alternativa nel prompt)"
+                                                className={UC_AGENT_ROW_EDIT_BTN}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleAddStructuralVariant(u.id);
+                                                }}
+                                              >
+                                                <Plus size={12} aria-hidden />
+                                              </button>
+                                            ) : null}
                                           </span>
                                         </div>
                                       </div>
                                     </div>
                                   )}
+                                  {rowAssistant && !isPrimaryPhraseParametricEnabled(u) ? (
+                                    <StructuralVariantsEditor
+                                      useCase={u}
+                                      busy={busy}
+                                      onPatch={(variantId, patch) =>
+                                        handlePatchStructuralVariant(u.id, variantId, patch)
+                                      }
+                                      onRemove={(variantId) =>
+                                        handleRemoveStructuralVariant(u.id, variantId)
+                                      }
+                                    />
+                                  ) : null}
                                 </>
                                   );
                                 })()
@@ -2681,6 +3101,7 @@ export function AIAgentUseCaseComposer({
                 })}
               </ul>
               </UseCaseListDndShell>
+              </div>
               </>
               )}
           </div>
@@ -2807,6 +3228,35 @@ export function AIAgentUseCaseComposer({
                   </div>
 
                   <div className="rounded-lg ring-1 ring-emerald-600/40 bg-emerald-950/20 px-2 py-1">
+                    {assistantTurn && isPrimaryPhraseParametricEnabled(selected) ? (
+                      <PhraseParametricEditor
+                        useCase={selected}
+                        busy={busy}
+                        cartesianFeedback={parametricCartesianErrorById[selected.id] ?? null}
+                        onAddCatalogDimension={(ck) =>
+                          handleAddParametricCatalogDimension(selected.id, ck)
+                        }
+                        onAddFreeDimension={() =>
+                          handleAddParametricFreeDimension(selected.id)
+                        }
+                        onRemoveDimension={(dimId) =>
+                          handleRemoveParametricDimension(selected.id, dimId)
+                        }
+                        onPatchDimensionLabel={(dimId, label) =>
+                          handlePatchParametricDimensionLabel(selected.id, dimId, label)
+                        }
+                        onAddRow={() => handleAddParametricRow(selected.id)}
+                        onPatchCell={(rowId, dimId, v) =>
+                          handlePatchParametricCell(selected.id, rowId, dimId, v)
+                        }
+                        onPatchPrompt={(rowId, prompt) =>
+                          handlePatchParametricPrompt(selected.id, rowId, prompt)
+                        }
+                        onExpandCartesian={() =>
+                          handleExpandParametricCartesian(selected.id)
+                        }
+                      />
+                    ) : null}
                     {assistantTurn ? (
                       agentMsgEditUseCaseId === selected.id ? (
                         <div className="flex flex-wrap items-start gap-2">
@@ -2878,6 +3328,42 @@ export function AIAgentUseCaseComposer({
                             >
                               <X size={14} aria-hidden />
                             </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              aria-pressed={isPrimaryPhraseParametricEnabled(selected)}
+                              title={
+                                isPrimaryPhraseParametricEnabled(selected)
+                                  ? 'Disattiva messaggio parametrico'
+                                  : 'Rendi il messaggio parametrico'
+                              }
+                              className={`${UC_AGENT_ROW_EDIT_BTN} ${
+                                isPrimaryPhraseParametricEnabled(selected) ? 'text-emerald-400' : ''
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTogglePrimaryParametric(
+                                  selected.id,
+                                  !isPrimaryPhraseParametricEnabled(selected)
+                                );
+                              }}
+                            >
+                              <Variable size={12} aria-hidden />
+                            </button>
+                            {!isPrimaryPhraseParametricEnabled(selected) ? (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                title="Aggiungi variante strutturale"
+                                className={UC_AGENT_ROW_EDIT_BTN}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddStructuralVariant(selected.id);
+                                }}
+                              >
+                                <Plus size={12} aria-hidden />
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       ) : (
@@ -2934,6 +3420,42 @@ export function AIAgentUseCaseComposer({
                                 >
                                   <Pencil size={12} aria-hidden />
                                 </button>
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  aria-pressed={isPrimaryPhraseParametricEnabled(selected)}
+                                  title={
+                                    isPrimaryPhraseParametricEnabled(selected)
+                                      ? 'Disattiva messaggio parametrico'
+                                      : 'Rendi il messaggio parametrico'
+                                  }
+                                  className={`${UC_AGENT_ROW_EDIT_BTN} ${
+                                    isPrimaryPhraseParametricEnabled(selected) ? 'text-emerald-400' : ''
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleTogglePrimaryParametric(
+                                      selected.id,
+                                      !isPrimaryPhraseParametricEnabled(selected)
+                                    );
+                                  }}
+                                >
+                                  <Variable size={12} aria-hidden />
+                                </button>
+                                {!isPrimaryPhraseParametricEnabled(selected) ? (
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    title="Aggiungi variante strutturale (formula alternativa nel prompt)"
+                                    className={UC_AGENT_ROW_EDIT_BTN}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAddStructuralVariant(selected.id);
+                                    }}
+                                  >
+                                    <Plus size={12} aria-hidden />
+                                  </button>
+                                ) : null}
                               </span>
                             </div>
                           </div>
@@ -2958,6 +3480,18 @@ export function AIAgentUseCaseComposer({
                         </div>
                       </div>
                     )}
+                    {assistantTurn && !isPrimaryPhraseParametricEnabled(selected) ? (
+                      <StructuralVariantsEditor
+                        useCase={selected}
+                        busy={busy}
+                        onPatch={(variantId, patch) =>
+                          handlePatchStructuralVariant(selected.id, variantId, patch)
+                        }
+                        onRemove={(variantId) =>
+                          handleRemoveStructuralVariant(selected.id, variantId)
+                        }
+                      />
+                    ) : null}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1 border-t border-emerald-800/40 pt-1.5">
                       {assistantTurn && !agentMessageEmpty ? (
                         <>

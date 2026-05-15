@@ -66,6 +66,7 @@ describe('buildConversationalPrompt', () => {
     expect(prompt).toContain('"useCaseId": "uc-a"');
     expect(prompt).toContain('"label": "Accettazione"');
     expect(prompt).toContain('"scenario": "Conferma data."');
+    expect(prompt).toContain('"variants"');
     expect(prompt).toContain('"tokenizedExample": "Ti vedo il [data]."');
     expect(prompt).toContain('"tokens": [');
     /**
@@ -108,7 +109,7 @@ describe('buildConversationalPrompt', () => {
       ]);
       expect(prompt).not.toContain('Logging use case');
       expect(prompt).not.toContain('"log"');
-      expect(prompt).not.toContain('USECASE:');
+      expect(prompt).toContain('USECASE: "UKS"');
     });
 
     it("with includeLog=true: each JSON entry has 'log' with USECASE: \"<NOME>\" upper-cased", () => {

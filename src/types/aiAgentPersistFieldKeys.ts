@@ -33,4 +33,5 @@ export const AI_AGENT_PERSIST_FIELD_KEYS: readonly string[] = [
   'agentConversationStyleSelections',
   'agentConversationDeployStyleId',
   'agentLogUseCase',
+  'agentBehavior',
 ];

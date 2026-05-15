@@ -813,8 +813,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   );
   const onOpenConversationalPromptDialog = React.useCallback(() => {
     if (!canCreateConversationalPrompt) return;
+    c.compileUseCasePhrasesForCatalog();
     setConversationalPromptDialogOpen(true);
-  }, [canCreateConversationalPrompt]);
+  }, [canCreateConversationalPrompt, c.compileUseCasePhrasesForCatalog]);
   const onCloseConversationalPromptDialog = React.useCallback(
     () => setConversationalPromptDialogOpen(false),
     []
@@ -1219,6 +1220,13 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentConversationDeployStyleId: c.setAgentConversationDeployStyleId,
     agentLogUseCase: c.agentLogUseCase,
     setAgentLogUseCase: c.setAgentLogUseCase,
+    agentBehavior: c.agentBehavior,
+    setAgentBehavior: c.setAgentBehavior,
+    agentUseCasesJson: c.agentUseCasesJson,
+    compileUseCasePhrasesForCatalog: c.compileUseCasePhrasesForCatalog,
+    compilePhrasesBusy: c.compilePhrasesBusy,
+    projectSlotLexicon: c.projectSlotLexicon,
+    approveLexiconSurface: c.approveLexiconSurface,
 
     useCasePropagatorProvider: provider,
     useCasePropagatorModel: typeof model === 'string' ? model : '',
@@ -1379,6 +1387,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           open={conversationalPromptDialogOpen}
           useCases={c.useCases}
           includeLog={c.agentLogUseCase}
+          agentBehavior={c.agentBehavior}
           onClose={onCloseConversationalPromptDialog}
         />
       </div>

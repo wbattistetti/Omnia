@@ -84,6 +84,7 @@ export interface AIAgentTaskSnapshot {
    * `false` per non alterare il comportamento dei task già pubblicati.
    */
   agentLogUseCase: boolean;
+  agentBehavior: 'A' | 'B' | 'C';
 }
 
 /**
@@ -151,6 +152,10 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
         ? r.agentConversationDeployStyleId
         : null,
     agentLogUseCase: r?.agentLogUseCase === true,
+    agentBehavior:
+      r?.agentBehavior === 'A' || r?.agentBehavior === 'B' || r?.agentBehavior === 'C'
+        ? r.agentBehavior
+        : 'B',
   };
 }
 

@@ -91,6 +91,11 @@ export type ProjectData = {
   backendCatalog?: ProjectBackendCatalogBlob;
   /** Connessioni OAuth verso portali protetti (token solo lato server FastAPI). */
   portalConnections?: ProjectPortalConnectionsBlob;
+  /**
+   * Lessico slot agente virtuale (surface → slot_id, registry tipi). JSON
+   * {@link import('../domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon}.
+   */
+  agentSlotLexiconJson?: string;
   // ...other fields as needed
 };
 

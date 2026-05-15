@@ -221,7 +221,7 @@ export function ConversationStyleToolbar({
       role="tablist"
       aria-label="Stili conversazione"
     >
-      <Sparkles size={13} className="shrink-0 text-sky-300" aria-hidden />
+      <Sparkles size={15} className="shrink-0 text-sky-300" aria-hidden />
       <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-200">
         Stili
       </span>
@@ -282,7 +282,7 @@ export function ConversationStyleToolbar({
                 }}
                 onMouseDown={(e) => e.preventDefault()}
                 className={[
-                  'absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-4 w-4 items-center justify-center rounded text-sky-200 transition-opacity',
+                  'absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-5 w-5 items-center justify-center rounded text-sky-200 transition-opacity',
                   'hover:bg-sky-500/30 focus-visible:bg-sky-500/30',
                   /* Visibile su hover/focus della pill o quando in editing. */
                   editing
@@ -295,7 +295,7 @@ export function ConversationStyleToolbar({
                     : `Modifica descrizione ed esempi dello stile «${style.label}»`
                 }
               >
-                <Pencil size={11} aria-hidden />
+                <Pencil size={13} aria-hidden />
               </span>
             ) : null}
           </button>
@@ -383,7 +383,7 @@ export function ConversationStyleEditor({
         role="tablist"
         aria-label="Stili di registro per la generazione conversazioni"
       >
-        <Sparkles size={14} className="shrink-0 text-sky-300" aria-hidden />
+        <Sparkles size={16} className="shrink-0 text-sky-300" aria-hidden />
         <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-sky-200">
           Stili
         </span>

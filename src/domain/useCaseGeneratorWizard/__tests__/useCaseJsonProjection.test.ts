@@ -85,7 +85,7 @@ describe('projectUseCaseToConversationalJson', () => {
     expect(projectUseCaseToConversationalJson(uc)).toBeNull();
   });
 
-  it('projects label, scenario, tokenizedExample, and unique tokens in order', () => {
+  it('projects label, scenario, variants with tokenizedExample and tokens', () => {
     const uc = makeUseCase({
       id: 'uc-x',
       label: 'Conferma slot',
@@ -100,13 +100,12 @@ describe('projectUseCaseToConversationalJson', () => {
       ],
     });
     const out = projectUseCaseToConversationalJson(uc);
-    expect(out).toEqual({
-      useCaseId: 'uc-x',
-      label: 'Conferma slot',
-      scenario: 'Scenario di conferma.',
-      tokenizedExample: 'Ciao [slot], ti vedo il [data1] alle [orario] al [data2].',
-      tokens: ['slot', 'data1', 'orario', 'data2'],
-    });
+    expect(out?.useCaseId).toBe('uc-x');
+    expect(out?.variants).toHaveLength(1);
+    expect(out?.variants[0].tokenizedExample).toBe(
+      'Ciao [slot], ti vedo il [data1] alle [orario] al [data2].'
+    );
+    expect(out?.variants[0].tokens).toEqual(['slot', 'data1', 'orario', 'data2']);
   });
 
   it('keeps numeric suffixes verbatim when the same base appears with different indices', () => {
@@ -125,7 +124,7 @@ describe('projectUseCaseToConversationalJson', () => {
       ],
     });
     const out = projectUseCaseToConversationalJson(uc);
-    expect(out?.tokens).toEqual(['data1', 'data2']);
+    expect(out?.variants[0].tokens).toEqual(['data1', 'data2']);
   });
 
   it('trims label and scenario whitespace', () => {
@@ -146,7 +145,48 @@ describe('projectUseCaseToConversationalJson', () => {
       ],
     });
     const out = projectUseCaseToConversationalJson(uc);
-    expect(out?.tokens).toEqual([]);
+    expect(out?.variants[0].tokens).toEqual([]);
+  });
+
+  it('omits structural variants with empty template (avoids duplicate default in variants[])', () => {
+    const uc = makeUseCase({
+      phrases: [
+        {
+          phraseId: 'ph-uc-1-0',
+          naturalText: 'Ciao [Mario Rossi].',
+          variants: [
+            { variantId: 'default' },
+            { variantId: 'structural_1', naturalText: '', when: 'draft' },
+          ],
+        },
+      ],
+    });
+    const out = projectUseCaseToConversationalJson(uc);
+    expect(out?.variants).toHaveLength(1);
+    expect(out?.variants[0].variantId).toBe('default');
+  });
+
+  it('includes structural variant when it has its own non-empty template', () => {
+    const uc = makeUseCase({
+      phrases: [
+        {
+          phraseId: 'ph-uc-1-0',
+          naturalText: 'Default [x].',
+          variants: [
+            { variantId: 'default' },
+            {
+              variantId: 'structural_1',
+              naturalText: 'Alternativa [y].',
+              when: 'retry',
+            },
+          ],
+        },
+      ],
+    });
+    const out = projectUseCaseToConversationalJson(uc);
+    expect(out?.variants).toHaveLength(2);
+    expect(out?.variants.map((v) => v.variantId)).toEqual(['default', 'structural_1']);
+    expect(out?.variants[1].when).toBe('retry');
   });
 });
 

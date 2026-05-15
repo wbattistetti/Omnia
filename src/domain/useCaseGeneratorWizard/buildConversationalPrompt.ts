@@ -41,8 +41,12 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
  * Default `false` (back-compat): i task gi\u00e0 pubblicati continuano a generare lo stesso
  * prompt di prima finch\u00e9 il designer non attiva il toggle "Logga Use Case" dal menu Upload.
  */
+/** Comportamento runtime quando l'input non mappa su nessun use case (UKS). */
+export type AgentBehaviorMode = 'A' | 'B' | 'C';
+
 export interface BuildConversationalPromptOptions {
   readonly includeLog?: boolean;
+  readonly agentBehavior?: AgentBehaviorMode;
 }
 
 /**
@@ -69,25 +73,38 @@ Per ogni risposta, alla fine del testo restituisci anche il marker dello use cas
  * formulazione tra invocazioni e tra istanze: il designer e il motore esterno costruiscono
  * familiarità su una guida fissa. Variazioni intenzionali vanno fatte qui, non al call-site.
  */
+function buildUksInstruction(agentBehavior: AgentBehaviorMode): string {
+  const base = `Use Case non riconosciuto (UKS)
+Se NESSUN use case del catalogo si applica all'input, NON forzare un mapping. Termina la risposta con \`USECASE: "UKS"\` su nuova riga.`;
+  switch (agentBehavior) {
+    case 'A':
+      return `${base}
+Comportamento A: rispondi in modo colloquiale libero (fuori dai template del catalogo), poi il marker UKS.`;
+    case 'B':
+      return `${base}
+Comportamento B: rispondi ESATTAMENTE «Non ho capito, può ripetere?» e il marker UKS.`;
+    case 'C':
+      return `${base}
+Comportamento C: al primo tentativo fallito rispondi «Non ho capito, può ripetere?»; al secondo tentativo fallito di seguito comunica che passerai a un operatore umano, poi UKS.`;
+    default:
+      return base;
+  }
+}
+
 const PROMPT_HEADER_IT = `Ruolo
 Sei l'agente virtuale di un servizio fissato dal progettista. Devi parlare e rispondere ESCLUSIVAMENTE come definito dalla lista di use case che ti vengono forniti più sotto, in formato JSON.
 
 Regole obbligatorie
-1. Per ogni interazione, scegli UN solo use case dalla lista e usa il suo \`tokenizedExample\` come template della tua risposta.
-2. NON inventare frasi: se l'utente esce dai casi previsti, riconducilo educatamente dentro uno degli use case del catalogo.
-3. I segmenti tra parentesi quadre nel template (es. \`[data]\`, \`[orario]\`, \`[importo]\`) sono SLOT. Devi sostituirli con i valori effettivi al momento della risposta:
-   - \`[data]\` → una data nel formato del dominio (es. «12 giugno»).
-   - \`[orario]\` → un orario (es. «09:30»).
-   - \`[nome]\`, \`[email]\`, \`[telefono]\`, \`[importo]\`, ecc. → il valore della corrispondente entità.
-   - \`[slot]\`, \`[slot1]\`, \`[slot2]\` → valori generici quando il compilatore non può inferire un tipo più specifico.
-   - Se lo stesso tipo compare più volte nello stesso template (\`[data1]\`, \`[data2]\`) sono valori distinti coerenti col contesto.
-4. NON aggiungere parentesi quadre nella risposta finale: gli slot vanno sostituiti, non lasciati visibili.
-5. Mantieni tono, registro e struttura del \`tokenizedExample\`. Non riformulare la frase: sostituisci SOLO gli slot.
-6. Usa il campo \`scenario\` di ciascun use case come guida per decidere QUANDO applicarlo.
-7. Il campo \`label\` è il nome interno; non citarlo nella risposta all'utente.
+1. Per ogni interazione, scegli UN solo use case dalla lista. Usa UNA delle sue \`variants\`: il campo \`tokenizedExample\` è il template; rispetta \`when\` per scegliere la variante corretta (se una sola variante, usala).
+2. Dentro il catalogo NON inventare frasi: sostituisci SOLO gli slot. Fuori catalogo (UKS) vale la sezione UKS sotto.
+3. Gli slot tra parentesi quadre (es. \`[prestazione]\`, \`[data]\`, \`[formulaconferma]\`) vanno sostituiti con valori coerenti. \`[formulaconferma]\` e slot linguistici simili: scegli una formula dalla lista \`linguisticVariants\` del registry se fornita.
+4. NON lasciare parentesi quadre visibili nella risposta finale.
+5. Mantieni tono e struttura fissa del \`tokenizedExample\`; non riformulare le parole fuori dagli slot.
+6. Usa \`scenario\` per decidere QUANDO applicare l'use case.
+7. Il campo \`label\` è interno; non citarlo.
 
 Catalogo use case (JSON)
-Ogni voce è autonoma. Il campo \`tokenizedExample\` è il template da usare; \`tokens\` elenca gli slot che devi popolare.`;
+Ogni voce ha \`variants[]\` (sempre almeno una). Ogni variante ha \`tokenizedExample\`, \`tokens\`, opzionale \`when\`.`;
 
 /**
  * Costruisce il prompt conversazionale combinando istruzioni IT + catalogo JSON degli use
@@ -114,6 +131,7 @@ export function buildConversationalPrompt(
   }
 
   const includeLog = options.includeLog === true;
+  const agentBehavior = options.agentBehavior ?? 'B';
   const projected = projectAllUseCasesToConversationalJson(useCases, { includeLog });
 
   /**
@@ -145,9 +163,10 @@ export function buildConversationalPrompt(
    * invece che in {@link PROMPT_HEADER_IT} mantiene quest'ultimo stabile per i task che
    * non usano il logging.
    */
+  const uksBlock = buildUksInstruction(agentBehavior);
   const catalogSection = includeLog
-    ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${catalogBlocks.join('\n\n')}`
-    : catalogBlocks.join('\n\n');
+    ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${uksBlock}\n\n${catalogBlocks.join('\n\n')}`
+    : `${uksBlock}\n\n${catalogBlocks.join('\n\n')}`;
 
   return `${PROMPT_HEADER_IT}\n\n${catalogSection}\n`;
 }

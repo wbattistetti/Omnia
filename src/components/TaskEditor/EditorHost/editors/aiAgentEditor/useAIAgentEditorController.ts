@@ -33,6 +33,16 @@ import {
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import { newAgentUseCaseTurnId, serializeLogicalSteps, serializeUseCases } from '@types/aiAgentUseCases';
+import {
+  loadProjectSlotLexicon,
+  saveProjectSlotLexicon,
+} from '@domain/useCaseBundle/projectLexiconAccess';
+import {
+  collectMappingsFromUseCases,
+  compileAllUseCases,
+} from '@domain/useCaseBundle/semanticCompile';
+import { mergeMappingsIntoLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import {
@@ -323,6 +333,13 @@ export function useAIAgentEditorController({
    * non attiva esplicitamente la checkbox dal pannellino Upload.
    */
   const [agentLogUseCase, setAgentLogUseCaseState] = React.useState<boolean>(false);
+  const [agentBehavior, setAgentBehaviorState] = React.useState<'A' | 'B' | 'C'>('B');
+  const [compilePhrasesBusy, setCompilePhrasesBusy] = React.useState(false);
+  const [projectSlotLexicon, setProjectSlotLexicon] = React.useState<ProjectSlotLexicon>(() =>
+    loadProjectSlotLexicon(
+      typeof localStorage !== 'undefined' ? localStorage.getItem('currentProjectId') : null
+    )
+  );
 
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
@@ -664,6 +681,48 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  const setAgentBehavior = React.useCallback((next: 'A' | 'B' | 'C') => {
+    setAgentBehaviorState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
+  const compileUseCasePhrasesForCatalog = React.useCallback(() => {
+    setCompilePhrasesBusy(true);
+    try {
+      const compiled = compileAllUseCases(useCases, projectSlotLexicon);
+      const mappings = collectMappingsFromUseCases(compiled);
+      const { lexicon: merged } = mergeMappingsIntoLexicon(projectSlotLexicon, mappings, {
+        sourceTaskId: instanceId,
+        approve: false,
+      });
+      setProjectSlotLexicon(merged);
+      saveProjectSlotLexicon(projectId ?? null, merged);
+      setUseCases(compiled);
+      setDirty(true);
+    } finally {
+      setCompilePhrasesBusy(false);
+    }
+  }, [useCases, projectSlotLexicon, instanceId, projectId]);
+
+  const approveLexiconSurface = React.useCallback(
+    (surface: string) => {
+      setProjectSlotLexicon((prev) => {
+        const next = {
+          ...prev,
+          entries: prev.entries.map((e) =>
+            e.surface === surface.trim().toLowerCase() ? { ...e, approved: true } : e
+          ),
+        };
+        saveProjectSlotLexicon(projectId ?? null, next);
+        return next;
+      });
+    },
+    [projectId]
+  );
+
   const hydratedRef = React.useRef(false);
   React.useEffect(() => {
     hydratedRef.current = hydrated;
@@ -780,6 +839,8 @@ export function useAIAgentEditorController({
     setAgentConversationStyleSelectionsState(b.agentConversationStyleSelections);
     setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
     setAgentLogUseCaseState(b.agentLogUseCase);
+    setAgentBehaviorState(b.agentBehavior);
+    setProjectSlotLexicon(loadProjectSlotLexicon(projectId ?? null));
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -892,6 +953,7 @@ export function useAIAgentEditorController({
       agentConversationStyleSelections,
       agentConversationDeployStyleId,
       agentLogUseCase,
+      agentBehavior,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -942,6 +1004,7 @@ export function useAIAgentEditorController({
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
     agentLogUseCase,
+    agentBehavior,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -2054,6 +2117,7 @@ export function useAIAgentEditorController({
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
     agentLogUseCase,
+    agentBehavior,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -2222,5 +2286,12 @@ export function useAIAgentEditorController({
     setAgentConversationDeployStyleId,
     agentLogUseCase,
     setAgentLogUseCase,
+    agentBehavior,
+    setAgentBehavior,
+    agentUseCasesJson: serializeUseCases(useCases),
+    compileUseCasePhrasesForCatalog,
+    compilePhrasesBusy,
+    projectSlotLexicon,
+    approveLexiconSurface,
   };
 }

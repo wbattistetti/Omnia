@@ -2,7 +2,17 @@
  * Design-time use case composer: logical steps + hierarchical scenarios with payoff and agent output.
  */
 
+import type {
+  AIAgentCanonicalPhrase,
+} from '../domain/useCaseBundle/schema';
 import type { AgentMessageMotorPayload } from '../domain/aiAgentUseCase/splitAgentMessageTemplate';
+import { ensureUseCasePhrases } from '../domain/useCaseBundle/migrateUseCase';
+import {
+  parseAgentUseCaseBundleJson,
+  serializeAgentUseCaseBundle,
+} from '../domain/useCaseBundle/parseSerializeBundle';
+
+export type { AIAgentCanonicalPhrase, AIAgentPhraseParametricDimension, AIAgentPhraseParametricRow, AIAgentPhraseParametricConfig, AIAgentPhraseVariant, PhraseCompiledSnapshot, SlotSurfaceMapping } from '../domain/useCaseBundle/schema';
 
 /** Last IA-synced motor JSON for an assistant turn; compare source_content to detect stale edits. */
 export interface AIAgentAssistantMotorSnapshot {
@@ -102,6 +112,12 @@ export interface AIAgentUseCase {
    * considerati inclusi). Vedi {@link isUseCaseIncludedInConversations}.
    */
   included_in_conversations?: boolean;
+
+  /**
+   * Schema v2: una o più frasi canoniche con varianti strutturali e compile snapshot.
+   * Assente su record legacy → {@link ensureUseCasePhrases} alla lettura.
+   */
+  phrases?: AIAgentCanonicalPhrase[];
 }
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
@@ -117,6 +133,11 @@ export function newAgentUseCaseTurnId(): string {
  * pattern in più punti (wizard tokenizzazione, bubble Passo 2, baseline diff, ecc.).
  */
 export function getAssistantExample(useCase: AIAgentUseCase): string {
+  const phrases = useCase?.phrases;
+  if (Array.isArray(phrases) && phrases.length > 0) {
+    const t = phrases[0].naturalText;
+    if (typeof t === 'string') return t;
+  }
   const dialogue = Array.isArray(useCase?.dialogue) ? useCase.dialogue : [];
   const assistant = dialogue.find((t) => t && t.role === 'assistant');
   return assistant && typeof assistant.content === 'string' ? assistant.content : '';
@@ -214,12 +235,14 @@ export function parseAgentLogicalStepsJson(raw: string | undefined): AIAgentLogi
 }
 
 export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[] {
-  if (!raw || typeof raw !== 'string' || !raw.trim()) return [];
-  try {
-    const v = JSON.parse(raw) as unknown;
-    if (!Array.isArray(v)) return [];
-    const out: AIAgentUseCase[] = [];
-    for (const e of v) {
+  return parseAgentUseCaseBundleJson(raw);
+}
+
+/** Parse array grezzo use case (v1 o elemento di `use_cases` v2). */
+export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] {
+  if (!Array.isArray(v)) return [];
+  const out: AIAgentUseCase[] = [];
+  for (const e of v) {
       if (!e || typeof e !== 'object') continue;
       const o = e as Record<string, unknown>;
       const id = typeof o.id === 'string' ? o.id.trim() : '';
@@ -319,6 +342,7 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
         typeof o.assistant_example_tokenized_source === 'string'
           ? o.assistant_example_tokenized_source
           : undefined;
+      const phrases = parsePhrasesField(o.phrases);
       out.push({
         id,
         label,
@@ -341,12 +365,89 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
         ...(assistant_example_tokenized_source !== undefined
           ? { assistant_example_tokenized_source }
           : {}),
+        ...(phrases.length > 0 ? { phrases } : {}),
       });
     }
-    return out;
-  } catch {
-    return [];
+  return out.map((uc) => ensureUseCasePhrases(uc));
+}
+
+function parsePhrasesField(raw: unknown): AIAgentCanonicalPhrase[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AIAgentCanonicalPhrase[] = [];
+  for (const p of raw) {
+    if (!p || typeof p !== 'object') continue;
+    const po = p as Record<string, unknown>;
+    const phraseId = typeof po.phraseId === 'string' && po.phraseId.trim() ? po.phraseId.trim() : '';
+    const naturalText = typeof po.naturalText === 'string' ? po.naturalText : '';
+    if (!phraseId) continue;
+    const variantsRaw = Array.isArray(po.variants) ? po.variants : [];
+    let variants = variantsRaw
+      .map((vr) => {
+        if (!vr || typeof vr !== 'object') return null;
+        const vo = vr as Record<string, unknown>;
+        const variantId =
+          typeof vo.variantId === 'string' && vo.variantId.trim() ? vo.variantId.trim() : '';
+        if (!variantId) return null;
+        return {
+          variantId,
+          ...(typeof vo.naturalText === 'string' ? { naturalText: vo.naturalText } : {}),
+          ...(typeof vo.when === 'string' && vo.when.trim() ? { when: vo.when.trim() } : {}),
+          ...(vo.compiled && typeof vo.compiled === 'object'
+            ? { compiled: parseCompiledField(vo.compiled as Record<string, unknown>) }
+            : {}),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+    if (variants.length === 0) {
+      variants = [{ variantId: 'default' }];
+    }
+    out.push({
+      phraseId,
+      naturalText,
+      variants,
+      ...(Array.isArray(po.localMappings) ? { localMappings: parseMappings(po.localMappings) } : {}),
+    });
   }
+  return out;
+}
+
+function parseMappings(raw: unknown): import('../domain/useCaseBundle/schema').SlotSurfaceMapping[] {
+  if (!Array.isArray(raw)) return [];
+  const out: import('../domain/useCaseBundle/schema').SlotSurfaceMapping[] = [];
+  for (const m of raw) {
+    if (!m || typeof m !== 'object') continue;
+    const mo = m as Record<string, unknown>;
+    const surface = typeof mo.surface === 'string' ? mo.surface.trim() : '';
+    const slot_id = typeof mo.slot_id === 'string' ? mo.slot_id.trim() : '';
+    if (surface && slot_id) {
+      out.push({
+        surface,
+        slot_id,
+        ...(mo.localOnly === true ? { localOnly: true } : {}),
+      });
+    }
+  }
+  return out;
+}
+
+function parseCompiledField(
+  o: Record<string, unknown>
+): import('../domain/useCaseBundle/schema').PhraseCompiledSnapshot | undefined {
+  const tokenizedText = typeof o.tokenizedText === 'string' ? o.tokenizedText : '';
+  if (!tokenizedText.trim()) return undefined;
+  const tokens = Array.isArray(o.tokens)
+    ? o.tokens.filter((t): t is string => typeof t === 'string')
+    : [];
+  const mappings = parseMappings(o.mappings);
+  const status = o.status === 'stale' ? 'stale' : 'fresh';
+  const compiledAt = typeof o.compiledAt === 'string' ? o.compiledAt : '';
+  return {
+    tokenizedText,
+    tokens,
+    mappings,
+    status,
+    compiledAt: compiledAt || new Date(0).toISOString(),
+  };
 }
 
 export function serializeLogicalSteps(steps: readonly AIAgentLogicalStep[]): string {
@@ -354,7 +455,7 @@ export function serializeLogicalSteps(steps: readonly AIAgentLogicalStep[]): str
 }
 
 export function serializeUseCases(cases: readonly AIAgentUseCase[]): string {
-  return JSON.stringify([...cases]);
+  return serializeAgentUseCaseBundle(cases);
 }
 
 /** Normalize LLM/API arrays into typed logical steps. */

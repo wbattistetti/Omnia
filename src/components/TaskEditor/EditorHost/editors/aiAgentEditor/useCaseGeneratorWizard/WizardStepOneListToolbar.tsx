@@ -46,7 +46,7 @@ import type { UseCaseGeneratorWizardModel } from './useUseCaseGeneratorWizard';
  * toolbar (`size` mappa su width/height in px). `currentColor` sullo stroke così eredita
  * la palette del bottone wrapper (amber per ON, slate per OFF).
  */
-function BracketsXIcon({ size = 14 }: { size?: number }): React.ReactElement {
+function BracketsXIcon({ size = 16 }: { size?: number }): React.ReactElement {
   return (
     <svg
       width={size}
@@ -122,7 +122,7 @@ export function CompactIconToggle({
       title={title}
       onClick={onClick}
       className={[
-        'inline-flex h-7 w-7 items-center justify-center rounded transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+        'inline-flex h-8 w-8 items-center justify-center rounded transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
         active
           ? activeClass
           : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300',
@@ -182,10 +182,10 @@ function UseCaseListSearchInput({
        * stretta si comprime fino a un minimo decoroso (vedi `min-w-[120px]` sul
        * `<input>` sotto). Tutti gli altri controlli sono `shrink-0`.
        */
-      className="relative inline-flex h-7 min-w-0 flex-1 items-center"
+      className="relative inline-flex h-8 min-w-0 flex-1 items-center"
     >
       <Search
-        size={12}
+        size={14}
         aria-hidden
         className="pointer-events-none absolute left-1.5 text-slate-500"
       />
@@ -202,7 +202,7 @@ function UseCaseListSearchInput({
         placeholder="cerca nei messaggi…"
         aria-label="Testo da cercare nei messaggi degli use case"
         title="Scrivi e premi Invio per evidenziare le occorrenze nei messaggi"
-        className="h-7 w-full min-w-[120px] max-w-[260px] rounded-md border border-slate-700/70 bg-slate-900/60 pl-6 pr-6 text-[12px] text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40"
+        className="h-8 w-full min-w-[120px] max-w-[260px] rounded-md border border-slate-700/70 bg-slate-900/60 pl-7 pr-6 text-[12px] text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40"
       />
       {hasDraft ? (
         <button
@@ -212,7 +212,7 @@ function UseCaseListSearchInput({
           title="Pulisci ricerca (Esc)"
           className="absolute right-1 inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-500"
         >
-          <XIcon size={11} aria-hidden />
+          <XIcon size={13} aria-hidden />
         </button>
       ) : null}
     </form>
@@ -251,7 +251,7 @@ function LabeledInlineToggle({
       title={title}
       onClick={onClick}
       className={[
-        'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+        'inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
         active
           ? activeClass
           : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300',
@@ -368,14 +368,14 @@ export function WizardStepOneListToolbarControls({
       aria-label={isFullyExpanded ? 'Collassa tutte le card' : 'Espandi tutte le card'}
       onClick={isFullyExpanded ? triggerCollapseAll : triggerExpandAll}
       className={[
-        'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+        'inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
         expandActiveClass,
       ].join(' ')}
     >
       {isFullyExpanded ? (
-        <Minimize2 size={13} aria-hidden />
+        <Minimize2 size={15} aria-hidden />
       ) : (
-        <Maximize2 size={13} aria-hidden />
+        <Maximize2 size={15} aria-hidden />
       )}
       <span>{isFullyExpanded ? 'Collassa' : 'Espandi'}</span>
     </button>
@@ -400,7 +400,7 @@ export function WizardStepOneListToolbarControls({
           onClick={toggleScenario}
           title="Mostra/nascondi lo scenario"
           activeClass="text-violet-300 bg-violet-500/15"
-          icon={<BookOpen size={13} aria-hidden />}
+          icon={<BookOpen size={15} aria-hidden />}
           label="Scenario"
         />
         <LabeledInlineToggle
@@ -408,7 +408,7 @@ export function WizardStepOneListToolbarControls({
           onClick={toggleMessage}
           title="Mostra/nascondi il messaggio agente"
           activeClass="text-emerald-300 bg-emerald-500/15"
-          icon={<MessageSquareText size={13} aria-hidden />}
+          icon={<MessageSquareText size={15} aria-hidden />}
           label="Messaggio"
         />
       </div>
@@ -429,7 +429,7 @@ export function WizardStepOneListToolbarControls({
           }
           aria-label="Ordina alfabeticamente"
           className={[
-            'inline-flex h-7 min-w-8 shrink-0 items-center justify-center rounded-md px-1.5 text-[13px] font-black leading-none tracking-tight transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+            'inline-flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md px-1.5 text-[13px] font-black leading-none tracking-tight transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
             dock.useCaseSiblingSortMode === 'alphabetical'
               ? 'bg-violet-500/15 text-violet-200'
               : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300',

@@ -25,7 +25,10 @@ import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
 import type { editor as monacoEditorNs } from 'monaco-editor';
 import { Clipboard, ClipboardCheck, Sparkles, X } from 'lucide-react';
-import { buildConversationalPrompt } from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
+import {
+  buildConversationalPrompt,
+  type AgentBehaviorMode,
+} from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   ensureConversationalPromptLanguage,
@@ -43,6 +46,7 @@ export interface ConversationalPromptDialogProps {
    * Default `false`: il dialog mostra il prompt classico, senza tracing.
    */
   includeLog?: boolean;
+  agentBehavior?: AgentBehaviorMode;
   onClose: () => void;
 }
 
@@ -69,6 +73,7 @@ export function ConversationalPromptDialog({
   open,
   useCases,
   includeLog = false,
+  agentBehavior = 'B',
   onClose,
 }: ConversationalPromptDialogProps): React.ReactElement | null {
   /**
@@ -80,14 +85,17 @@ export function ConversationalPromptDialog({
   const promptResult = React.useMemo<{ value: string; error: string | null }>(() => {
     if (!open) return { value: '', error: null };
     try {
-      return { value: buildConversationalPrompt(useCases, { includeLog }), error: null };
+      return {
+        value: buildConversationalPrompt(useCases, { includeLog, agentBehavior }),
+        error: null,
+      };
     } catch (err) {
       return {
         value: '',
         error: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [open, useCases, includeLog]);
+  }, [open, useCases, includeLog, agentBehavior]);
 
   const [copyJustSucceeded, setCopyJustSucceeded] = React.useState(false);
   const [copyError, setCopyError] = React.useState<string | null>(null);

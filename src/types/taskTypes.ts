@@ -553,6 +553,12 @@ export interface Task {
    */
   agentLogUseCase?: boolean;
 
+  /**
+   * Comportamento UKS (use case non riconosciuto) nel prompt conversazionale:
+   * A = risposta libera + trace UKS; B = «Non ho capito, può ripetere?»; C = ripeti poi operatore.
+   */
+  agentBehavior?: 'A' | 'B' | 'C';
+
   /** Client-only: last IA provisioning failure for this row (never persisted). */
   provisioningError?: NormalizedIaProviderError;
 

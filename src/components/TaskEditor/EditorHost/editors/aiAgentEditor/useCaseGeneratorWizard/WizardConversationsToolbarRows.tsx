@@ -190,11 +190,11 @@ function ConversationOutcomeGroup({
     <div className={clusterShell} role="group" aria-label={label}>
       <span className={iconClass} title={label} aria-hidden>
         {group === 'discovery' ? (
-          <Lightbulb size={12} />
+          <Lightbulb size={14} />
         ) : group === 'positive' ? (
-          <ThumbsUp size={12} />
+          <ThumbsUp size={14} />
         ) : (
-          <ThumbsDown size={12} />
+          <ThumbsDown size={14} />
         )}
       </span>
       <div className="inline-flex flex-wrap items-center gap-2">
@@ -264,7 +264,7 @@ function ConversationTabButton({
       <span className="tabular-nums">{ordinal}</span>
       {suggested && group !== 'discovery' ? (
         <Lightbulb
-          size={12}
+          size={14}
           className="shrink-0 text-amber-300"
           aria-label="contiene use case emergenti"
         />

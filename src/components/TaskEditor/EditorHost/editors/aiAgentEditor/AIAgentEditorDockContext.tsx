@@ -302,6 +302,13 @@ export interface AIAgentEditorDockContextValue {
    */
   agentLogUseCase: boolean;
   setAgentLogUseCase: (next: boolean) => void;
+  agentBehavior: 'A' | 'B' | 'C';
+  setAgentBehavior: (next: 'A' | 'B' | 'C') => void;
+  agentUseCasesJson: string;
+  compileUseCasePhrasesForCatalog: () => void;
+  compilePhrasesBusy: boolean;
+  projectSlotLexicon: import('@domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon;
+  approveLexiconSurface: (surface: string) => void;
 
   /**
    * Parametri per propagazione/anteprima stile correzioni nel composer (mirror di Omnia Tutor +

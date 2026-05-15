@@ -36,7 +36,12 @@ import {
   projectUseCaseToConversationalJson,
   type UseCaseConversationalJson,
 } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
+import {
+  emptyProjectSlotLexicon,
+  type ProjectSlotLexicon,
+} from '@domain/useCaseBundle/projectSlotLexicon';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import { DeployVariantsRibbon } from '../useCaseBundle/DeployVariantsRibbon';
 import { TokenizedHighlightedText } from './TokenizedHighlightedText';
 import {
   computeSemanticJsonDecorations,
@@ -62,6 +67,8 @@ export interface ConversationalJsonPanelProps {
    * (es. lista SX) così il pannello rimane sincronizzato.
    */
   onSelectUseCase?: (useCaseId: string) => void;
+  /** Lessico progetto per proiezione `variants[]` (compile on-the-fly). */
+  lexicon?: ProjectSlotLexicon;
 }
 
 const MONACO_OPTIONS = {
@@ -82,7 +89,9 @@ export function ConversationalJsonPanel({
   selectedUseCase,
   useCases,
   onSelectUseCase,
+  lexicon: lexiconProp,
 }: ConversationalJsonPanelProps): React.ReactElement {
+  const lexicon = lexiconProp ?? emptyProjectSlotLexicon();
   React.useEffect(() => {
     ensureConversationalJsonTheme(monaco);
   }, []);
@@ -93,8 +102,8 @@ export function ConversationalJsonPanel({
    * cambiano le frasi canoniche o gli id.
    */
   const projectableUseCases = React.useMemo(
-    () => (useCases ? useCases.filter((u) => isUseCaseProjectable(u)) : []),
-    [useCases]
+    () => (useCases ? useCases.filter((u) => isUseCaseProjectable(u, lexicon)) : []),
+    [useCases, lexicon]
   );
 
   /**
@@ -117,8 +126,9 @@ export function ConversationalJsonPanel({
   }, [onSelectUseCase, projectableUseCases, selectedUseCase]);
 
   const projected: UseCaseConversationalJson | null = React.useMemo(
-    () => (selectedUseCase ? projectUseCaseToConversationalJson(selectedUseCase) : null),
-    [selectedUseCase]
+    () =>
+      selectedUseCase ? projectUseCaseToConversationalJson(selectedUseCase, { lexicon }) : null,
+    [selectedUseCase, lexicon]
   );
   const compiled = React.useMemo(
     () => (selectedUseCase ? compileUseCaseConversationalText(selectedUseCase) : null),
@@ -289,6 +299,12 @@ export function ConversationalJsonPanel({
                 </ul>
               </div>
             ) : null}
+
+            <RibbonSection
+              title={`Varianti deploy (${projected.variants.length})`}
+            >
+              <DeployVariantsRibbon variants={projected.variants} />
+            </RibbonSection>
 
             <RibbonSection title="JSON">
               <div className="h-[320px] min-h-[240px] overflow-hidden rounded border border-slate-700/60">

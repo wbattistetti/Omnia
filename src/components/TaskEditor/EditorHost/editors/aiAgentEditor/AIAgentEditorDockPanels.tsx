@@ -33,6 +33,13 @@ import {
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
+import { UseCaseBundleToolsStrip } from './useCaseBundle/UseCaseBundleToolsStrip';
+import { CompiledPhraseInspector } from './useCaseBundle/CompiledPhraseInspector';
+import { ProjectSlotLexiconPanel } from './useCaseBundle/ProjectSlotLexiconPanel';
+import {
+  countLexiconConflicts,
+  countStaleCompiledPhrases,
+} from './useCaseBundle/useCaseBundleUiHelpers';
 
 /**
  * Wizard step 1 — un singolo Dockview (single-pane) le cui tab sono:
@@ -208,7 +215,17 @@ export function EditorUseCasesPanel() {
     setAgentConversationStyleAuto,
     agentConversationStyleSelections,
     setAgentConversationStyleSelections,
+    agentBehavior,
+    setAgentBehavior,
+    agentUseCasesJson,
+    compileUseCasePhrasesForCatalog,
+    compilePhrasesBusy,
+    projectSlotLexicon,
+    approveLexiconSurface,
   } = useAIAgentEditorDock();
+
+  const [compiledInspectorOpen, setCompiledInspectorOpen] = React.useState(false);
+  const [lexiconPanelOpen, setLexiconPanelOpen] = React.useState(false);
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
@@ -263,6 +280,28 @@ export function EditorUseCasesPanel() {
     [useCases]
   );
 
+  const openCompiledForUseCase = React.useCallback(
+    (useCaseId: string) => {
+      setSelectedUseCaseId(useCaseId);
+      setCompiledInspectorOpen(true);
+    },
+    []
+  );
+
+  const bundleTools = (
+    <UseCaseBundleToolsStrip
+      agentUseCasesJson={agentUseCasesJson}
+      agentBehavior={agentBehavior}
+      onAgentBehaviorChange={setAgentBehavior}
+      onCompilePhrases={compileUseCasePhrasesForCatalog}
+      compileBusy={compilePhrasesBusy}
+      onOpenLexiconPanel={() => setLexiconPanelOpen(true)}
+      onOpenCompiledInspector={() => setCompiledInspectorOpen(true)}
+      lexiconConflictCount={countLexiconConflicts(projectSlotLexicon)}
+      stalePhraseCount={countStaleCompiledPhrases(useCases)}
+    />
+  );
+
   const composer = (
     <AIAgentUseCaseComposer
       editorTaskInstanceId={instanceId}
@@ -299,6 +338,8 @@ export function EditorUseCasesPanel() {
       controlledSelectionId={selectedUseCaseId}
       showTokenizedAgentMessage={Boolean(useCaseGeneratorWizard?.showTokenizedInBubbles)}
       tokenizedByUseCaseId={tokenizedByUseCaseId}
+      projectSlotLexicon={projectSlotLexicon}
+      onInspectCompiled={openCompiledForUseCase}
     />
   );
 
@@ -520,7 +561,12 @@ export function EditorUseCasesPanel() {
         );
       }
     } else {
-      leftPanel = composer;
+      leftPanel = (
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          {bundleTools}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+        </div>
+      );
     }
 
     const tokenizedUseCaseCount = useCases.reduce(
@@ -535,7 +581,8 @@ export function EditorUseCasesPanel() {
     ).some(Boolean);
 
     return (
-      <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-100/95 dark:bg-slate-950/80">
+      <>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
         <UseCaseWizardListToolbarProvider>
           <ViewSkaGenerator
             wizard={useCaseGeneratorWizard}
@@ -584,14 +631,47 @@ export function EditorUseCasesPanel() {
             selectedUseCase={selectedUseCase}
             onSelectUseCaseRequest={setSelectedUseCaseId}
             useCases={useCases}
+            projectSlotLexicon={projectSlotLexicon}
             generationStyleContract={generationStyleContract}
             onGenerationStyleContractChange={onGenerationStyleContractChange}
             generationStyleFieldDisabled={useCaseComposerBlockingBusy}
           />
         </UseCaseWizardListToolbarProvider>
       </div>
+      <CompiledPhraseInspector
+        open={compiledInspectorOpen}
+        onClose={() => setCompiledInspectorOpen(false)}
+        useCase={selectedUseCase}
+        lexicon={projectSlotLexicon}
+      />
+      <ProjectSlotLexiconPanel
+        open={lexiconPanelOpen}
+        onClose={() => setLexiconPanelOpen(false)}
+        lexicon={projectSlotLexicon}
+        onApproveEntry={approveLexiconSurface}
+      />
+      </>
     );
   }
 
-  return <div className="h-full min-h-0 overflow-hidden flex flex-col bg-slate-100/95 dark:bg-slate-950/80">{composer}</div>;
+  return (
+    <>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
+        {bundleTools}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+      </div>
+      <CompiledPhraseInspector
+        open={compiledInspectorOpen}
+        onClose={() => setCompiledInspectorOpen(false)}
+        useCase={selectedUseCase}
+        lexicon={projectSlotLexicon}
+      />
+      <ProjectSlotLexiconPanel
+        open={lexiconPanelOpen}
+        onClose={() => setLexiconPanelOpen(false)}
+        lexicon={projectSlotLexicon}
+        onApproveEntry={approveLexiconSurface}
+      />
+    </>
+  );
 }

@@ -26,47 +26,35 @@
 
 import { extractTokenNames } from './tokenizedText';
 import { autoTokenizeAnnotated, type AutoTokenizeBracket } from './tokenTypeInference';
+import { ensureUseCasePhrases } from '../useCaseBundle/migrateUseCase';
+import { compilePhraseVariant } from '../useCaseBundle/semanticCompile';
+import { buildParametricWhenClause } from '../useCaseBundle/parametricPhraseHelpers';
+import { emptyProjectSlotLexicon, type ProjectSlotLexicon } from '../useCaseBundle/projectSlotLexicon';
+import type { AIAgentPhraseVariant } from '../useCaseBundle/schema';
 import {
   getAssistantExample,
   isUseCaseIncludedInConversations,
   type AIAgentUseCase,
 } from '@types/aiAgentUseCases';
 
+/** Variante deploy (schema v2 prompt conversazionale). */
+export interface UseCaseConversationalVariantJson {
+  variantId: string;
+  phraseId?: string;
+  tokenizedExample: string;
+  tokens: string[];
+  when?: string;
+}
+
 /**
  * Forma JSON di un singolo use case nel «prompt conversazionale» esposto al motore esterno.
- * Schema-stabile: aggiungere campi è breaking change perché il motore esterno potrebbe averli
- * mappati nel suo prompt. Aggiunte vanno fatte solo dietro consenso designer + bump versione.
+ * Schema v2: sempre `variants[]` (anche con una sola voce).
  */
 export interface UseCaseConversationalJson {
-  /** GUID dello use case nel catalogo. */
   useCaseId: string;
-  /** Etichetta umana mostrata nel catalogo. */
   label: string;
-  /**
-   * Narrativa sintetica di scenario (1–3 frasi): il `payoff` dello use case. Aiuta il motore
-   * esterno a riconoscere quando applicare questo use case rispetto agli altri.
-   */
   scenario: string;
-  /**
-   * Frase tokenizzata canonica: testo dell'agente con le parti variabili sostituite da
-   * placeholder tra parentesi quadre (es. `Buongiorno, alle [orario]`).
-   */
-  tokenizedExample: string;
-  /**
-   * Nomi dei placeholder presenti in `tokenizedExample`, in ordine di prima apparizione,
-   * con dedup. I nomi sono ESATTAMENTE come scritti nella frase (inclusi gli indici per
-   * disambiguazione: `data1`, `data2`).
-   */
-  tokens: string[];
-  /**
-   * Marker di "log use case" che l'agente runtime deve appendere alla risposta quando
-   * questo use case è stato applicato. Serializzato **solo** quando il task ha
-   * `agentLogUseCase === true` (toggle nel `AIAgentDeployMenu`). Quando assente, il
-   * comportamento runtime è invariato rispetto al passato. Formato fisso:
-   * `USECASE: "<NOME>"` — `USECASE` in MAIUSCOLO, label in MAIUSCOLO racchiusa in virgolette
-   * doppie per renderla riconoscibile a colpo d'occhio nel trace e parsabile via regex
-   * (`/USECASE:\s*"([^"]+)"/`).
-   */
+  variants: UseCaseConversationalVariantJson[];
   log?: string;
 }
 
@@ -77,6 +65,8 @@ export interface UseCaseConversationalJson {
  */
 export interface ProjectUseCaseOptions {
   readonly includeLog?: boolean;
+  /** Lessico progetto per compile on-the-fly se manca snapshot su variante. */
+  readonly lexicon?: ProjectSlotLexicon;
 }
 
 /**
@@ -153,29 +143,149 @@ function buildCompilationWarnings(naturalText: string, brackets: AutoTokenizeBra
  * non partecipano alla proiezione per evitare divergenze.
  */
 export function compileUseCaseConversationalText(
-  uc: AIAgentUseCase
+  uc: AIAgentUseCase,
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon()
 ): UseCaseConversationalCompilation | null {
-  const naturalText = getAssistantExample(uc).trim();
+  const withPhrases = ensureUseCasePhrases(uc);
+  const phrase = withPhrases.phrases?.[0];
+  const variant = phrase?.variants?.[0];
+  if (!phrase || !variant) {
+    const naturalText = getAssistantExample(uc).trim();
+    if (!naturalText) return null;
+    const compiled = autoTokenizeAnnotated(naturalText);
+    const tokenizedText = compiled.tokenized.trim();
+    if (!tokenizedText) return null;
+    return {
+      naturalText,
+      tokenizedText,
+      tokens: uniqueTokensFromTokenizedText(tokenizedText),
+      brackets: compiled.brackets,
+      warnings: buildCompilationWarnings(naturalText, compiled.brackets),
+    };
+  }
+  const naturalText =
+    (typeof variant.naturalText === 'string' && variant.naturalText.trim()) ||
+    phrase.naturalText.trim();
   if (!naturalText) return null;
-  const compiled = autoTokenizeAnnotated(naturalText);
-  const tokenizedText = compiled.tokenized.trim();
+  const snap =
+    variant.compiled?.status === 'fresh'
+      ? variant.compiled
+      : compilePhraseVariant(phrase, variant, lexicon);
+  const tokenizedText = snap.tokenizedText.trim();
   if (!tokenizedText) return null;
+  const warnings = buildCompilationWarnings(naturalText, []);
+  if (snap.mappings.some((m) => m.slot_id === 'slot')) {
+    warnings.push('Un valore è stato compilato come [slot]: verifica il lessico progetto.');
+  }
   return {
     naturalText,
     tokenizedText,
-    tokens: uniqueTokensFromTokenizedText(tokenizedText),
-    brackets: compiled.brackets,
-    warnings: buildCompilationWarnings(naturalText, compiled.brackets),
+    tokens: snap.tokens,
+    brackets: [],
+    warnings,
   };
 }
 
+function variantNaturalForDeploy(
+  phrase: { naturalText: string },
+  variant: AIAgentPhraseVariant
+): string {
+  if (typeof variant.naturalText === 'string' && variant.naturalText.trim()) {
+    return variant.naturalText.trim();
+  }
+  return phrase.naturalText.trim();
+}
+
+function collectVariantProjections(
+  uc: AIAgentUseCase,
+  lexicon: ProjectSlotLexicon
+): UseCaseConversationalVariantJson[] {
+  const withPhrases = ensureUseCasePhrases(uc);
+  const out: UseCaseConversationalVariantJson[] = [];
+  for (const phrase of withPhrases.phrases ?? []) {
+    const param = phrase.parametric;
+    if (
+      param?.enabled &&
+      param.dimensions.length > 0 &&
+      param.rows.some((r) => typeof r.promptNaturalText === 'string' && r.promptNaturalText.trim())
+    ) {
+      const defaultVariant = phrase.variants.find((v) => v.variantId === 'default') ?? phrase.variants[0];
+      if (defaultVariant) {
+        const naturalDef = variantNaturalForDeploy(phrase, defaultVariant);
+        if (naturalDef) {
+          const snap =
+            defaultVariant.compiled?.tokenizedText?.trim()
+              ? defaultVariant.compiled
+              : compilePhraseVariant(phrase, defaultVariant, lexicon);
+          if (snap.tokenizedText.trim()) {
+            out.push({
+              variantId: 'default',
+              phraseId: phrase.phraseId,
+              tokenizedExample: snap.tokenizedText,
+              tokens: snap.tokens,
+            });
+          }
+        }
+      }
+      let paramIdx = 0;
+      for (const prow of param.rows) {
+        const prompt = prow.promptNaturalText?.trim();
+        if (!prompt) continue;
+        const when = buildParametricWhenClause(param.dimensions, prow.valuesByDimensionId);
+        const vid = `param_${++paramIdx}`;
+        const rowVariant: AIAgentPhraseVariant = {
+          variantId: vid,
+          naturalText: prompt,
+          ...(when.trim() ? { when: when.trim() } : {}),
+        };
+        const snap = compilePhraseVariant(phrase, rowVariant, lexicon);
+        if (!snap.tokenizedText.trim()) continue;
+        out.push({
+          variantId: vid,
+          phraseId: phrase.phraseId,
+          tokenizedExample: snap.tokenizedText,
+          tokens: snap.tokens,
+          ...(when.trim() ? { when: when.trim() } : {}),
+        });
+      }
+      continue;
+    }
+
+    for (const variant of phrase.variants) {
+      const hasOwnTemplate =
+        typeof variant.naturalText === 'string' && variant.naturalText.trim().length > 0;
+      /** Varianti strutturali senza testo proprio sono bozze: non duplicare il template default nel prompt. */
+      if (variant.variantId !== 'default' && !hasOwnTemplate) continue;
+
+      const natural = variantNaturalForDeploy(phrase, variant);
+      if (!natural) continue;
+      const snap =
+        variant.compiled?.tokenizedText?.trim()
+          ? variant.compiled
+          : compilePhraseVariant(phrase, variant, lexicon);
+      if (!snap.tokenizedText.trim()) continue;
+      out.push({
+        variantId: variant.variantId,
+        phraseId: phrase.phraseId,
+        tokenizedExample: snap.tokenizedText,
+        tokens: snap.tokens,
+        ...(typeof variant.when === 'string' && variant.when.trim()
+          ? { when: variant.when.trim() }
+          : {}),
+      });
+    }
+  }
+  return out;
+}
+
 /**
- * Indica se uno use case ha tutti i campi necessari per essere proiettato in JSON. La
- * tokenizzazione runtime viene compilata on-demand dal testo canonico, quindi non serve più un
- * campo `assistant_example_tokenized` persistito.
+ * Indica se uno use case ha almeno una variante deployabile con testo non vuoto.
  */
-export function isUseCaseProjectable(uc: AIAgentUseCase): boolean {
-  return compileUseCaseConversationalText(uc) !== null;
+export function isUseCaseProjectable(
+  uc: AIAgentUseCase,
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon()
+): boolean {
+  return collectVariantProjections(uc, lexicon).length > 0;
 }
 
 /**
@@ -190,11 +300,10 @@ export function projectUseCaseToConversationalJson(
   uc: AIAgentUseCase,
   options: ProjectUseCaseOptions = {}
 ): UseCaseConversationalJson | null {
-  if (!isUseCaseProjectable(uc)) return null;
+  const lexicon = options.lexicon ?? emptyProjectSlotLexicon();
+  const variants = collectVariantProjections(uc, lexicon);
+  if (variants.length === 0) return null;
 
-  const compiled = compileUseCaseConversationalText(uc);
-  if (!compiled) return null;
-  const tokenizedExample = compiled.tokenizedText;
   const scenario = typeof uc.payoff === 'string' ? uc.payoff.trim() : '';
   const label = typeof uc.label === 'string' ? uc.label.trim() : '';
 
@@ -202,8 +311,7 @@ export function projectUseCaseToConversationalJson(
     useCaseId: uc.id,
     label,
     scenario,
-    tokenizedExample,
-    tokens: compiled.tokens,
+    variants,
   };
   if (options.includeLog === true) {
     projected.log = buildUseCaseLogValue(label);
@@ -246,11 +354,14 @@ export function projectAllUseCasesToConversationalJson(
  * il prompt deve essere completo per essere utile al motore esterno. Use case esclusi non
  * partecipano alla validazione (l'utente li ha tolti consapevolmente di mezzo).
  */
-export function areAllUseCasesProjectable(useCases: readonly AIAgentUseCase[]): boolean {
+export function areAllUseCasesProjectable(
+  useCases: readonly AIAgentUseCase[],
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon()
+): boolean {
   const included = useCases.filter(isUseCaseIncludedInConversations);
   if (included.length === 0) return false;
   for (const uc of included) {
-    if (!isUseCaseProjectable(uc)) return false;
+    if (!isUseCaseProjectable(uc, lexicon)) return false;
   }
   return true;
 }
