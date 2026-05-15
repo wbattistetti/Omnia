@@ -9,6 +9,7 @@ import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
 import { LastAiCostBadge } from '@components/common/LastAiCostBadge';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { wizardTutorialHeadingPill } from './wizardCardStyles';
+import { UseCaseGenerationStyleField } from './UseCaseGenerationStyleField';
 
 export interface UseCaseListStepReviewCardProps {
   useCaseCount: number;
@@ -27,6 +28,10 @@ export interface UseCaseListStepReviewCardProps {
   onAdvanceStep?: () => void;
   canAdvanceStep: boolean;
   advanceStepAnchorRef: React.RefObject<HTMLButtonElement | null>;
+  /** Contratto stile effettivo per le prossime chiamate «genera / crea altri». */
+  generationStyleContract: string;
+  onGenerationStyleContractChange: (next: string) => void;
+  styleFieldDisabled?: boolean;
 }
 
 const BTN_UNIFORM =
@@ -47,6 +52,9 @@ export function UseCaseListStepReviewCard({
   onAdvanceStep,
   canAdvanceStep,
   advanceStepAnchorRef,
+  generationStyleContract,
+  onGenerationStyleContractChange,
+  styleFieldDisabled = false,
 }: UseCaseListStepReviewCardProps): React.ReactElement {
   const n = Math.max(0, useCaseCount);
 
@@ -107,6 +115,11 @@ export function UseCaseListStepReviewCard({
         </ul>
 
         <div className="flex flex-col gap-2 border-t border-slate-700/55 pt-4">
+          <UseCaseGenerationStyleField
+            value={generationStyleContract}
+            onChange={onGenerationStyleContractChange}
+            disabled={styleFieldDisabled}
+          />
           {canGenerateMore ? (
             <UseCaseListGenerateButton
               generateBusy={generateBusy}

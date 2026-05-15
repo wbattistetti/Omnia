@@ -189,6 +189,10 @@ export interface ViewSkaGeneratorProps {
    * post-generazione: checkbox = stili attivi; glow = stile visualizzato nelle bubble.
    */
   conversationsToolbarSlot?: React.ReactNode;
+  /** Contratto stile effettivo (preset + note) per generazione use case. */
+  generationStyleContract?: string;
+  onGenerationStyleContractChange?: (next: string) => void;
+  generationStyleFieldDisabled?: boolean;
 }
 
 function TutorialAsideBody(props: { stepId: UseCaseGeneratorWizardStepId }): React.ReactElement {
@@ -251,6 +255,9 @@ export function ViewSkaGenerator({
   useCases,
   conversationsPayoffMessage = null,
   conversationsToolbarSlot = null,
+  generationStyleContract = '',
+  onGenerationStyleContractChange,
+  generationStyleFieldDisabled = false,
 }: ViewSkaGeneratorProps) {
   const [clearScope, setClearScope] = React.useState<ClearWizardScope | null>(null);
   const clearUseCasesAnchorRef = React.useRef<HTMLButtonElement>(null);
@@ -730,6 +737,11 @@ export function ViewSkaGenerator({
                         onAdvanceStep={onAdvanceWizardStep}
                         canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
                         advanceStepAnchorRef={advanceStepAnchorRef}
+                        generationStyleContract={generationStyleContract}
+                        onGenerationStyleContractChange={
+                          onGenerationStyleContractChange ?? (() => {})
+                        }
+                        styleFieldDisabled={generationStyleFieldDisabled}
                       />
                       {wizard.showNoChangesTutorial ? (
                         <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">

@@ -1715,7 +1715,7 @@ export function AIAgentUseCaseComposer({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {showStyleLearningNotesPanel ? (
+      {!primaryGenerateOnRightOnly && showStyleLearningNotesPanel ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL} space-y-1.5`}>
           <div className="flex items-start justify-between gap-2">
             <label
@@ -1756,7 +1756,7 @@ export function AIAgentUseCaseComposer({
             aria-label="Note stile use case"
           />
         </div>
-      ) : (
+      ) : !primaryGenerateOnRightOnly ? (
         <div className="shrink-0 px-1">
           <button
             type="button"
@@ -1766,7 +1766,7 @@ export function AIAgentUseCaseComposer({
             Aggiungi note di stile (opzionale)
           </button>
         </div>
-      )}
+      ) : null}
       {!primaryGenerateOnRightOnly ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}>
           <div className="flex items-center gap-2">

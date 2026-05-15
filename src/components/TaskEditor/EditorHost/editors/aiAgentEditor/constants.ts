@@ -37,7 +37,8 @@ export const AI_AGENT_GLOBAL_USE_CASE_STYLES: Array<{ id: string; label: string;
   {
     id: 'cortese',
     label: 'Cortese',
-    contract: 'Tono sempre cortese, rispettoso e rassicurante; risposte chiare e collaborative.',
+    contract:
+      'Messaggi molto sintetici, conversazionali e naturali — come al call center: cortesi, rassicuranti, senza prolissità. Scenari completi ma descritti in modo breve e diretto.',
   },
   {
     id: 'ironico',

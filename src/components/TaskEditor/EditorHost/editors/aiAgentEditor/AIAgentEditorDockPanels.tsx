@@ -25,7 +25,11 @@ import {
 } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { InlineStylePillEditor } from './useCaseGeneratorWizard/ConversationStyleEditor';
 import { UseCaseWizardListToolbarProvider } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
-import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
+import { AI_AGENT_GLOBAL_USE_CASE_STYLES, AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
+import {
+  mergeUseCaseGlobalStyleContract,
+  parseStyleContractToLearningNotes,
+} from './mergeUseCaseGlobalStyleContract';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
@@ -213,6 +217,26 @@ export function EditorUseCasesPanel() {
     useCaseComposerBusy ||
     useCaseBundleGenerationBusy ||
     useCasePhraseStylePropagationBusy;
+
+  const baseUseCaseStyleContract = React.useMemo(
+    () =>
+      AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === useCaseGlobalStyleId)?.contract ?? '',
+    [useCaseGlobalStyleId]
+  );
+
+  const generationStyleContract = React.useMemo(
+    () => mergeUseCaseGlobalStyleContract(baseUseCaseStyleContract, agentUseCaseStyleLearningNotes),
+    [baseUseCaseStyleContract, agentUseCaseStyleLearningNotes]
+  );
+
+  const onGenerationStyleContractChange = React.useCallback(
+    (next: string) => {
+      setAgentUseCaseStyleLearningNotes(
+        parseStyleContractToLearningNotes(next, baseUseCaseStyleContract)
+      );
+    },
+    [baseUseCaseStyleContract, setAgentUseCaseStyleLearningNotes]
+  );
 
   /**
    * Lift-up della selezione lista del composer: serve al pannello DX «Mostra JSON» per
@@ -560,6 +584,9 @@ export function EditorUseCasesPanel() {
             selectedUseCase={selectedUseCase}
             onSelectUseCaseRequest={setSelectedUseCaseId}
             useCases={useCases}
+            generationStyleContract={generationStyleContract}
+            onGenerationStyleContractChange={onGenerationStyleContractChange}
+            generationStyleFieldDisabled={useCaseComposerBlockingBusy}
           />
         </UseCaseWizardListToolbarProvider>
       </div>
