@@ -38,13 +38,16 @@ export const UC_SCENARIO_PANEL_SURFACE =
 export const UC_PARAMETRIC_EDITOR_SURFACE =
   'rounded-md border border-slate-300/80 bg-slate-50 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:border-slate-600/50 dark:bg-slate-900/60 dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.15)]';
 
+/** Monospace body in wizard list (aligned with response action rows). */
+export const UC_WIZARD_BODY_MONO = 'font-mono text-sm leading-snug';
+
 /** Testo messaggio agente in lista wizard: massima leggibilità (nero / bianco dark). */
 export const UC_WIZARD_AGENT_MESSAGE_TEXT =
-  'text-slate-950 dark:text-slate-50';
+  `${UC_WIZARD_BODY_MONO} text-slate-950 dark:text-slate-50`;
 
 /** Testo scenario in lista wizard: grigio smorzato (non nero pieno). */
 export const UC_WIZARD_SCENARIO_TEXT =
-  'text-slate-500/95 dark:text-slate-400/95';
+  `${UC_WIZARD_BODY_MONO} text-slate-500/95 dark:text-slate-400/95`;
 
 /** Riquadro scenario in lista wizard / accordion compatto. */
 export const UC_WIZARD_SCENARIO_BLOCK = `rounded-md ${UC_SCENARIO_PANEL_SURFACE}`;
@@ -65,8 +68,8 @@ export const UC_PILL_SCENARIO =
   'inline-flex shrink-0 select-none items-center rounded-full border border-sky-600/40 bg-[hsl(222_28%_16%)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-100 dark:border-sky-500/35 dark:bg-[hsl(220_22%_18%)] dark:text-sky-100/95';
 export const UC_PILL_AGENT_MSG =
   'inline-flex shrink-0 select-none items-center rounded-full border border-emerald-600/50 bg-emerald-950/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-100';
-/** Corpo scenario: ~1px sotto `text-sm` del messaggio agente (textarea classica). */
-export const UC_SCENARIO_BODY_TEXT = 'text-[13px] leading-snug';
+/** Corpo scenario in wizard (mono, leggermente più compatto del messaggio). */
+export const UC_SCENARIO_BODY_TEXT = `${UC_WIZARD_BODY_MONO} text-[13px]`;
 export const UC_CLASSIC_TEXTAREA_SCENARIO =
   `min-w-0 flex-1 rounded-md border border-sky-600/45 bg-slate-900/95 px-2 py-1.5 ${UC_SCENARIO_BODY_TEXT} text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500/45 disabled:opacity-60`;
 export const UC_CLASSIC_TEXTAREA_AGENT =
@@ -121,12 +124,12 @@ export function useCaseHeaderTitleTextClass(
   const weight = active ? 'font-semibold' : 'font-medium';
   const dim = included ? '' : ' opacity-[0.32] saturate-[0.45]';
   if (labelVote === 'up') {
-    return `${weight} text-emerald-700 dark:text-emerald-300${dim}`;
+    return `${UC_WIZARD_BODY_MONO} ${weight} text-emerald-700 dark:text-emerald-300${dim}`;
   }
   if (labelVote === 'down') {
-    return `${weight} text-rose-700 dark:text-rose-300${dim}`;
+    return `${UC_WIZARD_BODY_MONO} ${weight} text-rose-700 dark:text-rose-300${dim}`;
   }
-  return `${weight} text-amber-700 dark:text-amber-400${dim}`;
+  return `${UC_WIZARD_BODY_MONO} ${weight} text-amber-700 dark:text-amber-400${dim}`;
 }
 
 /** Contenitore messaggio agente in lista wizard. */

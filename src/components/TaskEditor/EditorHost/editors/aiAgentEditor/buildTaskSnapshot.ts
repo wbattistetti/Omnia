@@ -4,6 +4,8 @@
 
 import type { AIAgentProposedVariable, AIAgentDesignSampleTurn } from '@types/aiAgentDesign';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
+import { parseAgentConversationalRulesJson } from '@domain/conversationalRules/parseSerialize';
+import type { ConversationalRule } from '@domain/conversationalRules/types';
 import {
   parseAgentLogicalStepsJson,
   parseAgentUseCasesJson,
@@ -36,6 +38,8 @@ export interface AIAgentTaskSnapshot {
   agentDesignHasGeneration: boolean | undefined;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
+  agentConversationalRulesJson: string;
+  conversationalRules: ConversationalRule[];
   agentUseCaseWizardStateJson: string;
   agentIaRuntimeOverrideJson: string;
   agentImmediateStart: boolean;
@@ -120,11 +124,15 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       typeof r?.agentDesignHasGeneration === 'boolean' ? r.agentDesignHasGeneration : undefined,
     agentLogicalStepsJson: String(r?.agentLogicalStepsJson ?? ''),
     agentUseCasesJson: String(r?.agentUseCasesJson ?? ''),
+    agentConversationalRulesJson: String(r?.agentConversationalRulesJson ?? ''),
     agentUseCaseWizardStateJson: String(r?.agentUseCaseWizardStateJson ?? ''),
     agentIaRuntimeOverrideJson: String(r?.agentIaRuntimeOverrideJson ?? ''),
     agentImmediateStart: r?.agentImmediateStart === true,
     logicalSteps: parseAgentLogicalStepsJson(String(r?.agentLogicalStepsJson ?? '')),
     useCases: parseAgentUseCasesJson(String(r?.agentUseCasesJson ?? '')),
+    conversationalRules: parseAgentConversationalRulesJson(
+      String(r?.agentConversationalRulesJson ?? '')
+    ),
     agentConstructionPhase: resolveAgentConstructionPhase(
       r?.agentConstructionPhase,
       persistedHasGen

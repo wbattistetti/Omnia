@@ -6,6 +6,10 @@
 import { DEFAULT_AGENT_PROMPT_PLATFORM } from '@domain/agentPrompt';
 import { AI_AGENT_DEFAULT_PREVIEW_STYLE_ID } from '@types/aiAgentPreview';
 import { AGENT_WIZARD_FIRST_STEP_INDEX } from '@domain/aiAgentConstruction/agentConstructionPhase';
+import {
+  materializeConversationalRulesFromLibrary,
+  serializeConversationalRules,
+} from '@domain/conversationalRules/parseSerialize';
 import { EMPTY_OUTPUT_MAPPINGS } from './constants';
 
 /**
@@ -27,6 +31,9 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentDesignHasGeneration: false,
     agentLogicalStepsJson: '[]',
     agentUseCasesJson: '[]',
+    agentConversationalRulesJson: serializeConversationalRules(
+      materializeConversationalRulesFromLibrary()
+    ),
     agentUseCaseWizardStateJson: '',
     agentUseCaseGlobalStyleId: '',
     agentUseCaseStyleLearningNotes: '',

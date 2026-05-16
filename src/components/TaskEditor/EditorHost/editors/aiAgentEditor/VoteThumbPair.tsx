@@ -10,10 +10,12 @@ export interface VoteThumbPairProps {
   disabled?: boolean;
   outerBtnClass: string;
   onVote: (choice: 'up' | 'down') => void;
+  /** Lucide icon size (default 12). */
+  iconSize?: number;
 }
 
 export function VoteThumbPair(props: VoteThumbPairProps): React.ReactElement {
-  const { vote, disabled, outerBtnClass, onVote } = props;
+  const { vote, disabled, outerBtnClass, onVote, iconSize = 12 } = props;
   return (
     <>
       <button
@@ -26,7 +28,7 @@ export function VoteThumbPair(props: VoteThumbPairProps): React.ReactElement {
           onVote('up');
         }}
       >
-        <ThumbsUp size={12} aria-hidden />
+        <ThumbsUp size={iconSize} aria-hidden />
       </button>
       <button
         type="button"
@@ -38,7 +40,7 @@ export function VoteThumbPair(props: VoteThumbPairProps): React.ReactElement {
           onVote('down');
         }}
       >
-        <ThumbsDown size={12} aria-hidden />
+        <ThumbsDown size={iconSize} aria-hidden />
       </button>
     </>
   );

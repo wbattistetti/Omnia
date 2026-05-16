@@ -880,9 +880,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * cliccando il pulsante "$" oppure cliccando uno qualunque degli step ufficiali (1..5).
    */
   const [costsViewActive, setCostsViewActive] = React.useState(false);
+  const [errorHandlingPanelOpen, setErrorHandlingPanelOpen] = React.useState(false);
   const onSelectWizardStep = React.useCallback(
     (next: AgentWizardStepIndex) => {
       setCostsViewActive(false);
+      setErrorHandlingPanelOpen(false);
       if (next !== 2) setAgentInterfacePanelOpen(false);
       stepSetter(next);
     },
@@ -891,15 +893,30 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const onSelectCostsView = React.useCallback(() => {
     setCostsViewActive(true);
     setAgentInterfacePanelOpen(false);
+    setErrorHandlingPanelOpen(false);
   }, []);
   const onToggleInterfaceView = React.useCallback(() => {
     setCostsViewActive(false);
+    setErrorHandlingPanelOpen(false);
     setAgentInterfacePanelOpen((prev) => {
       const next = !prev;
       if (next) stepSetter(2);
       return next;
     });
   }, [stepSetter]);
+  const onToggleErrorHandlingView = React.useCallback(() => {
+    setCostsViewActive(false);
+    setAgentInterfacePanelOpen(false);
+    setErrorHandlingPanelOpen((prev) => {
+      const next = !prev;
+      if (next) stepSetter(1);
+      return next;
+    });
+  }, [stepSetter]);
+  const useCaseCatalogMode =
+    errorHandlingPanelOpen && c.agentWizardCurrentStep === 1 && !costsViewActive
+      ? ('error_handling' as const)
+      : ('prompts' as const);
   /**
    * Click di «Cominciamo» nella Tutor:
    * 1. attiva l'animazione di uscita della Tutor (`tutorExiting=true`, ~400ms);
@@ -1156,6 +1173,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     logicalSteps: c.logicalSteps,
     useCases: c.useCases,
     setUseCases: c.setUseCases,
+    conversationalRules: c.conversationalRules,
+    setConversationalRules: c.setConversationalRules,
+    useCaseCatalogMode,
     useCaseComposerBusy: c.useCaseComposerBusy,
     useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
     useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
@@ -1170,6 +1190,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onRegenerateAgentMessage: c.handleRegenerateAgentMessage,
     onAnnotateAgentMessageForJson: c.handleAnnotateAgentMessageForJson,
     onDeleteUseCase: c.handleDeleteUseCase,
+    onCreateConversationalRule: c.handleCreateConversationalRule,
+    onDeleteConversationalRule: c.handleDeleteConversationalRule,
     useCaseGlobalStyleId: c.useCaseGlobalStyleId,
     setUseCaseGlobalStyleId: c.setUseCaseGlobalStyleId,
     agentUseCaseStyleLearningNotes: c.agentUseCaseStyleLearningNotes,
@@ -1257,6 +1279,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     agentBehavior: c.agentBehavior,
     setAgentBehavior: c.setAgentBehavior,
     agentUseCasesJson: c.agentUseCasesJson,
+    agentConversationalRulesJson: c.agentConversationalRulesJson,
     compileUseCasePhrasesForCatalog: c.compileUseCasePhrasesForCatalog,
     compilePhrasesBusy: c.compilePhrasesBusy,
     projectSlotLexicon: c.projectSlotLexicon,
@@ -1407,6 +1430,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               onSelectCosts={onSelectCostsView}
               interfaceActive={agentInterfacePanelOpen && !costsViewActive}
               onToggleInterface={onToggleInterfaceView}
+              errorHandlingActive={errorHandlingPanelOpen && !costsViewActive}
+              onToggleErrorHandling={onToggleErrorHandlingView}
               taskId={instanceId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}
@@ -1422,6 +1447,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         <ConversationalPromptDialog
           open={conversationalPromptDialogOpen}
           useCases={c.useCases}
+          conversationalRules={c.conversationalRules}
           includeLog={c.agentLogUseCase}
           agentBehavior={c.agentBehavior}
           onClose={onCloseConversationalPromptDialog}

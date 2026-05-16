@@ -29,6 +29,7 @@ import {
   buildConversationalPrompt,
   type AgentBehaviorMode,
 } from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
+import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   ensureConversationalPromptLanguage,
@@ -40,6 +41,7 @@ export interface ConversationalPromptDialogProps {
   open: boolean;
   /** Lista use case sorgente — tutti devono avere un messaggio canonico compilabile. */
   useCases: readonly AIAgentUseCase[];
+  conversationalRules?: readonly ConversationalRule[];
   /**
    * Quando true, riflette il toggle "Logga Use Case" del deploy menu: il prompt include
    * il campo `log` per ogni use case e l'istruzione testuale per il caso "non riconosciuto".
@@ -72,6 +74,7 @@ const MONACO_PROMPT_OPTIONS = {
 export function ConversationalPromptDialog({
   open,
   useCases,
+  conversationalRules = [],
   includeLog = false,
   agentBehavior = 'B',
   onClose,
@@ -86,7 +89,11 @@ export function ConversationalPromptDialog({
     if (!open) return { value: '', error: null };
     try {
       return {
-        value: buildConversationalPrompt(useCases, { includeLog, agentBehavior }),
+        value: buildConversationalPrompt(useCases, {
+          includeLog,
+          agentBehavior,
+          conversationalRules,
+        }),
         error: null,
       };
     } catch (err) {
@@ -95,7 +102,7 @@ export function ConversationalPromptDialog({
         error: err instanceof Error ? err.message : String(err),
       };
     }
-  }, [open, useCases, includeLog, agentBehavior]);
+  }, [open, useCases, conversationalRules, includeLog, agentBehavior]);
 
   const [copyJustSucceeded, setCopyJustSucceeded] = React.useState(false);
   const [copyError, setCopyError] = React.useState<string | null>(null);

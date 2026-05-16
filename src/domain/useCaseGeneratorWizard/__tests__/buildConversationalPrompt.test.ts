@@ -146,4 +146,22 @@ describe('buildConversationalPrompt', () => {
       );
     });
   });
+
+  it('appends conversational rules section when provided', () => {
+    const prompt = buildConversationalPrompt([makeUseCase()], {
+      conversationalRules: [
+        {
+          id: 'cr-1',
+          libraryRuleId: 'lib-dati-mancanti',
+          label: 'Dati mancanti',
+          scenario: 'Chiedi solo ciò che manca.',
+          exampleMessage: 'Mi serve ancora [dato].',
+          sort_order: 0,
+        },
+      ],
+    });
+    expect(prompt).toContain('Regole conversazionali');
+    expect(prompt).toContain('Dati mancanti');
+    expect(prompt).toContain('### Regola 1');
+  });
 });

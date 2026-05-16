@@ -8,11 +8,13 @@ interface PanelEmptyDropZoneProps {
   onDropTask: (task: TaskReference) => void;
   color?: string;
   /** Shown when not dragging (default avoids implying the whole editor is only a drop target). */
-  idleLabel?: string;
+  idleLabel?: React.ReactNode;
   /** Shown while a draggable is over the zone. */
   overLabel?: string;
   /** Tighter layout for nested empty states (e.g. escalation row). */
   compact?: boolean;
+  /** Half the default compact height (e.g. use case response action strip). */
+  compactHalf?: boolean;
   /** Fill parent height (single escalation): full-panel drop target. */
   fillAvailable?: boolean;
   // Legacy prop for backward compatibility
@@ -26,6 +28,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
   idleLabel,
   overLabel,
   compact = false,
+  compactHalf = false,
   fillAvailable = false,
 }) => {
   const handleDrop = onDropTask ?? onDropAction;
@@ -63,7 +66,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
     : compact
       ? {
           flex: 1,
-          minHeight: '56px',
+          minHeight: compactHalf ? '28px' : '56px',
           alignSelf: 'stretch',
           maxWidth: '100%',
           width: '100%',
@@ -83,7 +86,11 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
         width: '100%',
         border: isOver ? `2px dashed ${color}` : `1px dashed ${color}40`,
         background: isOver ? `${color}10` : 'transparent',
-        padding: compact ? '0.75rem 1rem' : '1rem 1.25rem',
+        padding: compact
+          ? compactHalf
+            ? '0.35rem 0.65rem'
+            : '0.75rem 1rem'
+          : '1rem 1.25rem',
         borderRadius: '8px',
         transition: 'all 0.2s',
         display: 'flex',

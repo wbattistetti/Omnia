@@ -48,8 +48,10 @@ export type TaskSequenceEditorProps = {
   translations?: Record<string, string>;
   allowedTemplateIds?: readonly string[];
   fillAvailableHeight?: boolean;
-  emptyIdleLabel?: string;
+  emptyIdleLabel?: React.ReactNode;
   emptyOverLabel?: string;
+  /** Half-height compact empty drop zone (nested under message row). */
+  compactEmptyDropZone?: boolean;
   /**
    * When the list becomes empty, call once (e.g. open Tasks palette in ResponseEditor).
    * Ignored if `autoOpenTasksPanel` is false.
@@ -83,6 +85,7 @@ export function TaskSequenceEditor({
   fillAvailableHeight = false,
   emptyIdleLabel = DEFAULT_EMPTY_IDLE,
   emptyOverLabel = DEFAULT_EMPTY_OVER,
+  compactEmptyDropZone = false,
   autoOpenTasksPanel = false,
   onAutoOpenTasksPanel,
   onMoveTaskAcrossLists,
@@ -306,6 +309,7 @@ export function TaskSequenceEditor({
           color={color}
           onDropTask={handleAppend}
           compact={!fillAvailableHeight}
+          compactHalf={compactEmptyDropZone}
           fillAvailable={fillAvailableHeight}
           idleLabel={emptyIdleLabel}
           overLabel={emptyOverLabel}

@@ -51,6 +51,11 @@ import {
 } from '@domain/aiAgentUseCase/stripAssistantTurnsFromUseCases';
 import { remapExtendUseCaseIds } from '@domain/aiAgentUseCase/remapExtendUseCaseIds';
 import {
+  createConversationalRuleFromLabel,
+  serializeConversationalRules,
+} from '@domain/conversationalRules/parseSerialize';
+import type { ConversationalRule } from '@domain/conversationalRules/types';
+import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
   mapSampleToPreviewTurns,
   normalizeAgentPreviewFromTask,
@@ -262,6 +267,7 @@ export function useAIAgentEditorController({
   const [committedDesignDescription, setCommittedDesignDescription] = React.useState('');
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
+  const [conversationalRules, setConversationalRules] = React.useState<ConversationalRule[]>([]);
   /** Ref: letto da setter senza dipendenze stale; default ordine dialogo (non alfabetico). */
   const useCaseSiblingSortModeRef = React.useRef<UseCaseSiblingSortMode>('logical');
   const [useCaseSiblingSortMode, setUseCaseSiblingSortModeState] =
@@ -521,6 +527,14 @@ export function useAIAgentEditorController({
       )
     );
   }, []);
+
+  const setConversationalRulesUser = React.useCallback(
+    (v: React.SetStateAction<ConversationalRule[]>) => {
+      setDirty(true);
+      setConversationalRules(v);
+    },
+    []
+  );
 
   /**
    * Riordino drag & drop tra fratelli: forza modalità «elenco» (logical) e persiste l'ordine
@@ -884,6 +898,7 @@ export function useAIAgentEditorController({
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
     setUseCases(normalizeUseCaseSiblingOrder(b.useCases, 'logical'));
+    setConversationalRules(b.conversationalRules);
     const storedStyle = String(b.agentUseCaseGlobalStyleId || '').trim();
     setUseCaseGlobalStyleIdState(
       AI_AGENT_GLOBAL_USE_CASE_STYLES.some((x) => x.id === storedStyle)
@@ -946,6 +961,7 @@ export function useAIAgentEditorController({
     const reason = persistReasonRef.current;
     persistReasonRef.current = 'direct';
     const agentUseCasesJson = serializeUseCases(useCases);
+    const agentConversationalRulesJson = serializeConversationalRules(conversationalRules);
     const taskBeforePersist = taskRepository.getTask(instanceId);
     let iaRuntimeForPersist = mergeConvaiAgentIdFromGlobalDefaults(
       iaRuntimeConfig,
@@ -981,6 +997,7 @@ export function useAIAgentEditorController({
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
+      agentConversationalRulesJson,
       agentUseCaseWizardStateJson,
       agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(iaRuntimeForPersist),
       agentImmediateStart,
@@ -1032,6 +1049,7 @@ export function useAIAgentEditorController({
     hasAgentGeneration,
     logicalSteps,
     useCases,
+    conversationalRules,
     iaRuntimeConfig,
     agentImmediateStart,
     manualCatalogBackendTaskIds,
@@ -1974,6 +1992,41 @@ export function useAIAgentEditorController({
     [useCases, setUseCasesUser]
   );
 
+  const handleDeleteConversationalRule = React.useCallback((ruleId: string) => {
+    if (!conversationalRules.some((r) => r.id === ruleId)) {
+      setUseCaseComposerError('Regola non trovata.');
+      return;
+    }
+    setUseCaseComposerError(null);
+    setConversationalRules((prev) => prev.filter((r) => r.id !== ruleId));
+    setDirty(true);
+  }, [conversationalRules]);
+
+  const handleCreateConversationalRule = React.useCallback(
+    async (params: {
+      label: string;
+      parentId: string | null;
+      creationScope?: 'single' | 'batch';
+    }): Promise<string> => {
+      const label = String(params.label || '').trim();
+      if (!label) {
+        throw new Error('Il titolo della regola è obbligatorio.');
+      }
+      if (params.parentId !== null) {
+        throw new Error('Le regole conversazionali non supportano sotto-regole.');
+      }
+      const maxOrder = conversationalRules.reduce(
+        (max, r) => Math.max(max, r.sort_order),
+        -1
+      );
+      const rule = createConversationalRuleFromLabel(label, maxOrder + 1);
+      setConversationalRules((prev) => [...prev, rule]);
+      setDirty(true);
+      return rule.id;
+    },
+    [conversationalRules]
+  );
+
   const handleCreateUseCase = React.useCallback(
     async (params: {
       label: string;
@@ -2145,6 +2198,7 @@ export function useAIAgentEditorController({
     hasAgentGeneration,
     agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
     agentUseCasesJson: serializeUseCases(useCases),
+    agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     agentUseCaseWizardStateJson,
     agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(
       mergeConvaiAgentIdFromGlobalDefaults(iaRuntimeConfig, loadGlobalIaAgentConfig())
@@ -2274,6 +2328,8 @@ export function useAIAgentEditorController({
     syncFlowVariableFromLabel,
     logicalSteps,
     useCases,
+    conversationalRules,
+    setConversationalRules: setConversationalRulesUser,
     setLogicalSteps,
     setUseCases: setUseCasesUser,
     useCaseComposerBusy,
@@ -2296,6 +2352,8 @@ export function useAIAgentEditorController({
     handleRegenerateAgentMessage,
     handleAnnotateAgentMessageForJson,
     handleDeleteUseCase,
+    handleCreateConversationalRule,
+    handleDeleteConversationalRule,
     useCaseSiblingSortMode,
     setUseCaseSiblingSortMode,
     reorderUseCaseSiblingByDrag,
@@ -2335,6 +2393,7 @@ export function useAIAgentEditorController({
     setAgentInterfaceOutput,
     agentInterfaceJson,
     agentUseCasesJson: serializeUseCases(useCases),
+    agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     compileUseCasePhrasesForCatalog,
     compilePhrasesBusy,
     projectSlotLexicon,

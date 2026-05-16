@@ -53,6 +53,8 @@ export interface AIAgentConstructionWizardShellProps {
   readonly onSelectCosts?: () => void;
   readonly interfaceActive?: boolean;
   readonly onToggleInterface?: () => void;
+  readonly errorHandlingActive?: boolean;
+  readonly onToggleErrorHandling?: () => void;
   /** Identit\u00e0 del task corrente: necessari per filtrare il report. Solo per `costsActive=true`. */
   readonly taskId?: string;
   readonly taskLabel?: string;
@@ -105,6 +107,8 @@ export function AIAgentConstructionWizardShell({
   onSelectCosts,
   interfaceActive = false,
   onToggleInterface,
+  errorHandlingActive = false,
+  onToggleErrorHandling,
   taskId,
   taskLabel,
   deploySlot = null,
@@ -114,6 +118,10 @@ export function AIAgentConstructionWizardShell({
     STEP_RENDERERS[currentStep] !== undefined ? currentStep : AGENT_WIZARD_FIRST_STEP_INDEX;
   const meta = getAgentWizardStepMeta(safeStep);
   const renderStepBody = STEP_RENDERERS[safeStep];
+  const stepTitle =
+    errorHandlingActive && safeStep === 1
+      ? 'Error Handling and others'
+      : meta.title;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-slate-950 text-slate-100">
@@ -126,6 +134,8 @@ export function AIAgentConstructionWizardShell({
         onSelectCosts={onSelectCosts}
         interfaceActive={interfaceActive}
         onToggleInterface={onToggleInterface}
+        errorHandlingActive={errorHandlingActive}
+        onToggleErrorHandling={onToggleErrorHandling}
         deploySlot={deploySlot}
         bypassGating={bypassGating}
       />
@@ -151,7 +161,7 @@ export function AIAgentConstructionWizardShell({
               <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-violet-300">
                 Passo {meta.displayNumber}/{AGENT_WIZARD_STEPS_META.length}
               </span>
-              <h2 className="min-w-0 text-base font-semibold text-slate-100">{meta.title}</h2>
+              <h2 className="min-w-0 text-base font-semibold text-slate-100">{stepTitle}</h2>
               {stepHeaderAction ? (
                 <div className="flex shrink-0 items-center">{stepHeaderAction}</div>
               ) : null}

@@ -28,6 +28,8 @@ import {
   areAllUseCasesProjectable,
   projectAllUseCasesToConversationalJson,
 } from './useCaseJsonProjection';
+import { buildConversationalRulesPromptSection } from '@domain/conversationalRules/buildConversationalRulesPromptSection';
+import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
 /**
@@ -47,6 +49,8 @@ export type AgentBehaviorMode = 'A' | 'B' | 'C';
 export interface BuildConversationalPromptOptions {
   readonly includeLog?: boolean;
   readonly agentBehavior?: AgentBehaviorMode;
+  /** Optional cross-cutting rules (separate from business use-case catalog). */
+  readonly conversationalRules?: readonly ConversationalRule[];
 }
 
 /**
@@ -168,5 +172,11 @@ export function buildConversationalPrompt(
     ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${uksBlock}\n\n${catalogBlocks.join('\n\n')}`
     : `${uksBlock}\n\n${catalogBlocks.join('\n\n')}`;
 
-  return `${PROMPT_HEADER_IT}\n\n${catalogSection}\n`;
+  const rulesSection = buildConversationalRulesPromptSection(
+    options.conversationalRules ?? []
+  );
+  const body = rulesSection.trim()
+    ? `${catalogSection}\n\n${rulesSection}`
+    : catalogSection;
+  return `${PROMPT_HEADER_IT}\n\n${body}\n`;
 }

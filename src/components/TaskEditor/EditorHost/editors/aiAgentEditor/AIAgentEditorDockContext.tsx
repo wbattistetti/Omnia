@@ -4,6 +4,7 @@
 
 import React from 'react';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
+import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
@@ -19,6 +20,9 @@ import type { UseCaseSiblingSortMode } from './useCaseHierarchy';
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 
 /** Triade `(purpose, taskId, taskLabel)` serializzabile verso `/design/*` — allineato a {@link AiCallMeta}. */
+/** Which catalog the use-case composer is editing in the Prompts step. */
+export type UseCaseCatalogMode = 'prompts' | 'error_handling';
+
 export type AIAgentPropagatorCallMeta = {
   readonly purpose?: string;
   readonly taskId?: string;
@@ -57,6 +61,10 @@ export interface AIAgentEditorDockContextValue {
   logicalSteps: readonly AIAgentLogicalStep[];
   useCases: readonly AIAgentUseCase[];
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
+  conversationalRules: readonly ConversationalRule[];
+  setConversationalRules: React.Dispatch<React.SetStateAction<ConversationalRule[]>>;
+  /** Prompts step: business use cases vs error-handling rules (separate JSON). */
+  useCaseCatalogMode: UseCaseCatalogMode;
   useCaseComposerBusy: boolean;
   /** Generazione / estensione lista use case (LLM bundle); separato da propagazione stile. */
   useCaseBundleGenerationBusy: boolean;
@@ -82,6 +90,12 @@ export interface AIAgentEditorDockContextValue {
     assistantContentFromEditor?: string
   ) => void | Promise<boolean>;
   onDeleteUseCase: (useCaseId: string) => void;
+  onCreateConversationalRule: (params: {
+    label: string;
+    parentId: string | null;
+    creationScope?: 'single' | 'batch';
+  }) => Promise<string>;
+  onDeleteConversationalRule: (ruleId: string) => void;
   useCaseCreationMessage: string | null;
   /** Global style contract for all use-case dialogues. */
   useCaseGlobalStyleId: string;
@@ -316,6 +330,7 @@ export interface AIAgentEditorDockContextValue {
   agentBehavior: 'A' | 'B' | 'C';
   setAgentBehavior: (next: 'A' | 'B' | 'C') => void;
   agentUseCasesJson: string;
+  agentConversationalRulesJson: string;
   compileUseCasePhrasesForCatalog: () => void;
   compilePhrasesBusy: boolean;
   projectSlotLexicon: import('@domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon;

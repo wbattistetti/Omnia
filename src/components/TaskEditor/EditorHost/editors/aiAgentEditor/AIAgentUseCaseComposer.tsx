@@ -49,6 +49,7 @@ import {
 import { StructuralVariantsEditor } from './useCaseBundle/StructuralVariantsEditor';
 import { UseCaseResponseEditor } from './UseCaseResponseEditor';
 import { usePatchUseCaseResponseTasks } from './usePatchUseCaseResponseTasks';
+import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { UseCaseRowDeployChips } from './useCaseBundle/UseCaseRowDeployChips';
 import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeployStats';
@@ -268,10 +269,8 @@ export interface AIAgentUseCaseComposerProps {
   projectSlotLexicon?: ProjectSlotLexicon;
   /** Apre «Vedi compilato» per uno use case (barra salute / chip occhio). */
   onInspectCompiled?: (useCaseId: string) => void;
-}
-
-function isPrimaryPhraseParametricEnabled(uc: AIAgentUseCase): boolean {
-  return Boolean(ensureUseCasePhrases(uc).phrases?.[0]?.parametric?.enabled);
+  /** `conversational_rules`: catalogo error handling (no IA create/regenerate). */
+  composerCatalog?: 'prompts' | 'conversational_rules';
 }
 
 export function AIAgentUseCaseComposer({
@@ -309,7 +308,9 @@ export function AIAgentUseCaseComposer({
   tokenizedByUseCaseId,
   projectSlotLexicon = emptyProjectSlotLexicon(),
   onInspectCompiled,
+  composerCatalog = 'prompts',
 }: AIAgentUseCaseComposerProps) {
+  const isConversationalRulesCatalog = composerCatalog === 'conversational_rules';
   const patchUseCaseResponseTasks = usePatchUseCaseResponseTasks(setUseCases);
 
   const seedUseCaseResponse = React.useCallback(
@@ -2162,7 +2163,11 @@ export function AIAgentUseCaseComposer({
                     setRootBatchWarning(null);
                   }}
                   disabled={busy}
-                  placeholder="Uno o più use case: una riga per scenario, oppure separa con ; o ,. INVIO crea tutti in sequenza."
+                  placeholder={
+                    isConversationalRulesCatalog
+                      ? 'Una o più regole: una riga per titolo, oppure separa con ; o ,. INVIO crea tutte in sequenza.'
+                      : 'Uno o più use case: una riga per scenario, oppure separa con ; o ,. INVIO crea tutti in sequenza.'
+                  }
                   className="w-full resize-none overflow-hidden rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 min-h-[36px]"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2183,7 +2188,9 @@ export function AIAgentUseCaseComposer({
                   <p className="text-sm text-slate-500 max-w-md">
                     {onGenerateUseCaseBundle
                       ? 'Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.'
-                      : primaryGenerateOnRightOnly
+                      : isConversationalRulesCatalog
+                        ? 'Le regole predefinite (error handling) compaiono qui. Aggiungi nuove regole nella text box sopra e premi INVIO.'
+                        : primaryGenerateOnRightOnly
                         ? (
                           <>
                             Nessuno use case ancora.
@@ -2735,14 +2742,44 @@ export function AIAgentUseCaseComposer({
                           ) : null}
                           {wizardShowMessage ? (
                             <div className={UC_WIZARD_AGENT_MESSAGE_PANEL}>
-                              {primaryGenerateOnRightOnly &&
-                              !isPrimaryPhraseParametricEnabled(u) ? (
+                              {primaryGenerateOnRightOnly ? (
+                                rowAssistant ? (
                                 <UseCaseResponseEditor
                                   useCase={u}
                                   onPatchResponseTasks={patchUseCaseResponseTasks}
+                                  onPatchUseCase={(updater) =>
+                                    setUseCases((prev) =>
+                                      prev.map((x) => (x.id === u.id ? updater(x) : x))
+                                    )
+                                  }
                                   onSeedUseCase={seedUseCaseResponse}
-                                  disabled={busy}
+                                  onAgentMessageVote={(choice) =>
+                                    toggleDesignerFieldVote(u.id, 'agentMessage', choice)
+                                  }
+                                  onAssistantPhraseDraftChange={onAssistantPhraseDraftChange}
+                                  parametricCartesianFeedback={
+                                    parametricCartesianErrorById[u.id] ?? null
+                                  }
+                                  busy={busy}
+                                  searchSeed={wizardSearchSeed}
+                                  showTokenizedAgentMessage={showTokenizedAgentMessage}
+                                  tokenizedByUseCaseId={tokenizedByUseCaseId}
                                 />
+                                ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-xs text-slate-500">
+                                    Nessun turno assistente. Aggiungi un messaggio vuoto per iniziare.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => ensureAssistantTurnFor(u.id)}
+                                    className="text-xs text-emerald-300 underline disabled:opacity-50"
+                                  >
+                                    Aggiungi messaggio agente (vuoto)
+                                  </button>
+                                </div>
+                                )
                               ) : rowAssistant ? (
                                 (() => {
                                   /**

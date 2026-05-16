@@ -21,7 +21,7 @@
  */
 
 import React from 'react';
-import { Check, DollarSign, Lock, Unplug } from 'lucide-react';
+import { Check, DollarSign, Lock, MessagesSquare, ShieldAlert, Unplug } from 'lucide-react';
 import {
   AGENT_WIZARD_STEP_COUNT,
   type AgentWizardStepIndex,
@@ -53,6 +53,9 @@ export interface AIAgentConstructionStepperProps {
   readonly interfaceActive?: boolean;
   /** Toggle pannello Interface; tipicamente apre anche il passo Backend. */
   readonly onToggleInterface?: () => void;
+  /** Vista regole conversazionali (error handling) sul passo Prompts. */
+  readonly errorHandlingActive?: boolean;
+  readonly onToggleErrorHandling?: () => void;
   /**
    * Slot opzionale renderizzato all'estrema destra dello stepper, dopo il pulsante "Costi".
    * Tipicamente contiene il dropdown «Deploy»: il parent decide quando mostrarlo (es. solo
@@ -97,6 +100,8 @@ export function AIAgentConstructionStepper({
   onSelectCosts,
   interfaceActive = false,
   onToggleInterface,
+  errorHandlingActive = false,
+  onToggleErrorHandling,
   deploySlot = null,
   bypassGating = false,
 }: AIAgentConstructionStepperProps): React.ReactElement {
@@ -128,7 +133,11 @@ export function AIAgentConstructionStepper({
           Su layout stretto che va a capo, il deploy resta allineato a destra dell'ULTIMA riga.
         */}
         {AGENT_WIZARD_STEPS_META.map((meta) => {
-          const isCurrent = !costsActive && meta.index === currentStep;
+          const isPromptsStep = meta.index === 1;
+          const isCurrent =
+            !costsActive &&
+            !errorHandlingActive &&
+            meta.index === currentStep;
           const isComplete = completion[meta.index] === true;
           const isEnabled = enabled[meta.index] === true;
           const Icon = meta.icon;
@@ -141,60 +150,93 @@ export function AIAgentConstructionStepper({
               : isEnabled
                 ? 'bg-slate-800 text-slate-100 border-slate-600 hover:bg-slate-700'
                 : 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed';
-          /**
-           * Glow transitorio (anello verde). Non sostituisce `stateClass` ma si somma.
-           */
           const glowClass = isGlow
             ? 'animate-pulse ring-4 ring-emerald-400/55 shadow-[0_0_20px_rgba(52,211,153,0.45)]'
             : '';
 
           const showPendingLabelMark = isEnabled && !isComplete;
 
-          return (
-            <li key={meta.index}>
-              <button
-                type="button"
-                disabled={!isEnabled}
-                aria-current={isCurrent ? 'step' : undefined}
-                aria-label={`Passo ${meta.displayNumber}: ${meta.title}${
-                  isComplete
-                    ? ' (completato)'
-                    : isEnabled
-                      ? ' (da completare)'
-                      : ' (bloccato)'
-                }`}
-                onClick={() => {
-                  if (isEnabled) onSelectStep(meta.index);
-                }}
-                className={`flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${stateClass} ${glowClass}`}
-              >
-                <span
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/25 text-xs font-semibold tabular-nums"
-                  aria-hidden
+          const errorHandlingButton =
+            isPromptsStep && onToggleErrorHandling ? (
+              <li key="error-handling">
+                <button
+                  type="button"
+                  aria-pressed={errorHandlingActive}
+                  aria-label="Error Handling: regole conversazionali trasversali"
+                  title="Apre le regole conversazionali (error handling) nel pannello sinistro"
+                  onClick={onToggleErrorHandling}
+                  className={
+                    'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
+                    (errorHandlingActive
+                      ? 'border-rose-500/55 bg-rose-950/75 text-rose-100 shadow-sm ring-2 ring-rose-400/30'
+                      : 'border-rose-800/45 bg-rose-950/35 text-rose-200/85 hover:border-rose-600/50 hover:bg-rose-950/55 hover:text-rose-100')
+                  }
                 >
-                  {isComplete ? (
-                    <Check size={14} className="text-emerald-300" strokeWidth={2.5} />
-                  ) : !isEnabled ? (
-                    <Lock size={13} className="text-slate-500" strokeWidth={2} />
-                  ) : (
-                    meta.displayNumber
-                  )}
-                </span>
-                <Icon size={15} aria-hidden className="shrink-0 opacity-85" strokeWidth={2} />
-                <span className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap text-sm font-medium leading-none">
-                  <span>{meta.label}</span>
-                  {showPendingLabelMark ? (
-                    <span
-                      className="inline-flex h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded bg-amber-400/16 px-0.5 text-[10px] font-bold text-amber-300/90"
-                      aria-hidden
-                      title="Passo da completare"
-                    >
-                      ?
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            </li>
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/25"
+                    aria-hidden
+                  >
+                    <ShieldAlert size={14} className="text-rose-300/90" strokeWidth={2} />
+                  </span>
+                  <MessagesSquare
+                    size={15}
+                    aria-hidden
+                    className="shrink-0 opacity-85 text-amber-300/90"
+                    strokeWidth={2}
+                  />
+                  <span className="whitespace-nowrap">Error Handling</span>
+                </button>
+              </li>
+            ) : null;
+
+          return (
+            <React.Fragment key={meta.index}>
+              <li>
+                <button
+                  type="button"
+                  disabled={!isEnabled}
+                  aria-current={isCurrent ? 'step' : undefined}
+                  aria-label={`Passo ${meta.displayNumber}: ${meta.title}${
+                    isComplete
+                      ? ' (completato)'
+                      : isEnabled
+                        ? ' (da completare)'
+                        : ' (bloccato)'
+                  }`}
+                  onClick={() => {
+                    if (isEnabled) onSelectStep(meta.index);
+                  }}
+                  className={`flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${stateClass} ${glowClass}`}
+                >
+                  <span
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/25 text-xs font-semibold tabular-nums"
+                    aria-hidden
+                  >
+                    {isComplete ? (
+                      <Check size={14} className="text-emerald-300" strokeWidth={2.5} />
+                    ) : !isEnabled ? (
+                      <Lock size={13} className="text-slate-500" strokeWidth={2} />
+                    ) : (
+                      meta.displayNumber
+                    )}
+                  </span>
+                  <Icon size={15} aria-hidden className="shrink-0 opacity-85" strokeWidth={2} />
+                  <span className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap text-sm font-medium leading-none">
+                    <span>{meta.label}</span>
+                    {showPendingLabelMark ? (
+                      <span
+                        className="inline-flex h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded bg-amber-400/16 px-0.5 text-[10px] font-bold text-amber-300/90"
+                        aria-hidden
+                        title="Passo da completare"
+                      >
+                        ?
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+              {errorHandlingButton}
+            </React.Fragment>
           );
         })}
         {onToggleInterface ? (

@@ -5,6 +5,7 @@ import {
   createSayMessageTaskRow,
   ensureUseCaseResponse,
   getMessageTextFromResponseTasks,
+  mapTasksUpdatingMessageText,
   mapUseCasesWithResponseTasksUpdaters,
   patchUseCaseResponseTasks,
   syncAssistantDialogueFromResponseTasks,
@@ -48,6 +49,14 @@ describe('patchUseCaseResponseTasks', () => {
     };
     const next = patchUseCaseResponseTasks(uc, [row]);
     expect(next.dialogue.find((t) => t.role === 'assistant')?.content).toBe('Nuovo testo');
+  });
+});
+
+describe('mapTasksUpdatingMessageText', () => {
+  it('updates text on existing sayMessage row', () => {
+    const uc = ensureUseCaseResponse(minimalUseCase());
+    const tasks = mapTasksUpdatingMessageText(uc.response!.tasks, 'Nuovo');
+    expect(getMessageTextFromResponseTasks(tasks)).toBe('Nuovo');
   });
 });
 

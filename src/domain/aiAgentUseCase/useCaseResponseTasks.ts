@@ -39,7 +39,46 @@ export function getUseCaseResponseTasks(useCase: AIAgentUseCase): TaskSequenceRo
 export function getMessageTextFromResponseTasks(tasks: readonly TaskSequenceRow[]): string {
   const msg = tasks.find((t) => isMessageLikeEscalationTask(t));
   if (!msg) return '';
-  return getScalarParameterValue(msg, 'text').trim();
+  return getScalarParameterValue(msg, 'text');
+}
+
+/** Splits response tasks into primary message row(s) and operational actions. */
+export function splitResponseMessageAndActions(tasks: readonly TaskSequenceRow[]): {
+  messageTasks: TaskSequenceRow[];
+  actionTasks: TaskSequenceRow[];
+} {
+  const messageTasks: TaskSequenceRow[] = [];
+  const actionTasks: TaskSequenceRow[] = [];
+  for (const t of tasks) {
+    if (isMessageLikeEscalationTask(t)) {
+      messageTasks.push(t);
+    } else {
+      actionTasks.push(t);
+    }
+  }
+  return { messageTasks, actionTasks };
+}
+
+/** Returns tasks with the first message-like row's `text` parameter updated (or appends one). */
+export function mapTasksUpdatingMessageText(
+  tasks: readonly TaskSequenceRow[],
+  text: string
+): TaskSequenceRow[] {
+  let updated = false;
+  const next = tasks.map((t) => {
+    if (!isMessageLikeEscalationTask(t)) return t;
+    updated = true;
+    const params = Array.isArray(t.parameters) ? [...t.parameters] : [];
+    const idx = params.findIndex((p) => p.parameterId === 'text');
+    if (idx >= 0) {
+      params[idx] = { ...params[idx], value: text };
+    } else {
+      params.push({ parameterId: 'text', value: text });
+    }
+    return { ...t, parameters: params };
+  });
+  if (updated) return next;
+  return [createSayMessageTaskRow(text), ...next];
 }
 
 /**

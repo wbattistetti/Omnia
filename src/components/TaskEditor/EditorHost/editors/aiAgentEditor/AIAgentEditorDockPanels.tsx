@@ -31,6 +31,11 @@ import {
   mergeUseCaseGlobalStyleContract,
   parseStyleContractToLearningNotes,
 } from './mergeUseCaseGlobalStyleContract';
+import {
+  conversationalRulesToUseCases,
+  useCasesToConversationalRules,
+} from '@domain/conversationalRules/ruleUseCaseMapping';
+import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
@@ -168,6 +173,9 @@ export function EditorUseCasesPanel() {
     logicalSteps,
     useCases,
     setUseCases,
+    conversationalRules,
+    setConversationalRules,
+    useCaseCatalogMode,
     useCaseComposerBusy,
     useCaseBundleGenerationBusy,
     useCasePhraseStylePropagationBusy,
@@ -176,11 +184,13 @@ export function EditorUseCasesPanel() {
     useCaseComposerError,
     onClearUseCaseComposerError,
     onCreateUseCase,
+    onCreateConversationalRule,
     onRegenerateUseCase,
     onGeneralizeUseCaseMeta,
     onRegenerateAgentMessage,
     onAnnotateAgentMessageForJson,
     onDeleteUseCase,
+    onDeleteConversationalRule,
     useCaseGlobalStyleId,
     setUseCaseGlobalStyleId,
     agentUseCaseStyleLearningNotes,
@@ -230,6 +240,36 @@ export function EditorUseCasesPanel() {
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
+  const isErrorHandlingCatalog = useCaseCatalogMode === 'error_handling';
+
+  const catalogUseCases = React.useMemo(
+    () =>
+      isErrorHandlingCatalog
+        ? conversationalRulesToUseCases(conversationalRules)
+        : useCases,
+    [isErrorHandlingCatalog, conversationalRules, useCases]
+  );
+
+  const setCatalogUseCases = React.useCallback(
+    (action: React.SetStateAction<AIAgentUseCase[]>) => {
+      if (!isErrorHandlingCatalog) {
+        setUseCases(action);
+        return;
+      }
+      setConversationalRules((prevRules) => {
+        const prevById = new Map(prevRules.map((r) => [r.id, r]));
+        const prevAsUseCases = conversationalRulesToUseCases(prevRules);
+        const nextUseCases =
+          typeof action === 'function' ? action(prevAsUseCases) : action;
+        return useCasesToConversationalRules(nextUseCases, prevById);
+      });
+    },
+    [isErrorHandlingCatalog, setUseCases, setConversationalRules]
+  );
+
+  const catalogOnCreate = isErrorHandlingCatalog ? onCreateConversationalRule : onCreateUseCase;
+  const catalogOnDelete = isErrorHandlingCatalog ? onDeleteConversationalRule : onDeleteUseCase;
+  const noopRegenerate = React.useCallback(async () => null, []);
 
   const useCaseComposerBlockingBusy =
     useCaseComposerBusy ||
@@ -264,8 +304,8 @@ export function EditorUseCasesPanel() {
    */
   const [selectedUseCaseId, setSelectedUseCaseId] = React.useState<string | null>(null);
   const selectedUseCase = React.useMemo(
-    () => useCases.find((u) => u.id === selectedUseCaseId) ?? null,
-    [useCases, selectedUseCaseId]
+    () => catalogUseCases.find((u) => u.id === selectedUseCaseId) ?? null,
+    [catalogUseCases, selectedUseCaseId]
   );
 
   /**
@@ -276,9 +316,11 @@ export function EditorUseCasesPanel() {
   const excludedUseCaseIds = React.useMemo(
     () =>
       new Set(
-        useCases.filter((u) => u.included_in_conversations === false).map((u) => u.id)
+        catalogUseCases
+          .filter((u) => u.included_in_conversations === false)
+          .map((u) => u.id)
       ),
-    [useCases]
+    [catalogUseCases]
   );
 
   const openCompiledForUseCase = React.useCallback(
@@ -307,18 +349,23 @@ export function EditorUseCasesPanel() {
     <AIAgentUseCaseComposer
       editorTaskInstanceId={instanceId}
       logicalSteps={logicalSteps}
-      useCases={useCases}
-      setUseCases={setUseCases}
-      busy={useCaseComposerBlockingBusy}
-      creationMessage={useCaseCreationMessage}
+      useCases={catalogUseCases}
+      setUseCases={setCatalogUseCases}
+      composerCatalog={isErrorHandlingCatalog ? 'conversational_rules' : 'prompts'}
+      busy={useCaseComposerBlockingBusy && !isErrorHandlingCatalog}
+      creationMessage={isErrorHandlingCatalog ? null : useCaseCreationMessage}
       error={useCaseComposerError}
       onDismissError={onClearUseCaseComposerError}
-      onCreateUseCase={onCreateUseCase}
-      onRegenerateUseCase={onRegenerateUseCase}
-      onGeneralizeUseCaseMeta={onGeneralizeUseCaseMeta}
-      onRegenerateAgentMessage={onRegenerateAgentMessage}
-      onAnnotateAgentMessageForJson={onAnnotateAgentMessageForJson}
-      onDeleteUseCase={onDeleteUseCase}
+      onCreateUseCase={catalogOnCreate}
+      onRegenerateUseCase={isErrorHandlingCatalog ? noopRegenerate : onRegenerateUseCase}
+      onGeneralizeUseCaseMeta={isErrorHandlingCatalog ? noopRegenerate : onGeneralizeUseCaseMeta}
+      onRegenerateAgentMessage={
+        isErrorHandlingCatalog ? async () => null : onRegenerateAgentMessage
+      }
+      onAnnotateAgentMessageForJson={
+        isErrorHandlingCatalog ? async () => false : onAnnotateAgentMessageForJson
+      }
+      onDeleteUseCase={catalogOnDelete}
       useCaseGlobalStyleId={useCaseGlobalStyleId}
       onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
       useCaseStyleLearningNotes={agentUseCaseStyleLearningNotes}
@@ -449,6 +496,8 @@ export function EditorUseCasesPanel() {
     useWizardShell,
   ]);
 
+  const wizardCatalogCount = catalogUseCases.length;
+
   if (useWizardShell && useCaseGeneratorWizard) {
     const currentStepId = useCaseGeneratorWizard.currentStepId;
     const isStepConversations = currentStepId === 'conversations';
@@ -465,7 +514,7 @@ export function EditorUseCasesPanel() {
      * sempre la bubble chat. Se il designer vuole rivedere la lista canonica, clicca
      * sullo step 1 della pipeline.
      */
-    const showBubbleView = isStepConversations;
+    const showBubbleView = isStepConversations && !isErrorHandlingCatalog;
     const conversationsCount = useCaseGeneratorWizard.conversations.length;
     const countByStyleId = countConversationsByStyleId(useCaseGeneratorWizard.conversations);
 
@@ -564,7 +613,7 @@ export function EditorUseCasesPanel() {
     } else {
       leftPanel = (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-          {bundleTools}
+          {isErrorHandlingCatalog ? null : bundleTools}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
         </div>
       );
@@ -589,10 +638,12 @@ export function EditorUseCasesPanel() {
           <ViewSkaGenerator
             wizard={useCaseGeneratorWizard}
             leftPanel={leftPanel}
-            onGenerateUseCaseBundle={showGenerateCta ? onGenerateUseCaseBundle : undefined}
+            onGenerateUseCaseBundle={
+              !isErrorHandlingCatalog && showGenerateCta ? onGenerateUseCaseBundle : undefined
+            }
             generateBusy={useCaseBundleGenerationBusy || generating}
-            showStepOneListToolbar={useCases.length > 0}
-            useCaseCount={useCases.length}
+            showStepOneListToolbar={wizardCatalogCount > 0}
+            useCaseCount={wizardCatalogCount}
             onAdvanceWizardStep={() => useCaseGeneratorWizard.advanceToNextStep()}
             bundleFeedback={useCaseBundleFeedback}
             onDismissBundleFeedback={onDismissUseCaseBundleFeedback}
@@ -632,7 +683,7 @@ export function EditorUseCasesPanel() {
             onClearWizardTokenization={onClearWizardTokenization}
             selectedUseCase={selectedUseCase}
             onSelectUseCaseRequest={setSelectedUseCaseId}
-            useCases={useCases}
+            useCases={catalogUseCases}
             projectSlotLexicon={projectSlotLexicon}
             generationStyleContract={generationStyleContract}
             onGenerationStyleContractChange={onGenerationStyleContractChange}

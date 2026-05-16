@@ -459,6 +459,11 @@ export interface Task {
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
   /**
+   * JSON array: conversational rules (error handling, ecc.) — catalogo separato dagli use case
+   * di business. Snapshot completo per regola sul task; libreria globale fa da seed.
+   */
+  agentConversationalRulesJson?: string;
+  /**
    * Agent orchestrator contract: INPUT/OUTPUT parameter lists (`wireKey`, optional `variableRefId`).
    * @see `parseAgentInterfaceJson` in `@domain/agentInterface/agentInterfaceState`.
    */
