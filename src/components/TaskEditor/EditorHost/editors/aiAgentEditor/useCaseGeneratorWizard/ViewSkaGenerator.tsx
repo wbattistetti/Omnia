@@ -29,6 +29,7 @@ import { isCompletaCorrezioneCalloutSurfaceActive } from '../useCaseSubstantialE
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import { UseCaseActionsPalettePanel } from '../UseCaseActionsPalettePanel';
+import { SlotMappingRightPanel } from '../useCaseBundle/SlotMappingRightPanel';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
 const RIGHT_PANEL_MIN_PX = 250;
@@ -180,8 +181,11 @@ export interface ViewSkaGeneratorProps {
    * Default: array vuoto (il bottone resta nascosto, le frecce DX nascoste).
    */
   useCases?: readonly AIAgentUseCase[];
-  /** Lessico progetto per anteprima JSON `variants[]` con compile semantico. */
+  /** Lessico slot per anteprima JSON e pannello Slot Mapping. */
   projectSlotLexicon?: ProjectSlotLexicon;
+  onApproveLexiconEntry?: (surface: string) => void;
+  onRevokeLexiconEntry?: (surface: string) => void;
+  onUpdateLexiconSlotId?: (surface: string, slotId: string) => void;
   /**
    * Messaggio payoff inline da mostrare sotto i 3 pulsanti di creazione conversazione
    * (Passo 2). Usato dal **gate di stile**: se l'utente clicca un pulsante senza aver
@@ -258,6 +262,9 @@ export function ViewSkaGenerator({
   onSelectUseCaseRequest,
   useCases,
   projectSlotLexicon,
+  onApproveLexiconEntry,
+  onRevokeLexiconEntry,
+  onUpdateLexiconSlotId,
   conversationsPayoffMessage = null,
   conversationsToolbarSlot = null,
   generationStyleContract = '',
@@ -340,10 +347,21 @@ export function ViewSkaGenerator({
   const canShowJsonToggle = (isStepOne || isStepTokenization) && useCaseCount > 0;
   const showJsonRightPanel =
     (isStepTokenization && useCaseCount > 0) || (canShowJsonToggle && wizard.showJsonPanel);
+  const showSlotMappingRightPanel =
+    unifiedUseCaseListReview &&
+    Boolean(listToolbarCtx?.showSlotMappingPanel) &&
+    !showJsonRightPanel;
   const showActionsRightPanel =
     unifiedUseCaseListReview &&
     Boolean(listToolbarCtx?.showActionsPanel) &&
-    !showJsonRightPanel;
+    !showJsonRightPanel &&
+    !showSlotMappingRightPanel;
+
+  React.useEffect(() => {
+    if (listToolbarCtx?.showSlotMappingPanel && wizard.showJsonPanel) {
+      wizard.toggleShowJsonPanel();
+    }
+  }, [listToolbarCtx?.showSlotMappingPanel, wizard.showJsonPanel, wizard.toggleShowJsonPanel]);
   const stepTheme = STEP_COLOR_THEME[wizard.currentStepId];
   const clearDialogAnchorRef =
     clearScope === 'conversations'
@@ -611,6 +629,8 @@ export function ViewSkaGenerator({
                   wizard={wizard}
                   canShowJsonToggle={canShowJsonToggle}
                   expandTheme="violet"
+                  projectSlotLexicon={projectSlotLexicon}
+                  catalogUseCases={useCases ?? []}
                 />
               </div>
             ) : null}
@@ -671,11 +691,13 @@ export function ViewSkaGenerator({
             aria-label={
               showJsonRightPanel
                 ? 'Anteprima JSON conversazionale dello use case selezionato'
-                : showActionsRightPanel
-                  ? 'Pannello azioni per il response'
-                  : correctionReplacesUseCaseTutorial
-                    ? 'Completa correzione messaggi'
-                    : 'Tutorial e azioni del passo'
+                : showSlotMappingRightPanel
+                  ? 'Slot Mapping'
+                  : showActionsRightPanel
+                    ? 'Pannello azioni per il response'
+                    : correctionReplacesUseCaseTutorial
+                      ? 'Completa correzione messaggi'
+                      : 'Tutorial e azioni del passo'
             }
           >
             {showJsonRightPanel ? (
@@ -684,6 +706,17 @@ export function ViewSkaGenerator({
                 useCases={useCases ?? []}
                 onSelectUseCase={onSelectUseCaseRequest}
                 lexicon={projectSlotLexicon}
+              />
+            ) : showSlotMappingRightPanel &&
+              projectSlotLexicon &&
+              onApproveLexiconEntry &&
+              onRevokeLexiconEntry &&
+              onUpdateLexiconSlotId ? (
+              <SlotMappingRightPanel
+                lexicon={projectSlotLexicon}
+                onApproveEntry={onApproveLexiconEntry}
+                onRevokeEntryApproval={onRevokeLexiconEntry}
+                onUpdateSlotId={onUpdateLexiconSlotId}
               />
             ) : showActionsRightPanel ? (
               <UseCaseActionsPalettePanel />

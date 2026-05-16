@@ -757,20 +757,51 @@ export function useAIAgentEditorController({
     }
   }, [useCases, projectSlotLexicon, instanceId, projectId]);
 
-  const approveLexiconSurface = React.useCallback(
-    (surface: string) => {
+  const patchLexiconEntries = React.useCallback(
+    (map: (entries: ProjectSlotLexicon['entries']) => ProjectSlotLexicon['entries']) => {
       setProjectSlotLexicon((prev) => {
-        const next = {
-          ...prev,
-          entries: prev.entries.map((e) =>
-            e.surface === surface.trim().toLowerCase() ? { ...e, approved: true } : e
-          ),
-        };
+        const next = { ...prev, entries: map(prev.entries) };
         saveProjectSlotLexicon(projectId ?? null, next);
         return next;
       });
+      setDirty(true);
     },
     [projectId]
+  );
+
+  const approveLexiconSurface = React.useCallback(
+    (surface: string) => {
+      const key = surface.trim().toLowerCase();
+      patchLexiconEntries((entries) =>
+        entries.map((e) => (e.surface === key ? { ...e, approved: true } : e))
+      );
+    },
+    [patchLexiconEntries]
+  );
+
+  const revokeLexiconSurface = React.useCallback(
+    (surface: string) => {
+      const key = surface.trim().toLowerCase();
+      patchLexiconEntries((entries) =>
+        entries.map((e) => (e.surface === key ? { ...e, approved: false } : e))
+      );
+    },
+    [patchLexiconEntries]
+  );
+
+  const updateLexiconSlotId = React.useCallback(
+    (surface: string, slotId: string) => {
+      const key = surface.trim().toLowerCase();
+      const nextSlot = slotId.trim().toLowerCase();
+      patchLexiconEntries((entries) =>
+        entries.map((e) =>
+          e.surface === key
+            ? { ...e, slot_id: nextSlot, approved: false, conflictWith: undefined }
+            : e
+        )
+      );
+    },
+    [patchLexiconEntries]
   );
 
   const hydratedRef = React.useRef(false);
@@ -2398,5 +2429,7 @@ export function useAIAgentEditorController({
     compilePhrasesBusy,
     projectSlotLexicon,
     approveLexiconSurface,
+    revokeLexiconSurface,
+    updateLexiconSlotId,
   };
 }

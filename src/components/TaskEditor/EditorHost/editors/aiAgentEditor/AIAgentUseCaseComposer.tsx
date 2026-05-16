@@ -127,6 +127,7 @@ import {
   applyUseCaseCardExpansion,
   collapseAllUseCaseCards,
   expandAllUseCaseCards,
+  expandOnlyUseCaseCards,
   type UseCaseAccordionFoldMode,
   type UseCaseCardExpandSource,
 } from './useCaseAccordionFold';
@@ -1051,6 +1052,17 @@ export function AIAgentUseCaseComposer({
     expandAllWizardCards,
     collapseAllWizardCards,
   ]);
+
+  /** Filtro ricerca / lente Slot Mapping: espandi solo i match visibili. */
+  React.useEffect(() => {
+    if (!primaryGenerateOnRightOnly || !wizardSearchSeed.trim()) return;
+    const openIds = filteredOrdered.map((u) => u.id);
+    if (openIds.length === 0) return;
+    const { expandedById, mode } = expandOnlyUseCaseCards(openIds, orderedIds);
+    accordionFoldModeRef.current = mode;
+    setCardExpandedById(expandedById);
+    setAccordionFoldMode(mode);
+  }, [primaryGenerateOnRightOnly, wizardSearchSeed, filteredOrdered, orderedIds]);
 
   const commitTitleEdit = React.useCallback(
     (useCaseId: string) => {

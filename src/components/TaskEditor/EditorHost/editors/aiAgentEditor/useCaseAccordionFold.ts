@@ -55,6 +55,23 @@ export function collapseAllUseCaseCards(orderedIds: readonly string[]): {
 }
 
 /**
+ * Espande solo gli id indicati e collassa gli altri (filtro ricerca / lente Slot Mapping).
+ */
+export function expandOnlyUseCaseCards(
+  openIds: readonly string[],
+  allOrderedIds: readonly string[]
+): {
+  expandedById: Record<string, boolean>;
+  mode: UseCaseAccordionFoldMode;
+} {
+  const open = new Set(openIds);
+  const expandedById = Object.fromEntries(
+    allOrderedIds.map((id) => [id, open.has(id)])
+  ) as Record<string, boolean>;
+  return { expandedById, mode: open.size > 0 ? 'custom' : 'default' };
+}
+
+/**
  * Applica apertura/chiusura di una card rispettando default/custom.
  */
 export function applyUseCaseCardExpansion(

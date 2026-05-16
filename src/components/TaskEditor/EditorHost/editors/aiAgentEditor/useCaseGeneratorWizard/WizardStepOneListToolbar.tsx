@@ -28,7 +28,7 @@ import {
   Maximize2,
   MessageSquareText,
   Minimize2,
-  Search,
+  ScanSearch,
   X as XIcon,
 } from 'lucide-react';
 import {
@@ -37,6 +37,12 @@ import {
 } from './UseCaseWizardListToolbarContext';
 import { useOptionalAIAgentEditorDock } from '../AIAgentEditorDockContext';
 import type { UseCaseGeneratorWizardModel } from './useUseCaseGeneratorWizard';
+import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import {
+  WizardAgentBehaviorSelect,
+  WizardSlotMappingToggle,
+} from './WizardToolbarSlotMappingControls';
 
 /**
  * Glifo «token disattivati / mostra/nascondi tokenizzazione»: due parentesi quadre con
@@ -87,6 +93,9 @@ export interface WizardStepOneListToolbarProps {
    * fedeli ai colori del campo (violetto / emerald) — vedi nota di intestazione.
    */
   expandTheme?: 'violet' | 'amber';
+  /** Per toggle Slot mapping e validazione. */
+  projectSlotLexicon?: ProjectSlotLexicon;
+  catalogUseCases?: readonly AIAgentUseCase[];
 }
 
 /**
@@ -165,10 +174,12 @@ function UseCaseListSearchInput({
 
   const clearAll = React.useCallback((): void => {
     setDraft('');
-    ctx.setSearchSeed('');
+    ctx.clearSearchFilter();
   }, [ctx]);
 
-  const hasDraft = draft.length > 0;
+  const filterActive = ctx.searchSeed.length > 0;
+  const showClear = filterActive || draft.length > 0;
+
   return (
     <form
       role="search"
@@ -185,10 +196,16 @@ function UseCaseListSearchInput({
        */
       className="relative inline-flex h-8 min-w-0 flex-1 items-center"
     >
-      <Search
-        size={14}
+      <ScanSearch
+        size={filterActive ? 16 : 14}
+        strokeWidth={filterActive ? 2.25 : 2}
         aria-hidden
-        className="pointer-events-none absolute left-1.5 text-slate-500"
+        className={[
+          'pointer-events-none absolute left-1.5 transition-colors duration-150',
+          filterActive
+            ? 'text-violet-300 drop-shadow-[0_0_5px_rgba(167,139,250,0.4)]'
+            : 'text-slate-500',
+        ].join(' ')}
       />
       <input
         type="text"
@@ -202,18 +219,28 @@ function UseCaseListSearchInput({
         }}
         placeholder="cerca nei messaggi…"
         aria-label="Testo da cercare nei messaggi degli use case"
-        title="Scrivi e premi Invio per evidenziare le occorrenze nei messaggi"
-        className="h-8 w-full min-w-[120px] max-w-[260px] rounded-md border border-slate-700/70 bg-slate-900/60 pl-7 pr-6 text-[12px] text-slate-100 placeholder:text-slate-500 focus:border-yellow-500/60 focus:outline-none focus:ring-1 focus:ring-yellow-500/40"
+        title={
+          filterActive
+            ? 'Filtro attivo — Invio per aggiornare, X o Esc per annullare'
+            : 'Scrivi e premi Invio per filtrare gli use case'
+        }
+        className={[
+          'h-8 w-full min-w-[120px] max-w-[260px] rounded-md border pr-7 text-[12px] text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1',
+          filterActive ? 'pl-8' : 'pl-7',
+          filterActive
+            ? 'border-violet-500/50 bg-violet-950/35 ring-violet-500/25 focus:border-violet-400/70 focus:ring-violet-500/30'
+            : 'border-slate-700/70 bg-slate-900/60 focus:border-yellow-500/60 focus:ring-yellow-500/40',
+        ].join(' ')}
       />
-      {hasDraft ? (
+      {showClear ? (
         <button
           type="button"
           onClick={clearAll}
-          aria-label="Pulisci ricerca"
-          title="Pulisci ricerca (Esc)"
-          className="absolute right-1 inline-flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-500"
+          aria-label="Annulla filtro"
+          title="Annulla filtro (Esc)"
+          className="absolute right-1 inline-flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:bg-slate-800/90 hover:text-slate-300 focus:outline-none focus-visible:ring-1 focus-visible:ring-slate-500"
         >
-          <XIcon size={13} aria-hidden />
+          <XIcon size={12} strokeWidth={2.5} aria-hidden />
         </button>
       ) : null}
     </form>
@@ -328,6 +355,8 @@ export function WizardStepOneListToolbarControls({
   wizard,
   canShowJsonToggle = false,
   expandTheme = 'violet',
+  projectSlotLexicon,
+  catalogUseCases = [],
 }: WizardStepOneListToolbarProps): React.ReactElement | null {
   const ctx = useUseCaseWizardListToolbarOptional();
   const dock = useOptionalAIAgentEditorDock();
@@ -454,6 +483,15 @@ export function WizardStepOneListToolbarControls({
         riga è stretta (vedi container `flex` senza wrap in `ContextualToolbarRow`).
       */}
       <UseCaseListSearchInput ctx={ctx} />
+      {dock && projectSlotLexicon ? (
+        <WizardSlotMappingToggle lexicon={projectSlotLexicon} useCases={catalogUseCases} />
+      ) : null}
+      {dock ? (
+        <WizardAgentBehaviorSelect
+          agentBehavior={dock.agentBehavior}
+          onAgentBehaviorChange={dock.setAgentBehavior}
+        />
+      ) : null}
       {/*
         Toggle «Mostra JSON» ({}) e «Mostra Tokens» ([x]) rimossi dalla toolbar:
         la tokenizzazione resta «sotto il cofano» — visibile solo nel JSON conversazionale

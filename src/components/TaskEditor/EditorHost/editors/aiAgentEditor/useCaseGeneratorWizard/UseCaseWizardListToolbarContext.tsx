@@ -32,9 +32,12 @@ export interface UseCaseWizardListToolbarContextValue {
   showMessage: boolean;
   /** Right aside: actions palette for use case response (replaces tutorial when on). */
   showActionsPanel: boolean;
+  /** Right aside: Slot Mapping (sostituisce tutorial). */
+  showSlotMappingPanel: boolean;
   toggleScenario: () => void;
   toggleMessage: () => void;
   toggleActionsPanel: () => void;
+  toggleSlotMappingPanel: () => void;
   bulkFold: WizardBulkFoldState;
   setBulkFold: React.Dispatch<React.SetStateAction<WizardBulkFoldState>>;
   registerHandlers: (handlers: UseCaseWizardListHandlers | null) => void;
@@ -50,6 +53,11 @@ export interface UseCaseWizardListToolbarContextValue {
    */
   searchSeed: string;
   setSearchSeed: (next: string) => void;
+  /** Surface lessico con lente attiva (toggle filtro da Slot Mapping). */
+  lensActiveSurface: string | null;
+  setLensActiveSurface: (next: string | null) => void;
+  /** Azzera filtro ricerca e lente (chip X / clear). */
+  clearSearchFilter: () => void;
   /**
    * Numero di **campi** (scenario / messaggio agente) sostanzialmente modificati dall'utente
    * rispetto all'ultima baseline IA (≥ 3 parole cambiate per campo, vedi
@@ -104,9 +112,11 @@ export function UseCaseWizardListToolbarProvider({
   /** Triplet UX: scenario + messaggio agente visibili subito dopo generazione IA. */
   const [showMessage, setShowMessage] = React.useState(true);
   const [showActionsPanel, setShowActionsPanel] = React.useState(false);
+  const [showSlotMappingPanel, setShowSlotMappingPanel] = React.useState(false);
   const [bulkFold, setBulkFold] = React.useState<WizardBulkFoldState>('expanded');
-  /** Seed search committato (commit esplicito su Enter / clear) — vedi JSDoc del context. */
+  /** Seed search committato (Enter, lente, chip X). */
   const [searchSeed, setSearchSeedRaw] = React.useState<string>('');
+  const [lensActiveSurface, setLensActiveSurfaceRaw] = React.useState<string | null>(null);
   /**
    * Conteggio "campi sostanzialmente modificati" pubblicato dal composer. Il callout
    * «Completa correzione» nel pannello DX lo legge per la visibilità.
@@ -171,16 +181,40 @@ export function UseCaseWizardListToolbarProvider({
   }, []);
 
   const toggleActionsPanel = React.useCallback(() => {
-    setShowActionsPanel((v) => !v);
+    setShowActionsPanel((v) => {
+      const next = !v;
+      if (next) setShowSlotMappingPanel(false);
+      return next;
+    });
   }, []);
 
-  /**
-   * Trim difensivo: spazi accidentali in coda non devono cambiare il match (l'utente
-   * percepirebbe "non funziona" pur avendo digitato la parola giusta). Il valore
-   * vuoto resta sentinella di "nessun highlight".
-   */
+  const toggleSlotMappingPanel = React.useCallback(() => {
+    setShowSlotMappingPanel((v) => {
+      const next = !v;
+      if (next) setShowActionsPanel(false);
+      return next;
+    });
+  }, []);
+
+  const setLensActiveSurface = React.useCallback((next: string | null) => {
+    setLensActiveSurfaceRaw(next && next.trim() ? next.trim().toLowerCase() : null);
+  }, []);
+
   const setSearchSeed = React.useCallback((next: string) => {
-    setSearchSeedRaw(typeof next === 'string' ? next.trim() : '');
+    const trimmed = typeof next === 'string' ? next.trim() : '';
+    setSearchSeedRaw(trimmed);
+    if (!trimmed) {
+      setLensActiveSurfaceRaw(null);
+      return;
+    }
+    setLensActiveSurfaceRaw((prev) =>
+      prev && trimmed.toLowerCase() === prev ? prev : null
+    );
+  }, []);
+
+  const clearSearchFilter = React.useCallback(() => {
+    setSearchSeedRaw('');
+    setLensActiveSurfaceRaw(null);
   }, []);
 
   /**
@@ -229,9 +263,11 @@ export function UseCaseWizardListToolbarProvider({
       showScenario,
       showMessage,
       showActionsPanel,
+      showSlotMappingPanel,
       toggleScenario,
       toggleMessage,
       toggleActionsPanel,
+      toggleSlotMappingPanel,
       bulkFold,
       setBulkFold,
       registerHandlers,
@@ -240,6 +276,9 @@ export function UseCaseWizardListToolbarProvider({
       notifyCardToggle,
       searchSeed,
       setSearchSeed,
+      lensActiveSurface,
+      setLensActiveSurface,
+      clearSearchFilter,
       pendingCorrectionsCount,
       setPendingCorrectionsCount,
       registerConsolidateCorrectionsHandler,
@@ -254,9 +293,11 @@ export function UseCaseWizardListToolbarProvider({
       showScenario,
       showMessage,
       showActionsPanel,
+      showSlotMappingPanel,
       toggleScenario,
       toggleMessage,
       toggleActionsPanel,
+      toggleSlotMappingPanel,
       bulkFold,
       registerHandlers,
       triggerExpandAll,
@@ -264,6 +305,9 @@ export function UseCaseWizardListToolbarProvider({
       notifyCardToggle,
       searchSeed,
       setSearchSeed,
+      lensActiveSurface,
+      setLensActiveSurface,
+      clearSearchFilter,
       pendingCorrectionsCount,
       setPendingCorrectionsCount,
       registerConsolidateCorrectionsHandler,

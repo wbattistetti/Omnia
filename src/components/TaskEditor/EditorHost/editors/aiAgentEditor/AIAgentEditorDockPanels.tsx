@@ -39,13 +39,6 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
-import { UseCaseBundleToolsStrip } from './useCaseBundle/UseCaseBundleToolsStrip';
-import { CompiledPhraseInspector } from './useCaseBundle/CompiledPhraseInspector';
-import { ProjectSlotLexiconPanel } from './useCaseBundle/ProjectSlotLexiconPanel';
-import {
-  countLexiconConflicts,
-  countStaleCompiledPhrases,
-} from './useCaseBundle/useCaseBundleUiHelpers';
 
 /**
  * Wizard step 1 — un singolo Dockview (single-pane) le cui tab sono:
@@ -226,17 +219,11 @@ export function EditorUseCasesPanel() {
     setAgentConversationStyleAuto,
     agentConversationStyleSelections,
     setAgentConversationStyleSelections,
-    agentBehavior,
-    setAgentBehavior,
-    agentUseCasesJson,
-    compileUseCasePhrasesForCatalog,
-    compilePhrasesBusy,
     projectSlotLexicon,
     approveLexiconSurface,
+    revokeLexiconSurface,
+    updateLexiconSlotId,
   } = useAIAgentEditorDock();
-
-  const [compiledInspectorOpen, setCompiledInspectorOpen] = React.useState(false);
-  const [lexiconPanelOpen, setLexiconPanelOpen] = React.useState(false);
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
@@ -323,28 +310,6 @@ export function EditorUseCasesPanel() {
     [catalogUseCases]
   );
 
-  const openCompiledForUseCase = React.useCallback(
-    (useCaseId: string) => {
-      setSelectedUseCaseId(useCaseId);
-      setCompiledInspectorOpen(true);
-    },
-    []
-  );
-
-  const bundleTools = (
-    <UseCaseBundleToolsStrip
-      agentUseCasesJson={agentUseCasesJson}
-      agentBehavior={agentBehavior}
-      onAgentBehaviorChange={setAgentBehavior}
-      onCompilePhrases={compileUseCasePhrasesForCatalog}
-      compileBusy={compilePhrasesBusy}
-      onOpenLexiconPanel={() => setLexiconPanelOpen(true)}
-      onOpenCompiledInspector={() => setCompiledInspectorOpen(true)}
-      lexiconConflictCount={countLexiconConflicts(projectSlotLexicon)}
-      stalePhraseCount={countStaleCompiledPhrases(useCases)}
-    />
-  );
-
   const composer = (
     <AIAgentUseCaseComposer
       editorTaskInstanceId={instanceId}
@@ -387,7 +352,6 @@ export function EditorUseCasesPanel() {
       showTokenizedAgentMessage={Boolean(useCaseGeneratorWizard?.showTokenizedInBubbles)}
       tokenizedByUseCaseId={tokenizedByUseCaseId}
       projectSlotLexicon={projectSlotLexicon}
-      onInspectCompiled={openCompiledForUseCase}
     />
   );
 
@@ -613,7 +577,6 @@ export function EditorUseCasesPanel() {
     } else {
       leftPanel = (
         <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-          {isErrorHandlingCatalog ? null : bundleTools}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
         </div>
       );
@@ -685,6 +648,9 @@ export function EditorUseCasesPanel() {
             onSelectUseCaseRequest={setSelectedUseCaseId}
             useCases={catalogUseCases}
             projectSlotLexicon={projectSlotLexicon}
+            onApproveLexiconEntry={approveLexiconSurface}
+            onRevokeLexiconEntry={revokeLexiconSurface}
+            onUpdateLexiconSlotId={updateLexiconSlotId}
             generationStyleContract={generationStyleContract}
             onGenerationStyleContractChange={onGenerationStyleContractChange}
             generationStyleFieldDisabled={useCaseComposerBlockingBusy}
@@ -692,40 +658,14 @@ export function EditorUseCasesPanel() {
         </UseCaseWizardListToolbarProvider>
         </FontProvider>
       </div>
-      <CompiledPhraseInspector
-        open={compiledInspectorOpen}
-        onClose={() => setCompiledInspectorOpen(false)}
-        useCase={selectedUseCase}
-        lexicon={projectSlotLexicon}
-      />
-      <ProjectSlotLexiconPanel
-        open={lexiconPanelOpen}
-        onClose={() => setLexiconPanelOpen(false)}
-        lexicon={projectSlotLexicon}
-        onApproveEntry={approveLexiconSurface}
-      />
       </>
     );
   }
 
   return (
-    <>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
-        {bundleTools}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
-      </div>
-      <CompiledPhraseInspector
-        open={compiledInspectorOpen}
-        onClose={() => setCompiledInspectorOpen(false)}
-        useCase={selectedUseCase}
-        lexicon={projectSlotLexicon}
-      />
-      <ProjectSlotLexiconPanel
-        open={lexiconPanelOpen}
-        onClose={() => setLexiconPanelOpen(false)}
-        lexicon={projectSlotLexicon}
-        onApproveEntry={approveLexiconSurface}
-      />
-    </>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+    </div>
   );
 }
+

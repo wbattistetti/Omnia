@@ -1284,6 +1284,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     compilePhrasesBusy: c.compilePhrasesBusy,
     projectSlotLexicon: c.projectSlotLexicon,
     approveLexiconSurface: c.approveLexiconSurface,
+    revokeLexiconSurface: c.revokeLexiconSurface,
+    updateLexiconSlotId: c.updateLexiconSlotId,
 
     useCasePropagatorProvider: provider,
     useCasePropagatorModel: typeof model === 'string' ? model : '',

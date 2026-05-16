@@ -335,6 +335,8 @@ export interface AIAgentEditorDockContextValue {
   compilePhrasesBusy: boolean;
   projectSlotLexicon: import('@domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon;
   approveLexiconSurface: (surface: string) => void;
+  revokeLexiconSurface: (surface: string) => void;
+  updateLexiconSlotId: (surface: string, slotId: string) => void;
 
   /**
    * Parametri per propagazione/anteprima stile correzioni nel composer (mirror di Omnia Tutor +
