@@ -51,6 +51,7 @@ export interface AIAgentPersistState {
   /** Toggle "Logga Use Case" della dropdown Upload. Default `false`. */
   agentLogUseCase: boolean;
   agentBehavior: 'A' | 'B' | 'C';
+  agentInterfaceJson: string;
 }
 
 /**
@@ -89,5 +90,6 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentConversationDeployStyleId: state.agentConversationDeployStyleId,
     agentLogUseCase: state.agentLogUseCase,
     agentBehavior: state.agentBehavior,
+    agentInterfaceJson: state.agentInterfaceJson,
   };
 }

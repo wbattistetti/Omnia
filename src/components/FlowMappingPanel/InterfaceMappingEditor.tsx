@@ -25,6 +25,11 @@ import { useContainerWidth } from './useContainerWidth';
 import { BackendSendReceivePanels } from './BackendSendReceivePanels';
 import { CollapsiblePanelSection } from '../FlowWorkspace/CollapsiblePanelSection';
 import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
+import { setMappingDragLabelGhost } from './mappingDragGhost';
+import {
+  handleAgentBackendParamDragOver,
+  parseAgentBackendParamDropFromDataTransfer,
+} from '@domain/agentInterface/agentInterfaceDragTypes';
 
 /** Draggable chip in SEND/RECEIVE headers: drop on tree to insert a new parameter. */
 export function BackendParameterDragChip() {
@@ -34,6 +39,7 @@ export function BackendParameterDragChip() {
       onDragStart={(e) => {
         e.dataTransfer.setData(DND_NEW_BACKEND_PARAM, 'new');
         e.dataTransfer.effectAllowed = 'copy';
+        setMappingDragLabelGhost(e, 'Parameter');
       }}
       title="Trascina nel tree per aggiungere un parametro"
       className="flex items-center gap-1 rounded-md border border-slate-950/35 bg-black/25 px-2 py-0.5 text-[10px] font-bold tracking-tight text-slate-900 cursor-grab active:cursor-grabbing select-none hover:bg-black/35"
@@ -212,6 +218,19 @@ export interface InterfaceMappingEditorProps {
    * Embedded AI Agent backend editor: mirrors toolbar «Signature» sub-row; when `false`, SEND parameter-constraint panels close.
    */
   embeddedSignatureSubToolbarOpen?: boolean;
+  /**
+   * Agent interface: allow drops with wireKey only (no flow variable yet).
+   * Default false — flow/subflow interface requires `variableRefId`.
+   */
+  interfaceDropWireKeyOnly?: boolean;
+  /** When set, replaces default INPUT drop handler (e.g. agent backend param rules). */
+  onInterfaceInputDrop?: (payload: FlowInterfaceDropPayload) => void;
+  /** When set, replaces default OUTPUT drop handler. */
+  onInterfaceOutputDrop?: (payload: FlowInterfaceDropPayload) => void;
+  /** Agent interface: accept palette drag MIME on INPUT/OUTPUT trees. */
+  enableAgentBackendParamDrop?: boolean;
+  /** Embedded backend editor: drag leaf params to agent Interface. */
+  agentParamDragSource?: import('./backendMappingTreeContext').AgentParamDragSource;
 }
 
 export function InterfaceMappingEditor({
@@ -261,6 +280,11 @@ export function InterfaceMappingEditor({
   onBackendSendReceiveSplitRatioChange,
   backendSendReceiveSplitClamp,
   embeddedSignatureSubToolbarOpen,
+  interfaceDropWireKeyOnly = false,
+  onInterfaceInputDrop: onInterfaceInputDropProp,
+  onInterfaceOutputDrop: onInterfaceOutputDropProp,
+  enableAgentBackendParamDrop = false,
+  agentParamDragSource,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -351,38 +375,100 @@ export function InterfaceMappingEditor({
 
   const onIfaceInDrop = useCallback(
     (payload: FlowInterfaceDropPayload) => {
-      const vid = String(payload.variableRefId || '').trim();
-      if (!vid) return;
+      if (onInterfaceInputDropProp) {
+        onInterfaceInputDropProp(payload);
+        return;
+      }
       const path = payload.wireKey.trim();
       if (!path) return;
-      if (flowDropTarget?.flowCanvasId) {
+      const vid = String(payload.variableRefId || '').trim();
+      if (!interfaceDropWireKeyOnly && !vid) return;
+      if (vid && flowDropTarget?.flowCanvasId) {
         ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, vid);
       }
       const newEntry = createMappingEntry({
         wireKey: path,
-        variableRefId: vid,
+        ...(vid ? { variableRefId: vid } : {}),
       });
       if (shouldSkipInterfaceDuplicate(interfaceInput, newEntry)) return;
       onInterfaceInputChange([...interfaceInput, newEntry]);
     },
-    [projectId, flowDropTarget, interfaceInput, onInterfaceInputChange]
+    [
+      onInterfaceInputDropProp,
+      interfaceDropWireKeyOnly,
+      projectId,
+      flowDropTarget,
+      interfaceInput,
+      onInterfaceInputChange,
+    ]
   );
 
   const onIfaceOutDrop = useCallback(
     (payload: FlowInterfaceDropPayload) => {
+      if (onInterfaceOutputDropProp) {
+        onInterfaceOutputDropProp(payload);
+        return;
+      }
       const path = payload.wireKey.trim();
       if (!path) return;
-      if (flowDropTarget?.flowCanvasId) {
-        ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, payload.variableRefId);
+      const vid = String(payload.variableRefId || '').trim();
+      if (!interfaceDropWireKeyOnly && !vid) return;
+      if (vid && flowDropTarget?.flowCanvasId) {
+        ensureFlowVariableBindingForInterfaceRow(projectId, flowDropTarget.flowCanvasId, vid);
       }
       const newEntry = createMappingEntry({
         wireKey: path,
-        variableRefId: payload.variableRefId,
+        ...(vid ? { variableRefId: vid } : {}),
       });
       if (shouldSkipInterfaceDuplicate(interfaceOutput, newEntry)) return;
       onInterfaceOutputChange([...interfaceOutput, newEntry]);
     },
-    [projectId, flowDropTarget, interfaceOutput, onInterfaceOutputChange]
+    [
+      onInterfaceOutputDropProp,
+      interfaceDropWireKeyOnly,
+      projectId,
+      flowDropTarget,
+      interfaceOutput,
+      onInterfaceOutputChange,
+    ]
+  );
+
+  const onAgentIfaceInDragOverCapture = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableAgentBackendParamDrop) return;
+      handleAgentBackendParamDragOver(e, 'input');
+    },
+    [enableAgentBackendParamDrop]
+  );
+
+  const onAgentIfaceOutDragOverCapture = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableAgentBackendParamDrop) return;
+      handleAgentBackendParamDragOver(e, 'output');
+    },
+    [enableAgentBackendParamDrop]
+  );
+
+  const onAgentIfaceInDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableAgentBackendParamDrop) return;
+      e.preventDefault();
+      const agent = parseAgentBackendParamDropFromDataTransfer(e.dataTransfer);
+      if (!agent || agent.side !== 'send') return;
+      onIfaceInDrop({ wireKey: agent.wireKey, agentBackendParam: agent });
+    },
+    [enableAgentBackendParamDrop, onIfaceInDrop]
+  );
+
+  const onAgentIfaceOutDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!enableAgentBackendParamDrop) return;
+      e.preventDefault();
+      const agent = parseAgentBackendParamDropFromDataTransfer(e.dataTransfer);
+      if (!agent || agent.side !== 'receive') return;
+      onIfaceOutDrop({ wireKey: agent.wireKey, agentBackendParam: agent });
+    },
+    [enableAgentBackendParamDrop, onIfaceOutDrop]
   );
 
   const blocksClass = useMemo(() => {
@@ -559,6 +645,7 @@ export function InterfaceMappingEditor({
                         backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
                         backendSendAdvancement={backendSendAdvancement}
                         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+                        agentParamDragSource={agentParamDragSource}
                       />
                     </div>
                   </div>
@@ -601,6 +688,7 @@ export function InterfaceMappingEditor({
                     onOutputVariableCreated={onOutputVariableCreated}
                     backendKnownVariableIds={backendVariableIdSet}
                     embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+                    agentParamDragSource={agentParamDragSource}
                   />
                   </div>
               </MappingBlock>
@@ -654,6 +742,10 @@ export function InterfaceMappingEditor({
                               ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
                               : undefined
                           }
+                          onBodyDragOverCapture={
+                            enableAgentBackendParamDrop ? onAgentIfaceInDragOverCapture : undefined
+                          }
+                          onBodyDrop={enableAgentBackendParamDrop ? onAgentIfaceInDrop : undefined}
                         >
                           <FlowMappingTree
                             variant="interface"
@@ -663,6 +755,7 @@ export function InterfaceMappingEditor({
                             variableOptions={[]}
                             listIdPrefix={inPrefix}
                             showDropZone
+                            enableAgentBackendParamDrop={enableAgentBackendParamDrop}
                             onDropVariable={onIfaceInDrop}
                             projectId={projectId}
                             flowCanvasId={flowDropTarget?.flowCanvasId}
@@ -680,6 +773,10 @@ export function InterfaceMappingEditor({
                               ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
                               : undefined
                           }
+                          onBodyDragOverCapture={
+                            enableAgentBackendParamDrop ? onAgentIfaceOutDragOverCapture : undefined
+                          }
+                          onBodyDrop={enableAgentBackendParamDrop ? onAgentIfaceOutDrop : undefined}
                         >
                           <FlowMappingTree
                             variant="interface"
@@ -689,6 +786,7 @@ export function InterfaceMappingEditor({
                             variableOptions={[]}
                             listIdPrefix={outPrefix}
                             showDropZone
+                            enableAgentBackendParamDrop={enableAgentBackendParamDrop}
                             onDropVariable={onIfaceOutDrop}
                             projectId={projectId}
                             flowCanvasId={flowDropTarget?.flowCanvasId}
@@ -708,6 +806,10 @@ export function InterfaceMappingEditor({
                             ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
                             : undefined
                         }
+                        onBodyDragOverCapture={
+                          enableAgentBackendParamDrop ? onAgentIfaceInDragOverCapture : undefined
+                        }
+                        onBodyDrop={enableAgentBackendParamDrop ? onAgentIfaceInDrop : undefined}
                       >
                         <FlowMappingTree
                           variant="interface"
@@ -717,6 +819,7 @@ export function InterfaceMappingEditor({
                           variableOptions={[]}
                           listIdPrefix={inPrefix}
                           showDropZone
+                          enableAgentBackendParamDrop={enableAgentBackendParamDrop}
                           onDropVariable={onIfaceInDrop}
                           projectId={projectId}
                           flowCanvasId={flowDropTarget?.flowCanvasId}
@@ -732,6 +835,10 @@ export function InterfaceMappingEditor({
                             ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
                             : undefined
                         }
+                        onBodyDragOverCapture={
+                          enableAgentBackendParamDrop ? onAgentIfaceOutDragOverCapture : undefined
+                        }
+                        onBodyDrop={enableAgentBackendParamDrop ? onAgentIfaceOutDrop : undefined}
                       >
                         <FlowMappingTree
                           variant="interface"
@@ -741,6 +848,7 @@ export function InterfaceMappingEditor({
                           variableOptions={[]}
                           listIdPrefix={outPrefix}
                           showDropZone
+                          enableAgentBackendParamDrop={enableAgentBackendParamDrop}
                           onDropVariable={onIfaceOutDrop}
                           projectId={projectId}
                           flowCanvasId={flowDropTarget?.flowCanvasId}
@@ -761,6 +869,10 @@ export function InterfaceMappingEditor({
                       ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'input' }
                       : undefined
                   }
+                  onBodyDragOverCapture={
+                    enableAgentBackendParamDrop ? onAgentIfaceInDragOverCapture : undefined
+                  }
+                  onBodyDrop={enableAgentBackendParamDrop ? onAgentIfaceInDrop : undefined}
                 >
                   <FlowMappingTree
                     variant="interface"
@@ -770,6 +882,7 @@ export function InterfaceMappingEditor({
                     variableOptions={[]}
                     listIdPrefix={inPrefix}
                     showDropZone
+                    enableAgentBackendParamDrop={enableAgentBackendParamDrop}
                     onDropVariable={onIfaceInDrop}
                     projectId={projectId}
                     flowCanvasId={flowDropTarget?.flowCanvasId}
@@ -784,6 +897,10 @@ export function InterfaceMappingEditor({
                       ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'output' }
                       : undefined
                   }
+                  onBodyDragOverCapture={
+                    enableAgentBackendParamDrop ? onAgentIfaceOutDragOverCapture : undefined
+                  }
+                  onBodyDrop={enableAgentBackendParamDrop ? onAgentIfaceOutDrop : undefined}
                 >
                   <FlowMappingTree
                     variant="interface"
@@ -793,6 +910,7 @@ export function InterfaceMappingEditor({
                     variableOptions={[]}
                     listIdPrefix={outPrefix}
                     showDropZone
+                    enableAgentBackendParamDrop={enableAgentBackendParamDrop}
                     onDropVariable={onIfaceOutDrop}
                     projectId={projectId}
                     flowCanvasId={flowDropTarget?.flowCanvasId}
@@ -813,6 +931,7 @@ export function InterfaceMappingEditor({
                         e.dataTransfer.setData(DND_TYPE, label);
                         e.dataTransfer.setData('text/plain', label);
                         e.dataTransfer.effectAllowed = 'copy';
+                        setMappingDragLabelGhost(e, label);
                       }}
                       className="cursor-grab active:cursor-grabbing rounded-md border border-slate-600 bg-slate-800/80 px-2 py-1 text-[10px] text-slate-200 hover:border-violet-500/50"
                     >

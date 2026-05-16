@@ -76,6 +76,8 @@ export type FlowInterfaceDropPayload = {
   variableRefId?: string;
   /** When set (e.g. row drag), shown as primary label instead of path slug. */
   rowLabel?: string;
+  /** Agent wizard: drop from backend signature palette. */
+  agentBackendParam?: import('@domain/agentInterface/agentInterfaceDragTypes').AgentBackendParamDragPayload;
 };
 
 /** Single-segment path for tree; avoids dots in user row text. */

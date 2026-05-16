@@ -51,6 +51,8 @@ export interface AIAgentConstructionWizardShellProps {
   readonly costsActive?: boolean;
   /** Callback per attivare la vista "Costi" (cliccando il pulsante separato dello stepper). */
   readonly onSelectCosts?: () => void;
+  readonly interfaceActive?: boolean;
+  readonly onToggleInterface?: () => void;
   /** Identit\u00e0 del task corrente: necessari per filtrare il report. Solo per `costsActive=true`. */
   readonly taskId?: string;
   readonly taskLabel?: string;
@@ -101,6 +103,8 @@ export function AIAgentConstructionWizardShell({
   stepHeaderAction = null,
   costsActive = false,
   onSelectCosts,
+  interfaceActive = false,
+  onToggleInterface,
   taskId,
   taskLabel,
   deploySlot = null,
@@ -120,6 +124,8 @@ export function AIAgentConstructionWizardShell({
         glowStepIndex={glowStepIndex}
         costsActive={costsActive}
         onSelectCosts={onSelectCosts}
+        interfaceActive={interfaceActive}
+        onToggleInterface={onToggleInterface}
         deploySlot={deploySlot}
         bypassGating={bypassGating}
       />

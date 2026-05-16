@@ -8,6 +8,12 @@ import type { MappingEntry } from './mappingTypes';
 import type { ParamDropPlacement, ParamDropPosition } from './backendParamInsert';
 import type { BackendSendAdvancementApi } from './backendMappingTreeTypes';
 import type { DropPreviewTone } from './backendMappingTreeDnD';
+import type { AgentBackendParamDragPayload } from '@domain/agentInterface/agentInterfaceDragTypes';
+
+export type AgentParamDragSource = Pick<
+  AgentBackendParamDragPayload,
+  'backendTaskId' | 'backendLabel'
+>;
 
 export type BackendMappingDropIndicator = {
   targetPathKey: string;
@@ -36,6 +42,8 @@ export interface BackendMappingTreeContextValue {
   backendSendParamEnumByWireKey?: Record<string, string[]>;
   backendSendAdvancement?: BackendSendAdvancementApi;
   embeddedSignatureSubToolbarOpen?: boolean;
+  /** When set, leaf rows drag to agent Interface with ghost. */
+  agentParamDragSource?: AgentParamDragSource;
   dropLineIndentPx: (level: number) => number;
   dropLineTone: DropPreviewTone;
 }

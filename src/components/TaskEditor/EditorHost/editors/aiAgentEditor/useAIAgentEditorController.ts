@@ -71,6 +71,14 @@ import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContra
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
+import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
+import {
+  agentInterfaceRowsToMappingEntries,
+  mappingEntriesToAgentInterfaceRows,
+  parseAgentInterfaceJson,
+  serializeAgentInterfaceJson,
+  AGENT_INTERFACE_SCHEMA_VERSION,
+} from '@domain/agentInterface/agentInterfaceState';
 import {
   AGENT_WIZARD_FIRST_STEP_INDEX,
   AGENT_WIZARD_LAST_STEP_INDEX,
@@ -334,6 +342,8 @@ export function useAIAgentEditorController({
    */
   const [agentLogUseCase, setAgentLogUseCaseState] = React.useState<boolean>(false);
   const [agentBehavior, setAgentBehaviorState] = React.useState<'A' | 'B' | 'C'>('B');
+  const [agentInterfaceInput, setAgentInterfaceInputState] = React.useState<MappingEntry[]>([]);
+  const [agentInterfaceOutput, setAgentInterfaceOutputState] = React.useState<MappingEntry[]>([]);
   const [compilePhrasesBusy, setCompilePhrasesBusy] = React.useState(false);
   const [projectSlotLexicon, setProjectSlotLexicon] = React.useState<ProjectSlotLexicon>(() =>
     loadProjectSlotLexicon(
@@ -689,6 +699,32 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  const setAgentInterfaceInput = React.useCallback(
+    (updater: React.SetStateAction<MappingEntry[]>) => {
+      setDirty(true);
+      setAgentInterfaceInputState(updater);
+    },
+    []
+  );
+
+  const setAgentInterfaceOutput = React.useCallback(
+    (updater: React.SetStateAction<MappingEntry[]>) => {
+      setDirty(true);
+      setAgentInterfaceOutputState(updater);
+    },
+    []
+  );
+
+  const agentInterfaceJson = React.useMemo(
+    () =>
+      serializeAgentInterfaceJson({
+        schemaVersion: AGENT_INTERFACE_SCHEMA_VERSION,
+        input: mappingEntriesToAgentInterfaceRows(agentInterfaceInput),
+        output: mappingEntriesToAgentInterfaceRows(agentInterfaceOutput),
+      }),
+    [agentInterfaceInput, agentInterfaceOutput]
+  );
+
   const compileUseCasePhrasesForCatalog = React.useCallback(() => {
     setCompilePhrasesBusy(true);
     try {
@@ -840,6 +876,9 @@ export function useAIAgentEditorController({
     setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
     setAgentLogUseCaseState(b.agentLogUseCase);
     setAgentBehaviorState(b.agentBehavior);
+    const ifaceLoaded = parseAgentInterfaceJson(b.agentInterfaceJson);
+    setAgentInterfaceInputState(agentInterfaceRowsToMappingEntries(ifaceLoaded.input));
+    setAgentInterfaceOutputState(agentInterfaceRowsToMappingEntries(ifaceLoaded.output));
     setProjectSlotLexicon(loadProjectSlotLexicon(projectId ?? null));
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
@@ -954,6 +993,7 @@ export function useAIAgentEditorController({
       agentConversationDeployStyleId,
       agentLogUseCase,
       agentBehavior,
+      agentInterfaceJson,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -1005,6 +1045,7 @@ export function useAIAgentEditorController({
     agentConversationDeployStyleId,
     agentLogUseCase,
     agentBehavior,
+    agentInterfaceJson,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -2288,6 +2329,11 @@ export function useAIAgentEditorController({
     setAgentLogUseCase,
     agentBehavior,
     setAgentBehavior,
+    agentInterfaceInput,
+    agentInterfaceOutput,
+    setAgentInterfaceInput,
+    setAgentInterfaceOutput,
+    agentInterfaceJson,
     agentUseCasesJson: serializeUseCases(useCases),
     compileUseCasePhrasesForCatalog,
     compilePhrasesBusy,

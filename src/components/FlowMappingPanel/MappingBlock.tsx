@@ -66,6 +66,9 @@ export interface MappingBlockProps {
   containBodyOverflow?: boolean;
   /** Thinner border, no shadow-inner — embedded backend panels without double-frame look. */
   flat?: boolean;
+  /** Agent interface: accept backend param drag on the whole block body (capture). */
+  onBodyDragOverCapture?: React.DragEventHandler;
+  onBodyDrop?: React.DragEventHandler;
 }
 
 /** Max body height before vertical scroll; keeps panels short when few rows. */
@@ -85,6 +88,8 @@ export function MappingBlock({
   fillBodyHeight = false,
   containBodyOverflow = false,
   flat = false,
+  onBodyDragOverCapture,
+  onBodyDrop,
 }: MappingBlockProps) {
   const { headerClass, borderClass, label } = ACCENT[accent];
   const text = labelOverride ?? label;
@@ -132,6 +137,8 @@ export function MappingBlock({
               : `min-h-0 min-w-0 flex-1 ${bodyPad} overflow-y-auto overflow-x-hidden`
             : `min-h-0 min-w-0 ${bodyPad} overflow-y-auto overflow-x-hidden ${BODY_MAX_H}`
         }
+        onDragOverCapture={onBodyDragOverCapture}
+        onDrop={onBodyDrop}
       >
         {children}
       </div>

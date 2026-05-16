@@ -21,7 +21,7 @@
  */
 
 import React from 'react';
-import { Check, DollarSign, Lock } from 'lucide-react';
+import { Check, DollarSign, Lock, Unplug } from 'lucide-react';
 import {
   AGENT_WIZARD_STEP_COUNT,
   type AgentWizardStepIndex,
@@ -46,6 +46,13 @@ export interface AIAgentConstructionStepperProps {
   readonly costsActive?: boolean;
   /** Callback di selezione della vista "Costi". Se omesso, il pulsante non viene reso. */
   readonly onSelectCosts?: () => void;
+  /**
+   * Pannello Interface agente (INPUT/OUTPUT) aperto sul passo Backend. Separato dagli step
+   * ufficiali, tra «Voce» e «Costi di design».
+   */
+  readonly interfaceActive?: boolean;
+  /** Toggle pannello Interface; tipicamente apre anche il passo Backend. */
+  readonly onToggleInterface?: () => void;
   /**
    * Slot opzionale renderizzato all'estrema destra dello stepper, dopo il pulsante "Costi".
    * Tipicamente contiene il dropdown «Deploy»: il parent decide quando mostrarlo (es. solo
@@ -88,6 +95,8 @@ export function AIAgentConstructionStepper({
   glowStepIndex = null,
   costsActive = false,
   onSelectCosts,
+  interfaceActive = false,
+  onToggleInterface,
   deploySlot = null,
   bypassGating = false,
 }: AIAgentConstructionStepperProps): React.ReactElement {
@@ -188,6 +197,32 @@ export function AIAgentConstructionStepper({
             </li>
           );
         })}
+        {onToggleInterface ? (
+          <>
+            <li
+              aria-hidden
+              className="mx-2 hidden h-10 w-px shrink-0 self-center bg-slate-700 sm:block"
+            />
+            <li>
+              <button
+                type="button"
+                aria-pressed={interfaceActive}
+                aria-label="Interfaccia agente: parametri INPUT e OUTPUT esposti all'orchestratore del flow"
+                title="Apre il pannello Interface (INPUT/OUTPUT) sul passo Backend"
+                onClick={onToggleInterface}
+                className={
+                  'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
+                  (interfaceActive
+                    ? 'border-sky-400 bg-sky-900/75 text-sky-50 shadow-sm ring-2 ring-sky-400/40'
+                    : 'border-sky-600/40 bg-slate-900/90 text-sky-200/90 hover:border-sky-500/60 hover:bg-slate-800 hover:text-sky-100')
+                }
+              >
+                <Unplug size={15} aria-hidden className="shrink-0 opacity-90" strokeWidth={2} />
+                <span className="whitespace-nowrap">Interface</span>
+              </button>
+            </li>
+          </>
+        ) : null}
         {/*
           Pulsante "Costi" separato. Non \u00e8 uno step di costruzione: \u00e8 un visualizzatore del
           report dei costi IA filtrato per il task corrente. Per evitare confusione visiva con
@@ -198,7 +233,7 @@ export function AIAgentConstructionStepper({
           <>
             <li
               aria-hidden
-              className="mx-2 hidden h-10 w-px shrink-0 self-center bg-slate-700 sm:block"
+              className="mx-1.5 hidden h-10 w-px shrink-0 self-center bg-slate-700 sm:block"
             />
             <li>
               <button

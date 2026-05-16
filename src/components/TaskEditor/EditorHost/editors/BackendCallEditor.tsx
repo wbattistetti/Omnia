@@ -1824,6 +1824,14 @@ export default function BackendCallEditor({
             backendSendAdvancement={backendSendAdvancement}
             backendSendAdvancementOverlay={backendSendAdvancementOverlay}
             embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+            agentParamDragSource={
+              hideHeader && task.id
+                ? {
+                    backendTaskId: task.id,
+                    ...(task.name?.trim() ? { backendLabel: task.name.trim() } : {}),
+                  }
+                : undefined
+            }
             backendReceiveColumnVisible={receiveMappingPanelVisible}
             backendSendReceiveSplitRatio={sendReceiveSplitRatio}
             onBackendSendReceiveSplitRatioChange={persistSendReceiveSplitRatio}

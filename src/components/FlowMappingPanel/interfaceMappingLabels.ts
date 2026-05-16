@@ -18,7 +18,7 @@ export function getInterfaceLeafDisplayName(
   void _projectId;
   const vid = entry.variableRefId?.trim();
   if (!vid) {
-    return '';
+    return entry.wireKey.trim();
   }
   return interfaceOutputLeafDisplayName(vid, opts?.flowCanvasId, opts?.flows, getProjectTranslationsTable());
 }

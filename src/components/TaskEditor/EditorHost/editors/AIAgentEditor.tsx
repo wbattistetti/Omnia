@@ -7,6 +7,7 @@ import type { EditorProps } from '../types';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
+import { taskRepository } from '@services/TaskRepository';
 import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import {
@@ -771,6 +772,36 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const globalHeaderAction = isWizardTaskStep ? null : headerAction;
   const isWizardBackendStep = c.agentWizardCurrentStep === 2;
+
+  const agentInterfaceOpenStorageKey = c.instanceId
+    ? `omnia:agent-interface-open:${c.instanceId}`
+    : null;
+  const [agentInterfacePanelOpen, setAgentInterfacePanelOpen] = React.useState(() => {
+    if (!agentInterfaceOpenStorageKey) return false;
+    try {
+      return sessionStorage.getItem(agentInterfaceOpenStorageKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  React.useEffect(() => {
+    if (!agentInterfaceOpenStorageKey) return;
+    try {
+      sessionStorage.setItem(agentInterfaceOpenStorageKey, agentInterfacePanelOpen ? '1' : '0');
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [agentInterfaceOpenStorageKey, agentInterfacePanelOpen]);
+
+  const agentInterfaceTitle = React.useMemo(() => {
+    const tid = String(c.instanceId ?? '').trim();
+    if (!tid) return 'Agent';
+    const t = taskRepository.getTask(tid);
+    const label = String((t as { label?: string } | null)?.label ?? '').trim();
+    return label || 'Agent';
+  }, [c.instanceId]);
+
+  /** Solo «Aggiungi backend»; Interface è nello stepper (tra Voce e Costi). */
   const wizardBackendHeaderActions = (
     <AddBackendDropdown
       wizardUi
@@ -852,13 +883,23 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const onSelectWizardStep = React.useCallback(
     (next: AgentWizardStepIndex) => {
       setCostsViewActive(false);
+      if (next !== 2) setAgentInterfacePanelOpen(false);
       stepSetter(next);
     },
     [stepSetter]
   );
   const onSelectCostsView = React.useCallback(() => {
     setCostsViewActive(true);
+    setAgentInterfacePanelOpen(false);
   }, []);
+  const onToggleInterfaceView = React.useCallback(() => {
+    setCostsViewActive(false);
+    setAgentInterfacePanelOpen((prev) => {
+      const next = !prev;
+      if (next) stepSetter(2);
+      return next;
+    });
+  }, [stepSetter]);
   /**
    * Click di «Cominciamo» nella Tutor:
    * 1. attiva l'animazione di uscita della Tutor (`tutorExiting=true`, ~400ms);
@@ -1163,6 +1204,14 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     invokeBackendsAddManual,
     hideBackendsPanelInlineAddButton: c.agentWizardCurrentStep === 2,
 
+    agentInterfacePanelOpen,
+    setAgentInterfacePanelOpen,
+    agentInterfaceInput: c.agentInterfaceInput,
+    agentInterfaceOutput: c.agentInterfaceOutput,
+    setAgentInterfaceInput: c.setAgentInterfaceInput,
+    setAgentInterfaceOutput: c.setAgentInterfaceOutput,
+    agentInterfaceTitle,
+
     useCaseGeneratorWizard: useCaseGenWizard,
 
     useCaseBundleFeedback,
@@ -1356,6 +1405,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               stepHeaderAction={costsViewActive ? null : wizardStepHeaderAction}
               costsActive={costsViewActive}
               onSelectCosts={onSelectCostsView}
+              interfaceActive={agentInterfacePanelOpen && !costsViewActive}
+              onToggleInterface={onToggleInterfaceView}
               taskId={instanceId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}

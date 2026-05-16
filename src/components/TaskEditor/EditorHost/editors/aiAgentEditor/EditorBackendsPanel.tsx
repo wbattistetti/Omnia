@@ -35,6 +35,7 @@ import { EmbeddedBackendCallEditor } from './EmbeddedBackendCallEditor';
 import { AddBackendDropdown } from './AddBackendDropdown';
 import { ensureManualCatalogBackendTask } from './ensureManualCatalogBackendTask';
 import { ConnectPortalModal } from '@components/portalAuth/ConnectPortalModal';
+import { AgentInterfacePanel } from './AgentInterfacePanel';
 import type { PortalConnectionMeta } from '@domain/portalAuth/portalConnectionTypes';
 import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalConnections';
 import { normalizePortalOrigin } from '@domain/portalAuth/normalizePortalOrigin';
@@ -805,6 +806,12 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   /** Wizard: un solo backend espanso → riempie il viewport del passo; scroll solo nei tree SEND/RECEIVE. */
   const wizardFillViewport = wizardUi && soleExpandedManualId !== null;
 
+  const interfaceOpen = Boolean(dockCtx?.agentInterfacePanelOpen);
+  const interfaceListIdPrefix = React.useMemo(
+    () => `agent-iface-${String(dockCtx?.instanceId ?? 'x').slice(0, 8)}`,
+    [dockCtx?.instanceId]
+  );
+
   const addManualBackend = React.useCallback(
     (mode: ManualBackendCreationMode) => {
     const id = generateSafeGuid();
@@ -967,12 +974,21 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
       ) : null}
       <div
         className={
-          wizardFillViewport
-            ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
-            : 'flex-1 min-h-0 space-y-2 overflow-y-auto pr-0.5'
+          interfaceOpen
+            ? 'flex min-h-0 flex-1 flex-row overflow-hidden'
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden'
         }
-        data-ia-runtime-focus="tools"
       >
+        <div
+          className={
+            interfaceOpen
+              ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
+              : wizardFillViewport
+                ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
+                : 'flex-1 min-h-0 space-y-2 overflow-y-auto pr-0.5'
+          }
+          data-ia-runtime-focus="tools"
+        >
         {elevenLabsBackendToolsVisible && convaiBackendToolsDiscoveryContext ? (
           <button
             type="button"
@@ -1024,6 +1040,20 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
             );
           })
         )}
+        </div>
+        {interfaceOpen && dockCtx ? (
+          <AgentInterfacePanel
+            agentTitle={dockCtx.agentInterfaceTitle}
+            interfaceInput={[...dockCtx.agentInterfaceInput]}
+            interfaceOutput={[...dockCtx.agentInterfaceOutput]}
+            onInterfaceInputChange={dockCtx.setAgentInterfaceInput}
+            onInterfaceOutputChange={dockCtx.setAgentInterfaceOutput}
+            onClose={() => dockCtx.setAgentInterfacePanelOpen(false)}
+            projectId={projectId}
+            listIdPrefix={interfaceListIdPrefix}
+            className="w-[min(44%,520px)] shrink-0"
+          />
+        ) : null}
       </div>
       {projectId ? (
         <ConnectPortalModal

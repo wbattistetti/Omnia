@@ -85,6 +85,8 @@ export interface AIAgentTaskSnapshot {
    */
   agentLogUseCase: boolean;
   agentBehavior: 'A' | 'B' | 'C';
+  /** Serialized agent INPUT/OUTPUT contract. */
+  agentInterfaceJson: string;
 }
 
 /**
@@ -156,6 +158,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       r?.agentBehavior === 'A' || r?.agentBehavior === 'B' || r?.agentBehavior === 'C'
         ? r.agentBehavior
         : 'B',
+    agentInterfaceJson: String(r?.agentInterfaceJson ?? ''),
   };
 }
 

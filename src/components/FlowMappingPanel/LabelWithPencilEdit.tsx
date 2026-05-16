@@ -6,6 +6,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { Check, Pencil, X } from 'lucide-react';
 import { AutosizeOneLineInput } from './AutosizeOneLineInput';
+import { mappingParamLabelHottrack } from './mappingParameterHottrack';
 
 export type LabelWithPencilEditHandle = {
   startEditing: () => void;
@@ -33,6 +34,8 @@ export interface LabelWithPencilEditProps {
   textSizeClass?: string;
   /** Fired when inline rename mode starts or ends (e.g. to hide sibling toolbars). */
   onEditingChange?: (editing: boolean) => void;
+  /** Highlight label text on hover (mapping trees), not the whole row. */
+  hoverHighlight?: boolean;
 }
 
 export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWithPencilEditProps>(
@@ -52,9 +55,11 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
       readOnlyPreferWrap = false,
       textSizeClass = 'text-[11px]',
       onEditingChange,
+      hoverHighlight = false,
     },
     ref
   ) {
+    const labelHotClass = hoverHighlight ? mappingParamLabelHottrack : '';
     const [editing, setEditing] = useState(() => Boolean(ephemeralNew));
     const [draft, setDraft] = useState(() => (ephemeralNew ? '' : segment));
     const inputRef = useRef<HTMLInputElement>(null);
@@ -168,8 +173,8 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
         <span
           className={
             readOnlyPreferWrap
-              ? `block max-w-full min-h-[1.25em] whitespace-pre-wrap break-words text-left ${textSizeClass} font-medium text-slate-100 ${segmentClassName || ''}`
-              : `inline-flex max-w-full min-h-[1.25em] items-center truncate ${textSizeClass} font-medium text-slate-100 ${segmentClassName || ''}`
+              ? `block max-w-full min-h-[1.25em] whitespace-pre-wrap break-words text-left ${textSizeClass} font-medium text-slate-100 ${labelHotClass} ${segmentClassName || ''}`
+              : `inline-flex max-w-full min-h-[1.25em] items-center truncate ${textSizeClass} font-medium text-slate-100 ${labelHotClass} ${segmentClassName || ''}`
           }
           title={viewTitle ?? viewLabel}
         >
@@ -235,7 +240,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
     return (
       <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
         <span
-          className={`peer inline-flex min-h-[1.25em] min-w-0 max-w-full cursor-default select-none items-center overflow-hidden text-ellipsis whitespace-nowrap rounded px-0.5 ${textSizeClass} font-medium text-slate-100 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 ${segmentClassName || ''}`}
+          className={`peer inline-flex min-h-[1.25em] min-w-0 max-w-full cursor-default select-none items-center overflow-hidden text-ellipsis whitespace-nowrap rounded px-0.5 ${textSizeClass} font-medium text-slate-100 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 ${labelHotClass} ${segmentClassName || ''}`}
           tabIndex={0}
           onDoubleClick={() => setEditing(true)}
           onKeyDown={(e) => {

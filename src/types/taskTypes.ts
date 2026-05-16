@@ -459,6 +459,11 @@ export interface Task {
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
   /**
+   * Agent orchestrator contract: INPUT/OUTPUT parameter lists (`wireKey`, optional `variableRefId`).
+   * @see `parseAgentInterfaceJson` in `@domain/agentInterface/agentInterfaceState`.
+   */
+  agentInterfaceJson?: string;
+  /**
    * JSON string: stato wizard use case (passo pipeline + baseline IA passo 1/2).
    * @see `parseUseCaseWizardPersistedState` in `@domain/useCaseGeneratorWizard/useCaseWizardPersistedState`.
    */

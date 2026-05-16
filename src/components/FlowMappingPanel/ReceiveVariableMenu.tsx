@@ -10,6 +10,7 @@ import { isUuidString } from '../../utils/translationKeys';
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 import { filterVariableOptionsByQuery } from './mappingVariableFilter';
 import type { EditorParamCommitPatch } from './editorParamTypes';
+import { mappingParamValueHottrack } from './mappingParameterHottrack';
 
 const mirror10 = 'text-[10px] px-2 py-1 font-normal';
 
@@ -200,7 +201,7 @@ export function ReceiveVariableMenu({
           type="button"
           aria-haspopup="dialog"
           aria-expanded={false}
-          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 ${textSm} font-medium h-6 min-h-6 leading-6 border border-transparent hover:border-amber-500/25 ${
+          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 ${textSm} font-medium h-6 min-h-6 leading-6 border border-transparent hover:border-amber-500/25 ${mappingParamValueHottrack} ${
             showEmpty ? emptyClass : accentClassName
           }`}
           onClick={() => {

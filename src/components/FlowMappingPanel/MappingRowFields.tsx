@@ -13,6 +13,7 @@ import { resolveVariableDisplayName } from '../../utils/resolveVariableDisplayNa
 import { useActiveFlowMetaTranslationsFlattened } from '../../hooks/useActiveFlowMetaTranslations';
 import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
 import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
+import { mappingParamValueHottrack } from './mappingParameterHottrack';
 
 export interface MappingRowFieldsProps {
   variant: 'backend' | 'interface';
@@ -111,7 +112,7 @@ export function MappingRowFields({
       <div className="flex min-w-0 shrink-0 items-center gap-0">
         {showApiFields && !hideApiFieldColumn ? (
           <span
-            className={`h-6 min-h-[22px] min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono leading-6 text-slate-400 cursor-default select-none tabular-nums ${compactTypography ? 'text-xs' : 'text-[10px]'}`}
+            className={`h-6 min-h-[22px] min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono leading-6 text-slate-400 cursor-default select-none tabular-nums ${mappingParamValueHottrack} ${compactTypography ? 'text-xs' : 'text-[10px]'}`}
             title={
               apiRef
                 ? `Backend parameter name (read-only): ${apiRef}`

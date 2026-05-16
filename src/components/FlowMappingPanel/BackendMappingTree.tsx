@@ -79,6 +79,7 @@ export interface BackendMappingTreeProps {
   backendSendAdvancement?: BackendSendAdvancementApi;
   embeddedSignatureSubToolbarOpen?: boolean;
   variableOptions: string[];
+  agentParamDragSource?: import('./backendMappingTreeContext').AgentParamDragSource;
 }
 
 export function BackendMappingTree({
@@ -99,6 +100,7 @@ export function BackendMappingTree({
   backendSendAdvancement,
   embeddedSignatureSubToolbarOpen,
   variableOptions,
+  agentParamDragSource,
 }: BackendMappingTreeProps) {
   const treeRef = useRef<TreeApi<BackendArboristNodeData> | null>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -233,6 +235,7 @@ export function BackendMappingTree({
       backendSendParamEnumByWireKey,
       backendSendAdvancement,
       embeddedSignatureSubToolbarOpen,
+      agentParamDragSource,
       dropLineIndentPx,
       dropLineTone,
     }),
@@ -258,6 +261,7 @@ export function BackendMappingTree({
       backendSendParamEnumByWireKey,
       backendSendAdvancement,
       embeddedSignatureSubToolbarOpen,
+      agentParamDragSource,
       dropLineIndentPx,
       dropLineTone,
     ]
@@ -358,8 +362,7 @@ export function BackendMappingTree({
           </div>
         ) : null}
 
-        <div ref={viewportRef} className="relative min-h-0 flex-1">
-          <div className="absolute inset-0 overflow-hidden">
+        <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-hidden">
             <Tree
               ref={treeRef}
               data={arboristData}
@@ -377,7 +380,6 @@ export function BackendMappingTree({
             >
               {BackendMappingTreeNode}
             </Tree>
-          </div>
         </div>
 
         {enableBackendParamDrop ? (

@@ -16,6 +16,7 @@ import type { AgentPromptPlatformId, BackendPlaceholderInstance, PlatformPromptO
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { UseCaseGeneratorWizardModel } from './useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 import type { UseCaseSiblingSortMode } from './useCaseHierarchy';
+import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 
 /** Triade `(purpose, taskId, taskLabel)` serializzabile verso `/design/*` — allineato a {@link AiCallMeta}. */
 export type AIAgentPropagatorCallMeta = {
@@ -159,6 +160,16 @@ export interface AIAgentEditorDockContextValue {
    * il pannello non duplica la stessa riga in cima.
    */
   hideBackendsPanelInlineAddButton?: boolean;
+
+  /** Wizard passo Backend: pannello destro Interface (INPUT/OUTPUT agente). */
+  agentInterfacePanelOpen: boolean;
+  setAgentInterfacePanelOpen: (open: boolean) => void;
+  agentInterfaceInput: readonly MappingEntry[];
+  agentInterfaceOutput: readonly MappingEntry[];
+  setAgentInterfaceInput: React.Dispatch<React.SetStateAction<MappingEntry[]>>;
+  setAgentInterfaceOutput: React.Dispatch<React.SetStateAction<MappingEntry[]>>;
+  /** Titolo nell’header «Interface · …». */
+  agentInterfaceTitle: string;
 
   /** Presente dopo il mount dell’editor quando il generatore guidato è disponibile. */
   useCaseGeneratorWizard: UseCaseGeneratorWizardModel | null;

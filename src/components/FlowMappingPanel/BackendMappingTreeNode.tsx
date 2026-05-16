@@ -19,6 +19,10 @@ import type { BackendArboristNodeData } from './backendMappingArboristData';
 import { useBackendMappingTreeContext } from './backendMappingTreeContext';
 import { LabelWithPencilEdit, type LabelWithPencilEditHandle } from './LabelWithPencilEdit';
 import { MappingRowFields } from './MappingRowFields';
+import { MappingParameterToolbarActions } from './MappingParameterToolbarActions';
+import { MappingParameterToolbarPortal } from './MappingParameterToolbarPortal';
+import { setMappingDragLabelGhost } from './mappingDragGhost';
+import { writeAgentBackendParamDragData } from '@domain/agentInterface/agentInterfaceDragTypes';
 import {
   DND_NEW_BACKEND_PARAM,
   isEphemeralNewSegment,
@@ -94,8 +98,21 @@ export function BackendMappingTreeNode({
   const ctx = useBackendMappingTreeContext();
   const treeNode = node.data.treeNode;
   const rowRef = useRef<HTMLDivElement>(null);
+  const valueAnchorRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
   const [rowExtra, setRowExtra] = useState<'none' | 'notes' | 'values' | 'config'>('none');
+  const [paramHovered, setParamHovered] = useState(false);
+  const paramHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onParamEnter = useCallback(() => {
+    if (paramHideTimerRef.current != null) clearTimeout(paramHideTimerRef.current);
+    setParamHovered(true);
+  }, []);
+
+  const onParamLeave = useCallback(() => {
+    if (paramHideTimerRef.current != null) clearTimeout(paramHideTimerRef.current);
+    paramHideTimerRef.current = setTimeout(() => setParamHovered(false), 120);
+  }, []);
 
   const {
     entries,
@@ -119,6 +136,7 @@ export function BackendMappingTreeNode({
     backendSendParamEnumByWireKey,
     backendSendAdvancement,
     embeddedSignatureSubToolbarOpen,
+    agentParamDragSource,
     dropLineIndentPx,
     dropLineTone,
   } = ctx;
@@ -245,6 +263,34 @@ export function BackendMappingTreeNode({
     dropIndicator.placement === 'child';
 
   const ephemeralNew = Boolean(treeNode.entry && isEphemeralNewSegment(treeNode.segment));
+
+  const canAgentParamDrag = Boolean(
+    treeNode.entry && !isGroupOnly && agentParamDragSource && !ephemeralNew
+  );
+
+  const handleAgentParamDragStart = useCallback(
+    (e: React.DragEvent) => {
+      if (!canAgentParamDrag || !treeNode.entry || !agentParamDragSource) return;
+      const t = e.target as HTMLElement;
+      if (t.closest('button, input, textarea, select, [role="combobox"]')) {
+        e.preventDefault();
+        return;
+      }
+      e.stopPropagation();
+      const side = backendColumn === 'receive' ? 'receive' : 'send';
+      writeAgentBackendParamDragData(e.dataTransfer, {
+        wireKey: treeNode.entry.wireKey,
+        backendTaskId: agentParamDragSource.backendTaskId,
+        side,
+        ...(agentParamDragSource.backendLabel
+          ? { backendLabel: agentParamDragSource.backendLabel }
+          : {}),
+      });
+      setMappingDragLabelGhost(e, treeNode.segment);
+    },
+    [agentParamDragSource, backendColumn, canAgentParamDrag, treeNode.entry, treeNode.segment]
+  );
+
   const descTitle =
     treeNode.entry?.fieldDescription?.trim() ? treeNode.entry.fieldDescription.trim() : undefined;
 
@@ -310,14 +356,18 @@ export function BackendMappingTreeNode({
   const labelIndentPx = level * BACKEND_TREE_INDENT_PX;
 
   return (
-    <div className="select-none" style={{ ...style, paddingLeft: 0, overflow: 'visible' }}>
+    <div style={{ ...style, paddingLeft: 0, overflow: 'visible' }}>
       {showBefore ? <DropPreviewLine indentPx={dropLineIndentPx(level)} tone={dropLineTone} /> : null}
       <div className="relative overflow-visible" style={{ height: style.height }}>
         <div
           ref={rowRef}
           data-backend-map-row={pathKey}
           data-backend-map-has-children={hasChildren ? '1' : '0'}
-          className="group/row flex h-full min-h-[22px] items-center gap-1 rounded-md py-0 pr-0.5 hover:bg-slate-800/35"
+          className={`group/row flex h-full min-h-[22px] items-center gap-1 rounded-md py-0 pr-0.5 ${
+            canAgentParamDrag ? 'cursor-grab active:cursor-grabbing' : ''
+          }`}
+          draggable={canAgentParamDrag}
+          onDragStart={canAgentParamDrag ? handleAgentParamDragStart : undefined}
           onDragOver={onRowDragOver}
           onDragOverCapture={onRowDragOver}
           onDrop={onRowDrop}
@@ -367,6 +417,11 @@ export function BackendMappingTreeNode({
           ) : null}
 
           <div
+            className="flex min-h-[22px] min-w-0 flex-1 items-center gap-1"
+            onMouseEnter={treeNode.entry && !isGroupOnly ? onParamEnter : undefined}
+            onMouseLeave={treeNode.entry && !isGroupOnly ? onParamLeave : undefined}
+          >
+          <div
             className="group/label-slot relative flex min-h-[22px] min-w-0 flex-1 items-center gap-0.5"
             style={{ paddingLeft: labelIndentPx }}
           >
@@ -381,58 +436,6 @@ export function BackendMappingTreeNode({
               >
                 <AlertTriangle className={ICON} strokeWidth={2} aria-hidden />
               </span>
-            ) : null}
-            {treeNode.entry && !isGroupOnly ? (
-              <div className="absolute bottom-full left-0 z-30 flex items-center gap-0.5 rounded-md bg-slate-900/95 px-0.5 py-0.5 opacity-0 shadow-md ring-1 ring-slate-600/50 transition-opacity pointer-events-none group-hover/label-slot:opacity-100 group-hover/label-slot:pointer-events-auto">
-                <div className="pointer-events-auto absolute inset-x-0 -bottom-3 z-30 h-3 cursor-default" aria-hidden />
-                <button
-                  type="button"
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-amber-200"
-                  title="Modifica nome interno"
-                  aria-label="Modifica nome interno"
-                  onClick={() => labelEditRef.current?.startEditing()}
-                >
-                  <Pencil className={ICON} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-400"
-                  title="Rimuovi parametro"
-                  aria-label="Rimuovi parametro"
-                  onClick={handleRemove}
-                >
-                  <Trash2 className={ICON} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'notes' ? 'text-amber-300' : 'text-slate-400 hover:text-amber-200'}`}
-                  title="Descrizione (tooltip)"
-                  aria-label="Descrizione campo"
-                  onClick={() => setRowExtra((x) => (x === 'notes' ? 'none' : 'notes'))}
-                >
-                  <StickyNote className={ICON} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'values' ? 'text-sky-300' : 'text-slate-400 hover:text-sky-200'}`}
-                  title="Dominio valori"
-                  aria-label="Dominio valori"
-                  onClick={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
-                >
-                  <Table2 className={ICON} strokeWidth={2} />
-                </button>
-                {backendColumn === 'send' ? (
-                  <button
-                    type="button"
-                    className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'config' ? 'text-sky-300' : 'text-slate-400 hover:text-sky-200'}`}
-                    title="Parameter constraint"
-                    aria-label="Parameter constraint"
-                    onClick={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
-                  >
-                    <Settings2 className={ICON} strokeWidth={2} />
-                  </button>
-                ) : null}
-              </div>
             ) : null}
             <div className="min-w-0 flex-1 flex items-center gap-0.5">
               <div className="min-w-0 flex-1">
@@ -450,6 +453,7 @@ export function BackendMappingTreeNode({
                   segmentClassName={segmentToneClass}
                   readOnlyPreferWrap={!leafLabelEditable}
                   textSizeClass={ROW_TEXT}
+                  hoverHighlight={Boolean(treeNode.entry && !isGroupOnly)}
                 />
               </div>
               {collapsedParamCountSuffix}
@@ -457,7 +461,8 @@ export function BackendMappingTreeNode({
           </div>
 
           <div
-            className="flex min-h-[22px] min-w-0 shrink-0 items-center"
+            ref={treeNode.entry && !isGroupOnly ? valueAnchorRef : undefined}
+            className="relative flex min-h-[22px] min-w-0 shrink-0 items-center"
             {...(ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}
           >
             <MappingRowFields
@@ -482,6 +487,24 @@ export function BackendMappingTreeNode({
               backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
               compactTypography
             />
+          </div>
+          {treeNode.entry && !isGroupOnly ? (
+            <MappingParameterToolbarPortal
+              anchorRef={valueAnchorRef}
+              visible={paramHovered}
+              onPointerHoverChange={setParamHovered}
+            >
+              <MappingParameterToolbarActions
+                onEditName={() => labelEditRef.current?.startEditing()}
+                onRemove={handleRemove}
+                rowExtra={rowExtra}
+                onToggleNotes={() => setRowExtra((x) => (x === 'notes' ? 'none' : 'notes'))}
+                onToggleValues={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
+                showConstraint={backendColumn === 'send'}
+                onToggleConstraint={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
+              />
+            </MappingParameterToolbarPortal>
+          ) : null}
           </div>
 
           {showAdvancementUi && backendSendAdvancement!.isEnabled(advancementWireKey) ? (

@@ -46,6 +46,11 @@ import {
   type FlowInterfaceDropPayload,
   type FlowInterfacePointerPreviewDetail,
 } from './flowInterfaceDragTypes';
+import {
+  handleAgentBackendParamDragOver,
+  hasAgentBackendParamDrag,
+  parseAgentBackendParamDropFromDataTransfer,
+} from '@domain/agentInterface/agentInterfaceDragTypes';
 import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
 import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
 import {
@@ -60,6 +65,11 @@ import { BackendMappingDominioValoriPanel } from './backendMappingDominioValori'
 import { backendDominioValoriLabelInsetPx } from './backendMappingDominioValoriLayout';
 import { BackendMappingTree } from './BackendMappingTree';
 import type { BackendSendAdvancementApi } from './backendMappingTreeTypes';
+import { MappingParameterToolbarActions, MappingParameterInterfaceRemoveAction } from './MappingParameterToolbarActions';
+import { MappingParameterToolbarPortal } from './MappingParameterToolbarPortal';
+import { setMappingDragLabelGhost } from './mappingDragGhost';
+import { writeAgentBackendParamDragData } from '@domain/agentInterface/agentInterfaceDragTypes';
+import type { AgentParamDragSource } from './backendMappingTreeContext';
 export type { BackendSendAdvancementApi } from './backendMappingTreeTypes';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
@@ -172,6 +182,10 @@ export interface FlowMappingTreeProps {
   onDropVariable?: (payload: FlowInterfaceDropPayload) => void;
   /** Backend: enable drag-from-header new parameter + drop targets */
   enableBackendParamDrop?: boolean;
+  /** Agent interface: accept backend signature palette drag on INPUT/OUTPUT. */
+  enableAgentBackendParamDrop?: boolean;
+  /** Drag leaf params to agent Interface (embedded backend editor). */
+  agentParamDragSource?: AgentParamDragSource;
   /** Backend: when false, only variable field is shown per row */
   showApiFields?: boolean;
   /** Interface: resolve variable display names */
@@ -271,6 +285,10 @@ interface RowProps {
   embeddedSignatureSubToolbarOpen?: boolean;
   /** Backend: layout albero compatto (indent + slot fissi, senza rail w-14). */
   backendCleanTree?: boolean;
+  agentParamDragSource?: AgentParamDragSource;
+  enableAgentBackendParamDrop?: boolean;
+  interfaceZone?: 'input' | 'output';
+  onAgentBackendParamDrop?: (payload: import('./flowInterfaceDragTypes').FlowInterfaceDropPayload) => void;
 }
 
 function MappingTreeRow({
@@ -312,10 +330,27 @@ function MappingTreeRow({
   treeRailWidthPx,
   embeddedSignatureSubToolbarOpen,
   backendCleanTree: backendCleanTreeProp = false,
+  agentParamDragSource,
+  enableAgentBackendParamDrop = false,
+  interfaceZone,
+  onAgentBackendParamDrop,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const valueAnchorRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
   const [rowExtra, setRowExtra] = useState<'none' | 'notes' | 'values' | 'config'>('none');
+  const [paramHovered, setParamHovered] = useState(false);
+  const paramHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onParamEnter = useCallback(() => {
+    if (paramHideTimerRef.current != null) clearTimeout(paramHideTimerRef.current);
+    setParamHovered(true);
+  }, []);
+
+  const onParamLeave = useCallback(() => {
+    if (paramHideTimerRef.current != null) clearTimeout(paramHideTimerRef.current);
+    paramHideTimerRef.current = setTimeout(() => setParamHovered(false), 120);
+  }, []);
 
   useEffect(() => {
     if (embeddedSignatureSubToolbarOpen !== false) return;
@@ -401,6 +436,13 @@ function MappingTreeRow({
 
   const onRowDragOver = useCallback(
     (e: React.DragEvent) => {
+      if (
+        variant === 'interface' &&
+        enableAgentBackendParamDrop &&
+        handleAgentBackendParamDragOver(e, interfaceZone)
+      ) {
+        return;
+      }
       if (!enableBackendParamDrop || variant !== 'backend') return;
       if (hasFlowRowVarDrag(e)) {
         e.preventDefault();
@@ -423,11 +465,22 @@ function MappingTreeRow({
       const p = placementFromY(e.clientY, rect, hasChildren);
       onBackendParamDragOver(node.pathKey, p);
     },
-    [enableBackendParamDrop, variant, hasChildren, node.pathKey, onBackendParamDragOver]
+    [enableAgentBackendParamDrop, enableBackendParamDrop, interfaceZone, variant, hasChildren, node.pathKey, onBackendParamDragOver]
   );
 
   const onRowDrop = useCallback(
     (e: React.DragEvent) => {
+      if (variant === 'interface' && enableAgentBackendParamDrop && onAgentBackendParamDrop) {
+        e.preventDefault();
+        e.stopPropagation();
+        const agent = parseAgentBackendParamDropFromDataTransfer(e.dataTransfer);
+        if (agent) {
+          if (interfaceZone === 'input' && agent.side !== 'send') return;
+          if (interfaceZone === 'output' && agent.side !== 'receive') return;
+          onAgentBackendParamDrop({ wireKey: agent.wireKey, agentBackendParam: agent });
+        }
+        return;
+      }
       if (!enableBackendParamDrop || variant !== 'backend') return;
       if (hasFlowRowVarDrag(e) && onBackendFlowVariableDrop) {
         const el = rowRef.current;
@@ -446,7 +499,17 @@ function MappingTreeRow({
       const placement = placementFromY(e.clientY, rect, hasChildren);
       onInsertBackendParam({ targetPathKey: node.pathKey, placement });
     },
-    [enableBackendParamDrop, variant, hasChildren, node.pathKey, onInsertBackendParam, onBackendFlowVariableDrop]
+    [
+      enableAgentBackendParamDrop,
+      enableBackendParamDrop,
+      interfaceZone,
+      onAgentBackendParamDrop,
+      variant,
+      hasChildren,
+      node.pathKey,
+      onInsertBackendParam,
+      onBackendFlowVariableDrop,
+    ]
   );
 
   const handleIfaceReorderDragOver = useCallback(
@@ -650,7 +713,7 @@ function MappingTreeRow({
           tone={showReorderBefore ? reorderLineTone : 'amber'}
         />
       )}
-      <div className={`relative ${depthLegacyGutter}`}>
+      <div className={`relative overflow-visible ${depthLegacyGutter}`}>
         <div
           ref={rowRef}
           {...(variant === 'backend' && enableBackendParamDrop
@@ -675,7 +738,7 @@ function MappingTreeRow({
           onDragEnd={() => {
             reorderDragSourceIdRef.current = null;
           }}
-          className={`group/row flex ${rowAlignClass} gap-1 ${rowMinH} rounded-md py-0 pr-0.5 -mx-0.5 hover:bg-slate-800/35 ${
+          className={`group/row flex ${rowAlignClass} gap-1 ${rowMinH} rounded-md py-0 pr-0.5 -mx-0.5 ${
             backendCleanTree
               ? ''
               : variant === 'backend' && flatBackendRowLayout
@@ -801,6 +864,39 @@ function MappingTreeRow({
         ) : null}
 
         <div
+          className={`flex min-w-0 shrink-0 items-center gap-0 ${
+            node.entry && !isGroupOnly ? 'flex-1' : backendCleanTree ? 'flex-1' : ''
+          } ${rowMinH} ${
+            node.entry && !isGroupOnly && agentParamDragSource ? 'cursor-grab active:cursor-grabbing' : ''
+          }`}
+          onMouseEnter={node.entry && !isGroupOnly ? onParamEnter : undefined}
+          onMouseLeave={node.entry && !isGroupOnly ? onParamLeave : undefined}
+          draggable={Boolean(
+            node.entry && !isGroupOnly && agentParamDragSource && variant === 'backend' && !ephemeralNew
+          )}
+          onDragStart={
+            node.entry && !isGroupOnly && agentParamDragSource && variant === 'backend' && !ephemeralNew
+              ? (e) => {
+                  const t = e.target as HTMLElement;
+                  if (t.closest('button, input, textarea, select, [role="combobox"]')) {
+                    e.preventDefault();
+                    return;
+                  }
+                  const side = backendColumn === 'receive' ? 'receive' : 'send';
+                  writeAgentBackendParamDragData(e.dataTransfer, {
+                    wireKey: node.entry!.wireKey,
+                    backendTaskId: agentParamDragSource.backendTaskId,
+                    side,
+                    ...(agentParamDragSource.backendLabel
+                      ? { backendLabel: agentParamDragSource.backendLabel }
+                      : {}),
+                  });
+                  setMappingDragLabelGhost(e, node.segment);
+                }
+              : undefined
+          }
+        >
+        <div
           className={`group/label-slot relative flex ${rowMinH} min-w-0 shrink-0 gap-0 pl-0 ${
             backendCleanTree ? 'max-w-none flex-1' : 'max-w-[min(20rem,52vw)]'
           } ${
@@ -819,59 +915,6 @@ function MappingTreeRow({
               <AlertTriangle className={iconSm} strokeWidth={2} aria-hidden />
             </span>
           ) : null}
-          {variant === 'backend' && node.entry && !isGroupOnly && (
-            <div className="absolute bottom-full left-0 z-30 flex items-center gap-0.5 rounded-md bg-slate-900/95 px-0.5 py-0.5 opacity-0 shadow-md ring-1 ring-slate-600/50 transition-opacity pointer-events-none group-hover/label-slot:opacity-100 group-hover/label-slot:pointer-events-auto">
-              {/* Transparent bridge — prevents hover loss in the 2-4px gap between toolbar and row */}
-              <div className="pointer-events-auto absolute inset-x-0 -bottom-3 z-30 h-3 cursor-default" aria-hidden />
-              <button
-                type="button"
-                className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-amber-200"
-                title="Modifica nome interno"
-                aria-label="Modifica nome interno"
-                onClick={() => labelEditRef.current?.startEditing()}
-              >
-                <Pencil className={iconSm} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-400"
-                title="Rimuovi parametro"
-                aria-label="Rimuovi parametro"
-                onClick={handleRemove}
-              >
-                <Trash2 className={iconSm} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'notes' ? 'text-amber-300' : 'text-slate-400 hover:text-amber-200'}`}
-                title="Descrizione (tooltip)"
-                aria-label="Descrizione campo"
-                onClick={() => setRowExtra((x) => (x === 'notes' ? 'none' : 'notes'))}
-              >
-                <StickyNote className={iconSm} strokeWidth={2} />
-              </button>
-              <button
-                type="button"
-                className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'values' ? 'text-sky-300' : 'text-slate-400 hover:text-sky-200'}`}
-                title="Dominio valori (hint / mock)"
-                aria-label="Dominio valori"
-                onClick={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
-              >
-                <Table2 className={iconSm} strokeWidth={2} />
-              </button>
-              {backendColumn === 'send' ? (
-                <button
-                  type="button"
-                  className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'config' ? 'text-sky-300' : 'text-slate-400 hover:text-sky-200'}`}
-                  title="Parameter constraint (mandatory / optional)"
-                  aria-label="Parameter constraint"
-                  onClick={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
-                >
-                  <Settings2 className={iconSm} strokeWidth={2} />
-                </button>
-              ) : null}
-            </div>
-          )}
           <div
             className={`min-w-0 flex-1 flex ${
               variant === 'backend' ? 'items-center gap-0.5' : 'items-baseline gap-1'
@@ -901,6 +944,7 @@ function MappingTreeRow({
               viewTitle={backendMappingViewTitle}
               segmentClassName={segmentToneClass}
               readOnlyPreferWrap={variant === 'backend' && !leafLabelEditable}
+              hoverHighlight={Boolean(node.entry && !isGroupOnly)}
             />
             </div>
             {collapsedParamCountSuffix}
@@ -908,7 +952,8 @@ function MappingTreeRow({
         </div>
 
           <div
-            className={`flex ${rowMinH} min-w-0 shrink-0 items-center gap-0 pl-0`}
+            ref={node.entry && !isGroupOnly ? valueAnchorRef : undefined}
+            className={`relative flex ${rowMinH} min-w-0 shrink-0 items-center gap-0 pl-0`}
           {...(variant === 'backend' && ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}
         >
           <MappingRowFields
@@ -933,23 +978,34 @@ function MappingTreeRow({
             backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
           />
         </div>
+        {node.entry && !isGroupOnly ? (
+          <MappingParameterToolbarPortal
+            anchorRef={valueAnchorRef}
+            visible={paramHovered}
+            onPointerHoverChange={setParamHovered}
+          >
+            {variant === 'backend' ? (
+              <MappingParameterToolbarActions
+                onEditName={() => labelEditRef.current?.startEditing()}
+                onRemove={handleRemove}
+                rowExtra={rowExtra}
+                onToggleNotes={() => setRowExtra((x) => (x === 'notes' ? 'none' : 'notes'))}
+                onToggleValues={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
+                showConstraint={backendColumn === 'send'}
+                onToggleConstraint={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
+              />
+            ) : (
+              <MappingParameterInterfaceRemoveAction onRemove={handleRemove} />
+            )}
+          </MappingParameterToolbarPortal>
+        ) : null}
+        </div>
 
         {showAdvancementUi && backendSendAdvancement!.isEnabled(advancementWireKey) ? (
           <div className="flex min-w-0 shrink-0 items-center">{backendSendAdvancement.renderEditor(advancementWireKey)}</div>
         ) : null}
 
         {variant === 'interface' ? <span className="min-w-2 shrink flex-1" aria-hidden /> : null}
-
-        {node.entry && variant === 'interface' && (
-          <button
-            type="button"
-            className="shrink-0 p-1 rounded text-slate-600 opacity-0 group-hover/row:opacity-100 hover:text-red-400 focus:opacity-100 focus:outline-none"
-            aria-label="Rimuovi mapping"
-            onClick={handleRemove}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
         </div>
 
         {variant === 'backend' && node.entry && rowExtra === 'notes' && (
@@ -1152,6 +1208,10 @@ function MappingTreeRow({
               treeRailWidthPx={treeRailWidthPx}
               backendCleanTree={backendCleanTreeProp}
               embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+              agentParamDragSource={agentParamDragSource}
+              enableAgentBackendParamDrop={enableAgentBackendParamDrop}
+              interfaceZone={interfaceZone}
+              onAgentBackendParamDrop={onAgentBackendParamDrop}
             />
           ))}
         </div>
@@ -1190,6 +1250,7 @@ function BackendMappingTreeView({
   backendSendParamEnumByWireKey,
   backendSendAdvancement,
   embeddedSignatureSubToolbarOpen,
+  agentParamDragSource,
 }: FlowMappingTreeProps) {
   return (
     <div
@@ -1223,6 +1284,7 @@ function BackendMappingTreeView({
         backendSendAdvancement={backendSendAdvancement}
         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
         variableOptions={variableOptions}
+        agentParamDragSource={agentParamDragSource}
       />
     </div>
   );
@@ -1237,11 +1299,25 @@ function InterfaceMappingTree({
   listIdPrefix,
   showDropZone,
   onDropVariable,
+  enableBackendParamDrop = false,
+  enableAgentBackendParamDrop = false,
+  showApiFields = true,
   projectId,
   flowCanvasId,
   interfaceZone,
   siblingOrder = 'construction',
+  backendColumn,
+  onCreateOutputVariable,
+  onOutputVariableCreated,
+  backendKnownVariableIds,
+  backendSendParamKindByWireKey,
+  backendSendParamEnumByWireKey,
+  backendSendAdvancement,
+  embeddedSignatureSubToolbarOpen,
+  agentParamDragSource,
 }: FlowMappingTreeProps) {
+  /** InterfaceMappingTree is mounted only for `variant === 'interface'`; backend accordion layout lives in BackendMappingTree. */
+  const useBackendRootAccordion = false;
   const workspaceState = useFlowWorkspaceOptional();
   const workspaceFlows = workspaceState?.flows;
 
@@ -1398,14 +1474,38 @@ function InterfaceMappingTree({
     [entries, onEntriesChange]
   );
 
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  }, []);
+  const onDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (enableAgentBackendParamDrop && handleAgentBackendParamDragOver(e, interfaceZone)) {
+        return;
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    },
+    [enableAgentBackendParamDrop, interfaceZone]
+  );
+
+  const onDragOverCapture = useCallback(
+    (e: React.DragEvent) => {
+      if (enableAgentBackendParamDrop) {
+        handleAgentBackendParamDragOver(e, interfaceZone);
+      }
+    },
+    [enableAgentBackendParamDrop, interfaceZone]
+  );
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      if (onDropVariable && enableAgentBackendParamDrop) {
+        const agent = parseAgentBackendParamDropFromDataTransfer(e.dataTransfer);
+        if (agent) {
+          if (interfaceZone === 'input' && agent.side !== 'send') return;
+          if (interfaceZone === 'output' && agent.side !== 'receive') return;
+          onDropVariable({ wireKey: agent.wireKey, agentBackendParam: agent });
+          return;
+        }
+      }
       if (onDropVariable) {
         const fromRow = parseFlowInterfaceDropFromDataTransfer(e.dataTransfer);
         if (fromRow) {
@@ -1419,7 +1519,7 @@ function InterfaceMappingTree({
         onDropVariable({ wireKey: label.trim() });
       }
     },
-    [onDropVariable]
+    [onDropVariable, enableAgentBackendParamDrop, interfaceZone]
   );
 
   const onEmptyBackendDragOver = useCallback(
@@ -1539,6 +1639,7 @@ function InterfaceMappingTree({
         treeRailWidthPx={useBackendRootAccordion ? undefined : treeRailPx}
         backendCleanTree={useBackendRootAccordion}
         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+        agentParamDragSource={agentParamDragSource}
       />
     );
   }
@@ -1558,6 +1659,7 @@ function InterfaceMappingTree({
               : ''
       }
       onDragOver={showDropZone ? onDragOver : rootDragOver}
+      onDragOverCapture={showDropZone ? onDragOverCapture : undefined}
       onDrop={showDropZone ? onDrop : undefined}
     >
       <datalist id={`${listIdPrefix}-api`}>
@@ -1669,6 +1771,10 @@ function InterfaceMappingTree({
               flatTreeGrid={flatTreeGrid}
               treeRailWidthPx={backendTreeRailWidthPx}
               embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+              agentParamDragSource={agentParamDragSource}
+              enableAgentBackendParamDrop={variant === 'interface' && enableAgentBackendParamDrop}
+              interfaceZone={interfaceZone}
+              onAgentBackendParamDrop={variant === 'interface' ? onDropVariable : undefined}
             />
           ))
         : tree.map((root) => {
