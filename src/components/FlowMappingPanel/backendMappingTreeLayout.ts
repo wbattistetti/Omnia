@@ -8,8 +8,11 @@ export const BACKEND_TREE_INDENT_PX = 12;
 /** Slot fisso chevron espansione (non si allarga con flex-1). */
 export const BACKEND_TREE_CHEVRON_SLOT_PX = 14;
 
-/** Slot freccia parametro (glyph compatto centrato; larghezza ~2× rispetto alla v1). */
-export const BACKEND_TREE_ARROW_SLOT_PX = 80;
+/** Stima larghezza glyph freccia per inset pannelli (la riga non usa colonne fisse). */
+export const BACKEND_TREE_ARROW_GLYPH_ESTIMATE_PX = 42;
+
+/** @deprecated Usare BACKEND_TREE_ARROW_GLYPH_ESTIMATE_PX; mantenuto per test di migrazione inset. */
+export const BACKEND_TREE_ARROW_SLOT_PX = BACKEND_TREE_ARROW_GLYPH_ESTIMATE_PX;
 
 export function backendTreeDepthIndentPx(depth: number): number {
   return Math.max(0, depth) * BACKEND_TREE_INDENT_PX;

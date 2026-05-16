@@ -12,10 +12,11 @@ export const BACKEND_SEND_MAPPING_ICON_COLOR = '#4A90E2';
 /** Arancione RECEIVE (#F5A623). */
 export const BACKEND_RECEIVE_MAPPING_ICON_COLOR = '#F5A623';
 
-const GLYPH_W_DEFAULT = 59;
+const GLYPH_W_DEFAULT = 118;
 const GLYPH_H_DEFAULT = 22;
-const GLYPH_W_COMPACT = 76;
-const GLYPH_H_COMPACT = 16;
+/** Compact tree row: wide glyph, tight box (no 76/152px column). */
+const GLYPH_W_COMPACT = 42;
+const GLYPH_H_COMPACT = 18;
 /** SEND: blu mapping (#4A90E2) — obbligatorio = fill pieno, opzionale = solo stroke. */
 const SEND_SHADOW = 'drop-shadow-[0_0_6px_rgba(74,144,226,0.45)]';
 const RECV_SHADOW = 'drop-shadow-[0_0_5px_rgba(245,166,35,0.4)]';
@@ -39,13 +40,13 @@ export function BackendSendArrowIcon({
   const fillC = filled ? c : 'none';
   const w = compact ? GLYPH_W_COMPACT : GLYPH_W_DEFAULT;
   const h = compact ? GLYPH_H_COMPACT : GLYPH_H_DEFAULT;
-  const cls = compact ? `h-4 w-[38px] shrink-0` : `h-[22px] w-[59px] shrink-0`;
+  const cls = compact ? 'h-[18px] w-[42px] shrink-0' : 'h-[22px] w-[118px] shrink-0';
   return (
     <Icon
       className={`${cls} ${SEND_SHADOW}`}
       width={w}
       height={h}
-      strokeWidth={2.15}
+      strokeWidth={compact ? 2.6 : 2.15}
       fill={fillC}
       stroke={strokeC}
       title={title}
@@ -67,13 +68,13 @@ export function BackendReceiveArrowIcon({
   const strokeC = c;
   const w = compact ? GLYPH_W_COMPACT : GLYPH_W_DEFAULT;
   const h = compact ? GLYPH_H_COMPACT : GLYPH_H_DEFAULT;
-  const cls = compact ? `h-4 w-[76px] shrink-0` : `h-[22px] w-[59px] shrink-0`;
+  const cls = compact ? 'h-[18px] w-[42px] shrink-0' : 'h-[22px] w-[118px] shrink-0';
   return (
     <ArrowBigLeft
       className={`${cls} ${RECV_SHADOW}`}
       width={w}
       height={h}
-      strokeWidth={2.15}
+      strokeWidth={compact ? 2.6 : 2.15}
       fill={fillC}
       stroke={strokeC}
       aria-hidden

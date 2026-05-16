@@ -35,6 +35,9 @@ export interface MappingEntry {
   /** SEND: id gruppo vincolo one-of (stesso id su più righe). */
   sendConstraintGroupId?: string;
   sendConstraintGroupLabel?: string;
+  /** Agent interface: provenance from backend SEND/RECEIVE drag. */
+  sourceBackendTaskId?: string;
+  sourceSide?: 'send' | 'receive';
 }
 
 export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'wireKey'>): MappingEntry {
@@ -65,6 +68,12 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(vid ? { variableRefId: vid } : {}),
     ...(lit ? { literalConstant: lit } : {}),
     ...(lk ? { labelKey: lk } : {}),
+    ...(partial.sourceBackendTaskId?.trim()
+      ? { sourceBackendTaskId: partial.sourceBackendTaskId.trim() }
+      : {}),
+    ...(partial.sourceSide === 'send' || partial.sourceSide === 'receive'
+      ? { sourceSide: partial.sourceSide }
+      : {}),
   };
 }
 

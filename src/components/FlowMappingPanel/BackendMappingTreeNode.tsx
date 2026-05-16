@@ -20,7 +20,7 @@ import { useBackendMappingTreeContext } from './backendMappingTreeContext';
 import { LabelWithPencilEdit, type LabelWithPencilEditHandle } from './LabelWithPencilEdit';
 import { MappingRowFields } from './MappingRowFields';
 import { MappingParameterToolbarActions } from './MappingParameterToolbarActions';
-import { MappingParameterToolbarPortal } from './MappingParameterToolbarPortal';
+import { MappingTreeNodeRow } from './MappingTreeNodeRow';
 import { setMappingDragLabelGhost } from './mappingDragGhost';
 import { writeAgentBackendParamDragData } from '@domain/agentInterface/agentInterfaceDragTypes';
 import {
@@ -37,18 +37,15 @@ import {
 } from './BackendSendArrowIcon';
 import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
 import { BackendMappingDominioValoriPanel } from './backendMappingDominioValori';
-import {
-  BACKEND_TREE_ARROW_SLOT_PX,
-  BACKEND_TREE_CHEVRON_SLOT_PX,
-  BACKEND_TREE_INDENT_PX,
-  backendDominioValoriCleanTreeInsetPx,
-} from './backendMappingTreeLayout';
+import { BACKEND_TREE_INDENT_PX, backendDominioValoriCleanTreeInsetPx } from './backendMappingTreeLayout';
 import { DropPreviewLine, placementFromY } from './backendMappingTreeDnD';
 import type { MappingEntry } from './mappingTypes';
 import { renameLeafSegment } from './mappingTreeUtils';
 
 const ICON = 'w-3 h-3';
-const ROW_TEXT = 'text-xs';
+import { MAPPING_ROW_TEXT_CLASS } from './mappingPanelTypography';
+
+const ROW_TEXT = MAPPING_ROW_TEXT_CLASS;
 
 function hasNewParamDrag(e: React.DragEvent): boolean {
   return [...e.dataTransfer.types].includes(DND_NEW_BACKEND_PARAM);
@@ -98,21 +95,8 @@ export function BackendMappingTreeNode({
   const ctx = useBackendMappingTreeContext();
   const treeNode = node.data.treeNode;
   const rowRef = useRef<HTMLDivElement>(null);
-  const valueAnchorRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
   const [rowExtra, setRowExtra] = useState<'none' | 'notes' | 'values' | 'config'>('none');
-  const [paramHovered, setParamHovered] = useState(false);
-  const paramHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const onParamEnter = useCallback(() => {
-    if (paramHideTimerRef.current != null) clearTimeout(paramHideTimerRef.current);
-    setParamHovered(true);
-  }, []);
-
-  const onParamLeave = useCallback(() => {
-    if (paramHideTimerRef.current != null) clearTimeout(paramHideTimerRef.current);
-    paramHideTimerRef.current = setTimeout(() => setParamHovered(false), 120);
-  }, []);
 
   const {
     entries,
@@ -349,151 +333,124 @@ export function BackendMappingTreeNode({
     >
       {node.isOpen ? <ChevronDown className={ICON} /> : <ChevronRight className={ICON} />}
     </button>
-  ) : (
-    <span className={`inline-block w-3.5 shrink-0`} aria-hidden />
-  );
+  ) : null;
 
   const labelIndentPx = level * BACKEND_TREE_INDENT_PX;
+
+  const arrowTitle = isGroupOnly
+    ? undefined
+    : backendColumn === 'send'
+      ? sendArrowTitle(sendGlyphKind)
+      : backendColumn === 'receive'
+        ? receiveOptional
+          ? 'Parametro in ingresso (da API). Opzionale.'
+          : 'Parametro in ingresso (da API). Obbligatorio.'
+        : 'Parametro';
+
+  const paramArrow = !isGroupOnly ? (
+    <span title={arrowTitle}>
+      {backendColumn === 'send' ? (
+        <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} compact />
+      ) : backendColumn === 'receive' ? (
+        <BackendReceiveArrowIcon optional={receiveOptional} compact />
+      ) : null}
+    </span>
+  ) : null;
+
+  const advancementCheckbox = showAdvancementUi ? (
+    <input
+      type="checkbox"
+      className="h-3 w-3 cursor-pointer rounded border-slate-500 bg-slate-900 text-teal-500 focus:ring-teal-500/40"
+      checked={backendSendAdvancement!.isEnabled(advancementWireKey)}
+      onChange={(e) => backendSendAdvancement!.onToggle(advancementWireKey, e.target.checked)}
+      onClick={(e) => e.stopPropagation()}
+      title="Avanzamento tra batch"
+      aria-label="Avanzamento parametro"
+    />
+  ) : null;
+
+  const labelNode = (
+    <>
+      {treeNode.entry?.openapiDescriptionDrift ? (
+        <span
+          className="shrink-0 text-amber-400"
+          title={
+            treeNode.entry.openapiDescriptionHint
+              ? `Descrizione salvata diversa da OpenAPI.\nOpenAPI: ${treeNode.entry.openapiDescriptionHint}`
+              : 'Descrizione salvata diversa da OpenAPI'
+          }
+        >
+          <AlertTriangle className={ICON} strokeWidth={2} aria-hidden />
+        </span>
+      ) : null}
+      <LabelWithPencilEdit
+        ref={labelEditRef}
+        segment={treeNode.segment}
+        editable={leafLabelEditable}
+        onCommit={handleRenameSegment}
+        editIntent={Boolean(treeNode.entry && pendingLabelEditId === treeNode.entry.id)}
+        onConsumeEditIntent={onConsumeLabelEditIntent}
+        ephemeralNew={ephemeralNew}
+        onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
+        inlinePencil={false}
+        viewTitle={descTitle}
+        segmentClassName={segmentToneClass}
+        readOnlyPreferWrap={!leafLabelEditable}
+        textSizeClass={ROW_TEXT}
+        hoverHighlight={Boolean(treeNode.entry && !isGroupOnly)}
+      />
+    </>
+  );
+
+  const valueEditorNode = (
+    <div {...(ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}>
+      <MappingRowFields
+        variant="backend"
+        entry={treeNode.entry}
+        groupOnlyBackend={isGroupOnly}
+        showApiFields={false}
+        hideApiFieldColumn
+        secondaryFieldsLocked={ephemeralNew}
+        suppressFieldTabFocus={Boolean(
+          treeNode.entry && (pendingLabelEditId === treeNode.entry.id || ephemeralNew)
+        )}
+        datalistApiId={datalistApi}
+        datalistVarId={datalistVar}
+        onPatch={patchEntry}
+        backendColumn={backendColumn}
+        variableOptions={variableOptions}
+        onCreateOutputVariable={onCreateOutputVariable}
+        onOutputVariableCreated={onOutputVariableCreated}
+        backendKnownVariableIds={backendKnownVariableIds}
+        backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+        backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
+        compactTypography
+      />
+    </div>
+  );
 
   return (
     <div style={{ ...style, paddingLeft: 0, overflow: 'visible' }}>
       {showBefore ? <DropPreviewLine indentPx={dropLineIndentPx(level)} tone={dropLineTone} /> : null}
       <div className="relative overflow-visible" style={{ height: style.height }}>
-        <div
-          ref={rowRef}
-          data-backend-map-row={pathKey}
-          data-backend-map-has-children={hasChildren ? '1' : '0'}
-          className={`group/row flex h-full min-h-[22px] items-center gap-1 rounded-md py-0 pr-0.5 ${
-            canAgentParamDrag ? 'cursor-grab active:cursor-grabbing' : ''
-          }`}
-          draggable={canAgentParamDrag}
-          onDragStart={canAgentParamDrag ? handleAgentParamDragStart : undefined}
-          onDragOver={onRowDragOver}
-          onDragOverCapture={onRowDragOver}
-          onDrop={onRowDrop}
-        >
-          <div
-            className="flex shrink-0 items-center justify-center"
-            style={{ width: BACKEND_TREE_CHEVRON_SLOT_PX }}
-          >
-            {chevronControl}
-          </div>
-
-          <div
-            className="flex h-6 shrink-0 items-center justify-center"
-            style={{ width: BACKEND_TREE_ARROW_SLOT_PX }}
-            title={
-              isGroupOnly
-                ? undefined
-                : backendColumn === 'send'
-                  ? sendArrowTitle(sendGlyphKind)
-                  : backendColumn === 'receive'
-                    ? receiveOptional
-                      ? 'Parametro in ingresso (da API). Opzionale.'
-                      : 'Parametro in ingresso (da API). Obbligatorio.'
-                    : 'Parametro'
-            }
-          >
-            {!isGroupOnly ? (
-              backendColumn === 'send' ? (
-                <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} compact />
-              ) : backendColumn === 'receive' ? (
-                <BackendReceiveArrowIcon optional={receiveOptional} compact />
-              ) : null
-            ) : null}
-          </div>
-
-          {showAdvancementUi ? (
-            <div className="flex h-6 shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="checkbox"
-                className="h-3 w-3 cursor-pointer rounded border-slate-500 bg-slate-900 text-teal-500 focus:ring-teal-500/40"
-                checked={backendSendAdvancement!.isEnabled(advancementWireKey)}
-                onChange={(e) => backendSendAdvancement!.onToggle(advancementWireKey, e.target.checked)}
-                title="Avanzamento tra batch"
-                aria-label="Avanzamento parametro"
-              />
-            </div>
-          ) : null}
-
-          <div
-            className="flex min-h-[22px] min-w-0 flex-1 items-center gap-1"
-            onMouseEnter={treeNode.entry && !isGroupOnly ? onParamEnter : undefined}
-            onMouseLeave={treeNode.entry && !isGroupOnly ? onParamLeave : undefined}
-          >
-          <div
-            className="group/label-slot relative flex min-h-[22px] min-w-0 flex-1 items-center gap-0.5"
-            style={{ paddingLeft: labelIndentPx }}
-          >
-            {treeNode.entry?.openapiDescriptionDrift ? (
-              <span
-                className="shrink-0 text-amber-400"
-                title={
-                  treeNode.entry.openapiDescriptionHint
-                    ? `Descrizione salvata diversa da OpenAPI.\nOpenAPI: ${treeNode.entry.openapiDescriptionHint}`
-                    : 'Descrizione salvata diversa da OpenAPI'
-                }
-              >
-                <AlertTriangle className={ICON} strokeWidth={2} aria-hidden />
-              </span>
-            ) : null}
-            <div className="min-w-0 flex-1 flex items-center gap-0.5">
-              <div className="min-w-0 flex-1">
-                <LabelWithPencilEdit
-                  ref={labelEditRef}
-                  segment={treeNode.segment}
-                  editable={leafLabelEditable}
-                  onCommit={handleRenameSegment}
-                  editIntent={Boolean(treeNode.entry && pendingLabelEditId === treeNode.entry.id)}
-                  onConsumeEditIntent={onConsumeLabelEditIntent}
-                  ephemeralNew={ephemeralNew}
-                  onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
-                  inlinePencil={false}
-                  viewTitle={descTitle}
-                  segmentClassName={segmentToneClass}
-                  readOnlyPreferWrap={!leafLabelEditable}
-                  textSizeClass={ROW_TEXT}
-                  hoverHighlight={Boolean(treeNode.entry && !isGroupOnly)}
-                />
-              </div>
-              {collapsedParamCountSuffix}
-            </div>
-          </div>
-
-          <div
-            ref={treeNode.entry && !isGroupOnly ? valueAnchorRef : undefined}
-            className="relative flex min-h-[22px] min-w-0 shrink-0 items-center"
-            {...(ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}
-          >
-            <MappingRowFields
-              variant="backend"
-              entry={treeNode.entry}
-              groupOnlyBackend={isGroupOnly}
-              showApiFields={showApiFields && level === 0}
-              hideApiFieldColumn={level > 0}
-              secondaryFieldsLocked={ephemeralNew}
-              suppressFieldTabFocus={Boolean(
-                treeNode.entry && (pendingLabelEditId === treeNode.entry.id || ephemeralNew)
-              )}
-              datalistApiId={datalistApi}
-              datalistVarId={datalistVar}
-              onPatch={patchEntry}
-              backendColumn={backendColumn}
-              variableOptions={variableOptions}
-              onCreateOutputVariable={onCreateOutputVariable}
-              onOutputVariableCreated={onOutputVariableCreated}
-              backendKnownVariableIds={backendKnownVariableIds}
-              backendSendParamKindByWireKey={backendSendParamKindByWireKey}
-              backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
-              compactTypography
-            />
-          </div>
-          {treeNode.entry && !isGroupOnly ? (
-            <MappingParameterToolbarPortal
-              anchorRef={valueAnchorRef}
-              visible={paramHovered}
-              onPointerHoverChange={setParamHovered}
-            >
+        <MappingTreeNodeRow
+          rowRef={rowRef}
+          rowClassName="h-full"
+          depthIndentPx={labelIndentPx}
+          isGroup={isGroupOnly}
+          chevron={chevronControl}
+          arrow={paramArrow}
+          labelLeading={advancementCheckbox}
+          label={labelNode}
+          labelSuffix={collapsedParamCountSuffix}
+          valueEditor={isGroupOnly ? null : valueEditorNode}
+          afterEditor={
+            showAdvancementUi && backendSendAdvancement!.isEnabled(advancementWireKey)
+              ? backendSendAdvancement.renderEditor(advancementWireKey)
+              : null
+          }
+          toolbar={
+            treeNode.entry && !isGroupOnly ? (
               <MappingParameterToolbarActions
                 onEditName={() => labelEditRef.current?.startEditing()}
                 onRemove={handleRemove}
@@ -503,16 +460,18 @@ export function BackendMappingTreeNode({
                 showConstraint={backendColumn === 'send'}
                 onToggleConstraint={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
               />
-            </MappingParameterToolbarPortal>
-          ) : null}
-          </div>
-
-          {showAdvancementUi && backendSendAdvancement!.isEnabled(advancementWireKey) ? (
-            <div className="flex min-w-0 shrink-0 items-center">
-              {backendSendAdvancement.renderEditor(advancementWireKey)}
-            </div>
-          ) : null}
-        </div>
+            ) : null
+          }
+          draggable={canAgentParamDrag}
+          onDragStart={canAgentParamDrag ? handleAgentParamDragStart : undefined}
+          onDragOver={onRowDragOver}
+          onDragOverCapture={onRowDragOver}
+          onDrop={onRowDrop}
+          rowProps={{
+            'data-backend-map-row': pathKey,
+            'data-backend-map-has-children': hasChildren ? '1' : '0',
+          }}
+        />
 
         {treeNode.entry && rowExtra === 'notes' ? (
           <div

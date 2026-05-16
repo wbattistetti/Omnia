@@ -29,7 +29,7 @@ describe('backendMappingTreeLayout', () => {
     );
   });
 
-  it('arrow slot is double the legacy 40px width', () => {
-    expect(BACKEND_TREE_ARROW_SLOT_PX).toBe(80);
+  it('arrow glyph estimate is compact (no fixed row column)', () => {
+    expect(BACKEND_TREE_ARROW_SLOT_PX).toBe(42);
   });
 });

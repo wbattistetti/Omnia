@@ -9,6 +9,24 @@ import { getProjectTranslationsTable } from '../../utils/projectTranslationsRegi
 import { interfaceOutputLeafDisplayName, resolveVariableDisplayName } from '../../utils/resolveVariableDisplayName';
 import type { MappingEntry } from './mappingTypes';
 
+/**
+ * Label shown on an Interface tree row: local segment in the trie (e.g. `json` under `agenda`),
+ * or translated variable name when `variableRefId` is set.
+ */
+export function getInterfaceTreeRowDisplayLabel(
+  entry: MappingEntry | undefined,
+  treeSegment: string,
+  projectId: string | undefined,
+  opts?: { flowCanvasId?: string; flows?: WorkspaceState['flows'] }
+): string {
+  if (!entry) return treeSegment;
+  const vid = entry.variableRefId?.trim();
+  if (vid) {
+    return getInterfaceLeafDisplayName(entry, projectId, opts);
+  }
+  return treeSegment.trim() || entry.wireKey.trim();
+}
+
 /** Single label for Interface tree rows: translations + optional live `flows` / task row fallback. */
 export function getInterfaceLeafDisplayName(
   entry: MappingEntry,

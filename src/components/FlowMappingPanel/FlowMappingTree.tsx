@@ -52,7 +52,14 @@ import {
   parseAgentBackendParamDropFromDataTransfer,
 } from '@domain/agentInterface/agentInterfaceDragTypes';
 import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
-import { getInterfaceLeafDisplayName } from './interfaceMappingLabels';
+import { getInterfaceTreeRowDisplayLabel } from './interfaceMappingLabels';
+import {
+  MAPPING_ROW_CELL_H,
+  MAPPING_ROW_CELL_MIN_H,
+  MAPPING_ROW_ICON_SM,
+  MAPPING_ROW_MIN_H,
+  MAPPING_ROW_TEXT_CLASS,
+} from './mappingPanelTypography';
 import {
   BackendReceiveArrowIcon,
   BackendSendArrowIcon,
@@ -63,10 +70,16 @@ import {
 import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
 import { BackendMappingDominioValoriPanel } from './backendMappingDominioValori';
 import { backendDominioValoriLabelInsetPx } from './backendMappingDominioValoriLayout';
+import {
+  BACKEND_TREE_ARROW_SLOT_PX,
+  BACKEND_TREE_CHEVRON_SLOT_PX,
+  backendTreeDepthIndentPx,
+} from './backendMappingTreeLayout';
 import { BackendMappingTree } from './BackendMappingTree';
 import type { BackendSendAdvancementApi } from './backendMappingTreeTypes';
 import { MappingParameterToolbarActions, MappingParameterInterfaceRemoveAction } from './MappingParameterToolbarActions';
 import { MappingParameterToolbarPortal } from './MappingParameterToolbarPortal';
+import { MappingTreeNodeRow } from './MappingTreeNodeRow';
 import { setMappingDragLabelGhost } from './mappingDragGhost';
 import { writeAgentBackendParamDragData } from '@domain/agentInterface/agentInterfaceDragTypes';
 import type { AgentParamDragSource } from './backendMappingTreeContext';
@@ -156,6 +169,32 @@ function siblingDropLineIndentPx(depth: number): number {
 
 function childDropLineIndentPx(depth: number): number {
   return (depth + 1) * ROW_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX;
+}
+
+function resolveInterfaceParamSide(
+  interfaceZone: 'input' | 'output' | undefined,
+  entry: MappingEntry | undefined
+): 'send' | 'receive' | null {
+  if (!entry) return null;
+  if (entry.sourceSide === 'send' || entry.sourceSide === 'receive') return entry.sourceSide;
+  if (interfaceZone === 'input') return 'send';
+  if (interfaceZone === 'output') return 'receive';
+  return null;
+}
+
+function InterfaceParamArrow({
+  side,
+  entry,
+}: {
+  side: 'send' | 'receive';
+  entry?: MappingEntry;
+}): React.ReactElement {
+  if (side === 'send') {
+    const kind = entry ? resolveSendArrowKind(entry.apiField, entry) : 'filledSolid';
+    return <BackendSendArrowIcon kind={kind} title={sendArrowTitle(kind)} compact />;
+  }
+  const optional = Boolean(entry?.sendBindingOptional);
+  return <BackendReceiveArrowIcon optional={optional} compact />;
 }
 
 /** Mapping con `wireKey` sotto `pathKey` (discendenti diretti o annidati). */
@@ -368,12 +407,14 @@ function MappingTreeRow({
   const flatBackendRowLayout = Boolean(
     !backendCleanTree && flatTreeGrid && typeof treeRailWidthPx === 'number' && treeRailWidthPx > 0
   );
-  /** Righe SEND/RECEIVE più basse e icone più piccole (densità tipo inspector). */
   const backendDense = variant === 'backend';
-  const rowMinH = backendDense ? 'min-h-[22px]' : 'min-h-[28px]';
-  const cellH = backendDense ? 'h-6' : 'h-7';
-  const cellMinH = backendDense ? 'min-h-[22px]' : 'min-h-7';
-  const iconSm = backendDense ? 'w-3 h-3' : 'w-3.5 h-3.5';
+  const rowMinH = MAPPING_ROW_MIN_H;
+  const cellH = MAPPING_ROW_CELL_H;
+  const cellMinH = MAPPING_ROW_CELL_MIN_H;
+  const iconSm = MAPPING_ROW_ICON_SM;
+  const rowTextClass = MAPPING_ROW_TEXT_CLASS;
+  const interfaceParamSide =
+    variant === 'interface' ? resolveInterfaceParamSide(interfaceZone, node.entry) : null;
   /** Linee drop: offset allineato al gutter riga. */
   const dropLineIndentSibling = (d: number) =>
     backendCleanTree
@@ -692,7 +733,7 @@ function MappingTreeRow({
       ? 'ml-2 border-l border-slate-700/40 pl-2'
       : '';
 
-  const chevronControl = hasChildren ? (
+  const chevronToggle = hasChildren ? (
     <button
       type="button"
       className={`rounded ${backendDense ? 'p-px' : 'p-0.5'} text-slate-400 hover:text-slate-200`}
@@ -701,8 +742,65 @@ function MappingTreeRow({
     >
       {isExpanded ? <ChevronDown className={iconSm} /> : <ChevronRight className={iconSm} />}
     </button>
-  ) : (
+  ) : null;
+
+  const chevronControl = chevronToggle ?? (
     <span className={`inline-block ${backendDense ? 'w-3.5' : 'w-4'} shrink-0`} aria-hidden />
+  );
+
+  const useUnifiedNodeRow = variant === 'interface' && !flatBackendRowLayout;
+
+  const ifaceParamArrow =
+    isGroupOnly || !interfaceParamSide ? null : (
+      <InterfaceParamArrow side={interfaceParamSide} entry={node.entry} />
+    );
+
+  const ifaceLabelNode = (
+    <LabelWithPencilEdit
+      ref={labelEditRef}
+      segment={node.segment}
+      displayLabel={
+        node.entry
+          ? getInterfaceTreeRowDisplayLabel(node.entry, node.segment, projectId, {
+              flowCanvasId,
+              flows: workspaceFlows,
+            })
+          : undefined
+      }
+      editable={leafLabelEditable}
+      onCommit={handleRenameSegment}
+      editIntent={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
+      onConsumeEditIntent={onConsumeLabelEditIntent}
+      ephemeralNew={ephemeralNew}
+      onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
+      inlinePencil
+      viewTitle={backendMappingViewTitle}
+      segmentClassName={segmentToneClass}
+      readOnlyPreferWrap={false}
+      textSizeClass={rowTextClass}
+      hoverHighlight={Boolean(node.entry && !isGroupOnly)}
+    />
+  );
+
+  const ifaceValueEditor = (
+    <MappingRowFields
+      variant="interface"
+      entry={node.entry}
+      groupOnlyInterface={isGroupOnly}
+      showApiFields
+      secondaryFieldsLocked={false}
+      suppressFieldTabFocus={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
+      datalistApiId={datalistApi}
+      datalistVarId={datalistVar}
+      onPatch={patchEntry}
+      backendColumn={backendColumn}
+      variableOptions={variableOptions}
+      onCreateOutputVariable={onCreateOutputVariable}
+      onOutputVariableCreated={onOutputVariableCreated}
+      backendKnownVariableIds={backendKnownVariableIds}
+      backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+      backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
+    />
   );
 
   return (
@@ -714,6 +812,43 @@ function MappingTreeRow({
         />
       )}
       <div className={`relative overflow-visible ${depthLegacyGutter}`}>
+        {useUnifiedNodeRow ? (
+          <MappingTreeNodeRow
+            rowRef={rowRef}
+            isGroup={isGroupOnly}
+            chevron={chevronToggle}
+            arrow={ifaceParamArrow}
+            label={ifaceLabelNode}
+            labelSuffix={collapsedParamCountSuffix}
+            valueEditor={isGroupOnly ? null : ifaceValueEditor}
+            toolbar={
+              node.entry && !isGroupOnly ? (
+                <MappingParameterInterfaceRemoveAction onRemove={handleRemove} />
+              ) : null
+            }
+            draggable={Boolean(enableRowReorder && node.entry)}
+            onDragStart={(e) => {
+              if (!enableRowReorder || !node.entry) return;
+              const t = e.target as HTMLElement;
+              if (t.closest('button, input, textarea, select, [role="combobox"]')) {
+                e.preventDefault();
+                return;
+              }
+              e.stopPropagation();
+              reorderDragSourceIdRef.current = node.entry.id;
+              e.dataTransfer.setData(DND_IFACE_REORDER, node.entry.id);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={combinedRowDragOver}
+            onDragOverCapture={combinedRowDragOver}
+            onDrop={combinedRowDrop}
+            rowProps={{
+              onDragEnd: () => {
+                reorderDragSourceIdRef.current = null;
+              },
+            }}
+          />
+        ) : (
         <div
           ref={rowRef}
           {...(variant === 'backend' && enableBackendParamDrop
@@ -788,6 +923,8 @@ function MappingTreeRow({
                   />
                 ) : variant === 'backend' && backendColumn === 'receive' ? (
                   <BackendReceiveArrowIcon optional={receiveOptional} compact />
+                ) : variant === 'interface' && interfaceParamSide ? (
+                  <InterfaceParamArrow side={interfaceParamSide} entry={node.entry} />
                 ) : (
                   <Brackets className={iconSm} strokeWidth={2} aria-hidden />
                 )}
@@ -817,7 +954,8 @@ function MappingTreeRow({
 
         {!backendCleanTree && (variant !== 'backend' || !isGroupOnly) ? (
         <div
-          className={`flex ${cellH} w-14 shrink-0 items-center justify-center pr-0`}
+          className={`flex ${cellH} shrink-0 items-center justify-center pr-0`}
+          style={{ width: BACKEND_TREE_ARROW_SLOT_PX }}
           title={
             isGroupOnly
               ? node.segment === 'Session'
@@ -829,17 +967,23 @@ function MappingTreeRow({
                   ? receiveOptional
                     ? 'Parametro in ingresso (da API). Opzionale.'
                     : 'Parametro in ingresso (da API). Obbligatorio.'
-                  : 'Parametro'
+                  : interfaceParamSide === 'send'
+                    ? sendArrowTitle(
+                        node.entry ? resolveSendArrowKind(node.entry.apiField, node.entry) : 'filledSolid'
+                      )
+                    : interfaceParamSide === 'receive'
+                      ? 'Parametro in ingresso (da API).'
+                      : 'Parametro'
           }
         >
           {isGroupOnly ? (
             <span className={`inline-block ${iconSm} shrink-0`} aria-hidden />
-          ) : variant === 'interface' ? (
-            <span className={`inline-block ${iconSm}`} aria-hidden />
+          ) : variant === 'interface' && interfaceParamSide ? (
+            <InterfaceParamArrow side={interfaceParamSide} entry={node.entry} />
           ) : variant === 'backend' && backendColumn === 'send' ? (
-            <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} />
+            <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} compact />
           ) : variant === 'backend' && backendColumn === 'receive' ? (
-            <BackendReceiveArrowIcon optional={receiveOptional} />
+            <BackendReceiveArrowIcon optional={receiveOptional} compact />
           ) : (
             <Brackets className={iconSm} strokeWidth={2} aria-hidden />
           )}
@@ -928,7 +1072,7 @@ function MappingTreeRow({
               segment={node.segment}
               displayLabel={
                 variant === 'interface' && node.entry
-                  ? getInterfaceLeafDisplayName(node.entry, projectId, {
+                  ? getInterfaceTreeRowDisplayLabel(node.entry, node.segment, projectId, {
                       flowCanvasId,
                       flows: workspaceFlows,
                     })
@@ -944,6 +1088,7 @@ function MappingTreeRow({
               viewTitle={backendMappingViewTitle}
               segmentClassName={segmentToneClass}
               readOnlyPreferWrap={variant === 'backend' && !leafLabelEditable}
+              textSizeClass={rowTextClass}
               hoverHighlight={Boolean(node.entry && !isGroupOnly)}
             />
             </div>
@@ -1005,8 +1150,11 @@ function MappingTreeRow({
           <div className="flex min-w-0 shrink-0 items-center">{backendSendAdvancement.renderEditor(advancementWireKey)}</div>
         ) : null}
 
-        {variant === 'interface' ? <span className="min-w-2 shrink flex-1" aria-hidden /> : null}
+        {variant === 'interface' && !useUnifiedNodeRow ? (
+          <span className="min-w-2 shrink flex-1" aria-hidden />
+        ) : null}
         </div>
+        )}
 
         {variant === 'backend' && node.entry && rowExtra === 'notes' && (
           <div className="mt-1 w-full min-w-0 rounded-md border border-amber-600/35 bg-slate-950/50 px-2 py-1.5 pb-2">
