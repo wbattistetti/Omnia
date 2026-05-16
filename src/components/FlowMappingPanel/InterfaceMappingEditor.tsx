@@ -206,6 +206,12 @@ export interface InterfaceMappingEditorProps {
   /** Backend: quota larghezza SEND 0.28–0.82 in layout affiancato. */
   backendSendReceiveSplitRatio?: number;
   onBackendSendReceiveSplitRatioChange?: (ratio: number) => void;
+  /** Limiti drag/quota SEND (default 0.28–0.82; catalogo embedded: stretti). */
+  backendSendReceiveSplitClamp?: { readonly min: number; readonly max: number };
+  /**
+   * Embedded AI Agent backend editor: mirrors toolbar «Signature» sub-row; when `false`, SEND parameter-constraint panels close.
+   */
+  embeddedSignatureSubToolbarOpen?: boolean;
 }
 
 export function InterfaceMappingEditor({
@@ -253,6 +259,8 @@ export function InterfaceMappingEditor({
   backendReceiveColumnVisible = true,
   backendSendReceiveSplitRatio = 0.58,
   onBackendSendReceiveSplitRatioChange,
+  backendSendReceiveSplitClamp,
+  embeddedSignatureSubToolbarOpen,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -491,6 +499,7 @@ export function InterfaceMappingEditor({
               sendBasisRatio={backendSendReceiveSplitRatio}
               onSendBasisRatioChange={onBackendSendReceiveSplitRatioChange}
               compactGap={Boolean(compactBackendPanels)}
+              sendBasisClamp={backendSendReceiveSplitClamp}
               splitContainerRef={backendSplitRowRef}
               send={
                 <MappingBlock
@@ -544,6 +553,7 @@ export function InterfaceMappingEditor({
                         backendSendParamKindByWireKey={backendSendParamKindByWireKey}
                         backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
                         backendSendAdvancement={backendSendAdvancement}
+                        embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
                       />
                     </div>
                   </div>

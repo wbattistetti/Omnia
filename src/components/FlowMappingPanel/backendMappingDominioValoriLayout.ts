@@ -9,13 +9,18 @@ export const BACKEND_DOMINIO_VALORI_LABEL = 'Dominio valori';
 export function backendDominioValoriLabelInsetPx(opts: {
   showAdvancementUi: boolean;
   hasOpenApiDrift: boolean;
+  /** Con griglia flat: larghezza binario ad albero (px); se assente si usa euristica legacy. */
+  treeRailWidthPx?: number;
+  /** Griglia flat: indentazione cumulativa per profondità (`depth * step` in `FlowMappingTree`). */
+  treeDepthIndentPx?: number;
 }): number {
   const rowPadL = 2;
-  const chevron = 16;
-  const g1 = 2;
-  const arrow = 62;
-  const g2 = 2;
+  const depthPad = typeof opts.treeDepthIndentPx === 'number' ? opts.treeDepthIndentPx : 0;
+  const rail = typeof opts.treeRailWidthPx === 'number' ? opts.treeRailWidthPx : 18;
+  /** Larghezza colonna freccia SEND/RECEIVE in `FlowMappingTree` (w-14). */
+  const arrowW = 56;
+  const gapRailArrow = 0;
   const adv = opts.showAdvancementUi ? 30 + 2 : 0;
   const drift = opts.hasOpenApiDrift ? 22 + 2 : 0;
-  return rowPadL + chevron + g1 + arrow + g2 + adv + drift;
+  return rowPadL + depthPad + rail + gapRailArrow + arrowW + adv + drift;
 }

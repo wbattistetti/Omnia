@@ -1,5 +1,7 @@
 /**
  * Mapping tree: dot paths, folder vs variable icon, SEND/RECEIVE style columns.
+ * Backend flat: gruppi con etichetta vicino al chevron (gap 3px) e conteggio (n) se accordion chiuso;
+ * indentazione uniforme per i figli.
  * Backend: toolbar sopra il nome interno in hover sulla colonna label (overlap, senza pt extra).
  * Backend: drag “Parameter” from block header, drop on rows with insertion preview line.
  */
@@ -11,13 +13,13 @@ import {
   ChevronDown,
   ChevronRight,
   Trash2,
-  Circle,
   Brackets,
   Pencil,
   StickyNote,
   Table2,
   X,
   AlertTriangle,
+  Settings2,
 } from 'lucide-react';
 import type { MappingEntry } from './mappingTypes';
 import type { OpenApiInputUiKind } from '../../services/openApiBackendCallSpec';
@@ -104,11 +106,14 @@ function placementFromY(clientY: number, rowRect: DOMRect, hasChildren: boolean)
 
 /** Matches row `ml-2` + `pl-2` (8px + 8px) per depth level. */
 const ROW_DEPTH_INDENT_PX = 16;
+/** Backend flat tree: indentazione uniforme per ogni livello sotto un accordion espanso. */
+const BACKEND_FLAT_DEPTH_INDENT_PX = ROW_DEPTH_INDENT_PX;
 /**
- * Offset from row left edge toward the row icon: `px-1` + chevron `w-5` + `gap-1` ≈ 28px; a few px less
- * so the line sits slightly left of the icon (Brackets/Circle).
+ * Offset from row left edge toward the row icon (interface / drop line legacy).
  */
 const ROW_ICON_LINE_OFFSET_PX = 24;
+/** Larghezza cella chevron nel rail backend (griglia fissa, senza indent per profondità). */
+const TREE_RAIL_CHEVRON_CELL_PX = 26;
 
 type DropPreviewTone = 'amber' | 'teal' | 'emerald';
 
@@ -140,6 +145,19 @@ function siblingDropLineIndentPx(depth: number): number {
 
 function childDropLineIndentPx(depth: number): number {
   return (depth + 1) * ROW_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX;
+}
+
+/** Mapping con `wireKey` sotto `pathKey` (discendenti diretti o annidati). */
+function countDescendantMappingEntries(entries: MappingEntry[], pathKey: string): number {
+  const base = pathKey.trim();
+  if (!base) return 0;
+  const prefix = `${base}.`;
+  let n = 0;
+  for (const e of entries) {
+    const w = e.wireKey.trim();
+    if (w.startsWith(prefix)) n += 1;
+  }
+  return n;
 }
 
 export interface FlowMappingTreeProps {
@@ -178,6 +196,11 @@ export interface FlowMappingTreeProps {
   backendSendParamEnumByWireKey?: Record<string, string[]>;
   /** Backend SEND: checkbox avanzamento + editor inline per riga (batch progression). */
   backendSendAdvancement?: BackendSendAdvancementApi;
+  /**
+   * Embedded Backend Call: when `false`, SEND rows close the parameter-constraint panel (`rowExtra === 'config'`).
+   * Mirrors the toolbar «Signature» sub-row so panels do not stay open when that strip is collapsed.
+   */
+  embeddedSignatureSubToolbarOpen?: boolean;
 }
 
 /** Checkbox + editor DSL inline sulla riga SEND (Backend Call). */
@@ -247,6 +270,11 @@ interface RowProps {
   backendSendParamKindByWireKey?: Record<string, OpenApiInputUiKind>;
   backendSendParamEnumByWireKey?: Record<string, string[]>;
   backendSendAdvancement?: BackendSendAdvancementApi;
+  /** Backend: freccia e testo su griglia a margine fisso (indent solo nel binario ad albero). */
+  flatTreeGrid?: boolean;
+  /** Larghezza binario ad albero (px); usata solo con `flatTreeGrid`. */
+  treeRailWidthPx?: number;
+  embeddedSignatureSubToolbarOpen?: boolean;
 }
 
 function MappingTreeRow({
@@ -284,10 +312,18 @@ function MappingTreeRow({
   backendSendParamKindByWireKey,
   backendSendParamEnumByWireKey,
   backendSendAdvancement,
+  flatTreeGrid,
+  treeRailWidthPx,
+  embeddedSignatureSubToolbarOpen,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
-  const [rowExtra, setRowExtra] = useState<'none' | 'notes' | 'values'>('none');
+  const [rowExtra, setRowExtra] = useState<'none' | 'notes' | 'values' | 'config'>('none');
+
+  useEffect(() => {
+    if (embeddedSignatureSubToolbarOpen !== false) return;
+    setRowExtra((x) => (x === 'config' ? 'none' : x));
+  }, [embeddedSignatureSubToolbarOpen]);
   const hasChildren = node.children.length > 0;
   const isExpanded = !collapsed.has(node.pathKey);
   const hasEntry = Boolean(node.entry);
@@ -295,6 +331,39 @@ function MappingTreeRow({
   const canRenameLabel = Boolean(node.entry && !hasChildren);
   /** Interface: single variable name in tree; no separate alias column. */
   const leafLabelEditable = canRenameLabel && variant !== 'interface';
+
+  const flatBackendRowLayout = Boolean(
+    flatTreeGrid && typeof treeRailWidthPx === 'number' && treeRailWidthPx > 0
+  );
+  /** Backend flat: linee drop seguono indent per profondità + offset colonna icone. */
+  const dropLineIndentSibling = (d: number) =>
+    flatBackendRowLayout
+      ? d * BACKEND_FLAT_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX
+      : siblingDropLineIndentPx(d);
+  const dropLineIndentChild = (d: number) =>
+    flatBackendRowLayout
+      ? (d + 1) * BACKEND_FLAT_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX
+      : childDropLineIndentPx(d);
+
+  const backendFlatDepthPaddingPx = flatBackendRowLayout ? depth * BACKEND_FLAT_DEPTH_INDENT_PX : 0;
+  /** Solo gruppo (accordion senza riga foglia): avvicina l’etichetta al chevron senza allargare il gutter freccia. */
+  const tightenGroupLabelToChevron = flatBackendRowLayout && isGroupOnly;
+  /** Gruppo backend flat: chevron + label nello stesso rail (gap 3px), colonna freccia vuota per allineare SEND/RECEIVE. */
+  const mergeGroupRailLabel = Boolean(flatBackendRowLayout && treeRailWidthPx != null && isGroupOnly);
+
+  const hiddenDescendantParamCount = useMemo(
+    () => countDescendantMappingEntries(entries, node.pathKey),
+    [entries, node.pathKey]
+  );
+  const collapsedParamCountSuffix =
+    hasChildren && !isExpanded ? (
+      <span
+        className="shrink-0 whitespace-nowrap text-[10px] font-medium tabular-nums text-slate-500"
+        aria-label={`${hiddenDescendantParamCount} parametri nascosti`}
+      >
+        ({hiddenDescendantParamCount})
+      </span>
+    ) : null;
 
   const patchEntry = useCallback(
     (patch: Partial<MappingEntry>) => {
@@ -507,45 +576,66 @@ function MappingTreeRow({
       ? node.entry.fieldDescription.trim()
       : undefined;
 
-  const backendMappingViewTitle =
-    variant === 'backend'
-      ? backendColumn === 'send' && node.entry?.sendConstraintGroupLabel?.trim()
-        ? [descTitle, node.entry.sendConstraintGroupLabel].filter(Boolean).join('\n\n')
-        : descTitle
-      : undefined;
-
-  const sendOptionalLabelClass =
-    variant === 'backend' && backendColumn === 'send' && node.entry?.sendBindingOptional
-      ? 'italic text-slate-400/95'
-      : undefined;
-
-  const sendGlyphKind: SendArrowGlyphKind =
-    variant === 'backend' && backendColumn === 'send' && node.entry && !isGroupOnly
-      ? resolveSendArrowKind(node.entry.apiField, node.entry)
-      : 'filledSolid';
+  /** Solo descrizione campo: niente didascalie one-of nel tooltip (restano in compile / doc OpenAPI). */
+  const backendMappingViewTitle = variant === 'backend' ? descTitle : undefined;
 
   const receiveOptional =
     variant === 'backend' && backendColumn === 'receive' && node.entry && !isGroupOnly
       ? Boolean(node.entry.sendBindingOptional)
       : false;
 
+  const sendOptionalLabelClass =
+    variant === 'backend' && backendColumn === 'send' && node.entry?.sendBindingOptional
+      ? 'italic text-slate-400/95 underline decoration-dotted decoration-slate-500/75 underline-offset-[3px]'
+      : undefined;
+
+  const receiveOptionalLabelClass =
+    variant === 'backend' && backendColumn === 'receive' && node.entry && receiveOptional
+      ? 'italic text-slate-400/95 underline decoration-dotted decoration-slate-500/75 underline-offset-[3px]'
+      : undefined;
+
+  const segmentToneClass = sendOptionalLabelClass ?? receiveOptionalLabelClass;
+
+  const sendGlyphKind: SendArrowGlyphKind =
+    variant === 'backend' && backendColumn === 'send' && node.entry && !isGroupOnly
+      ? resolveSendArrowKind(node.entry.apiField, node.entry)
+      : 'filledSolid';
+
   const dominioValoriAlignPx =
     variant === 'backend' && node.entry && !isGroupOnly
       ? backendDominioValoriLabelInsetPx({
           showAdvancementUi,
           hasOpenApiDrift: Boolean(node.entry.openapiDescriptionDrift),
+          treeRailWidthPx: flatBackendRowLayout ? treeRailWidthPx : undefined,
+          treeDepthIndentPx: flatBackendRowLayout ? backendFlatDepthPaddingPx : undefined,
         })
       : 0;
+
+  const depthLegacyGutter =
+    !flatBackendRowLayout && depth > 0 ? 'ml-2 border-l border-slate-700/40 pl-2' : '';
+
+  const chevronControl = hasChildren ? (
+    <button
+      type="button"
+      className="rounded p-0.5 text-slate-400 hover:text-slate-200"
+      aria-expanded={isExpanded}
+      onClick={() => toggleCollapsed(node.pathKey)}
+    >
+      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+    </button>
+  ) : (
+    <span className="inline-block w-4 shrink-0" aria-hidden />
+  );
 
   return (
     <div className="select-none" {...ifaceRowAttrs}>
       {(showBefore || showIfaceBefore || showReorderBefore) && (
         <DropPreviewLine
-          indentPx={siblingDropLineIndentPx(depth)}
+          indentPx={dropLineIndentSibling(depth)}
           tone={showReorderBefore ? reorderLineTone : 'amber'}
         />
       )}
-      <div className={`relative ${depth > 0 ? 'ml-2 border-l border-slate-700/40 pl-2' : ''}`}>
+      <div className={`relative ${depthLegacyGutter}`}>
         <div
           ref={rowRef}
           {...(variant === 'backend' && enableBackendParamDrop
@@ -570,30 +660,83 @@ function MappingTreeRow({
           onDragEnd={() => {
             reorderDragSourceIdRef.current = null;
           }}
-          className={`group/row flex ${rowAlignClass} gap-0.5 min-h-[32px] rounded-md px-0.5 py-0.5 -mx-0.5 hover:bg-slate-800/50 ${
+          className={`group/row flex ${rowAlignClass} gap-0 min-h-[28px] rounded-md px-0.5 py-px -mx-0.5 hover:bg-slate-800/35 ${
             enableRowReorder && node.entry ? 'cursor-grab active:cursor-grabbing' : ''
           }`}
+          style={
+            backendFlatDepthPaddingPx > 0
+              ? { paddingLeft: backendFlatDepthPaddingPx }
+              : undefined
+          }
           onDragOver={combinedRowDragOver}
           onDragOverCapture={combinedRowDragOver}
           onDrop={combinedRowDrop}
         >
-        <div className="flex h-7 shrink-0 items-center gap-0.5 min-w-[1rem] justify-start">
-          {hasChildren ? (
-            <button
-              type="button"
-              className="p-0.5 rounded text-slate-400 hover:text-slate-200"
-              aria-expanded={isExpanded}
-              onClick={() => toggleCollapsed(node.pathKey)}
+        {mergeGroupRailLabel ? (
+          <>
+            <div
+              className="flex shrink-0 items-stretch border-r border-slate-800/20 bg-slate-950/20"
+              style={{ width: treeRailWidthPx }}
             >
-              {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            </button>
-          ) : (
-            <span className="w-4 inline-block" />
-          )}
-        </div>
+              <div className="flex min-h-7 min-w-0 flex-1 items-center gap-[3px] px-0.5">
+                {chevronControl}
+                <div className="group/label-slot relative flex min-h-7 min-w-0 flex-1 items-baseline gap-1 overflow-hidden">
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <LabelWithPencilEdit
+                      ref={labelEditRef}
+                      segment={node.segment}
+                      displayLabel={
+                        variant === 'interface' && node.entry
+                          ? getInterfaceLeafDisplayName(node.entry, projectId, {
+                              flowCanvasId,
+                              flows: workspaceFlows,
+                            })
+                          : undefined
+                      }
+                      editable={leafLabelEditable}
+                      onCommit={handleRenameSegment}
+                      editIntent={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
+                      onConsumeEditIntent={onConsumeLabelEditIntent}
+                      ephemeralNew={ephemeralNew}
+                      onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
+                      inlinePencil={variant !== 'backend'}
+                      viewTitle={backendMappingViewTitle}
+                      segmentClassName={segmentToneClass}
+                    />
+                  </div>
+                  {collapsedParamCountSuffix}
+                </div>
+              </div>
+            </div>
+            <div
+              className="flex h-7 w-14 shrink-0 items-center justify-end pr-0 opacity-0"
+              aria-hidden
+            />
+            <div
+              className="min-h-7 min-w-0 max-w-[min(14rem,36vw)] shrink-0"
+              aria-hidden
+            />
+          </>
+        ) : flatBackendRowLayout && treeRailWidthPx != null ? (
+          <div
+            className="flex shrink-0 items-stretch border-r border-slate-800/20 bg-slate-950/20"
+            style={{ width: treeRailWidthPx }}
+          >
+            <div className="flex min-h-7 min-w-0 flex-1 items-center justify-start pl-0">
+              {chevronControl}
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-7 min-w-[1rem] shrink-0 items-center justify-start gap-0.5">{chevronControl}</div>
+        )}
 
+        {!mergeGroupRailLabel ? (
         <div
-          className="flex h-7 shrink-0 items-center justify-center -mr-0.5"
+          className={
+            tightenGroupLabelToChevron
+              ? 'flex h-7 w-0 min-w-0 shrink-0 items-center justify-end overflow-hidden p-0'
+              : 'flex h-7 w-14 shrink-0 items-center justify-end pr-0'
+          }
           title={
             isGroupOnly
               ? node.segment === 'Session'
@@ -609,17 +752,18 @@ function MappingTreeRow({
           }
         >
           {isGroupOnly ? (
-            <Circle className="w-3.5 h-3.5" strokeWidth={2} />
+            <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden />
           ) : variant === 'interface' ? (
-            <span className="w-3.5 h-3.5 inline-block" aria-hidden />
+            <span className="inline-block h-3.5 w-3.5" aria-hidden />
           ) : variant === 'backend' && backendColumn === 'send' ? (
             <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} />
           ) : variant === 'backend' && backendColumn === 'receive' ? (
             <BackendReceiveArrowIcon optional={receiveOptional} />
           ) : (
-            <Brackets className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
+            <Brackets className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           )}
         </div>
+        ) : null}
 
         {showAdvancementUi ? (
           <div
@@ -638,7 +782,10 @@ function MappingTreeRow({
           </div>
         ) : null}
 
-        <div className="group/label-slot relative flex min-h-[28px] min-w-0 max-w-[min(18rem,55vw)] shrink-0 items-center gap-1 pl-0.5">
+        {!mergeGroupRailLabel ? (
+        <div
+          className={`group/label-slot relative flex min-h-[28px] min-w-0 max-w-[min(14rem,36vw)] shrink-0 items-center gap-0 pl-0`}
+        >
           {variant === 'backend' && node.entry?.openapiDescriptionDrift ? (
             <span
               className="shrink-0 text-amber-400"
@@ -652,7 +799,9 @@ function MappingTreeRow({
             </span>
           ) : null}
           {variant === 'backend' && node.entry && !isGroupOnly && (
-            <div className="absolute bottom-full left-0 z-30 mb-0.5 flex items-center gap-0.5 rounded-md bg-slate-900/95 px-0.5 py-0.5 opacity-0 shadow-md ring-1 ring-slate-600/50 transition-opacity pointer-events-none group-hover/label-slot:opacity-100 group-hover/label-slot:pointer-events-auto">
+            <div className="absolute bottom-full left-0 z-30 flex items-center gap-0.5 rounded-md bg-slate-900/95 px-0.5 py-0.5 opacity-0 shadow-md ring-1 ring-slate-600/50 transition-opacity pointer-events-none group-hover/label-slot:opacity-100 group-hover/label-slot:pointer-events-auto">
+              {/* Transparent bridge — prevents hover loss in the 2-4px gap between toolbar and row */}
+              <div className="pointer-events-auto absolute inset-x-0 -bottom-3 z-30 h-3 cursor-default" aria-hidden />
               <button
                 type="button"
                 className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-amber-200"
@@ -689,9 +838,21 @@ function MappingTreeRow({
               >
                 <Table2 className="w-3.5 h-3.5" strokeWidth={2} />
               </button>
+              {backendColumn === 'send' ? (
+                <button
+                  type="button"
+                  className={`rounded p-1 hover:bg-slate-800 ${rowExtra === 'config' ? 'text-sky-300' : 'text-slate-400 hover:text-sky-200'}`}
+                  title="Parameter constraint (mandatory / optional)"
+                  aria-label="Parameter constraint"
+                  onClick={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
+                >
+                  <Settings2 className="w-3.5 h-3.5" strokeWidth={2} />
+                </button>
+              ) : null}
             </div>
           )}
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 flex items-baseline gap-1 overflow-hidden">
+            <div className="min-w-0 flex-1">
             <LabelWithPencilEdit
               ref={labelEditRef}
               segment={node.segment}
@@ -711,13 +872,16 @@ function MappingTreeRow({
               onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
               inlinePencil={variant !== 'backend'}
               viewTitle={backendMappingViewTitle}
-              segmentClassName={sendOptionalLabelClass}
+              segmentClassName={segmentToneClass}
             />
+            </div>
+            {collapsedParamCountSuffix}
           </div>
         </div>
+        ) : null}
 
         <div
-          className="flex min-h-[28px] min-w-0 shrink-0 items-center"
+          className="flex min-h-[28px] min-w-0 shrink-0 items-center gap-0 pl-0"
           {...(variant === 'backend' && ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}
         >
           <MappingRowFields
@@ -747,7 +911,7 @@ function MappingTreeRow({
           <div className="flex min-w-0 shrink-0 items-center">{backendSendAdvancement.renderEditor(advancementWireKey)}</div>
         ) : null}
 
-        <span className="flex-1 min-w-2 shrink" aria-hidden />
+        {variant === 'interface' ? <span className="min-w-2 shrink flex-1" aria-hidden /> : null}
 
         {node.entry && variant === 'interface' && (
           <button
@@ -803,11 +967,123 @@ function MappingTreeRow({
             alignInsetPx={dominioValoriAlignPx}
           />
         )}
+
+        {variant === 'backend' && backendColumn === 'send' && node.entry && rowExtra === 'config' && (
+          <div className="mt-0.5 w-full min-w-0">
+            <div
+              className="max-w-md rounded-md border border-sky-500/45 bg-slate-900/85 shadow-md shadow-black/25 ring-1 ring-slate-700/30 backdrop-blur-[1px]"
+              style={{
+                marginLeft: dominioValoriAlignPx,
+                width: `min(20rem, calc(100% - ${dominioValoriAlignPx}px))`,
+              }}
+              role="dialog"
+              aria-labelledby={`${listIdPrefix}-param-constraint-${node.entry.id}-title`}
+            >
+              <div className="flex items-start justify-between gap-2 border-b border-sky-600/35 bg-sky-950/35 px-2 py-1.5">
+                <h2
+                  id={`${listIdPrefix}-param-constraint-${node.entry.id}-title`}
+                  className="text-[11px] font-semibold leading-tight text-slate-100"
+                >
+                  Parameter constraint
+                </h2>
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/80 hover:text-slate-100"
+                  title="Close"
+                  aria-label="Close parameter constraint"
+                  onClick={() => setRowExtra('none')}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+              <div className="flex flex-col gap-0.5 px-2 py-1.5">
+                {(
+                  [
+                    {
+                      id: 'design',
+                      label: 'Mandatory (design-time)',
+                      desc: 'Parameter must be provided before deployment',
+                      tooltip:
+                        'Parameter must be bound to a variable or constant before deployment',
+                      active:
+                        !node.entry.sendBindingOptional &&
+                        node.entry.sendBindingBindingPhase !== 'runtime',
+                      patch: {
+                        sendBindingOptional: false,
+                        sendBindingBindingPhase: 'design' as const,
+                        sendBindingDesignTimeRequired: true,
+                      },
+                    },
+                    {
+                      id: 'runtime',
+                      label: 'Mandatory (runtime)',
+                      desc: 'Parameter injected by system at runtime',
+                      tooltip:
+                        'Parameter is injected by the system at runtime (e.g., conversationId)',
+                      active:
+                        !node.entry.sendBindingOptional &&
+                        node.entry.sendBindingBindingPhase === 'runtime',
+                      patch: {
+                        sendBindingOptional: false,
+                        sendBindingBindingPhase: 'runtime' as const,
+                        sendBindingDesignTimeRequired: false,
+                      },
+                    },
+                    {
+                      id: 'optional',
+                      label: 'Optional',
+                      desc: 'Parameter can be omitted',
+                      tooltip:
+                        'Parameter can be omitted — the call proceeds even if no value is provided',
+                      active: Boolean(node.entry.sendBindingOptional),
+                      patch: {
+                        sendBindingOptional: true,
+                        sendBindingBindingPhase: 'design' as const,
+                        sendBindingDesignTimeRequired: false,
+                      },
+                    },
+                  ] as const
+                ).map(({ id, label, desc, tooltip, active, patch }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    title={tooltip}
+                    onClick={() => patchEntry(patch)}
+                    className={`flex w-full items-start gap-2 rounded-sm py-1.5 pl-1 pr-1.5 text-left transition-colors ${
+                      active
+                        ? 'border-l-2 border-sky-400 bg-sky-950/15'
+                        : 'border-l-2 border-transparent hover:bg-slate-800/35'
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 h-3 w-3 shrink-0 rounded-full border-2 ${
+                        active ? 'border-sky-400 bg-sky-500' : 'border-slate-500 bg-transparent'
+                      }`}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block text-[10px] leading-snug ${
+                          active
+                            ? 'font-semibold text-sky-50 underline decoration-sky-400/90 underline-offset-2'
+                            : 'font-medium text-slate-300'
+                        }`}
+                      >
+                        {label}
+                      </span>
+                      <span className="mt-0.5 block text-[9px] leading-snug text-slate-500">{desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {hasChildren && isExpanded && (
-        <div>
-          {showChildLine && <DropPreviewLine indentPx={childDropLineIndentPx(depth)} />}
+        <div className="flex flex-col gap-px">
+          {showChildLine && <DropPreviewLine indentPx={dropLineIndentChild(depth)} />}
           {node.children.map((ch) => (
             <MappingTreeRow
               key={ch.pathKey}
@@ -845,6 +1121,9 @@ function MappingTreeRow({
               backendSendParamKindByWireKey={backendSendParamKindByWireKey}
               backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
               backendSendAdvancement={backendSendAdvancement}
+              flatTreeGrid={flatTreeGrid}
+              treeRailWidthPx={treeRailWidthPx}
+              embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
             />
           ))}
         </div>
@@ -852,7 +1131,7 @@ function MappingTreeRow({
 
       {(showAfter || showIfaceAfter || showReorderAfter) && (
         <DropPreviewLine
-          indentPx={siblingDropLineIndentPx(depth)}
+          indentPx={dropLineIndentSibling(depth)}
           tone={showReorderAfter ? reorderLineTone : 'amber'}
         />
       )}
@@ -882,6 +1161,7 @@ export function FlowMappingTree({
   backendSendParamKindByWireKey,
   backendSendParamEnumByWireKey,
   backendSendAdvancement,
+  embeddedSignatureSubToolbarOpen,
 }: FlowMappingTreeProps) {
   const workspaceState = useFlowWorkspaceOptional();
   const workspaceFlows = variant === 'interface' ? workspaceState?.flows : undefined;
@@ -890,6 +1170,13 @@ export function FlowMappingTree({
     () => buildMappingTree(entries, { siblingOrder }),
     [entries, siblingOrder]
   );
+
+  const backendTreeRailWidthPx = useMemo(() => {
+    if (variant !== 'backend' || tree.length === 0) return undefined;
+    return TREE_RAIL_CHEVRON_CELL_PX + 6;
+  }, [tree, variant]);
+
+  const flatTreeGrid = variant === 'backend';
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorState>(null);
   const [rootEdgeDrop, setRootEdgeDrop] = useState<'top' | 'bottom' | null>(null);
@@ -1119,7 +1406,9 @@ export function FlowMappingTree({
           ? `min-h-[88px] rounded-lg p-1 transition-colors ${entries.length === 0 ? 'border-2 border-dashed border-violet-600/45 bg-violet-950/20' : 'border border-dashed border-violet-700/25 bg-slate-950/15'}`
           : enableBackendParamDrop && variant === 'backend' && tree.length === 0
             ? 'min-h-[52px] rounded-md border border-dashed border-teal-600/35 bg-slate-950/20 p-1'
-            : ''
+            : tree.length > 0
+              ? 'min-h-full'
+              : ''
       }
       onDragOver={showDropZone ? onDragOver : rootDragOver}
       onDrop={showDropZone ? onDrop : undefined}
@@ -1229,6 +1518,9 @@ export function FlowMappingTree({
           backendSendParamKindByWireKey={backendSendParamKindByWireKey}
           backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
           backendSendAdvancement={backendSendAdvancement}
+          flatTreeGrid={flatTreeGrid}
+          treeRailWidthPx={backendTreeRailWidthPx}
+          embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
         />
       ))}
 

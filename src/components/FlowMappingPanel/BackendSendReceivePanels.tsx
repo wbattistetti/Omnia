@@ -2,10 +2,10 @@
  * Layout SEND/RECEIVE: impilato (stretto) o affiancato con separatore ridimensionabile.
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { FlowMappingLayoutMode } from './useContainerWidth';
 
-const CLAMP = (n: number) => Math.min(0.82, Math.max(0.28, n));
+const DEFAULT_SEND_BASIS_CLAMP = { min: 0.28, max: 0.82 } as const;
 
 export type BackendSendReceivePanelsProps = {
   layoutMode: FlowMappingLayoutMode;
@@ -15,6 +15,11 @@ export type BackendSendReceivePanelsProps = {
   sendBasisRatio: number;
   onSendBasisRatioChange?: (ratio: number) => void;
   compactGap: boolean;
+  /**
+   * Limiti sulla frazione SEND (0–1) per il drag e il flex-basis.
+   * In catalogo embedded si usano massimi più bassi così RECEIVE non finisce compresso a destra.
+   */
+  sendBasisClamp?: { readonly min: number; readonly max: number };
   splitContainerRef: React.RefObject<HTMLDivElement | null>;
   send: React.ReactNode;
   receive: React.ReactNode;
@@ -26,12 +31,19 @@ export function BackendSendReceivePanels({
   sendBasisRatio,
   onSendBasisRatioChange,
   compactGap,
+  sendBasisClamp = DEFAULT_SEND_BASIS_CLAMP,
   splitContainerRef,
   send,
   receive,
 }: BackendSendReceivePanelsProps) {
   const gap = compactGap ? 'gap-2' : 'gap-3';
   const dragRef = useRef<{ pointerId: number; startX: number; startRatio: number } | null>(null);
+
+  const clampRatio = useMemo(() => {
+    const lo = Math.min(sendBasisClamp.min, sendBasisClamp.max);
+    const hi = Math.max(sendBasisClamp.min, sendBasisClamp.max);
+    return (n: number) => Math.min(hi, Math.max(lo, n));
+  }, [sendBasisClamp.min, sendBasisClamp.max]);
 
   const onSplitPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -40,11 +52,11 @@ export function BackendSendReceivePanels({
       dragRef.current = {
         pointerId: e.pointerId,
         startX: e.clientX,
-        startRatio: CLAMP(sendBasisRatio),
+        startRatio: clampRatio(sendBasisRatio),
       };
       e.currentTarget.setPointerCapture(e.pointerId);
     },
-    [layoutMode, onSendBasisRatioChange, receiveVisible, sendBasisRatio]
+    [clampRatio, layoutMode, onSendBasisRatioChange, receiveVisible, sendBasisRatio]
   );
 
   useEffect(() => {
@@ -55,7 +67,7 @@ export function BackendSendReceivePanels({
       const w = rect.width;
       if (w < 48) return;
       const dx = e.clientX - d.startX;
-      onSendBasisRatioChange(CLAMP(d.startRatio + dx / w));
+      onSendBasisRatioChange(clampRatio(d.startRatio + dx / w));
     };
     const end = (e: PointerEvent) => {
       const d = dragRef.current;
@@ -70,7 +82,7 @@ export function BackendSendReceivePanels({
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
     };
-  }, [onSendBasisRatioChange, splitContainerRef]);
+  }, [clampRatio, onSendBasisRatioChange, splitContainerRef]);
 
   if (layoutMode === 'stacked') {
     return (
@@ -81,16 +93,21 @@ export function BackendSendReceivePanels({
     );
   }
 
-  const pct = Math.round(CLAMP(sendBasisRatio) * 100);
+  const pct = Math.round(clampRatio(sendBasisRatio) * 100);
+  /** In compact: niente min-width percentuale sul SEND (prima forzava ~metà riga e spingeva RECEIVE). */
+  const sendPanelMin =
+    compactGap && receiveVisible ? 'min-w-0' : compactGap ? 'min-w-[12rem]' : 'min-w-0';
+  const receivePanelMin =
+    compactGap && receiveVisible ? 'min-w-[min(11rem,36%)]' : compactGap ? 'min-w-[12rem]' : 'min-w-0';
 
   return (
     <div ref={splitContainerRef} className="flex flex-row flex-1 min-h-0 min-w-0 items-stretch gap-0">
       <div
-        className="flex min-h-0 min-w-0 flex-col"
+        className={`flex min-h-0 flex-col ${sendPanelMin}`}
         style={
           receiveVisible
-            ? { flex: `0 0 ${pct}%`, minWidth: 0 }
-            : { flex: '1 1 auto', minWidth: 0, width: '100%' }
+            ? { flex: `0 0 ${pct}%` }
+            : { flex: '1 1 auto', width: '100%' }
         }
       >
         {send}
@@ -106,7 +123,7 @@ export function BackendSendReceivePanels({
           >
             <div className="pointer-events-none absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-slate-600/90 group-hover:bg-teal-400/90" />
           </div>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col" style={{ flex: '1 1 0%', minWidth: 0 }}>
+          <div className={`flex min-h-0 flex-1 flex-col ${receivePanelMin}`} style={{ flex: '1 1 0%' }}>
             {receive}
           </div>
         </>

@@ -1,5 +1,5 @@
 /**
- * AI Agent Construction Wizard — Stepper di alto livello (5 bottoni numerati).
+ * AI Agent Construction Wizard — Stepper di alto livello (cinque passi + Costi).
  *
  * Render visuale puro (no fetch, no side effects). Riceve in input:
  *   - `currentStep`     indice 0..4 dello step attivo
@@ -13,8 +13,9 @@
  *
  * Stato visivo:
  *   - 🔒 disabilitato → grigio, cursor not-allowed
- *   - 🟡 attivo (selezionato) → highlight viola
- *   - ✅ completato → verde + check
+ *   - Attivo (selezionato) → highlight verde (stessa famiglia cromatica degli altri step)
+ *   - ✅ completato → bordo/tonalità verde + check nel badge circolare
+ *   - Abilitato ma incompleto → numero nel badge circolare + «?» discreto a destra dell’etichetta
  *
  * Render compatto: solo bottoni step, senza caption/progress bar duplicata.
  */
@@ -32,9 +33,9 @@ export interface AIAgentConstructionStepperProps {
   readonly completion: readonly boolean[];
   readonly onSelectStep: (index: AgentWizardStepIndex) => void;
   /**
-   * Quando valorizzato, il pulsante dello step indicato riceve un effetto «glow» viola
-   * pulsante. Usato per richiamare l'attenzione sul primo step subito dopo l'uscita dalla
-   * Tutor di benvenuto (transizione di sessione, ~4s). `null` = nessuno step in glow.
+   * Quando valorizzato, il pulsante dello step indicato riceve un effetto «glow» (anello verde).
+   * Usato per richiamare l'attenzione sul primo step subito dopo l'uscita dalla Tutor di
+   * benvenuto (transizione di sessione, ~4s). `null` = nessuno step in glow.
    */
   readonly glowStepIndex?: AgentWizardStepIndex | null;
   /**
@@ -125,21 +126,20 @@ export function AIAgentConstructionStepper({
 
           const isGlow = glowStepIndex === meta.index;
           const stateClass = isCurrent
-            ? 'bg-violet-700 text-white border-violet-500 shadow ring-2 ring-violet-400/40'
+            ? 'bg-emerald-900/85 text-emerald-50 border-emerald-500 shadow-sm ring-2 ring-emerald-400/35'
             : isComplete
-              ? 'bg-emerald-900/55 text-emerald-100 border-emerald-700 hover:bg-emerald-900/70'
+              ? 'bg-slate-800 text-emerald-100 border-emerald-700/70 hover:bg-slate-700'
               : isEnabled
-                ? 'bg-slate-800 text-slate-100 border-slate-700 hover:bg-slate-700'
+                ? 'bg-slate-800 text-slate-100 border-slate-600 hover:bg-slate-700'
                 : 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed';
           /**
-           * Glow viola transitorio (4s ~ controllato dal parent). Sovrappone un anello
-           * pulsante e una shadow viola al pulsante dello step da evidenziare. Non
-           * sostituisce il `stateClass` ma si aggiunge: lo step glowing che è anche
-           * `current` ottiene un doppio effetto (ring viola pulsante + ring statico).
+           * Glow transitorio (anello verde). Non sostituisce `stateClass` ma si somma.
            */
           const glowClass = isGlow
-            ? 'animate-pulse ring-4 ring-violet-400/70 shadow-[0_0_22px_rgba(167,139,250,0.7)]'
+            ? 'animate-pulse ring-4 ring-emerald-400/55 shadow-[0_0_20px_rgba(52,211,153,0.45)]'
             : '';
+
+          const showPendingLabelMark = isEnabled && !isComplete;
 
           return (
             <li key={meta.index}>
@@ -148,27 +148,42 @@ export function AIAgentConstructionStepper({
                 disabled={!isEnabled}
                 aria-current={isCurrent ? 'step' : undefined}
                 aria-label={`Passo ${meta.displayNumber}: ${meta.title}${
-                  isComplete ? ' (completato)' : isEnabled ? '' : ' (bloccato)'
+                  isComplete
+                    ? ' (completato)'
+                    : isEnabled
+                      ? ' (da completare)'
+                      : ' (bloccato)'
                 }`}
                 onClick={() => {
                   if (isEnabled) onSelectStep(meta.index);
                 }}
-                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${stateClass} ${glowClass}`}
+                className={`flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ${stateClass} ${glowClass}`}
               >
                 <span
-                  className="flex h-6 w-6 items-center justify-center rounded-full bg-black/25 text-xs font-semibold"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/25 text-xs font-semibold tabular-nums"
                   aria-hidden
                 >
                   {isComplete ? (
-                    <Check size={14} className="text-emerald-300" />
+                    <Check size={14} className="text-emerald-300" strokeWidth={2.5} />
                   ) : !isEnabled ? (
-                    <Lock size={13} />
+                    <Lock size={13} className="text-slate-500" strokeWidth={2} />
                   ) : (
                     meta.displayNumber
                   )}
                 </span>
-                <Icon size={15} aria-hidden className="opacity-80" />
-                <span className={isCurrent ? 'text-base font-semibold' : 'text-sm'}>{meta.label}</span>
+                <Icon size={15} aria-hidden className="shrink-0 opacity-85" strokeWidth={2} />
+                <span className="inline-flex min-w-0 max-w-full items-center gap-1 whitespace-nowrap text-sm font-medium leading-none">
+                  <span>{meta.label}</span>
+                  {showPendingLabelMark ? (
+                    <span
+                      className="inline-flex h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded bg-amber-400/16 px-0.5 text-[10px] font-bold text-amber-300/90"
+                      aria-hidden
+                      title="Passo da completare"
+                    >
+                      ?
+                    </span>
+                  ) : null}
+                </span>
               </button>
             </li>
           );
@@ -183,7 +198,7 @@ export function AIAgentConstructionStepper({
           <>
             <li
               aria-hidden
-              className="mx-2 hidden h-6 w-px bg-slate-700 sm:block"
+              className="mx-2 hidden h-10 w-px shrink-0 self-center bg-slate-700 sm:block"
             />
             <li>
               <button
@@ -193,14 +208,14 @@ export function AIAgentConstructionStepper({
                 title="Apre il pannello dei costi di design: quanto ti è costato (in chiamate IA) costruire questo task"
                 onClick={onSelectCosts}
                 className={
-                  'flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ' +
+                  'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
                   (costsActive
-                    ? 'bg-amber-700 text-white border-amber-500 shadow ring-2 ring-amber-400/40'
-                    : 'bg-slate-800 text-amber-200 border-slate-700 hover:bg-slate-700')
+                    ? 'bg-amber-600 text-amber-50 border-amber-400 shadow-sm ring-2 ring-amber-300/50'
+                    : 'border-amber-600/45 bg-slate-900/90 text-amber-200 hover:border-amber-500/70 hover:bg-slate-800 hover:text-amber-100')
                 }
               >
-                <DollarSign size={13} aria-hidden className="opacity-90" />
-                <span>Costi di design</span>
+                <DollarSign size={15} aria-hidden className="shrink-0 opacity-90" strokeWidth={2} />
+                <span className="whitespace-nowrap">Costi di design</span>
               </button>
             </li>
           </>

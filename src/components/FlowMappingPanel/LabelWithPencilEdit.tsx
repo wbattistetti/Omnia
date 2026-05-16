@@ -157,7 +157,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
     if (!editable) {
       return (
         <span
-          className={`truncate text-slate-100 text-[11px] font-medium ${segmentClassName || ''}`}
+          className={`inline-flex max-w-full min-h-[1.25em] items-center truncate text-[11px] font-medium text-slate-100 ${segmentClassName || ''}`}
           title={viewTitle ?? viewLabel}
         >
           {viewLabel}
@@ -222,7 +222,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
     return (
       <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
         <span
-          className={`peer whitespace-nowrap text-slate-100 text-[11px] font-medium cursor-default select-none rounded px-0.5 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 overflow-hidden text-ellipsis min-w-0 max-w-full min-h-[1.1em] ${segmentClassName || ''}`}
+          className={`peer inline-flex min-h-[1.25em] min-w-0 max-w-full cursor-default select-none items-center overflow-hidden text-ellipsis whitespace-nowrap rounded px-0.5 text-[11px] font-medium text-slate-100 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 ${segmentClassName || ''}`}
           tabIndex={0}
           onDoubleClick={() => setEditing(true)}
           onKeyDown={(e) => {

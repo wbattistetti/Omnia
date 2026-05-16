@@ -1,6 +1,7 @@
 /**
- * Stesso contenuto funzionale del Response Editor per Backend Call: toolbar inline + BackendCallEditor.
- * Usato nel tab Backends per ogni voce manuale del catalogo (task dedicato con id = voce).
+ * Editor Backend Call incassato nel tab Backends dell'AI Agent Editor.
+ * Toolbar: EmbeddedBackendToolbar (modalità Emulation / Real Call + azioni contestuali).
+ * Layout: toolbar shrink-0 in cima → BackendCallEditor che occupa il resto senza scroll esterno.
  */
 
 import React from 'react';
@@ -8,82 +9,42 @@ import type { Task } from '../../../../../types/taskTypes';
 import type { ToolbarButton } from '../../../../../dock/types';
 import BackendCallEditor from '../BackendCallEditor';
 import { BackendCallEmbeddedLayout } from './BackendCallEmbeddedLayout';
-
-function InlineToolbarStrip({ buttons }: { buttons: ToolbarButton[] }) {
-  const visible = buttons.filter((b) => b.visible !== false);
-  if (visible.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-1 items-center mb-1 shrink-0">
-      {visible.map((b, i) => {
-        if (b.dropdownItems && b.dropdownItems.length > 0) {
-          return (
-            <select
-              key={i}
-              title={b.title}
-              aria-label={b.label || 'Azioni'}
-              className="rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[10px] text-slate-200 max-w-[10rem]"
-              defaultValue=""
-              onChange={(e) => {
-                const idx = Number(e.target.value);
-                if (!Number.isNaN(idx) && b.dropdownItems?.[idx]) {
-                  b.dropdownItems[idx].onClick();
-                }
-                e.target.selectedIndex = 0;
-              }}
-            >
-              <option value="" disabled>
-                {b.label ?? '⋯'}
-              </option>
-              {b.dropdownItems.map((d, j) => (
-                <option key={j} value={j}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          );
-        }
-        const successOn = Boolean(b.successHighlight && !b.disabled);
-        return (
-          <button
-            key={i}
-            type="button"
-            title={b.title}
-            disabled={b.disabled}
-            onClick={b.onClick}
-            className={`inline-flex items-center gap-1 rounded border px-1.5 py-1 text-[10px] ${
-              successOn
-                ? 'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-500'
-                : b.active
-                  ? 'border-emerald-600/70 bg-emerald-950/50 text-emerald-100'
-                  : 'border-slate-600 bg-transparent text-slate-200 hover:bg-slate-800/80'
-            } disabled:opacity-45`}
-          >
-            {b.icon}
-            {b.label ? <span>{b.label}</span> : null}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+import { EmbeddedBackendToolbar } from './EmbeddedBackendToolbar';
 
 export function EmbeddedBackendCallEditor({
   task,
   endpointExternalRevision = 0,
+  /**
+   * Se `true` (default), la riga endpoint è nascosta (URL gestito dall’header catalogo import).
+   * In modalità «specs» emulate l’URL è opzionale e si modifica nell’editor.
+   */
+  hideEndpointRow = true,
 }: {
   task: Task;
-  /** Allinea lo stato interno quando URL/metodo sono aggiornati dall’header accordion. */
+  /** Incrementato dal parent quando URL/metodo sono aggiornati fuori dall'editor (header accordion). */
   endpointExternalRevision?: number;
+  hideEndpointRow?: boolean;
 }) {
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
+  const [signatureSubOpen, setSignatureSubOpen] = React.useState(false);
 
   return (
-    <BackendCallEmbeddedLayout toolbar={<InlineToolbarStrip buttons={toolbarButtons} />}>
+    <BackendCallEmbeddedLayout
+      toolbar={
+        <EmbeddedBackendToolbar
+          buttons={toolbarButtons}
+          signatureSubOpen={signatureSubOpen}
+          onSignatureSubOpenChange={setSignatureSubOpen}
+        />
+      }
+    >
       <BackendCallEditor
         task={task}
         hideHeader
-        hideEndpointRow
+        hideEndpointRow={hideEndpointRow}
         endpointExternalRevision={endpointExternalRevision}
+        embeddedSignatureSubToolbarOpen={signatureSubOpen}
+        embeddedCloseSignatureToolbar={() => setSignatureSubOpen(false)}
         onToolbarUpdate={(btns) => setToolbarButtons(btns)}
       />
     </BackendCallEmbeddedLayout>

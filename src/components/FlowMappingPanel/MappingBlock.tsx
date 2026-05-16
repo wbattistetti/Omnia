@@ -95,7 +95,7 @@ export function MappingBlock({
   const borderBar = borderClassNameOverride ?? borderClass;
 
   const frameClass = flat
-    ? 'rounded-md border border-slate-600/25 bg-slate-950/30'
+    ? 'rounded-md border border-slate-600/20 bg-transparent'
     : `rounded-xl border-2 ${borderBar} bg-[#0a0c10] shadow-inner`;
 
   const bodyPad = flat ? 'p-1.5' : 'p-2.5';

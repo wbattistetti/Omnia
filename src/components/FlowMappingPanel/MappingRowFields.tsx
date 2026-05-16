@@ -66,19 +66,17 @@ export function MappingRowFields({
 
   if (variant === 'backend' && groupOnlyBackend) {
     return (
-      <div className="flex items-center gap-2 shrink-0 opacity-30 pointer-events-none" aria-hidden>
-        {showApiFields ? (
-          <div className="h-7 w-[3.25rem] shrink-0 rounded border border-dashed border-slate-600/70" />
-        ) : null}
-        <div className="h-7 w-[3.25rem] shrink-0 rounded border border-slate-600/70" />
+      <div className="flex h-7 shrink-0 items-center gap-0 opacity-25 pointer-events-none" aria-hidden>
+        {showApiFields ? <div className="h-6 w-16 shrink-0 rounded bg-slate-800/30" /> : null}
+        <div className="h-6 w-24 shrink-0 rounded bg-slate-800/30" />
       </div>
     );
   }
 
   if (variant === 'interface' && groupOnlyInterface) {
     return (
-      <div className="flex items-center gap-2 shrink-0 opacity-30 pointer-events-none" aria-hidden>
-        <div className="h-7 w-[3.25rem] shrink-0 rounded border border-slate-600/70" />
+      <div className="flex h-7 shrink-0 items-center gap-0 opacity-25 pointer-events-none" aria-hidden>
+        <div className="h-6 w-24 shrink-0 rounded bg-slate-800/30" />
       </div>
     );
   }
@@ -88,6 +86,8 @@ export function MappingRowFields({
   }
 
   if (variant === 'backend') {
+    void datalistApiId;
+    void suppressFieldTabFocus;
     const varMode = backendColumn === 'receive' ? 'receive' : 'send';
     const varLabel = entry.variableRefId
       ? resolveVariableDisplayName(entry.variableRefId, 'menuVariables', {
@@ -100,19 +100,20 @@ export function MappingRowFields({
       backendColumn === 'send' ? backendSendParamKindByWireKey?.[wireMetaKey] : undefined;
     const sendEnum =
       backendColumn === 'send' ? backendSendParamEnumByWireKey?.[wireMetaKey] : undefined;
+    const apiRef = (entry.apiField || '').trim();
     return (
-      <div className="flex items-center gap-2 shrink-0 min-w-0">
+      <div className="flex min-w-0 shrink-0 items-center gap-0">
         {showApiFields ? (
-          <InlineFieldWithPencilEdit
-            value={entry.apiField}
-            placeholder="Campo API (opz.)"
-            ariaLabel="Campo API (opzionale)"
-            listId={datalistApiId}
-            accent="sky"
-            suppressFocus={secondaryFieldsLocked}
-            viewTabIndex={suppressFieldTabFocus ? -1 : 0}
-            onCommit={(next) => onPatch({ apiField: next })}
-          />
+          <span
+            className="h-7 min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono text-[10px] leading-7 text-slate-400 cursor-default select-none tabular-nums"
+            title={
+              apiRef
+                ? `Backend parameter name (read-only): ${apiRef}`
+                : 'Backend parameter name (read-only, from OpenAPI / import)'
+            }
+          >
+            {apiRef || '—'}
+          </span>
         ) : null}
         {secondaryFieldsLocked ? (
           <InlineFieldWithPencilEdit

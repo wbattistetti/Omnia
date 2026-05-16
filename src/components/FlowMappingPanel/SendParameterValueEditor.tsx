@@ -425,10 +425,10 @@ export function SendParameterValueEditor({
           aria-expanded={false}
           aria-invalid={sendMissingEmpty}
           aria-describedby={sendMissingEmpty ? missingSendHintId : undefined}
-          className={`inline-flex items-center gap-0.5 max-w-[min(16rem,92vw)] truncate rounded px-2 py-1 text-[10px] font-medium min-h-[1.75rem] border ${
+          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 text-[10px] font-medium h-7 min-h-7 leading-7 border ${
             sendMissingEmpty
-              ? 'border-red-500/55 bg-red-950/30 text-red-400 hover:border-red-500/75'
-              : `border-transparent hover:border-amber-500/30 ${showEmpty ? emptyClass : accentClassName}`
+              ? 'border-red-500/40 bg-red-950/25 text-red-300 hover:border-red-500/60'
+              : `border-transparent hover:border-amber-500/25 ${showEmpty ? emptyClass : accentClassName}`
           }`}
           onPointerDown={(e) => {
             editorParamDebug('trigger pointerdown (hit target)', {

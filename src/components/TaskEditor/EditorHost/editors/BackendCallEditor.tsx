@@ -84,6 +84,8 @@ function defaultBackendRecalculationEntry(): BackendRecalculationEntry {
 }
 
 const SEND_RECV_SPLIT_STORAGE_KEY = 'omnia.backendCall.sendReceiveSplitRatio';
+/** Editor incassato nel catalogo agente: ratio separato e massimo più basso così RECEIVE non viene spinto fuori schermo. */
+const SEND_RECV_SPLIT_STORAGE_KEY_EMBEDDED = 'omnia.backendCall.sendReceiveSplitRatio.embedded';
 
 function collectUsedInternalNames(cfg: BackendCallConfig): Set<string> {
   const s = new Set<string>();
@@ -279,7 +281,13 @@ export default function BackendCallEditor({
   hideHeader,
   hideEndpointRow,
   endpointExternalRevision,
-}: EditorProps) {
+  embeddedSignatureSubToolbarOpen,
+  /** Incassato: chiudi il pannello Signature (toolbar esterna) quando si apre tabella/test. */
+  embeddedCloseSignatureToolbar,
+}: EditorProps & {
+  embeddedSignatureSubToolbarOpen?: boolean;
+  embeddedCloseSignatureToolbar?: () => void;
+}) {
   // ✅ RINOMINATO: act → task
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
@@ -344,24 +352,41 @@ export default function BackendCallEditor({
   const [receiveMappingPanelVisible, setReceiveMappingPanelVisible] = React.useState(true);
   const [sendReceiveSplitRatio, setSendReceiveSplitRatio] = React.useState(() => {
     try {
-      const s = typeof localStorage !== 'undefined' ? localStorage.getItem(SEND_RECV_SPLIT_STORAGE_KEY) : null;
-      if (s == null) return 0.58;
+      const embedded = Boolean(hideHeader);
+      const key = embedded ? SEND_RECV_SPLIT_STORAGE_KEY_EMBEDDED : SEND_RECV_SPLIT_STORAGE_KEY;
+      const min = embedded ? 0.32 : 0.28;
+      const max = embedded ? 0.52 : 0.82;
+      const def = embedded ? 0.44 : 0.58;
+      const s = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+      if (s == null) return def;
       const n = Number(s);
-      return Number.isFinite(n) ? Math.min(0.82, Math.max(0.28, n)) : 0.58;
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
     } catch {
-      return 0.58;
+      return hideHeader ? 0.44 : 0.58;
     }
   });
 
-  const persistSendReceiveSplitRatio = React.useCallback((r: number) => {
-    const c = Math.min(0.82, Math.max(0.28, r));
-    setSendReceiveSplitRatio(c);
-    try {
-      localStorage.setItem(SEND_RECV_SPLIT_STORAGE_KEY, String(c));
-    } catch {
-      /* noop */
-    }
-  }, []);
+  const backendSendReceiveSplitClamp = React.useMemo(
+    () => (hideHeader ? ({ min: 0.32, max: 0.52 } as const) : ({ min: 0.28, max: 0.82 } as const)),
+    [hideHeader]
+  );
+
+  const persistSendReceiveSplitRatio = React.useCallback(
+    (r: number) => {
+      const embedded = Boolean(hideHeader);
+      const min = embedded ? 0.32 : 0.28;
+      const max = embedded ? 0.52 : 0.82;
+      const key = embedded ? SEND_RECV_SPLIT_STORAGE_KEY_EMBEDDED : SEND_RECV_SPLIT_STORAGE_KEY;
+      const c = Math.min(max, Math.max(min, r));
+      setSendReceiveSplitRatio(c);
+      try {
+        localStorage.setItem(key, String(c));
+      } catch {
+        /* noop */
+      }
+    },
+    [hideHeader]
+  );
 
   // Get available variables for autocomplete
   // ✅ Use readable names directly (e.g., "data di nascita", "data di nascita.giorno")
@@ -903,22 +928,6 @@ export default function BackendCallEditor({
     [mappingSend, config.endpoint?.url]
   );
 
-  /** Blocchi informativi da `x-omnia.sendBinding` (vincoli one-of) sopra l’albero SEND. */
-  const backendSendOneOfHintBlocks = React.useMemo(() => {
-    if (!instanceId) return [];
-    const meta = taskRepository.getTask(instanceId)?.backendCallSpecMeta?.openapiSendBinding;
-    const sets = meta?.requireOneOfSets;
-    if (!sets?.length) return [];
-    const seen = new Set<string>();
-    const out: { id: string; label: string }[] = [];
-    for (const s of sets) {
-      if (!s.label?.trim() || seen.has(s.id)) continue;
-      seen.add(s.id);
-      out.push({ id: s.id, label: s.label.trim() });
-    }
-    return out;
-  }, [instanceId, config.inputs, swaggerInputContract.length]);
-
   /** Chiavi ammesse nell’oggetto risultato dello script unificato (= segmenti interni SEND). */
   const unifiedAllowedFieldKeys = React.useMemo(
     () =>
@@ -1308,6 +1317,7 @@ export default function BackendCallEditor({
   }, [mockTableAllInputInternalNames.length, mockTableHasAtLeastOneNonEmptyInputRow]);
 
   const handleTestApi = React.useCallback(() => {
+    embeddedCloseSignatureToolbar?.();
     logBackendCallTest('handleTestApi: click', { testApiReadiness });
     setShowTableView(true);
     if (mockTableAllInputInternalNames.length === 0) {
@@ -1361,6 +1371,9 @@ export default function BackendCallEditor({
     knownBackendVariableIdSet,
     openapiDescriptionSnapshots,
     mockTableAllInputInternalNames.length,
+    mockTableHasAtLeastOneNonEmptyInputRow,
+    testApiReadiness,
+    embeddedCloseSignatureToolbar,
   ]);
 
   /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
@@ -1459,67 +1472,93 @@ export default function BackendCallEditor({
           ? 'Completa tutti gli input attivi su almeno una riga: il test gira solo sulle righe complete; le righe vuote vengono saltate.'
           : 'Chiamata HTTP reale al backend (proxy ApiServer) per ogni riga con tutti gli input compilati; le righe vuote sono saltate. Il toggle MOCK/REAL non influisce su Test API — MOCK serve per emulare i valori nelle celle output senza rete.';
 
+    const setEmulationMode = () =>
+      setConfig((prev) => ({ ...prev, mockTableDefaultExecutionMode: BackendExecutionMode.MOCK }));
+    const setRealMode = () =>
+      setConfig((prev) => ({ ...prev, mockTableDefaultExecutionMode: BackendExecutionMode.REAL }));
+
     const base: ToolbarButton[] = [
+      // Group 1: Mode pills
       {
-        label: mockExecMode === BackendExecutionMode.MOCK ? 'MOCK' : 'REAL',
-        onClick: () =>
-          setConfig((prev) => ({
-            ...prev,
-            mockTableDefaultExecutionMode:
-              (prev.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK) === BackendExecutionMode.MOCK
-                ? BackendExecutionMode.REAL
-                : BackendExecutionMode.MOCK,
-          })),
-        title:
-          mockExecMode === BackendExecutionMode.MOCK
-            ? 'Modalità MOCK: emula il backend con i valori che scrivi nelle celle output (nessuna HTTP da qui). «Test API» chiama comunque il backend via proxy. Clicca per passare a REAL.'
-            : 'Modalità REAL: preferenza predefinita per nuove righe (HTTP via proxy se usassi esecuzione per riga). «Test API» è sempre HTTP. Clicca per passare a MOCK.',
-        active: mockExecMode === BackendExecutionMode.REAL,
+        buttonId: 'mode-emulation',
+        icon: <Table2 size={14} />,
+        label: 'Emulation',
+        onClick: setEmulationMode,
+        title: 'Simulate backend with test values',
+        active: mockExecMode === BackendExecutionMode.MOCK,
         visible: operationalUrlNonEmpty,
       },
       {
+        buttonId: 'mode-real',
+        icon: <Server size={14} />,
+        label: 'Real Call',
+        onClick: setRealMode,
+        title: 'Execute a real backend call',
+        active: mockExecMode === BackendExecutionMode.REAL,
+        visible: operationalUrlNonEmpty,
+      },
+      // Group 2: Actions
+      {
+        buttonId: 'show-api-column',
         icon: showApiColumn ? <EyeOff size={16} /> : <Eye size={16} />,
-        label: showApiColumn ? 'Hide API' : 'Show API',
+        label: showApiColumn ? 'Hide source names' : 'Show source names',
         onClick: () => setShowApiColumn((prev) => !prev),
-        title: showApiColumn ? 'Hide API parameter mapping column' : 'Show API parameter mapping column',
+        title: 'Display backend source parameter names in the mapping tree',
         active: showApiColumn,
       },
       {
+        buttonId: 'show-table',
         icon: <Table2 size={16} />,
-        label: 'Mock Table',
-        onClick: () => setShowTableView((prev) => !prev),
-        title: showTableView ? 'Show mapping editor' : 'Show mock table',
+        label: 'Emulation table',
+        onClick: () => {
+          setShowTableView((prev) => {
+            if (!prev) embeddedCloseSignatureToolbar?.();
+            return !prev;
+          });
+        },
+        title:
+          mockExecMode === BackendExecutionMode.REAL
+            ? 'Test table: bulk HTTP calls per row (same grid as Emulation). Use Signature for API check and mapping.'
+            : 'Emulation table: mock values and tests. Use Signature to return to API check and mapping tools.',
         active: showTableView,
       },
       {
+        buttonId: 'read-api',
         icon: <BookOpen size={16} />,
-        label: readApiBusy ? 'Reading…' : 'Read API',
+        label: readApiBusy ? 'Checking…' : 'Check Update',
         onClick: () => void handleReadApi(),
-        title:
-          'Scarica OpenAPI via ApiServer (no CORS): path da URL; metodo HTTP determinato da Swagger se il path è nello spec; altrimenti selezionabile manualmente (GET/POST). Discovery dall’endpoint; fallback Spec URL. SEND include body con allOf/oneOf.',
+        title: 'Verify if parameters are up-to-date with backend',
         disabled: readApiBusy,
         visible: readApiToolbarVisible,
       },
       {
+        buttonId: 'test-backend',
         icon: <FlaskConical size={16} />,
-        label: bulkApiTestBusy ? 'Testing…' : 'Test API',
+        label: bulkApiTestBusy ? 'Testing…' : 'Test Backend',
         onClick: () => void handleTestApi(),
         title: testApiTitle,
         disabled: bulkApiTestBusy,
+        active: showTableView,
         successHighlight: testApiReadiness === 'ready' && !bulkApiTestBusy,
-        visible: operationalUrlNonEmpty,
+        visible: operationalUrlNonEmpty && mockExecMode === BackendExecutionMode.REAL,
       },
+      // Utility
       {
+        buttonId: 'hide-receive',
         icon: <Columns2 size={16} />,
-        label: receiveMappingPanelVisible ? 'Hide Receive' : 'Show Receive',
+        label: receiveMappingPanelVisible ? 'Hide Receive parameters' : 'Show Receive parameters',
         onClick: () => setReceiveMappingPanelVisible((v) => !v),
         title: receiveMappingPanelVisible
           ? 'Nascondi il pannello RECEIVE: tutta la larghezza è per SEND.'
           : 'Mostra di nuovo il pannello RECEIVE affiancato a SEND.',
         active: receiveMappingPanelVisible,
-        visible: true,
+        visible:
+          embeddedSignatureSubToolbarOpen === undefined
+            ? true
+            : Boolean(embeddedSignatureSubToolbarOpen) && !showTableView,
       },
       {
+        buttonId: 'ricalcolo',
         icon: <Calculator size={16} />,
         label: 'Ricalcolo backend',
         onClick: () =>
@@ -1573,7 +1612,8 @@ export default function BackendCallEditor({
     refreshMockTableStructure,
     receiveMappingPanelVisible,
     advancementEditorWireKey,
-    showTableView,
+    embeddedSignatureSubToolbarOpen,
+    embeddedCloseSignatureToolbar,
   ]);
 
   // Update toolbar when it changes (for docking mode)
@@ -1699,7 +1739,8 @@ export default function BackendCallEditor({
 
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto">
             <BackendCallMockTable
               bulkTestNonce={bulkTestNonce}
               endpointInvocationFallback={literalFallbackFromSend}
@@ -1751,6 +1792,7 @@ export default function BackendCallEditor({
                 return v;
               }}
             />
+            </div>
           </div>
         ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -1781,20 +1823,11 @@ export default function BackendCallEditor({
             backendSendParamEnumByWireKey={inputEnumByInternalName}
             backendSendAdvancement={backendSendAdvancement}
             backendSendAdvancementOverlay={backendSendAdvancementOverlay}
+            embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
             backendReceiveColumnVisible={receiveMappingPanelVisible}
             backendSendReceiveSplitRatio={sendReceiveSplitRatio}
             onBackendSendReceiveSplitRatioChange={persistSendReceiveSplitRatio}
-            backendSendBodyPrefix={
-              backendSendOneOfHintBlocks.length > 0 ? (
-                <div className="mb-2 space-y-1 rounded-md border border-teal-500/30 bg-teal-950/35 px-2 py-1.5 text-[10px] leading-snug text-teal-50/95">
-                  {backendSendOneOfHintBlocks.map((h) => (
-                    <p key={h.id}>
-                      <span className="font-semibold text-teal-200/95">{h.id}</span>: {h.label}
-                    </p>
-                  ))}
-                </div>
-              ) : undefined
-            }
+            backendSendReceiveSplitClamp={backendSendReceiveSplitClamp}
           />
         </div>
         )}

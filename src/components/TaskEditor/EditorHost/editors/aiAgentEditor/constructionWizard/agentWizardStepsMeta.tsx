@@ -73,8 +73,11 @@ export const AGENT_WIZARD_STEPS_META: readonly AgentWizardStepMeta[] = [
     displayNumber: 3,
     label: 'Backend',
     title: 'Definisci i backend',
-    tutorial:
-      'Importa da URL OpenAPI («Aggiungi backend») oppure definisci tutto a mano («Emula backend»).',
+    /**
+     * Vuoto: didascalia header rimossa (maggio 2026). I pulsanti «Aggiungi backend» / «Emula backend»
+     * sono già visibili nell’header del pannello.
+     */
+    tutorial: '',
     icon: PlugZap,
   },
   {

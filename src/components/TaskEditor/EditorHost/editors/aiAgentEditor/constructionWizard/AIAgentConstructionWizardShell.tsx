@@ -38,11 +38,9 @@ export interface AIAgentConstructionWizardShellProps {
   /** Vedi `AIAgentConstructionStepperProps.glowStepIndex`. Forwarded as-is allo Stepper. */
   readonly glowStepIndex?: AgentWizardStepIndex | null;
   /**
-   * Azione (es. pulsante «Create Agent» / «Refine») da rendere nell'header dello step
-   * corrente, allineata a destra del titolo «Passo X/5 …». Il parent decide quando
-   * fornirla (tipicamente solo per lo step Task quando la descrizione \u00e8 sufficiente);
-   * se `null` o `undefined`, l'header non riserva spazio per l'azione. Questo sostituisce
-   * il vecchio pulsante nell'header globale dell'editor in modalit\u00e0 wizard.
+   * Azione (es. «Create Agent» / «Add backend») subito dopo il titolo step («Passo X/5 …» +
+   * titolo), sulla stessa riga (con wrap su viewport stretti). Il parent decide quando
+   * fornirla; se `null` o `undefined`, non viene renderizzata.
    */
   readonly stepHeaderAction?: React.ReactNode;
   /**
@@ -143,15 +141,13 @@ export function AIAgentConstructionWizardShell({
       ) : (
         <>
           <header className="border-b border-slate-800 bg-slate-900/40 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex flex-1 min-w-0 items-baseline gap-2">
-                <span className="text-sm font-semibold uppercase tracking-wide text-violet-300">
-                  Passo {meta.displayNumber}/{AGENT_WIZARD_STEPS_META.length}
-                </span>
-                <h2 className="text-base font-semibold text-slate-100">{meta.title}</h2>
-              </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3">
+              <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-violet-300">
+                Passo {meta.displayNumber}/{AGENT_WIZARD_STEPS_META.length}
+              </span>
+              <h2 className="min-w-0 text-base font-semibold text-slate-100">{meta.title}</h2>
               {stepHeaderAction ? (
-                <div className="shrink-0 flex items-center">{stepHeaderAction}</div>
+                <div className="flex shrink-0 items-center">{stepHeaderAction}</div>
               ) : null}
             </div>
             {/**

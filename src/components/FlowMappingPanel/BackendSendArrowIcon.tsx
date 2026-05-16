@@ -16,7 +16,8 @@ export const BACKEND_RECEIVE_MAPPING_ICON_COLOR = '#F5A623';
 const GLYPH_W = 59;
 const GLYPH_H = 22;
 const GLYPH_CLASS = `h-[22px] w-[59px] shrink-0`;
-const SEND_SHADOW = 'drop-shadow-[0_0_5px_rgba(74,144,226,0.35)]';
+/** SEND: blu mapping (#4A90E2) — obbligatorio = fill pieno, opzionale = solo stroke. */
+const SEND_SHADOW = 'drop-shadow-[0_0_6px_rgba(74,144,226,0.45)]';
 const RECV_SHADOW = 'drop-shadow-[0_0_5px_rgba(245,166,35,0.4)]';
 
 export type SendArrowGlyphKind = 'filledSolid' | 'outlineSolid' | 'filledBroken' | 'outlineBroken';
@@ -26,14 +27,16 @@ export function BackendSendArrowIcon({ kind, title }: { kind: SendArrowGlyphKind
   const filled = kind === 'filledSolid' || kind === 'filledBroken';
   const Icon = runtime ? ArrowBigRightDash : ArrowBigRight;
   const c = BACKEND_SEND_MAPPING_ICON_COLOR;
+  const strokeC = c;
+  const fillC = filled ? c : 'none';
   return (
     <Icon
       className={`${GLYPH_CLASS} ${SEND_SHADOW}`}
       width={GLYPH_W}
       height={GLYPH_H}
       strokeWidth={2.15}
-      fill={filled ? c : 'none'}
-      stroke={c}
+      fill={fillC}
+      stroke={strokeC}
       title={title}
       aria-hidden={title ? undefined : true}
     />
@@ -43,14 +46,16 @@ export function BackendSendArrowIcon({ kind, title }: { kind: SendArrowGlyphKind
 export function BackendReceiveArrowIcon({ optional }: { optional: boolean }) {
   const c = BACKEND_RECEIVE_MAPPING_ICON_COLOR;
   const filled = !optional;
+  const fillC = filled ? c : 'none';
+  const strokeC = c;
   return (
     <ArrowBigLeft
       className={`${GLYPH_CLASS} ${RECV_SHADOW}`}
       width={GLYPH_W}
       height={GLYPH_H}
       strokeWidth={2.15}
-      fill={filled ? c : 'none'}
-      stroke={c}
+      fill={fillC}
+      stroke={strokeC}
       aria-hidden
     />
   );

@@ -6,7 +6,7 @@ import React from 'react';
 import type { EditorProps } from '../types';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
-import { Bot, Loader2, Maximize2, Minimize2, Plus, Sparkles } from 'lucide-react';
+import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import {
@@ -44,6 +44,7 @@ import { openOmniaTutorForMissingModel } from '@utils/aiModelGuard';
 import { AIAgentEditorDockProvider } from './aiAgentEditor/AIAgentEditorDockContext';
 import { AIAgentWelcomeTutor } from './aiAgentEditor/constructionWizard/AIAgentWelcomeTutor';
 import { AIAgentConstructionWizardShell } from './aiAgentEditor/constructionWizard/AIAgentConstructionWizardShell';
+import { AddBackendDropdown } from './aiAgentEditor/AddBackendDropdown';
 import { AIAgentDeployMenu } from './aiAgentEditor/constructionWizard/AIAgentDeployMenu';
 import {
   AGENT_WIZARD_FIRST_STEP_INDEX,
@@ -771,27 +772,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const globalHeaderAction = isWizardTaskStep ? null : headerAction;
   const isWizardBackendStep = c.agentWizardCurrentStep === 2;
   const wizardBackendHeaderActions = (
-    <div className="inline-flex shrink-0 flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={() => invokeBackendsAddManual('import')}
-        aria-label="Aggiungi backend da URL OpenAPI"
-        title="Importa da URL: incolla lo swagger, poi Recupera specifiche"
-        className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 px-2.5 py-1 text-sm font-semibold text-violet-100 hover:bg-violet-900/55"
-      >
-        <Plus className="h-4 w-4 shrink-0" aria-hidden />
-        Aggiungi backend
-      </button>
-      <button
-        type="button"
-        onClick={() => invokeBackendsAddManual('emulate')}
-        aria-label="Emula backend senza OpenAPI"
-        title="Definisci manualmente nome, descrizione e URL senza import swagger"
-        className="inline-flex shrink-0 items-center gap-1 rounded border border-slate-600/80 bg-slate-900/90 px-2.5 py-1 text-sm font-semibold text-slate-100 hover:bg-slate-800"
-      >
-        Emula backend
-      </button>
-    </div>
+    <AddBackendDropdown
+      wizardUi
+      onAddExisting={() => invokeBackendsAddManual('import')}
+      onCreateSpecs={() => invokeBackendsAddManual('emulate')}
+    />
   );
   const wizardStepHeaderAction = isWizardTaskStep
     ? headerAction

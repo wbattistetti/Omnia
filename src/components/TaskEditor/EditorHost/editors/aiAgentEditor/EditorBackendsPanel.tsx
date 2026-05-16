@@ -1,6 +1,6 @@
 /**
- * Tab Dockview "Backends": catalogo manuale (accordion URL → descrizione → editor).
- * ElevenLabs: checkbox «Tool» per `convaiBackendToolTaskIds`; Fix SEND espande lo stesso accordion.
+ * Tab Dockview "Backends": catalogo manuale (accordion).
+ * Header collassato: nome, URL, metodo / Recupera. Espanso: Tool + elimina, descrizione, SEND/RECEIVE allineati alla colonna URL.
  */
 
 import React from 'react';
@@ -11,7 +11,6 @@ import {
   ChevronRight,
   GitBranchPlus,
   Loader2,
-  Plus,
   Trash2,
 } from 'lucide-react';
 import { runBackendCallReadApiForTask } from '@services/runBackendCallReadApiForTask';
@@ -33,6 +32,7 @@ import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { getVisibleFields } from '@utils/iaAgentRuntime/platformHelpers';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { EmbeddedBackendCallEditor } from './EmbeddedBackendCallEditor';
+import { AddBackendDropdown } from './AddBackendDropdown';
 import { ensureManualCatalogBackendTask } from './ensureManualCatalogBackendTask';
 import { ConnectPortalModal } from '@components/portalAuth/ConnectPortalModal';
 import type { PortalConnectionMeta } from '@domain/portalAuth/portalConnectionTypes';
@@ -101,21 +101,30 @@ function ManualBackendAccordion({
   const [endpointRev, setEndpointRev] = React.useState(0);
   const [readBusy, setReadBusy] = React.useState(false);
   const [headerToolDescription, setHeaderToolDescription] = React.useState('');
-  const nameInputRef = React.useRef<HTMLInputElement>(null);
+  /** Dopo un tentativo «Recupera specifiche» fallito: URL in rosso finché l’utente non modifica l’URL. */
+  const [urlMarkedUnreachable, setUrlMarkedUnreachable] = React.useState(false);
+  const urlInputRef = React.useRef<HTMLInputElement>(null);
+  const labelInputRef = React.useRef<HTMLInputElement>(null);
+  const descriptionTextareaRef = React.useRef<HTMLTextAreaElement>(null);
   const showIdentity = showBackendIdentityFields(entry);
-  const fieldCls = wizardUi
-    ? 'text-sm'
-    : 'text-[11px]';
-  const fieldPad = wizardUi ? 'px-2 py-1' : 'px-1.5 py-0.5';
-  const monoCls = wizardUi ? 'text-sm font-mono' : 'text-[10px] font-mono';
+  /** Import: pannello SEND/RECEIVE solo dopo import validato; emulate: sempre se espanso. */
+  const canShowParameterPanel = creationMode === 'emulate' || showIdentity;
+  const fieldCls = wizardUi ? 'text-sm' : 'text-xs';
+  const fieldPad = wizardUi ? 'px-2 py-1' : 'px-2 py-1';
+  const monoCls = wizardUi ? 'text-sm font-mono' : 'text-xs font-mono';
+  /** Altezza unica per tutti i controlli della barra accordion (URL, nome, pulsanti). */
+  const barH = 'h-9 min-h-[2.25rem]';
+  const inputShellBase = `${barH} box-border rounded border bg-slate-950 ${fieldPad} ${monoCls} outline-none transition-colors focus-visible:border-slate-500 focus-visible:ring-1 focus-visible:ring-slate-500/35`;
+  const inputShell = `${inputShellBase} w-full min-w-0`;
 
   const editorTask = React.useMemo(() => {
-    if (!expanded) return null;
+    if (!expanded || !canShowParameterPanel) return null;
     return ensureManualCatalogBackendTask(entry, projectId);
-  }, [expanded, entry, projectId]);
+  }, [expanded, canShowParameterPanel, entry, projectId]);
 
   const applyHeaderEndpoint = React.useCallback(
     (url: string, method: string) => {
+      setUrlMarkedUnreachable(false);
       const methodNorm = normalizeMethod(method);
       const trimmed = url.trim();
       onPatch(entry.id, {
@@ -148,11 +157,28 @@ function ManualBackendAccordion({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- usiamo `entry` solo al run; dipendenze strette per non resettare la descrizione a ogni rerender del parent
   }, [entry.id, endpointRev, projectId]);
 
+  const resizeDescriptionTextarea = React.useCallback(() => {
+    const el = descriptionTextareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const cap = typeof window !== 'undefined' ? Math.floor(window.innerHeight * 0.42) : 360;
+    const h = Math.min(Math.max(el.scrollHeight, 72), cap);
+    el.style.height = `${h}px`;
+  }, []);
+
+  React.useLayoutEffect(() => {
+    if (!expanded || !showIdentity) return;
+    resizeDescriptionTextarea();
+  }, [expanded, headerToolDescription, resizeDescriptionTextarea, showIdentity]);
+
   React.useEffect(() => {
-    if (!focusName || !nameInputRef.current) return;
-    nameInputRef.current.focus();
+    if (!focusName) return;
+    const el =
+      creationMode === 'emulate' ? labelInputRef.current : urlInputRef.current;
+    if (!el) return;
+    el.focus();
     onNameFocused?.();
-  }, [focusName, onNameFocused]);
+  }, [creationMode, focusName, onNameFocused]);
 
   const wasExpandedRef = React.useRef(false);
   React.useEffect(() => {
@@ -166,7 +192,7 @@ function ManualBackendAccordion({
 
   const runReadApiCollapsed = React.useCallback(async () => {
     const url = entry.endpointUrl.trim();
-    if (!url || expanded) return;
+    if (!url) return;
     setReadBusy(true);
     try {
       ensureManualCatalogBackendTask(entry, projectId);
@@ -212,8 +238,10 @@ function ManualBackendAccordion({
           }
         }
         window.alert(res.error);
+        setUrlMarkedUnreachable(true);
         return;
       }
+      setUrlMarkedUnreachable(false);
       if (portalConnectionId && portalConnectionId !== entry.portalConnectionId) {
         onPatch(entry.id, { portalConnectionId });
         taskRepository.updateTask(
@@ -238,12 +266,13 @@ function ManualBackendAccordion({
       if (toolDesc) setHeaderToolDescription(toolDesc);
       setEndpointRev((r) => r + 1);
       onExpandEntry(entry.id);
+    } catch {
+      setUrlMarkedUnreachable(true);
     } finally {
       setReadBusy(false);
     }
   }, [
     entry,
-    expanded,
     onExpandEntry,
     onPatch,
     onPortalAuthRequired,
@@ -335,141 +364,259 @@ function ManualBackendAccordion({
     return () => clearInterval(h);
   }, [entry.endpointUrl, entry.id, entry.method, onPatch]);
 
+  const descriptionFieldId = React.useId();
+  const backendIdentifierDisplay =
+    entry.label.trim() || deriveBackendLabelFromUrl(entry.endpointUrl.trim()) || entry.id;
+  const labelCls = wizardUi
+    ? 'mb-0.5 block text-xs font-semibold tracking-wide text-slate-300'
+    : 'mb-0.5 block text-xs font-semibold uppercase tracking-wide text-slate-500';
+
+  const urlPlaceholder =
+    creationMode === 'import' && !showIdentity
+      ? 'Inserisci URL del backend'
+      : 'https://… o …/v3/api-docs';
+
+  const internalPreviewFromUrl = deriveBackendLabelFromUrl(entry.endpointUrl.trim());
+  const retrieveBtnCls = `inline-flex ${barH} shrink-0 items-center gap-1.5 rounded border border-violet-600/80 bg-violet-950/50 px-2.5 text-xs font-semibold text-violet-100 hover:bg-violet-900/60 disabled:pointer-events-none disabled:opacity-45`;
+  const chevronWrapCls = `flex ${barH} w-9 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-800`;
+  const headerPadX = wizardUi ? 'px-3' : 'px-2';
+  /** URL: larghezza legata al contenuto dove supportato (field-sizing). */
+  const urlSizing = '[field-sizing:content] w-max min-w-[8rem] max-w-full shrink';
+
   return (
     <div
-      className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-700/90 bg-slate-900/60"
+      className={`grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border border-slate-700/55 bg-slate-950/35 ${
+        expanded ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[auto_minmax(0,0fr)]'
+      }`}
       data-convai-tool-backend-id={entry.id}
     >
+      {/* Header: solo chevron + nome + URL + metodo/Recupera (una riga visibile anche da collassato). */}
       <div
-        className={`flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-800/80 bg-slate-950/70 ${wizardUi ? 'px-3 py-2' : 'px-2 py-1.5'}`}
+        className={`flex shrink-0 items-stretch gap-2 border-b border-slate-800/65 bg-slate-950/50 py-2 ${headerPadX}`}
       >
-        <button
-          type="button"
-          className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          title={expanded ? 'Comprimi' : 'Espandi'}
-        >
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        {convaiToolToggle ? (
-          <label
-            className={`inline-flex shrink-0 cursor-pointer items-center gap-0.5 text-slate-400 ${wizardUi ? 'text-xs' : 'text-[9px]'}`}
-          >
-            <input
-              type="checkbox"
-              className="mt-0"
-              checked={convaiToolToggle.checked}
-              onChange={(e) => convaiToolToggle.onChange(e.target.checked)}
-              title="Includi come tool ConvAI (function calling) per questo agente"
-            />
-            <span>Tool</span>
-          </label>
-        ) : null}
-        {showIdentity ? (
-          <input
-            ref={nameInputRef}
-            className={`min-w-[5rem] w-[7.5rem] sm:w-[9rem] shrink-0 rounded border border-slate-700 bg-slate-950 ${fieldPad} ${fieldCls} text-slate-100`}
-            value={entry.label}
-            onChange={(e) => onPatch(entry.id, { label: e.target.value })}
-            placeholder="Nome"
-            title="Nome nel catalogo backend"
-          />
-        ) : null}
-        {showIdentity ? (
-          <input
-            type="text"
-            className={`min-w-[10rem] flex-1 basis-[14rem] rounded border border-slate-700 bg-slate-950 ${fieldPad} ${fieldCls} text-slate-100`}
-            value={headerToolDescription}
-            onChange={(e) => applyHeaderToolDescription(e.target.value)}
-            placeholder="Descrizione (ConvAI / tool)…"
-            title="Quando il modello deve chiamare questa API"
-          />
-        ) : null}
-        <input
-          type="text"
-          className={`min-w-[10rem] flex-1 basis-[14rem] rounded border border-slate-700 bg-slate-950 ${fieldPad} ${monoCls} text-slate-200`}
-          value={entry.endpointUrl}
-          onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
-          placeholder={
-            creationMode === 'import' && !showIdentity
-              ? 'Inserisci URL del backend'
-              : 'https://… o …/v3/api-docs'
-          }
-          title={
-            creationMode === 'import' && !showIdentity
-              ? 'URL del documento OpenAPI o dell’API da importare'
-              : 'URL swagger o endpoint OpenAPI'
-          }
-        />
-        {showIdentity ? (
-          httpMethodOpenApiUi.locked ? (
-            <span
-              className={`shrink-0 rounded border border-slate-700 bg-slate-900/90 ${fieldPad} font-semibold text-slate-200 select-none cursor-default ${fieldCls}`}
-              title="Metodo HTTP definito dallo Swagger/OpenAPI"
-            >
-              {httpMethodOpenApiUi.display}
-            </span>
-          ) : (
-            <select
-              className={`shrink-0 rounded border border-slate-700 bg-slate-950 ${fieldPad} ${fieldCls} text-slate-200`}
-              value={normalizeMethod(entry.method) === 'POST' ? 'POST' : 'GET'}
-              onChange={(e) => applyHeaderEndpoint(entry.endpointUrl, e.target.value)}
-              title="Metodo HTTP"
-            >
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-            </select>
-          )
-        ) : null}
-        {creationMode === 'import' && !expanded && !showIdentity ? (
+        <div className="flex w-9 shrink-0 items-center justify-center self-center">
           <button
             type="button"
-            disabled={readBusy || !entry.endpointUrl.trim()}
-            onClick={() => void runReadApiCollapsed()}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded border border-violet-600/80 bg-violet-950/50 font-semibold text-violet-100 hover:bg-violet-900/60 disabled:opacity-45 ${wizardUi ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-[10px]'}`}
-            title="Scarica swagger e compila SEND/RECEIVE"
+            className={chevronWrapCls}
+            onClick={onToggle}
+            aria-expanded={expanded}
+            title={expanded ? 'Comprimi' : 'Espandi'}
           >
-            {readBusy ? (
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
-            ) : (
-              <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
-            )}
-            <span>Recupera specifiche</span>
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
-        ) : null}
-        {showIdentity && !expanded && entry.endpointUrl.trim() ? (
-          <button
-            type="button"
-            disabled={readBusy}
-            onClick={() => void runReadApiCollapsed()}
-            className={`inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/80 bg-violet-950/50 text-violet-100 hover:bg-violet-900/60 disabled:opacity-45 ${wizardUi ? 'px-2.5 py-1 text-sm' : 'px-2 py-0.5 text-[10px]'}`}
-            title="Aggiorna da OpenAPI"
-          >
-            {readBusy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
-            ) : (
-              <BookOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            )}
-            <span>Recupera specifiche</span>
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="shrink-0 rounded p-1 text-red-400 hover:bg-slate-800"
-          title="Rimuovi"
-          onClick={() => onRemove(entry.id)}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {creationMode === 'emulate' ? (
+                <input
+                  id={`${entry.id}-internal-name`}
+                  ref={labelInputRef}
+                  type="text"
+                  className={`${inputShell} min-w-0 flex-1 border-slate-600/70 text-amber-100/90 focus:border-sky-600/60 focus:ring-sky-500/35`}
+                  value={entry.label}
+                  onChange={(e) =>
+                    onPatch(entry.id, {
+                      label: e.target.value,
+                      lastStructuralEditAt: new Date().toISOString(),
+                    })
+                  }
+                  placeholder="Internal name (e.g. bookfromagenda)"
+                  title="Internal backend name (manual specs; no OpenAPI URL required)."
+                  aria-label="Internal backend name"
+                />
+              ) : !showIdentity ? (
+                <>
+                  <input
+                    ref={urlInputRef}
+                    type="text"
+                    className={`${inputShellBase} min-w-0 flex-1 ${urlSizing} ${
+                      urlMarkedUnreachable
+                        ? 'border-red-700/70 text-red-400 placeholder:text-red-400/60'
+                        : 'border-slate-700 text-amber-100/95 placeholder:text-slate-600'
+                    }`}
+                    value={entry.endpointUrl}
+                    onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || e.shiftKey) return;
+                      const u = entry.endpointUrl.trim();
+                      if (!u || readBusy) return;
+                      e.preventDefault();
+                      void runReadApiCollapsed();
+                    }}
+                    placeholder={urlPlaceholder}
+                    title={
+                      creationMode === 'import' && !showIdentity
+                        ? 'URL del documento OpenAPI o dell’API da importare. Invio: recupera specifiche e apre la firma.'
+                        : 'Endpoint of the backend service (editable). Turns red if «Recupera specifiche» cannot reach this URL; editing clears the warning.'
+                    }
+                    aria-label="Backend URL"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    className={`${inputShell} w-[min(12rem,32vw)] shrink-0 cursor-default border-slate-700 bg-slate-900/85 text-amber-100/90`}
+                    value={internalPreviewFromUrl}
+                    placeholder="—"
+                    aria-label="Internal name (preview until import)"
+                    title="Preview from URL; becomes fixed after a successful import."
+                  />
+                  <button
+                    type="button"
+                    disabled={readBusy || !entry.endpointUrl.trim()}
+                    onClick={() => void runReadApiCollapsed()}
+                    className={retrieveBtnCls}
+                    title="Scarica swagger e compila SEND/RECEIVE"
+                  >
+                    {readBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    <span className="whitespace-nowrap">Recupera specifiche</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    ref={urlInputRef}
+                    type="text"
+                    className={`${inputShellBase} min-w-0 flex-1 ${urlSizing} ${
+                      urlMarkedUnreachable
+                        ? 'border-red-700/70 text-red-400 placeholder:text-red-400/60'
+                        : 'border-slate-700 text-amber-100/95 placeholder:text-slate-600'
+                    }`}
+                    value={entry.endpointUrl}
+                    onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter' || e.shiftKey) return;
+                      const u = entry.endpointUrl.trim();
+                      if (!u || readBusy) return;
+                      e.preventDefault();
+                      void runReadApiCollapsed();
+                    }}
+                    placeholder={urlPlaceholder}
+                    title="Endpoint of the backend service (editable). Turns red if «Recupera specifiche» cannot reach this URL; editing clears the warning."
+                    aria-label="Backend URL"
+                  />
+                  <input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    className={`${inputShell} w-[min(12rem,32vw)] shrink-0 cursor-default border-slate-600/70 bg-slate-900/80 text-amber-100/90`}
+                    value={backendIdentifierDisplay}
+                    aria-label="Internal backend name"
+                    title="Set after successful OpenAPI import"
+                  />
+                  {httpMethodOpenApiUi.locked ? (
+                    <span
+                      className={`inline-flex ${barH} shrink-0 items-center rounded border border-slate-700 bg-slate-900/90 px-2 font-semibold text-slate-200 ${fieldCls}`}
+                      title="Metodo HTTP definito dallo Swagger/OpenAPI"
+                    >
+                      {httpMethodOpenApiUi.display}
+                    </span>
+                  ) : (
+                    <select
+                      className={`${barH} shrink-0 rounded border border-slate-700 bg-slate-950 px-2 ${fieldCls} text-slate-200 outline-none focus-visible:ring-1 focus-visible:ring-slate-500/40`}
+                      value={normalizeMethod(entry.method) === 'POST' ? 'POST' : 'GET'}
+                      onChange={(e) => applyHeaderEndpoint(entry.endpointUrl, e.target.value)}
+                      title="Metodo HTTP"
+                      aria-label="HTTP method"
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    disabled={readBusy || !entry.endpointUrl.trim()}
+                    onClick={() => void runReadApiCollapsed()}
+                    className={retrieveBtnCls}
+                    title="Aggiorna parametri da OpenAPI"
+                  >
+                    {readBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                    <span className="whitespace-nowrap">Recupera specifiche</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
       </div>
-      {expanded && editorTask ? (
-        <div className="flex h-[min(65vh,520px)] min-h-[240px] flex-col overflow-hidden border-t border-slate-800/50 pt-1">
-          <EmbeddedBackendCallEditor
-            key={editorTask.id}
-            task={editorTask}
-            endpointExternalRevision={endpointRev}
-          />
+
+      {expanded ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className={`flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden py-2 ${headerPadX}`}>
+            <div className="w-9 shrink-0" aria-hidden />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+                {convaiToolToggle ? (
+                  <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      className="mt-0"
+                      checked={convaiToolToggle.checked}
+                      onChange={(e) => convaiToolToggle.onChange(e.target.checked)}
+                      title="Includi come tool ConvAI (function calling) per questo agente"
+                    />
+                    <span>Tool</span>
+                  </label>
+                ) : (
+                  <span className="min-w-0 flex-1" aria-hidden />
+                )}
+                <button
+                  type="button"
+                  className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
+                  title="Rimuovi backend dal catalogo"
+                  aria-label="Rimuovi backend"
+                  onClick={() => onRemove(entry.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+
+              {showIdentity ? (
+                <div className="min-w-0 shrink-0 border-b border-slate-800/60 pb-2">
+                  <label htmlFor={descriptionFieldId} className={labelCls}>
+                    Description
+                  </label>
+                  <textarea
+                    id={descriptionFieldId}
+                    ref={descriptionTextareaRef}
+                    rows={3}
+                    spellCheck
+                    wrap="soft"
+                    className={`box-border w-full min-h-[4.5rem] max-h-[42vh] resize-y overflow-y-auto border-0 bg-transparent px-0 py-1 ${fieldCls} whitespace-pre-wrap break-words text-slate-100 shadow-none outline-none ring-0 transition-[height] duration-75 ease-out placeholder:text-slate-600 focus:ring-0 focus-visible:ring-0`}
+                    value={headerToolDescription}
+                    onChange={(e) => {
+                      applyHeaderToolDescription(e.target.value);
+                      requestAnimationFrame(() => resizeDescriptionTextarea());
+                    }}
+                    placeholder="Descrizione del backend (ConvAI / tool)…"
+                    title="Editable description of the backend; expands automatically when text grows."
+                  />
+                </div>
+              ) : null}
+
+              {editorTask ? (
+                <div className="flex h-[min(88dvh,920px)] min-h-[240px] flex-1 flex-col overflow-hidden">
+                  <EmbeddedBackendCallEditor
+                    key={editorTask.id}
+                    task={editorTask}
+                    endpointExternalRevision={endpointRev}
+                    hideEndpointRow={creationMode === 'import'}
+                  />
+                </div>
+              ) : expanded && !canShowParameterPanel ? (
+                <p className="shrink-0 text-xs leading-snug text-slate-500">
+                  Recupera le specifiche OpenAPI dall&apos;intestazione per configurare SEND e RECEIVE.
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
@@ -655,6 +802,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
       auditLog,
       catalogVersion: (prev.catalogVersion ?? 0) + 1,
     });
+    setExpandedIds(() => new Set());
     if (mode === 'emulate') setFocusNameEntryId(id);
     },
     [data?.backendCatalog, data?.id, mergeProject]
@@ -767,18 +915,13 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
       */}
       {!dockCtx?.hideBackendsPanelInlineAddButton ? (
         <div className="mb-1.5 flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => addManualBackend('import')}
-            aria-label="Aggiungi backend manuale"
-            title="Aggiungi una riga backend manuale in fondo all\u2019elenco"
-            className={`inline-flex shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 font-semibold text-violet-100 hover:bg-violet-900/55 ${wizardUi ? 'px-2.5 py-1 text-sm' : 'px-2 py-0.5 text-[11px]'}`}
-          >
-            <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Aggiungi backend
-          </button>
+          <AddBackendDropdown
+            wizardUi={wizardUi}
+            onAddExisting={() => addManualBackend('import')}
+            onCreateSpecs={() => addManualBackend('emulate')}
+          />
           {manualEntries.length > 0 ? (
-            <span className="text-[10px] tabular-nums text-slate-500">
+            <span className="text-xs tabular-nums text-slate-500">
               {manualEntries.length} backend manual{manualEntries.length === 1 ? 'e' : 'i'}
             </span>
           ) : null}
@@ -792,7 +935,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
           <button
             type="button"
             onClick={() => mergeBackendsFromDownstreamFlow()}
-            className="inline-flex w-fit max-w-full shrink-0 items-center gap-1 rounded border border-violet-600/70 bg-violet-950/40 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-100 hover:bg-violet-900/55"
+            className="inline-flex min-h-[2rem] w-fit max-w-full shrink-0 items-center gap-1.5 rounded border border-violet-600/70 bg-violet-950/40 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-violet-100 hover:bg-violet-900/55"
             title="Aggiunge agli id tool ConvAI i Backend Call raggiungibili a valle sul grafo (archi uscenti)."
           >
             <GitBranchPlus className="h-3 w-3 shrink-0" aria-hidden />
