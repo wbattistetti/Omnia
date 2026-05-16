@@ -111,10 +111,22 @@ import {
   UC_SCENARIO_ROW_EDIT_BTN,
   UC_SCENARIO_VOTE_BTN,
   UC_WIZARD_CARD_BODY,
+  UC_WIZARD_AGENT_MESSAGE_PANEL,
+  UC_WIZARD_AGENT_MESSAGE_TEXT,
+  UC_WIZARD_ROW_EXPANDED,
+  useCaseHeaderShellClass,
+  useCaseHeaderTitleTextClass,
   UC_WIZARD_SCENARIO_BLOCK,
+  UC_WIZARD_SCENARIO_TEXT,
   fieldTextClass,
-  useCaseHeaderBgClass,
 } from './useCaseComposerPresentation';
+import {
+  applyUseCaseCardExpansion,
+  collapseAllUseCaseCards,
+  expandAllUseCaseCards,
+  type UseCaseAccordionFoldMode,
+  type UseCaseCardExpandSource,
+} from './useCaseAccordionFold';
 import {
   applyDesignerFieldVoteToggle,
   applyUseCaseHeaderVoteToggle,
@@ -339,7 +351,7 @@ export function AIAgentUseCaseComposer({
     <span
       title="Scenario"
       aria-label="Scenario"
-      className="shrink-0 inline-flex h-6 w-6 items-center justify-center text-violet-300"
+      className="shrink-0 self-start inline-flex h-6 w-6 items-center justify-center text-violet-300"
     >
       <BookOpen size={15} aria-hidden />
     </span>
@@ -469,6 +481,54 @@ export function AIAgentUseCaseComposer({
   >({});
   /** Wizard only: corpo card espanso per id (default true quando compare un nuovo use case). */
   const [cardExpandedById, setCardExpandedById] = React.useState<Record<string, boolean>>({});
+  /**
+   * Wizard: `default` = tutti collassati, doppio click apre uno solo; `custom` = più aperti
+   * (chevron con seconda apertura o «Espandi tutti»). «Collassa tutto» → default.
+   */
+  const [accordionFoldMode, setAccordionFoldMode] =
+    React.useState<UseCaseAccordionFoldMode>('default');
+  const accordionFoldModeRef = React.useRef<UseCaseAccordionFoldMode>('default');
+  accordionFoldModeRef.current = accordionFoldMode;
+  const orderedIds = React.useMemo(() => ordered.map((u) => u.id), [ordered]);
+
+  const commitCardExpansion = React.useCallback(
+    (useCaseId: string, open: boolean, source: UseCaseCardExpandSource) => {
+      setCardExpandedById((prev) => {
+        const result = applyUseCaseCardExpansion(
+          accordionFoldModeRef.current,
+          prev,
+          useCaseId,
+          open,
+          orderedIds,
+          source
+        );
+        accordionFoldModeRef.current = result.mode;
+        setAccordionFoldMode(result.mode);
+        return result.expandedById;
+      });
+    },
+    [orderedIds]
+  );
+
+  const toggleCardExpansion = React.useCallback(
+    (useCaseId: string, source: UseCaseCardExpandSource) => {
+      setCardExpandedById((prev) => {
+        const isOpen = prev[useCaseId] !== false;
+        const result = applyUseCaseCardExpansion(
+          accordionFoldModeRef.current,
+          prev,
+          useCaseId,
+          !isOpen,
+          orderedIds,
+          source
+        );
+        accordionFoldModeRef.current = result.mode;
+        setAccordionFoldMode(result.mode);
+        return result.expandedById;
+      });
+    },
+    [orderedIds]
+  );
   const [rootBatchWarning, setRootBatchWarning] = React.useState<string | null>(null);
   const rootDraftRef = React.useRef<HTMLTextAreaElement>(null);
   /** Selection range in assistant message textarea (for Token wrap UX). */
@@ -912,7 +972,7 @@ export function AIAgentUseCaseComposer({
   React.useEffect(() => {
     /**
      * Sync della mappa espansione card con la lista ordinata: aggiunge entry mancanti
-     * (default = espanso) e rimuove orfane. **Idempotente**: se non ci sono variazioni
+     * (default = collassato) e rimuove orfane. **Idempotente**: se non ci sono variazioni
      * effettive (es. l'utente sta solo togliendo la spunta «incluso»), restituiamo il
      * `prev` originale per evitare un rerender inutile dell'intera lista (ogni nuovo
      * oggetto stato innesca re-render di tutti gli `<li>` figli).
@@ -930,27 +990,25 @@ export function AIAgentUseCaseComposer({
       if (added === 0 && removed === 0) return prev;
       const next: Record<string, boolean> = {};
       for (const u of ordered) {
-        next[u.id] = u.id in prev ? prev[u.id] : true;
+        next[u.id] = u.id in prev ? prev[u.id] : false;
       }
       return next;
     });
   }, [ordered]);
 
   const expandAllWizardCards = React.useCallback(() => {
-    setCardExpandedById((prev) => {
-      const next = { ...prev };
-      for (const u of ordered) next[u.id] = true;
-      return next;
-    });
-  }, [ordered]);
+    const { expandedById, mode } = expandAllUseCaseCards(orderedIds);
+    accordionFoldModeRef.current = mode;
+    setCardExpandedById(expandedById);
+    setAccordionFoldMode(mode);
+  }, [orderedIds]);
 
   const collapseAllWizardCards = React.useCallback(() => {
-    setCardExpandedById((prev) => {
-      const next = { ...prev };
-      for (const u of ordered) next[u.id] = false;
-      return next;
-    });
-  }, [ordered]);
+    const { expandedById, mode } = collapseAllUseCaseCards(orderedIds);
+    accordionFoldModeRef.current = mode;
+    setCardExpandedById(expandedById);
+    setAccordionFoldMode(mode);
+  }, [orderedIds]);
 
   /**
    * Dopo espansione accordion wizard: scroll della lista così la card resti visibile
@@ -1152,11 +1210,11 @@ export function AIAgentUseCaseComposer({
       );
       onClearUseCaseHighlight?.(useCaseId);
       if (primaryGenerateOnRightOnly) {
-        setCardExpandedById((prev) => ({ ...prev, [useCaseId]: false }));
+        commitCardExpansion(useCaseId, false, 'programmatic');
         listToolbarCtx?.notifyCardToggle();
       }
     },
-    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx]
+    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
   );
 
   const handleAddStructuralVariant = React.useCallback(
@@ -1429,11 +1487,11 @@ export function AIAgentUseCaseComposer({
       setUseCases((prev) => applyUseCaseHeaderVoteToggle(prev, useCaseId, choice));
       onClearUseCaseHighlight?.(useCaseId);
       if (primaryGenerateOnRightOnly) {
-        setCardExpandedById((prev) => ({ ...prev, [useCaseId]: false }));
+        commitCardExpansion(useCaseId, false, 'programmatic');
         listToolbarCtx?.notifyCardToggle();
       }
     },
-    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx]
+    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
   );
 
   const beginPayoffEdit = React.useCallback((useCaseId: string, current: string) => {
@@ -2178,7 +2236,7 @@ export function AIAgentUseCaseComposer({
                   const descriptionTooltip = String(u.notes?.behavior || '').trim();
                   const rowAssistant = u.dialogue.find((t) => t.role === 'assistant');
                   const cardExpanded =
-                    !primaryGenerateOnRightOnly || cardExpandedById[u.id] !== false;
+                    !primaryGenerateOnRightOnly || cardExpandedById[u.id] === true;
                   const showWizardBody =
                     primaryGenerateOnRightOnly &&
                     cardExpanded &&
@@ -2198,7 +2256,9 @@ export function AIAgentUseCaseComposer({
                       : UC_LIST_ZEBRA_CLASSIC_ODD;
                   const liSurface = searchHighlight
                     ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-50/90 ring-2 ring-amber-300/50 dark:bg-amber-950/20 dark:ring-amber-400/40'
-                    : `rounded-md ${zebraRow}`;
+                    : primaryGenerateOnRightOnly && cardExpanded
+                      ? `overflow-hidden rounded-md border ${UC_WIZARD_ROW_EXPANDED}`
+                      : `rounded-md ${zebraRow}`;
                   const nextInFiltered = filteredOrdered[rowIndex + 1];
                   const showSiblingGapSentinel =
                     nextInFiltered != null &&
@@ -2224,11 +2284,8 @@ export function AIAgentUseCaseComposer({
                           if (el.closest('[data-uc-head-toolbar]')) return;
                           e.preventDefault();
                           e.stopPropagation();
-                          const wasCollapsed = cardExpandedById[u.id] === false;
-                          setCardExpandedById((prev) => {
-                            const isOpen = prev[u.id] !== false;
-                            return { ...prev, [u.id]: !isOpen };
-                          });
+                          const wasCollapsed = !cardExpandedById[u.id];
+                          toggleCardExpansion(u.id, 'dblclick');
                           listToolbarCtx?.notifyCardToggle();
                           if (wasCollapsed) {
                             scheduleScrollExpandedUseCaseCardIntoView(u.id);
@@ -2237,10 +2294,7 @@ export function AIAgentUseCaseComposer({
                         onClick={() => {
                           if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                         }}
-                        className={`group/uc-head flex cursor-pointer items-start gap-1 pl-1.5 pr-2 py-1 ${useCaseHeaderBgClass(
-                          u.designer_label_vote,
-                          active
-                        )}`}
+                        className={`group/uc-head flex cursor-pointer items-start gap-1 pl-1.5 pr-2 py-1.5 ${useCaseHeaderShellClass(active)}`}
                       >
                         {/*
                           Checkbox "incluso nelle conversazioni" (sempre presente, default
@@ -2275,16 +2329,13 @@ export function AIAgentUseCaseComposer({
                           <button
                             type="button"
                             data-uc-chevron
-                            className="mt-[1px] shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/90 hover:text-slate-100"
+                            className="mt-[1px] shrink-0 rounded p-0.5 text-slate-700/80 hover:bg-black/10 hover:text-slate-900 dark:text-slate-200/90 dark:hover:bg-white/10"
                             title={cardExpanded ? 'Collassa' : 'Espandi'}
                             aria-expanded={cardExpanded}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const wasCollapsed = cardExpandedById[u.id] === false;
-                              setCardExpandedById((prev) => {
-                                const isOpen = prev[u.id] !== false;
-                                return { ...prev, [u.id]: !isOpen };
-                              });
+                              const wasCollapsed = !cardExpandedById[u.id];
+                              toggleCardExpansion(u.id, 'chevron');
                               listToolbarCtx?.notifyCardToggle();
                               if (wasCollapsed) {
                                 scheduleScrollExpandedUseCaseCardIntoView(u.id);
@@ -2352,15 +2403,23 @@ export function AIAgentUseCaseComposer({
                             </button>
                           </div>
                         ) : (
-                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-0.5">
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                             <button
                               type="button"
                               title={descriptionTooltip || undefined}
-                              className={`min-w-0 max-w-full text-left text-sm leading-snug ${fieldTextClass(
-                                u.designer_label_vote,
-                                u.label ?? '',
-                                fieldBaselineByUseCaseId[u.id]?.label
-                              )} ${active ? 'font-semibold' : ''}`}
+                              className={`min-w-0 max-w-full text-left text-sm leading-snug ${
+                                primaryGenerateOnRightOnly
+                                  ? useCaseHeaderTitleTextClass(
+                                      u.designer_label_vote,
+                                      active,
+                                      includedInConv
+                                    )
+                                  : fieldTextClass(
+                                      u.designer_label_vote,
+                                      u.label ?? '',
+                                      fieldBaselineByUseCaseId[u.id]?.label
+                                    )
+                              } ${active && !primaryGenerateOnRightOnly ? 'font-semibold' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
@@ -2371,7 +2430,11 @@ export function AIAgentUseCaseComposer({
                             <UseCaseRowDeployChips
                               stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
                               onInspectCompiled={
-                                onInspectCompiled ? () => onInspectCompiled(u.id) : undefined
+                                primaryGenerateOnRightOnly
+                                  ? undefined
+                                  : onInspectCompiled
+                                    ? () => onInspectCompiled(u.id)
+                                    : undefined
                               }
                             />
                             {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
@@ -2548,7 +2611,9 @@ export function AIAgentUseCaseComposer({
                           onClick={(e) => e.stopPropagation()}
                         >
                           {wizardShowScenario ? (
-                            <div className={`relative ${UC_WIZARD_SCENARIO_BLOCK}`}>
+                            <div
+                              className={`relative ${UC_WIZARD_SCENARIO_BLOCK}`}
+                            >
                               {payoffEditUseCaseId === u.id ? (
                                 <div className="flex flex-wrap items-start gap-2">
                                   {scenarioFieldLabel}
@@ -2610,15 +2675,19 @@ export function AIAgentUseCaseComposer({
                                     beginPayoffEdit(u.id, u.payoff ?? '');
                                   }}
                                 >
-                                  <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
+                                  <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1">
                                     {scenarioFieldLabel}
                                     <div className="min-w-0 flex-1 text-sm leading-snug">
                                       <span
-                                        className={`inline whitespace-pre-wrap align-baseline ${UC_SCENARIO_BODY_TEXT} ${fieldTextClass(
-                                          u.designer_payoff_vote,
-                                          (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
-                                          rowBaseline?.payoff
-                                        )}`}
+                                        className={`inline whitespace-pre-wrap align-baseline ${UC_SCENARIO_BODY_TEXT} ${
+                                          primaryGenerateOnRightOnly
+                                            ? UC_WIZARD_SCENARIO_TEXT
+                                            : fieldTextClass(
+                                                u.designer_payoff_vote,
+                                                (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
+                                                rowBaseline?.payoff
+                                              )
+                                        }`}
                                       >
                                         {(u.payoff ?? '').trim() ? (
                                           u.payoff
@@ -2652,7 +2721,7 @@ export function AIAgentUseCaseComposer({
                             </div>
                           ) : null}
                           {wizardShowMessage ? (
-                            <div className="rounded-md ring-1 ring-emerald-600/35 bg-emerald-950/20 px-2 py-1">
+                            <div className={UC_WIZARD_AGENT_MESSAGE_PANEL}>
                               {rowAssistant ? (
                                 (() => {
                                   /**
@@ -2702,7 +2771,9 @@ export function AIAgentUseCaseComposer({
                                         <div className="flex w-full min-w-0 rounded px-0.5 py-0">
                                           <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
                                             {agentMsgFieldLabel}
-                                            <div className="min-w-0 flex-1 font-mono text-sm leading-snug text-current">
+                                            <div
+                                              className={`min-w-0 flex-1 font-mono text-sm leading-snug ${UC_WIZARD_AGENT_MESSAGE_TEXT}`}
+                                            >
                                               <TokenizedHighlightedText
                                                 text={tokenizedForRow}
                                                 inlineFlow
@@ -2934,11 +3005,15 @@ export function AIAgentUseCaseComposer({
                                       <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
                                         {agentMsgFieldLabel}
                                         <div
-                                          className={`min-w-0 flex-1 font-mono text-sm leading-snug ${fieldTextClass(
-                                            u.designer_agent_message_vote,
-                                            rowAssistant.content,
-                                            rowBaseline?.assistantContent
-                                          )}`}
+                                          className={`min-w-0 flex-1 font-mono text-sm leading-snug ${
+                                            primaryGenerateOnRightOnly
+                                              ? UC_WIZARD_AGENT_MESSAGE_TEXT
+                                              : fieldTextClass(
+                                                  u.designer_agent_message_vote,
+                                                  rowAssistant.content,
+                                                  rowBaseline?.assistantContent
+                                                )
+                                          }`}
                                         >
                                           {rowAssistant.content.trim() ? (
                                             wizardSearchSeed.trim() ? (

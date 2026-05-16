@@ -17,23 +17,34 @@ export const UC_USE_CASE_LIST_SCROLL =
   'min-h-0 flex-1 basis-0 overflow-y-scroll overflow-x-hidden overscroll-contain pr-0.5 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.75)_rgba(15,23,42,0.92)] dark:[scrollbar-color:rgba(148,163,184,0.85)_rgba(15,23,42,0.95)] [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-500/75 [&::-webkit-scrollbar-thumb]:hover:bg-slate-400/85 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-900/80';
 
 /**
- * Corpo espanso dell’accordion in wizard: neutro freddo (slate) per incorniciare scenario cobalto
- * e blocco parametrico grigio senza «arlecchino».
+ * Corpo espanso dell’accordion in wizard: sfondo pieno per contrasto con le righe collassate.
  */
 export const UC_WIZARD_CARD_BODY =
-  'border-t border-slate-200/70 bg-slate-50/80 px-2 py-2 space-y-2 dark:border-slate-700/50 dark:bg-[hsl(218_10%_10%)]';
+  'border-t border-slate-200/80 bg-white px-2.5 py-2.5 space-y-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:border-slate-600/55 dark:bg-slate-800/95 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]';
+
+/** Riga lista use case aperta (wizard): sfondo pieno distinto dalle righe chiuse. */
+export const UC_WIZARD_ROW_EXPANDED =
+  'border-slate-300/80 bg-white shadow-sm dark:border-slate-500/50 dark:bg-slate-800/90 dark:shadow-md dark:shadow-black/20';
 
 /**
- * Superficie blocco scenario: cobalto elegante, bassa saturazione (light + dark).
+ * Superficie blocco scenario: bordo leggero, fondo poco saturo, testo grigio smorzato.
  */
 export const UC_SCENARIO_PANEL_SURFACE =
-  'border border-sky-200/70 bg-sky-50/75 px-2 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-[hsl(220_14%_34%)] dark:bg-[hsl(220_20%_20%)] dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.18)]';
+  'border border-slate-200/80 bg-slate-100/35 px-2.5 py-2 dark:border-slate-600/40 dark:bg-slate-800/25';
 
 /**
- * Contenitore editor messaggio parametrico: grigio bluastro, distinto dallo scenario cobalto.
+ * Contenitore editor messaggio parametrico: grigio neutro, distinto dallo scenario.
  */
 export const UC_PARAMETRIC_EDITOR_SURFACE =
-  'rounded-md border border-slate-300/75 bg-slate-100/90 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] dark:border-[hsl(218_10%_28%)] dark:bg-[hsl(218_12%_16%)] dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.22)]';
+  'rounded-md border border-slate-300/80 bg-slate-50 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:border-slate-600/50 dark:bg-slate-900/60 dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.15)]';
+
+/** Testo messaggio agente in lista wizard: massima leggibilità (nero / bianco dark). */
+export const UC_WIZARD_AGENT_MESSAGE_TEXT =
+  'text-slate-950 dark:text-slate-50';
+
+/** Testo scenario in lista wizard: grigio smorzato (non nero pieno). */
+export const UC_WIZARD_SCENARIO_TEXT =
+  'text-slate-500/95 dark:text-slate-400/95';
 
 /** Riquadro scenario in lista wizard / accordion compatto. */
 export const UC_WIZARD_SCENARIO_BLOCK = `rounded-md ${UC_SCENARIO_PANEL_SURFACE}`;
@@ -89,33 +100,35 @@ export function fieldTextClass(
   return aiFieldToneClass(current, baseline);
 }
 
-/**
- * Background della barra header del use case nella lista, derivato dal voto «di validazione»
- * (single source of truth: `designer_label_vote`). Tre stati visivi:
- *
- *  - `'up'`   → tonalità verde (use case validato);
- *  - `'down'` → tonalità rossa (use case invalidato);
- *  - `undefined` → neutro slate/cobalto tenue su selezione, hover slate.
- *
- * La selezione attiva (`active`) influisce sull'opacità del background per restare
- * distinguibile rispetto al hover. Volutamente non mostriamo un terzo «strato» quando il
- * voto è espresso *e* la riga è attiva: il colore di voto è semanticamente prioritario.
- */
-export function useCaseHeaderBgClass(
-  vote: 'up' | 'down' | undefined,
-  active: boolean
-): string {
-  if (vote === 'up') {
-    return active
-      ? 'bg-[hsl(158_20%_84%)] hover:bg-[hsl(158_22%_80%)] dark:bg-[hsl(158_16%_26%)] dark:hover:bg-[hsl(158_18%_30%)]'
-      : 'bg-[hsl(158_18%_90%)] hover:bg-[hsl(158_20%_86%)] dark:bg-[hsl(158_14%_22%)] dark:hover:bg-[hsl(158_16%_26%)]';
-  }
-  if (vote === 'down') {
-    return active
-      ? 'bg-[hsl(2_22%_82%)] hover:bg-[hsl(2_24%_78%)] dark:bg-[hsl(2_22%_30%)] dark:hover:bg-[hsl(2_24%_34%)]'
-      : 'bg-[hsl(2_18%_88%)] hover:bg-[hsl(2_20%_84%)] dark:bg-[hsl(2_18%_26%)] dark:hover:bg-[hsl(2_20%_30%)]';
-  }
+/** Sfondo header accordion wizard: neutro (il voto è sul colore del titolo). */
+export function useCaseHeaderShellClass(active: boolean): string {
+  const ring = active ? 'ring-1 ring-inset ring-slate-900/10 dark:ring-white/12' : '';
   return active
-    ? 'bg-slate-200/90 dark:bg-[hsl(220_14%_22%)]'
-    : 'hover:bg-slate-200/90 dark:hover:bg-slate-800/80';
+    ? `bg-slate-200/95 text-slate-800 hover:bg-slate-200 dark:bg-slate-700/90 dark:text-slate-100 dark:hover:bg-slate-700/95 ${ring}`
+    : `bg-slate-100/90 text-slate-800 hover:bg-slate-200/95 dark:bg-slate-800/75 dark:text-slate-100 dark:hover:bg-slate-700/80`;
 }
+
+/**
+ * Colore titolo header: arancione (da validare), verde (validato), rosso (non validato).
+ * Se il use case è escluso dalle conversazioni (`included === false`), la tonalità resta
+ * riconoscibile ma molto attenuata.
+ */
+export function useCaseHeaderTitleTextClass(
+  labelVote: 'up' | 'down' | undefined,
+  active: boolean,
+  included = true
+): string {
+  const weight = active ? 'font-semibold' : 'font-medium';
+  const dim = included ? '' : ' opacity-[0.32] saturate-[0.45]';
+  if (labelVote === 'up') {
+    return `${weight} text-emerald-700 dark:text-emerald-300${dim}`;
+  }
+  if (labelVote === 'down') {
+    return `${weight} text-rose-700 dark:text-rose-300${dim}`;
+  }
+  return `${weight} text-amber-700 dark:text-amber-400${dim}`;
+}
+
+/** Contenitore messaggio agente in lista wizard. */
+export const UC_WIZARD_AGENT_MESSAGE_PANEL =
+  'rounded-md border border-slate-300/85 bg-white px-2.5 py-2 dark:border-slate-500/50 dark:bg-slate-900/65';
