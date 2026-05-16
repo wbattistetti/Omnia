@@ -1,6 +1,6 @@
 /**
  * Mapping tree: dot paths, folder vs variable icon, SEND/RECEIVE style columns.
- * Backend flat: gruppi con etichetta vicino al chevron (gap 3px) e conteggio (n) se accordion chiuso;
+ * Backend flat: gruppi usano la stessa griglia chevron | freccia | etichetta delle foglie (caption leggibile, wrap);
  * indentazione uniforme per i figli.
  * Backend: toolbar sopra il nome interno in hover sulla colonna label (overlap, senza pt extra).
  * Backend: drag “Parameter” from block header, drop on rows with insertion preview line.
@@ -346,10 +346,6 @@ function MappingTreeRow({
       : childDropLineIndentPx(d);
 
   const backendFlatDepthPaddingPx = flatBackendRowLayout ? depth * BACKEND_FLAT_DEPTH_INDENT_PX : 0;
-  /** Solo gruppo (accordion senza riga foglia): avvicina l’etichetta al chevron senza allargare il gutter freccia. */
-  const tightenGroupLabelToChevron = flatBackendRowLayout && isGroupOnly;
-  /** Gruppo backend flat: chevron + label nello stesso rail (gap 3px), colonna freccia vuota per allineare SEND/RECEIVE. */
-  const mergeGroupRailLabel = Boolean(flatBackendRowLayout && treeRailWidthPx != null && isGroupOnly);
 
   const hiddenDescendantParamCount = useMemo(
     () => countDescendantMappingEntries(entries, node.pathKey),
@@ -661,6 +657,8 @@ function MappingTreeRow({
             reorderDragSourceIdRef.current = null;
           }}
           className={`group/row flex ${rowAlignClass} gap-0 min-h-[28px] rounded-md px-0.5 py-px -mx-0.5 hover:bg-slate-800/35 ${
+            variant === 'backend' && flatBackendRowLayout ? 'items-start' : ''
+          } ${
             enableRowReorder && node.entry ? 'cursor-grab active:cursor-grabbing' : ''
           }`}
           style={
@@ -672,57 +670,18 @@ function MappingTreeRow({
           onDragOverCapture={combinedRowDragOver}
           onDrop={combinedRowDrop}
         >
-        {mergeGroupRailLabel ? (
-          <>
-            <div
-              className="flex shrink-0 items-stretch border-r border-slate-800/20 bg-slate-950/20"
-              style={{ width: treeRailWidthPx }}
-            >
-              <div className="flex min-h-7 min-w-0 flex-1 items-center gap-[3px] px-0.5">
-                {chevronControl}
-                <div className="group/label-slot relative flex min-h-7 min-w-0 flex-1 items-baseline gap-1 overflow-hidden">
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <LabelWithPencilEdit
-                      ref={labelEditRef}
-                      segment={node.segment}
-                      displayLabel={
-                        variant === 'interface' && node.entry
-                          ? getInterfaceLeafDisplayName(node.entry, projectId, {
-                              flowCanvasId,
-                              flows: workspaceFlows,
-                            })
-                          : undefined
-                      }
-                      editable={leafLabelEditable}
-                      onCommit={handleRenameSegment}
-                      editIntent={Boolean(node.entry && pendingLabelEditId === node.entry.id)}
-                      onConsumeEditIntent={onConsumeLabelEditIntent}
-                      ephemeralNew={ephemeralNew}
-                      onAbandonEphemeral={ephemeralNew ? handleAbandonEphemeral : undefined}
-                      inlinePencil={variant !== 'backend'}
-                      viewTitle={backendMappingViewTitle}
-                      segmentClassName={segmentToneClass}
-                    />
-                  </div>
-                  {collapsedParamCountSuffix}
-                </div>
-              </div>
-            </div>
-            <div
-              className="flex h-7 w-14 shrink-0 items-center justify-end pr-0 opacity-0"
-              aria-hidden
-            />
-            <div
-              className="min-h-7 min-w-0 max-w-[min(14rem,36vw)] shrink-0"
-              aria-hidden
-            />
-          </>
-        ) : flatBackendRowLayout && treeRailWidthPx != null ? (
+        {flatBackendRowLayout && treeRailWidthPx != null ? (
           <div
             className="flex shrink-0 items-stretch border-r border-slate-800/20 bg-slate-950/20"
             style={{ width: treeRailWidthPx }}
           >
-            <div className="flex min-h-7 min-w-0 flex-1 items-center justify-start pl-0">
+            <div
+              className={`flex min-h-7 min-w-0 flex-1 justify-start pl-0 ${
+                variant === 'backend' && isGroupOnly && flatBackendRowLayout
+                  ? 'items-start pt-0.5'
+                  : 'items-center'
+              }`}
+            >
               {chevronControl}
             </div>
           </div>
@@ -730,13 +689,12 @@ function MappingTreeRow({
           <div className="flex h-7 min-w-[1rem] shrink-0 items-center justify-start gap-0.5">{chevronControl}</div>
         )}
 
-        {!mergeGroupRailLabel ? (
         <div
-          className={
-            tightenGroupLabelToChevron
-              ? 'flex h-7 w-0 min-w-0 shrink-0 items-center justify-end overflow-hidden p-0'
-              : 'flex h-7 w-14 shrink-0 items-center justify-end pr-0'
-          }
+          className={`flex h-7 w-14 shrink-0 justify-end pr-0 ${
+            variant === 'backend' && flatBackendRowLayout && isGroupOnly
+              ? 'self-start pt-0.5'
+              : 'items-center'
+          }`}
           title={
             isGroupOnly
               ? node.segment === 'Session'
@@ -763,7 +721,6 @@ function MappingTreeRow({
             <Brackets className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           )}
         </div>
-        ) : null}
 
         {showAdvancementUi ? (
           <div
@@ -782,9 +739,10 @@ function MappingTreeRow({
           </div>
         ) : null}
 
-        {!mergeGroupRailLabel ? (
         <div
-          className={`group/label-slot relative flex min-h-[28px] min-w-0 max-w-[min(14rem,36vw)] shrink-0 items-center gap-0 pl-0`}
+          className={`group/label-slot relative flex min-h-[28px] min-w-0 max-w-[min(20rem,52vw)] shrink-0 gap-0 pl-0 ${
+            variant === 'backend' && flatBackendRowLayout ? 'items-start' : 'items-center'
+          }`}
         >
           {variant === 'backend' && node.entry?.openapiDescriptionDrift ? (
             <span
@@ -851,7 +809,11 @@ function MappingTreeRow({
               ) : null}
             </div>
           )}
-          <div className="min-w-0 flex-1 flex items-baseline gap-1 overflow-hidden">
+          <div
+            className={`min-w-0 flex-1 flex items-baseline gap-1 ${
+              variant === 'backend' && !leafLabelEditable ? '' : 'overflow-hidden'
+            }`}
+          >
             <div className="min-w-0 flex-1">
             <LabelWithPencilEdit
               ref={labelEditRef}
@@ -873,12 +835,12 @@ function MappingTreeRow({
               inlinePencil={variant !== 'backend'}
               viewTitle={backendMappingViewTitle}
               segmentClassName={segmentToneClass}
+              readOnlyPreferWrap={variant === 'backend' && !leafLabelEditable}
             />
             </div>
             {collapsedParamCountSuffix}
           </div>
         </div>
-        ) : null}
 
         <div
           className="flex min-h-[28px] min-w-0 shrink-0 items-center gap-0 pl-0"

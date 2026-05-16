@@ -115,7 +115,10 @@ function ManualBackendAccordion({
   /** Altezza unica per tutti i controlli della barra accordion (URL, nome, pulsanti). */
   const barH = 'h-9 min-h-[2.25rem]';
   const inputShellBase = `${barH} box-border rounded border bg-slate-950 ${fieldPad} ${monoCls} outline-none transition-colors focus-visible:border-slate-500 focus-visible:ring-1 focus-visible:ring-slate-500/35`;
+  /** Campi a larghezza piena (emulate nome, textarea). Non usarlo per i chip in barra import: `w-full` forza un wrap su riga dedicata. */
   const inputShell = `${inputShellBase} w-full min-w-0`;
+  /** Nome interno in barra (sola lettura / preview): larghezza contenuta, stesso shell senza `w-full`. */
+  const inputShellBarReadonly = `${inputShellBase} w-[min(12rem,32vw)] max-w-[min(18rem,48vw)] shrink-0 cursor-default`;
 
   const editorTask = React.useMemo(() => {
     if (!expanded || !canShowParameterPanel) return null;
@@ -162,7 +165,7 @@ function ManualBackendAccordion({
     if (!el) return;
     el.style.height = 'auto';
     const cap = typeof window !== 'undefined' ? Math.floor(window.innerHeight * 0.42) : 360;
-    const h = Math.min(Math.max(el.scrollHeight, 72), cap);
+    const h = Math.min(Math.max(el.scrollHeight, 40), cap);
     el.style.height = `${h}px`;
   }, []);
 
@@ -364,12 +367,8 @@ function ManualBackendAccordion({
     return () => clearInterval(h);
   }, [entry.endpointUrl, entry.id, entry.method, onPatch]);
 
-  const descriptionFieldId = React.useId();
   const backendIdentifierDisplay =
     entry.label.trim() || deriveBackendLabelFromUrl(entry.endpointUrl.trim()) || entry.id;
-  const labelCls = wizardUi
-    ? 'mb-0.5 block text-xs font-semibold tracking-wide text-slate-300'
-    : 'mb-0.5 block text-xs font-semibold uppercase tracking-wide text-slate-500';
 
   const urlPlaceholder =
     creationMode === 'import' && !showIdentity
@@ -381,7 +380,7 @@ function ManualBackendAccordion({
   const chevronWrapCls = `flex ${barH} w-9 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-800`;
   const headerPadX = wizardUi ? 'px-3' : 'px-2';
   /** URL: larghezza legata al contenuto dove supportato (field-sizing). */
-  const urlSizing = '[field-sizing:content] w-max min-w-[8rem] max-w-full shrink';
+  const urlSizing = 'min-w-0 [field-sizing:content] w-max max-w-full shrink';
 
   return (
     <div
@@ -406,8 +405,9 @@ function ManualBackendAccordion({
           </button>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-0">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-              {creationMode === 'emulate' ? (
+          <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
+            {creationMode === 'emulate' ? (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <input
                   id={`${entry.id}-internal-name`}
                   ref={labelInputRef}
@@ -424,149 +424,6 @@ function ManualBackendAccordion({
                   title="Internal backend name (manual specs; no OpenAPI URL required)."
                   aria-label="Internal backend name"
                 />
-              ) : !showIdentity ? (
-                <>
-                  <input
-                    ref={urlInputRef}
-                    type="text"
-                    className={`${inputShellBase} min-w-0 flex-1 ${urlSizing} ${
-                      urlMarkedUnreachable
-                        ? 'border-red-700/70 text-red-400 placeholder:text-red-400/60'
-                        : 'border-slate-700 text-amber-100/95 placeholder:text-slate-600'
-                    }`}
-                    value={entry.endpointUrl}
-                    onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' || e.shiftKey) return;
-                      const u = entry.endpointUrl.trim();
-                      if (!u || readBusy) return;
-                      e.preventDefault();
-                      void runReadApiCollapsed();
-                    }}
-                    placeholder={urlPlaceholder}
-                    title={
-                      creationMode === 'import' && !showIdentity
-                        ? 'URL del documento OpenAPI o dell’API da importare. Invio: recupera specifiche e apre la firma.'
-                        : 'Endpoint of the backend service (editable). Turns red if «Recupera specifiche» cannot reach this URL; editing clears the warning.'
-                    }
-                    aria-label="Backend URL"
-                  />
-                  <input
-                    type="text"
-                    readOnly
-                    tabIndex={-1}
-                    className={`${inputShell} w-[min(12rem,32vw)] shrink-0 cursor-default border-slate-700 bg-slate-900/85 text-amber-100/90`}
-                    value={internalPreviewFromUrl}
-                    placeholder="—"
-                    aria-label="Internal name (preview until import)"
-                    title="Preview from URL; becomes fixed after a successful import."
-                  />
-                  <button
-                    type="button"
-                    disabled={readBusy || !entry.endpointUrl.trim()}
-                    onClick={() => void runReadApiCollapsed()}
-                    className={retrieveBtnCls}
-                    title="Scarica swagger e compila SEND/RECEIVE"
-                  >
-                    {readBusy ? (
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                    ) : (
-                      <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
-                    )}
-                    <span className="whitespace-nowrap">Recupera specifiche</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <input
-                    ref={urlInputRef}
-                    type="text"
-                    className={`${inputShellBase} min-w-0 flex-1 ${urlSizing} ${
-                      urlMarkedUnreachable
-                        ? 'border-red-700/70 text-red-400 placeholder:text-red-400/60'
-                        : 'border-slate-700 text-amber-100/95 placeholder:text-slate-600'
-                    }`}
-                    value={entry.endpointUrl}
-                    onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter' || e.shiftKey) return;
-                      const u = entry.endpointUrl.trim();
-                      if (!u || readBusy) return;
-                      e.preventDefault();
-                      void runReadApiCollapsed();
-                    }}
-                    placeholder={urlPlaceholder}
-                    title="Endpoint of the backend service (editable). Turns red if «Recupera specifiche» cannot reach this URL; editing clears the warning."
-                    aria-label="Backend URL"
-                  />
-                  <input
-                    type="text"
-                    readOnly
-                    tabIndex={-1}
-                    className={`${inputShell} w-[min(12rem,32vw)] shrink-0 cursor-default border-slate-600/70 bg-slate-900/80 text-amber-100/90`}
-                    value={backendIdentifierDisplay}
-                    aria-label="Internal backend name"
-                    title="Set after successful OpenAPI import"
-                  />
-                  {httpMethodOpenApiUi.locked ? (
-                    <span
-                      className={`inline-flex ${barH} shrink-0 items-center rounded border border-slate-700 bg-slate-900/90 px-2 font-semibold text-slate-200 ${fieldCls}`}
-                      title="Metodo HTTP definito dallo Swagger/OpenAPI"
-                    >
-                      {httpMethodOpenApiUi.display}
-                    </span>
-                  ) : (
-                    <select
-                      className={`${barH} shrink-0 rounded border border-slate-700 bg-slate-950 px-2 ${fieldCls} text-slate-200 outline-none focus-visible:ring-1 focus-visible:ring-slate-500/40`}
-                      value={normalizeMethod(entry.method) === 'POST' ? 'POST' : 'GET'}
-                      onChange={(e) => applyHeaderEndpoint(entry.endpointUrl, e.target.value)}
-                      title="Metodo HTTP"
-                      aria-label="HTTP method"
-                    >
-                      <option value="GET">GET</option>
-                      <option value="POST">POST</option>
-                    </select>
-                  )}
-                  <button
-                    type="button"
-                    disabled={readBusy || !entry.endpointUrl.trim()}
-                    onClick={() => void runReadApiCollapsed()}
-                    className={retrieveBtnCls}
-                    title="Aggiorna parametri da OpenAPI"
-                  >
-                    {readBusy ? (
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                    ) : (
-                      <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
-                    )}
-                    <span className="whitespace-nowrap">Recupera specifiche</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-      </div>
-
-      {expanded ? (
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          <div className={`flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden py-2 ${headerPadX}`}>
-            <div className="w-9 shrink-0" aria-hidden />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-                {convaiToolToggle ? (
-                  <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 text-xs text-slate-400">
-                    <input
-                      type="checkbox"
-                      className="mt-0"
-                      checked={convaiToolToggle.checked}
-                      onChange={(e) => convaiToolToggle.onChange(e.target.checked)}
-                      title="Includi come tool ConvAI (function calling) per questo agente"
-                    />
-                    <span>Tool</span>
-                  </label>
-                ) : (
-                  <span className="min-w-0 flex-1" aria-hidden />
-                )}
                 <button
                   type="button"
                   className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
@@ -577,19 +434,159 @@ function ManualBackendAccordion({
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
+            ) : null}
+            {creationMode === 'import' && !showIdentity ? (
+              <>
+                <input
+                  ref={urlInputRef}
+                  type="text"
+                  className={`${inputShellBase} min-w-0 shrink ${urlSizing} ${
+                    urlMarkedUnreachable
+                      ? 'border-red-700/70 text-red-400 placeholder:text-red-400/60'
+                      : 'border-slate-700 text-amber-100/95 placeholder:text-slate-600'
+                  }`}
+                  value={entry.endpointUrl}
+                  onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.shiftKey) return;
+                    const u = entry.endpointUrl.trim();
+                    if (!u || readBusy) return;
+                    e.preventDefault();
+                    void runReadApiCollapsed();
+                  }}
+                  placeholder={urlPlaceholder}
+                  title="URL del documento OpenAPI o dell’API da importare. Invio: recupera specifiche e apre la firma."
+                  aria-label="Backend URL"
+                />
+                <input
+                  type="text"
+                  readOnly
+                  tabIndex={-1}
+                  className={`${inputShellBarReadonly} border-slate-700 bg-slate-900/85 text-amber-100/90`}
+                  value={internalPreviewFromUrl}
+                  placeholder="—"
+                  aria-label="Internal name (preview until import)"
+                  title="Preview from URL; becomes fixed after a successful import."
+                />
+                <button
+                  type="button"
+                  disabled={readBusy || !entry.endpointUrl.trim()}
+                  onClick={() => void runReadApiCollapsed()}
+                  className={retrieveBtnCls}
+                  title="Scarica swagger e compila SEND/RECEIVE"
+                >
+                  {readBusy ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+                  )}
+                  <span className="whitespace-nowrap">Recupera specifiche</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
+                  title="Rimuovi backend dal catalogo"
+                  aria-label="Rimuovi backend"
+                  onClick={() => onRemove(entry.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+            {creationMode === 'import' && showIdentity ? (
+              <>
+                <input
+                  ref={urlInputRef}
+                  type="text"
+                  className={`${inputShellBase} min-w-0 shrink ${urlSizing} ${
+                    urlMarkedUnreachable
+                      ? 'border-red-700/70 text-red-400 placeholder:text-red-400/60'
+                      : 'border-slate-700 text-amber-100/95 placeholder:text-slate-600'
+                  }`}
+                  value={entry.endpointUrl}
+                  onChange={(e) => applyHeaderEndpoint(e.target.value, entry.method || 'GET')}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.shiftKey) return;
+                    const u = entry.endpointUrl.trim();
+                    if (!u || readBusy) return;
+                    e.preventDefault();
+                    void runReadApiCollapsed();
+                  }}
+                  placeholder={urlPlaceholder}
+                  title="Endpoint of the backend service (editable). Turns red if «Recupera specifiche» cannot reach this URL; editing clears the warning."
+                  aria-label="Backend URL"
+                />
+                <input
+                  type="text"
+                  readOnly
+                  tabIndex={-1}
+                  className={`${inputShellBarReadonly} border-slate-600/70 bg-slate-900/80 text-amber-100/90`}
+                  value={backendIdentifierDisplay}
+                  aria-label="Internal backend name"
+                  title="Set after successful OpenAPI import"
+                />
+                {httpMethodOpenApiUi.locked ? (
+                  <span
+                    className={`inline-flex ${barH} shrink-0 items-center rounded border border-slate-700 bg-slate-900/90 px-2 font-semibold text-slate-200 ${fieldCls}`}
+                    title="Metodo HTTP definito dallo Swagger/OpenAPI"
+                  >
+                    {httpMethodOpenApiUi.display}
+                  </span>
+                ) : (
+                  <select
+                    className={`${barH} shrink-0 rounded border border-slate-700 bg-slate-950 px-2 ${fieldCls} text-slate-200 outline-none focus-visible:ring-1 focus-visible:ring-slate-500/40`}
+                    value={normalizeMethod(entry.method) === 'POST' ? 'POST' : 'GET'}
+                    onChange={(e) => applyHeaderEndpoint(entry.endpointUrl, e.target.value)}
+                    title="Metodo HTTP"
+                    aria-label="HTTP method"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                  </select>
+                )}
+                <button
+                  type="button"
+                  disabled={readBusy || !entry.endpointUrl.trim()}
+                  onClick={() => void runReadApiCollapsed()}
+                  className={retrieveBtnCls}
+                  title="Aggiorna parametri da OpenAPI"
+                >
+                  {readBusy ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  ) : (
+                    <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+                  )}
+                  <span className="whitespace-nowrap">Recupera specifiche</span>
+                </button>
+                <button
+                  type="button"
+                  className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
+                  title="Rimuovi backend dal catalogo"
+                  aria-label="Rimuovi backend"
+                  onClick={() => onRemove(entry.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+          </div>
+          </div>
+      </div>
 
+      {expanded ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className={`flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden pt-0 pb-2 ${headerPadX}`}>
+            <div className="w-9 shrink-0" aria-hidden />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
               {showIdentity ? (
-                <div className="min-w-0 shrink-0 border-b border-slate-800/60 pb-2">
-                  <label htmlFor={descriptionFieldId} className={labelCls}>
-                    Description
-                  </label>
+                <div className="min-w-0 shrink-0">
                   <textarea
-                    id={descriptionFieldId}
                     ref={descriptionTextareaRef}
-                    rows={3}
+                    rows={1}
                     spellCheck
                     wrap="soft"
-                    className={`box-border w-full min-h-[4.5rem] max-h-[42vh] resize-y overflow-y-auto border-0 bg-transparent px-0 py-1 ${fieldCls} whitespace-pre-wrap break-words text-slate-100 shadow-none outline-none ring-0 transition-[height] duration-75 ease-out placeholder:text-slate-600 focus:ring-0 focus-visible:ring-0`}
+                    aria-label="Descrizione backend (ConvAI / tool)"
+                    className={`box-border w-full min-h-0 max-h-[42vh] resize-y overflow-y-auto border-0 bg-transparent px-0 py-0 ${fieldCls} whitespace-pre-wrap break-words text-slate-100 shadow-none outline-none ring-0 transition-[height] duration-75 ease-out placeholder:text-slate-600 focus:ring-0 focus-visible:ring-0`}
                     value={headerToolDescription}
                     onChange={(e) => {
                       applyHeaderToolDescription(e.target.value);
@@ -598,6 +595,21 @@ function ManualBackendAccordion({
                     placeholder="Descrizione del backend (ConvAI / tool)…"
                     title="Editable description of the backend; expands automatically when text grows."
                   />
+                </div>
+              ) : null}
+
+              {convaiToolToggle ? (
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      className="mt-0"
+                      checked={convaiToolToggle.checked}
+                      onChange={(e) => convaiToolToggle.onChange(e.target.checked)}
+                      title="Includi come tool ConvAI (function calling) per questo agente"
+                    />
+                    <span>Tool</span>
+                  </label>
                 </div>
               ) : null}
 

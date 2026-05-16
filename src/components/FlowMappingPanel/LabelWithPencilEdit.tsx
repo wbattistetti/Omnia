@@ -24,6 +24,11 @@ export interface LabelWithPencilEditProps {
   viewTitle?: string;
   /** Classi aggiuntive sul label in sola lettura (es. corsivo per param opzionale). */
   segmentClassName?: string;
+  /**
+   * Sollettura senza rename: mostra il testo su più righe (no ellissi). Utile per gruppi backend
+   * nella colonna nome con larghezza limitata.
+   */
+  readOnlyPreferWrap?: boolean;
   /** Fired when inline rename mode starts or ends (e.g. to hide sibling toolbars). */
   onEditingChange?: (editing: boolean) => void;
 }
@@ -42,6 +47,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
       inlinePencil = true,
       viewTitle,
       segmentClassName,
+      readOnlyPreferWrap = false,
       onEditingChange,
     },
     ref
@@ -157,7 +163,11 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
     if (!editable) {
       return (
         <span
-          className={`inline-flex max-w-full min-h-[1.25em] items-center truncate text-[11px] font-medium text-slate-100 ${segmentClassName || ''}`}
+          className={
+            readOnlyPreferWrap
+              ? `block max-w-full min-h-[1.25em] whitespace-pre-wrap break-words text-left text-[11px] font-medium text-slate-100 ${segmentClassName || ''}`
+              : `inline-flex max-w-full min-h-[1.25em] items-center truncate text-[11px] font-medium text-slate-100 ${segmentClassName || ''}`
+          }
           title={viewTitle ?? viewLabel}
         >
           {viewLabel}
