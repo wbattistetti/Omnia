@@ -74,6 +74,7 @@ function ManualBackendAccordion({
   onAutoFetchConsumed,
   creationMode,
   wizardUi,
+  fillAvailableHeight = false,
   focusName,
   onNameFocused,
 }: {
@@ -95,6 +96,11 @@ function ManualBackendAccordion({
   creationMode: ManualBackendCreationMode;
   /** Wizard passo Backend: tipografia più leggibile (text-sm). */
   wizardUi?: boolean;
+  /**
+   * Wizard con un solo backend espanso: l’accordion riempie il main del passo;
+   * scroll solo in SEND/RECEIVE (non sulla lista catalogo).
+   */
+  fillAvailableHeight?: boolean;
   focusName?: boolean;
   onNameFocused?: () => void;
 }) {
@@ -382,13 +388,18 @@ function ManualBackendAccordion({
   /** URL: larghezza legata al contenuto dove supportato (field-sizing). */
   const urlSizing = 'min-w-0 [field-sizing:content] w-max max-w-full shrink';
 
-  return (
-    <div
-      className={`grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border border-slate-700/55 bg-slate-950/35 ${
+  const accordionFrame =
+    'overflow-hidden rounded-lg border border-slate-700/55 bg-slate-950/35';
+  const accordionRootClass = fillAvailableHeight
+    ? expanded
+      ? `flex min-h-0 flex-1 flex-col ${accordionFrame}`
+      : `shrink-0 ${accordionFrame}`
+    : `grid min-h-0 grid-cols-1 ${accordionFrame} ${
         expanded ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[auto_minmax(0,0fr)]'
-      }`}
-      data-convai-tool-backend-id={entry.id}
-    >
+      }`;
+
+  return (
+    <div className={accordionRootClass} data-convai-tool-backend-id={entry.id}>
       {/* Header: solo chevron + nome + URL + metodo/Recupera (una riga visibile anche da collassato). */}
       <div
         className={`flex shrink-0 items-stretch gap-2 border-b border-slate-800/65 bg-slate-950/50 py-2 ${headerPadX}`}
@@ -614,7 +625,13 @@ function ManualBackendAccordion({
               ) : null}
 
               {editorTask ? (
-                <div className="flex h-[min(88dvh,920px)] min-h-[240px] flex-1 flex-col overflow-hidden">
+                <div
+                  className={
+                    fillAvailableHeight
+                      ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+                      : 'flex h-[min(88dvh,920px)] min-h-[240px] flex-1 flex-col overflow-hidden'
+                  }
+                >
                   <EmbeddedBackendCallEditor
                     key={editorTask.id}
                     task={editorTask}
@@ -779,6 +796,15 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   const [focusNameEntryId, setFocusNameEntryId] = React.useState<string | null>(null);
   const wizardUi = Boolean(dockCtx?.hideBackendsPanelInlineAddButton);
 
+  const expandedManualIds = React.useMemo(
+    () => manualEntries.filter((e) => expandedIds.has(e.id)).map((e) => e.id),
+    [manualEntries, expandedIds]
+  );
+  const soleExpandedManualId =
+    expandedManualIds.length === 1 ? expandedManualIds[0]! : null;
+  /** Wizard: un solo backend espanso → riempie il viewport del passo; scroll solo nei tree SEND/RECEIVE. */
+  const wizardFillViewport = wizardUi && soleExpandedManualId !== null;
+
   const addManualBackend = React.useCallback(
     (mode: ManualBackendCreationMode) => {
     const id = generateSafeGuid();
@@ -940,7 +966,11 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
         </div>
       ) : null}
       <div
-        className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5"
+        className={
+          wizardFillViewport
+            ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
+            : 'flex-1 min-h-0 space-y-2 overflow-y-auto pr-0.5'
+        }
         data-ia-runtime-focus="tools"
       >
         {elevenLabsBackendToolsVisible && convaiBackendToolsDiscoveryContext ? (
@@ -978,6 +1008,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
                 projectData={data}
                 creationMode={e.creationMode ?? 'import'}
                 wizardUi={wizardUi}
+                fillAvailableHeight={wizardFillViewport && soleExpandedManualId === e.id}
                 focusName={focusNameEntryId === e.id}
                 onNameFocused={() => setFocusNameEntryId(null)}
                 onToggle={() => toggleExpanded(e.id)}

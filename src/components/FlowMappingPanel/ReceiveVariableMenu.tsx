@@ -24,6 +24,7 @@ export interface ReceiveVariableMenuProps {
   onCommit: (patch: EditorParamCommitPatch) => void;
   onCreateVariable?: (displayName: string) => { id: string; label: string } | null;
   onVariableCreated?: () => void;
+  compactTypography?: boolean;
 }
 
 export function ReceiveVariableMenu({
@@ -34,7 +35,9 @@ export function ReceiveVariableMenu({
   onCommit,
   onCreateVariable,
   onVariableCreated,
+  compactTypography = false,
 }: ReceiveVariableMenuProps) {
+  const textSm = compactTypography ? 'text-xs' : 'text-[10px]';
   const flowTr = useActiveFlowMetaTranslationsFlattened();
   const mergedTr = useMemo(
     () => ({ ...getProjectTranslationsTable(), ...flowTr }),
@@ -197,7 +200,7 @@ export function ReceiveVariableMenu({
           type="button"
           aria-haspopup="dialog"
           aria-expanded={false}
-          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 text-[10px] font-medium h-7 min-h-7 leading-7 border border-transparent hover:border-amber-500/25 ${
+          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 ${textSm} font-medium h-6 min-h-6 leading-6 border border-transparent hover:border-amber-500/25 ${
             showEmpty ? emptyClass : accentClassName
           }`}
           onClick={() => {

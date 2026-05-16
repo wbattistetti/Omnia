@@ -1,5 +1,6 @@
 /**
  * Lightweight collapsible block for unified Interface / flow side panels.
+ * Supporta modalità controllata (`open` / `onOpenChange`) e header personalizzabile.
  */
 
 import React, { useState } from 'react';
@@ -19,37 +20,63 @@ const HEADER_TONE: Record<
 export function CollapsiblePanelSection({
   title,
   defaultOpen = true,
+  open: openProp,
+  onOpenChange,
   className = '',
   headerClassName = '',
   /** Sfondo header a bassa saturazione (solo riga titolo). */
   headerTone,
   /** Applied to the open content wrapper (default keeps nested flex layouts scroll-safe). */
   contentClassName = 'overflow-hidden',
+  /** When false, nasconde il chevron di disclosure (header resta cliccabile). */
+  showDisclosure,
+  /** Override tipografia default del titolo (uppercase compatto). */
+  headerTitleClassName,
+  /** Header più basso e chevron più piccolo (mapping backend radice). */
+  compact = false,
   children,
 }: {
   title: React.ReactNode;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   className?: string;
   headerClassName?: string;
   headerTone?: keyof typeof HEADER_TONE;
   contentClassName?: string;
+  showDisclosure?: boolean;
+  headerTitleClassName?: string;
+  compact?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const controlled = openProp !== undefined;
+  const open = controlled ? Boolean(openProp) : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const toneCls = headerTone ? HEADER_TONE[headerTone] : 'border-b border-slate-700/40 bg-slate-800/35 hover:bg-slate-800/55';
+  const titleTypography =
+    headerTitleClassName ??
+    'text-[11px] font-semibold uppercase tracking-wide text-slate-100 whitespace-normal break-words';
+  const showChevron = showDisclosure !== false;
+  const headerPad = compact ? 'gap-1 px-1.5 py-0.5' : 'gap-2 px-2 py-1.5';
+  const chevronCls = compact
+    ? `h-3 w-3 shrink-0 text-slate-400 transition-transform ${open ? '' : '-rotate-90'}`
+    : `h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? '' : '-rotate-90'}`;
   return (
     <div className={`flex min-h-0 min-w-0 flex-col rounded-lg border border-slate-700/55 bg-[#080a0d]/90 ${className}`}>
       <button
         type="button"
-        className={`flex w-full shrink-0 items-center gap-2 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-100 ${toneCls} ${headerClassName}`}
-        onClick={() => setOpen((v) => !v)}
+        className={`flex w-full shrink-0 items-center justify-start text-left ${headerPad} ${titleTypography} ${toneCls} ${headerClassName}`}
+        onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? '' : '-rotate-90'}`}
-          aria-hidden
-        />
-        {title}
+        {showChevron ? (
+          <ChevronDown className={chevronCls} aria-hidden />
+        ) : null}
+        <span className="min-w-0 shrink text-left break-words">{title}</span>
       </button>
       {open ? (
         <div className={`min-h-0 min-w-0 flex-1 flex flex-col ${contentClassName}`}>{children}</div>

@@ -1,9 +1,7 @@
 /**
- * Mapping tree: dot paths, folder vs variable icon, SEND/RECEIVE style columns.
- * Backend flat: gruppi usano la stessa griglia chevron | freccia | etichetta delle foglie (caption leggibile, wrap);
- * indentazione uniforme per i figli.
- * Backend: toolbar sopra il nome interno in hover sulla colonna label (overlap, senza pt extra).
- * Backend: drag “Parameter” from block header, drop on rows with insertion preview line.
+ * Mapping tree: dot paths, folder vs variable icon.
+ * Backend SEND/RECEIVE: `BackendMappingTree` (react-arborist + trie wireKey).
+ * Interface: ricorsione `MappingTreeRow` con drag variabili / reorder.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -60,6 +58,9 @@ import {
 import { unwrapSessionTreeWireKey } from './bookFromAgendaSessionTree';
 import { BackendMappingDominioValoriPanel } from './backendMappingDominioValori';
 import { backendDominioValoriLabelInsetPx } from './backendMappingDominioValoriLayout';
+import { BackendMappingTree } from './BackendMappingTree';
+import type { BackendSendAdvancementApi } from './backendMappingTreeTypes';
+export type { BackendSendAdvancementApi } from './backendMappingTreeTypes';
 
 const DND_TYPE = 'application/x-omnia-varlabel';
 
@@ -113,7 +114,7 @@ const BACKEND_FLAT_DEPTH_INDENT_PX = ROW_DEPTH_INDENT_PX;
  */
 const ROW_ICON_LINE_OFFSET_PX = 24;
 /** Larghezza cella chevron nel rail backend (griglia fissa, senza indent per profondità). */
-const TREE_RAIL_CHEVRON_CELL_PX = 26;
+const TREE_RAIL_CHEVRON_CELL_PX = 22;
 
 type DropPreviewTone = 'amber' | 'teal' | 'emerald';
 
@@ -203,13 +204,6 @@ export interface FlowMappingTreeProps {
   embeddedSignatureSubToolbarOpen?: boolean;
 }
 
-/** Checkbox + editor DSL inline sulla riga SEND (Backend Call). */
-export type BackendSendAdvancementApi = {
-  isEnabled: (wireKey: string) => boolean;
-  onToggle: (wireKey: string, next: boolean) => void;
-  renderEditor: (wireKey: string) => React.ReactNode;
-};
-
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
   return entries.map((e) => {
     if (e.id !== id) return e;
@@ -275,6 +269,8 @@ interface RowProps {
   /** Larghezza binario ad albero (px); usata solo con `flatTreeGrid`. */
   treeRailWidthPx?: number;
   embeddedSignatureSubToolbarOpen?: boolean;
+  /** Backend: layout albero compatto (indent + slot fissi, senza rail w-14). */
+  backendCleanTree?: boolean;
 }
 
 function MappingTreeRow({
@@ -315,6 +311,7 @@ function MappingTreeRow({
   flatTreeGrid,
   treeRailWidthPx,
   embeddedSignatureSubToolbarOpen,
+  backendCleanTree: backendCleanTreeProp = false,
 }: RowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const labelEditRef = useRef<LabelWithPencilEditHandle>(null);
@@ -332,18 +329,29 @@ function MappingTreeRow({
   /** Interface: single variable name in tree; no separate alias column. */
   const leafLabelEditable = canRenameLabel && variant !== 'interface';
 
+  const backendCleanTree = variant === 'backend' && backendCleanTreeProp;
   const flatBackendRowLayout = Boolean(
-    flatTreeGrid && typeof treeRailWidthPx === 'number' && treeRailWidthPx > 0
+    !backendCleanTree && flatTreeGrid && typeof treeRailWidthPx === 'number' && treeRailWidthPx > 0
   );
-  /** Backend flat: linee drop seguono indent per profondità + offset colonna icone. */
+  /** Righe SEND/RECEIVE più basse e icone più piccole (densità tipo inspector). */
+  const backendDense = variant === 'backend';
+  const rowMinH = backendDense ? 'min-h-[22px]' : 'min-h-[28px]';
+  const cellH = backendDense ? 'h-6' : 'h-7';
+  const cellMinH = backendDense ? 'min-h-[22px]' : 'min-h-7';
+  const iconSm = backendDense ? 'w-3 h-3' : 'w-3.5 h-3.5';
+  /** Linee drop: offset allineato al gutter riga. */
   const dropLineIndentSibling = (d: number) =>
-    flatBackendRowLayout
-      ? d * BACKEND_FLAT_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX
-      : siblingDropLineIndentPx(d);
+    backendCleanTree
+      ? backendTreeDepthIndentPx(d) + Math.floor(BACKEND_TREE_CHEVRON_SLOT_PX / 2)
+      : flatBackendRowLayout
+        ? d * BACKEND_FLAT_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX
+        : siblingDropLineIndentPx(d);
   const dropLineIndentChild = (d: number) =>
-    flatBackendRowLayout
-      ? (d + 1) * BACKEND_FLAT_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX
-      : childDropLineIndentPx(d);
+    backendCleanTree
+      ? backendTreeDepthIndentPx(d + 1) + Math.floor(BACKEND_TREE_CHEVRON_SLOT_PX / 2)
+      : flatBackendRowLayout
+        ? (d + 1) * BACKEND_FLAT_DEPTH_INDENT_PX + ROW_ICON_LINE_OFFSET_PX
+        : childDropLineIndentPx(d);
 
   const backendFlatDepthPaddingPx = flatBackendRowLayout ? depth * BACKEND_FLAT_DEPTH_INDENT_PX : 0;
 
@@ -599,28 +607,39 @@ function MappingTreeRow({
 
   const dominioValoriAlignPx =
     variant === 'backend' && node.entry && !isGroupOnly
-      ? backendDominioValoriLabelInsetPx({
-          showAdvancementUi,
-          hasOpenApiDrift: Boolean(node.entry.openapiDescriptionDrift),
-          treeRailWidthPx: flatBackendRowLayout ? treeRailWidthPx : undefined,
-          treeDepthIndentPx: flatBackendRowLayout ? backendFlatDepthPaddingPx : undefined,
-        })
+      ? backendCleanTree
+        ? backendDominioValoriCleanTreeInsetPx({
+            depth,
+            showAdvancementUi,
+            hasOpenApiDrift: Boolean(node.entry.openapiDescriptionDrift),
+          })
+        : backendDominioValoriLabelInsetPx({
+            showAdvancementUi,
+            hasOpenApiDrift: Boolean(node.entry.openapiDescriptionDrift),
+            treeRailWidthPx: flatBackendRowLayout ? treeRailWidthPx : undefined,
+            treeDepthIndentPx: flatBackendRowLayout ? backendFlatDepthPaddingPx : undefined,
+          })
       : 0;
 
-  const depthLegacyGutter =
-    !flatBackendRowLayout && depth > 0 ? 'ml-2 border-l border-slate-700/40 pl-2' : '';
+  const depthLegacyGutter = backendCleanTree
+    ? depth > 0
+      ? 'ml-1 border-l border-slate-700/40 pl-1'
+      : ''
+    : !flatBackendRowLayout && depth > 0
+      ? 'ml-2 border-l border-slate-700/40 pl-2'
+      : '';
 
   const chevronControl = hasChildren ? (
     <button
       type="button"
-      className="rounded p-0.5 text-slate-400 hover:text-slate-200"
+      className={`rounded ${backendDense ? 'p-px' : 'p-0.5'} text-slate-400 hover:text-slate-200`}
       aria-expanded={isExpanded}
       onClick={() => toggleCollapsed(node.pathKey)}
     >
-      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+      {isExpanded ? <ChevronDown className={iconSm} /> : <ChevronRight className={iconSm} />}
     </button>
   ) : (
-    <span className="inline-block w-4 shrink-0" aria-hidden />
+    <span className={`inline-block ${backendDense ? 'w-3.5' : 'w-4'} shrink-0`} aria-hidden />
   );
 
   return (
@@ -656,29 +675,73 @@ function MappingTreeRow({
           onDragEnd={() => {
             reorderDragSourceIdRef.current = null;
           }}
-          className={`group/row flex ${rowAlignClass} gap-0 min-h-[28px] rounded-md px-0.5 py-px -mx-0.5 hover:bg-slate-800/35 ${
-            variant === 'backend' && flatBackendRowLayout ? 'items-start' : ''
+          className={`group/row flex ${rowAlignClass} gap-1 ${rowMinH} rounded-md py-0 pr-0.5 -mx-0.5 hover:bg-slate-800/35 ${
+            backendCleanTree
+              ? ''
+              : variant === 'backend' && flatBackendRowLayout
+                ? 'items-start gap-0'
+                : ''
           } ${
             enableRowReorder && node.entry ? 'cursor-grab active:cursor-grabbing' : ''
           }`}
           style={
-            backendFlatDepthPaddingPx > 0
-              ? { paddingLeft: backendFlatDepthPaddingPx }
-              : undefined
+            backendCleanTree
+              ? { paddingLeft: backendTreeDepthIndentPx(depth) }
+              : backendFlatDepthPaddingPx > 0
+                ? { paddingLeft: backendFlatDepthPaddingPx }
+                : undefined
           }
           onDragOver={combinedRowDragOver}
           onDragOverCapture={combinedRowDragOver}
           onDrop={combinedRowDrop}
         >
-        {flatBackendRowLayout && treeRailWidthPx != null ? (
+        {backendCleanTree ? (
+          <>
+            <div
+              className={`flex shrink-0 items-center justify-center ${cellMinH}`}
+              style={{ width: BACKEND_TREE_CHEVRON_SLOT_PX }}
+            >
+              {chevronControl}
+            </div>
+            {!isGroupOnly ? (
+              <div
+                className={`flex shrink-0 items-center justify-center ${cellH}`}
+                style={{ width: BACKEND_TREE_ARROW_SLOT_PX }}
+                title={
+                  variant === 'backend' && backendColumn === 'send'
+                    ? sendArrowTitle(sendGlyphKind)
+                    : variant === 'backend' && backendColumn === 'receive'
+                      ? receiveOptional
+                        ? 'Parametro in ingresso (da API). Opzionale.'
+                        : 'Parametro in ingresso (da API). Obbligatorio.'
+                      : 'Parametro'
+                }
+              >
+                {variant === 'backend' && backendColumn === 'send' ? (
+                  <BackendSendArrowIcon
+                    kind={sendGlyphKind}
+                    title={sendArrowTitle(sendGlyphKind)}
+                    compact
+                  />
+                ) : variant === 'backend' && backendColumn === 'receive' ? (
+                  <BackendReceiveArrowIcon optional={receiveOptional} compact />
+                ) : (
+                  <Brackets className={iconSm} strokeWidth={2} aria-hidden />
+                )}
+              </div>
+            ) : null}
+          </>
+        ) : flatBackendRowLayout && treeRailWidthPx != null ? (
           <div
             className="flex shrink-0 items-stretch border-r border-slate-800/20 bg-slate-950/20"
             style={{ width: treeRailWidthPx }}
           >
             <div
-              className={`flex min-h-7 min-w-0 flex-1 justify-start pl-0 ${
+              className={`flex ${cellMinH} min-w-0 flex-1 justify-start pl-0 ${
                 variant === 'backend' && isGroupOnly && flatBackendRowLayout
-                  ? 'items-start pt-0.5'
+                  ? backendDense
+                    ? 'items-start pt-px'
+                    : 'items-start pt-0.5'
                   : 'items-center'
               }`}
             >
@@ -686,15 +749,12 @@ function MappingTreeRow({
             </div>
           </div>
         ) : (
-          <div className="flex h-7 min-w-[1rem] shrink-0 items-center justify-start gap-0.5">{chevronControl}</div>
+          <div className={`flex ${cellH} ${cellMinH} min-w-[1rem] shrink-0 items-center justify-start gap-0.5`}>{chevronControl}</div>
         )}
 
+        {!backendCleanTree && (variant !== 'backend' || !isGroupOnly) ? (
         <div
-          className={`flex h-7 w-14 shrink-0 justify-end pr-0 ${
-            variant === 'backend' && flatBackendRowLayout && isGroupOnly
-              ? 'self-start pt-0.5'
-              : 'items-center'
-          }`}
+          className={`flex ${cellH} w-14 shrink-0 items-center justify-center pr-0`}
           title={
             isGroupOnly
               ? node.segment === 'Session'
@@ -710,27 +770,28 @@ function MappingTreeRow({
           }
         >
           {isGroupOnly ? (
-            <span className="inline-block h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className={`inline-block ${iconSm} shrink-0`} aria-hidden />
           ) : variant === 'interface' ? (
-            <span className="inline-block h-3.5 w-3.5" aria-hidden />
+            <span className={`inline-block ${iconSm}`} aria-hidden />
           ) : variant === 'backend' && backendColumn === 'send' ? (
             <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} />
           ) : variant === 'backend' && backendColumn === 'receive' ? (
             <BackendReceiveArrowIcon optional={receiveOptional} />
           ) : (
-            <Brackets className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            <Brackets className={iconSm} strokeWidth={2} aria-hidden />
           )}
         </div>
+        ) : null}
 
         {showAdvancementUi ? (
           <div
-            className="flex h-7 shrink-0 items-center"
+            className={`flex ${cellH} shrink-0 items-center`}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
             <input
               type="checkbox"
-              className="h-3.5 w-3.5 cursor-pointer rounded border-slate-500 bg-slate-900 text-teal-500 focus:ring-teal-500/40"
+              className={`${backendDense ? 'h-3 w-3' : 'h-3.5 w-3.5'} cursor-pointer rounded border-slate-500 bg-slate-900 text-teal-500 focus:ring-teal-500/40`}
               checked={backendSendAdvancement!.isEnabled(advancementWireKey)}
               onChange={(e) => backendSendAdvancement!.onToggle(advancementWireKey, e.target.checked)}
               title="Avanzamento tra batch"
@@ -740,8 +801,10 @@ function MappingTreeRow({
         ) : null}
 
         <div
-          className={`group/label-slot relative flex min-h-[28px] min-w-0 max-w-[min(20rem,52vw)] shrink-0 gap-0 pl-0 ${
-            variant === 'backend' && flatBackendRowLayout ? 'items-start' : 'items-center'
+          className={`group/label-slot relative flex ${rowMinH} min-w-0 shrink-0 gap-0 pl-0 ${
+            backendCleanTree ? 'max-w-none flex-1' : 'max-w-[min(20rem,52vw)]'
+          } ${
+            variant === 'backend' && flatBackendRowLayout && !backendCleanTree ? 'items-start' : 'items-center'
           }`}
         >
           {variant === 'backend' && node.entry?.openapiDescriptionDrift ? (
@@ -753,7 +816,7 @@ function MappingTreeRow({
                   : 'Descrizione salvata diversa da OpenAPI'
               }
             >
-              <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2} aria-hidden />
+              <AlertTriangle className={iconSm} strokeWidth={2} aria-hidden />
             </span>
           ) : null}
           {variant === 'backend' && node.entry && !isGroupOnly && (
@@ -767,7 +830,7 @@ function MappingTreeRow({
                 aria-label="Modifica nome interno"
                 onClick={() => labelEditRef.current?.startEditing()}
               >
-                <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                <Pencil className={iconSm} strokeWidth={2} />
               </button>
               <button
                 type="button"
@@ -776,7 +839,7 @@ function MappingTreeRow({
                 aria-label="Rimuovi parametro"
                 onClick={handleRemove}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className={iconSm} strokeWidth={2} />
               </button>
               <button
                 type="button"
@@ -785,7 +848,7 @@ function MappingTreeRow({
                 aria-label="Descrizione campo"
                 onClick={() => setRowExtra((x) => (x === 'notes' ? 'none' : 'notes'))}
               >
-                <StickyNote className="w-3.5 h-3.5" strokeWidth={2} />
+                <StickyNote className={iconSm} strokeWidth={2} />
               </button>
               <button
                 type="button"
@@ -794,7 +857,7 @@ function MappingTreeRow({
                 aria-label="Dominio valori"
                 onClick={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
               >
-                <Table2 className="w-3.5 h-3.5" strokeWidth={2} />
+                <Table2 className={iconSm} strokeWidth={2} />
               </button>
               {backendColumn === 'send' ? (
                 <button
@@ -804,13 +867,15 @@ function MappingTreeRow({
                   aria-label="Parameter constraint"
                   onClick={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
                 >
-                  <Settings2 className="w-3.5 h-3.5" strokeWidth={2} />
+                  <Settings2 className={iconSm} strokeWidth={2} />
                 </button>
               ) : null}
             </div>
           )}
           <div
-            className={`min-w-0 flex-1 flex items-baseline gap-1 ${
+            className={`min-w-0 flex-1 flex ${
+              variant === 'backend' ? 'items-center gap-0.5' : 'items-baseline gap-1'
+            } ${
               variant === 'backend' && !leafLabelEditable ? '' : 'overflow-hidden'
             }`}
           >
@@ -842,8 +907,8 @@ function MappingTreeRow({
           </div>
         </div>
 
-        <div
-          className="flex min-h-[28px] min-w-0 shrink-0 items-center gap-0 pl-0"
+          <div
+            className={`flex ${rowMinH} min-w-0 shrink-0 items-center gap-0 pl-0`}
           {...(variant === 'backend' && ephemeralNew ? ({ inert: true } as React.HTMLAttributes<HTMLDivElement>) : {})}
         >
           <MappingRowFields
@@ -1044,7 +1109,7 @@ function MappingTreeRow({
       </div>
 
       {hasChildren && isExpanded && (
-        <div className="flex flex-col gap-px">
+        <div className={backendDense ? 'flex flex-col gap-0' : 'flex flex-col gap-px'}>
           {showChildLine && <DropPreviewLine indentPx={dropLineIndentChild(depth)} />}
           {node.children.map((ch) => (
             <MappingTreeRow
@@ -1085,6 +1150,7 @@ function MappingTreeRow({
               backendSendAdvancement={backendSendAdvancement}
               flatTreeGrid={flatTreeGrid}
               treeRailWidthPx={treeRailWidthPx}
+              backendCleanTree={backendCleanTreeProp}
               embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
             />
           ))}
@@ -1101,7 +1167,7 @@ function MappingTreeRow({
   );
 }
 
-export function FlowMappingTree({
+function BackendMappingTreeView({
   variant,
   entries,
   onEntriesChange,
@@ -1125,8 +1191,59 @@ export function FlowMappingTree({
   backendSendAdvancement,
   embeddedSignatureSubToolbarOpen,
 }: FlowMappingTreeProps) {
+  return (
+    <div
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+    >
+      <datalist id={`${listIdPrefix}-api`}>
+        {apiOptions.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+      <datalist id={`${listIdPrefix}-var`}>
+        {variableOptions.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+      <BackendMappingTree
+        entries={entries}
+        onEntriesChange={onEntriesChange}
+        listIdPrefix={listIdPrefix}
+        enableBackendParamDrop={enableBackendParamDrop}
+        showApiFields={showApiFields}
+        projectId={projectId}
+        flowCanvasId={flowCanvasId}
+        siblingOrder={siblingOrder}
+        backendColumn={backendColumn}
+        onCreateOutputVariable={onCreateOutputVariable}
+        onOutputVariableCreated={onOutputVariableCreated}
+        backendKnownVariableIds={backendKnownVariableIds}
+        backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+        backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
+        backendSendAdvancement={backendSendAdvancement}
+        embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+        variableOptions={variableOptions}
+      />
+    </div>
+  );
+}
+
+function InterfaceMappingTree({
+  variant,
+  entries,
+  onEntriesChange,
+  apiOptions,
+  variableOptions,
+  listIdPrefix,
+  showDropZone,
+  onDropVariable,
+  projectId,
+  flowCanvasId,
+  interfaceZone,
+  siblingOrder = 'construction',
+}: FlowMappingTreeProps) {
   const workspaceState = useFlowWorkspaceOptional();
-  const workspaceFlows = variant === 'interface' ? workspaceState?.flows : undefined;
+  const workspaceFlows = workspaceState?.flows;
 
   const tree = useMemo(
     () => buildMappingTree(entries, { siblingOrder }),
@@ -1140,6 +1257,8 @@ export function FlowMappingTree({
 
   const flatTreeGrid = variant === 'backend';
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /** Backend accordion: radici chiuse dall’utente (pathKey radice = primo segmento). */
+  const [closedRootAccordions, setClosedRootAccordions] = useState<Set<string>>(() => new Set());
   const [dropIndicator, setDropIndicator] = useState<DropIndicatorState>(null);
   const [rootEdgeDrop, setRootEdgeDrop] = useState<'top' | 'bottom' | null>(null);
   const [pendingLabelEditId, setPendingLabelEditId] = useState<string | null>(null);
@@ -1195,6 +1314,21 @@ export function FlowMappingTree({
     });
   }, []);
 
+  /** Apre l’accordion della radice interessata da un nuovo wireKey (primo segmento). */
+  const openRootAccordionForWireKey = useCallback((wireKey: string) => {
+    const parts = wireKey
+      .split('.')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (parts.length === 0) return;
+    const rootKey = parts[0]!;
+    setClosedRootAccordions((prev) => {
+      const next = new Set(prev);
+      next.delete(rootKey);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const clear = () => {
       setDropIndicator(null);
@@ -1219,12 +1353,13 @@ export function FlowMappingTree({
     (pos: ParamDropPosition) => {
       const { next, newEntry } = insertNewBackendParameter(entries, pos, { siblingOrder });
       setCollapsed((prev) => expandAncestorsOfPath(prev, newEntry.wireKey));
+      openRootAccordionForWireKey(newEntry.wireKey);
       setPendingLabelEditId(newEntry.id);
       setDropIndicator(null);
       setRootEdgeDrop(null);
       onEntriesChange(next);
     },
-    [entries, onEntriesChange, siblingOrder]
+    [entries, onEntriesChange, openRootAccordionForWireKey, siblingOrder]
   );
 
   /** Backend: variabile da riga flow / menù subflow (DND_FLOWROW_VAR). */
@@ -1247,11 +1382,12 @@ export function FlowMappingTree({
       if (!result) return;
       onEntriesChange(result.merged);
       setCollapsed((prev) => expandAncestorsOfPath(prev, result.newEntry.wireKey));
+      openRootAccordionForWireKey(result.newEntry.wireKey);
       setDropIndicator(null);
       setRootEdgeDrop(null);
       setPendingLabelEditId(result.newEntry.id);
     },
-    [entries, onEntriesChange, projectId, flowCanvasId, siblingOrder]
+    [entries, onEntriesChange, openRootAccordionForWireKey, projectId, flowCanvasId, siblingOrder]
   );
 
   const onAbandonEphemeralEntry = useCallback(
@@ -1360,6 +1496,53 @@ export function FlowMappingTree({
       ? ({ 'data-flow-iface-tree-root': '', 'data-flow-canvas-id': flowCanvasId } as const)
       : {};
 
+  /** Righe backend SEND/RECEIVE (accordion o legacy): evita duplicare la lunga lista di props. */
+  function renderBackendMappingRow(node: MappingTreeNode, depth: number, treeRailPx: number | undefined) {
+    return (
+      <MappingTreeRow
+        key={node.pathKey}
+        node={node}
+        depth={depth}
+        variant="backend"
+        collapsed={collapsed}
+        toggleCollapsed={toggleCollapsed}
+        listIdPrefix={listIdPrefix}
+        entries={entries}
+        onEntriesChange={onEntriesChange}
+        enableBackendParamDrop={Boolean(enableBackendParamDrop)}
+        showApiFields={showApiFields}
+        dropIndicator={dropIndicator}
+        onBackendParamDragOver={onBackendParamDragOver}
+        pendingLabelEditId={pendingLabelEditId}
+        onConsumeLabelEditIntent={onConsumeLabelEditIntent}
+        onInsertBackendParam={onInsertBackendParam}
+        onAbandonEphemeralEntry={onAbandonEphemeralEntry}
+        onBackendFlowVariableDrop={enableBackendParamDrop ? commitBackendFlowVariableDrop : undefined}
+        projectId={projectId}
+        flowCanvasId={flowCanvasId}
+        workspaceFlows={workspaceFlows}
+        ifacePointerPreview={ifacePointerPreview}
+        enableRowReorder={enableRowReorder}
+        ifaceReorderDrag={ifaceReorderDrag}
+        reorderDragSourceIdRef={reorderDragSourceIdRef}
+        onIfaceReorderHover={onIfaceReorderHover}
+        onIfaceReorderCommit={onIfaceReorderCommit}
+        backendColumn={backendColumn}
+        variableOptions={variableOptions}
+        onCreateOutputVariable={onCreateOutputVariable}
+        onOutputVariableCreated={onOutputVariableCreated}
+        backendKnownVariableIds={backendKnownVariableIds}
+        backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+        backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
+        backendSendAdvancement={backendSendAdvancement}
+        flatTreeGrid={flatTreeGrid && !useBackendRootAccordion}
+        treeRailWidthPx={useBackendRootAccordion ? undefined : treeRailPx}
+        backendCleanTree={useBackendRootAccordion}
+        embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+      />
+    );
+  }
+
   return (
     <div
       {...ifaceTreeRootProps}
@@ -1369,7 +1552,9 @@ export function FlowMappingTree({
           : enableBackendParamDrop && variant === 'backend' && tree.length === 0
             ? 'min-h-[52px] rounded-md border border-dashed border-teal-600/35 bg-slate-950/20 p-1'
             : tree.length > 0
-              ? 'min-h-full'
+              ? useBackendRootAccordion
+                ? 'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:auto]'
+                : 'min-h-full'
               : ''
       }
       onDragOver={showDropZone ? onDragOver : rootDragOver}
@@ -1441,50 +1626,122 @@ export function FlowMappingTree({
         ifacePointerPreview.targetPathKey === null &&
         tree.length === 0 && <DropPreviewLine indentPx={siblingDropLineIndentPx(0)} />}
 
-      {tree.map((n) => (
-        <MappingTreeRow
-          key={n.pathKey}
-          node={n}
-          depth={0}
-          variant={variant}
-          collapsed={collapsed}
-          toggleCollapsed={toggleCollapsed}
-          listIdPrefix={listIdPrefix}
-          entries={entries}
-          onEntriesChange={onEntriesChange}
-          enableBackendParamDrop={Boolean(enableBackendParamDrop && variant === 'backend')}
-          showApiFields={variant === 'backend' ? showApiFields : true}
-          dropIndicator={dropIndicator}
-          onBackendParamDragOver={onBackendParamDragOver}
-          pendingLabelEditId={pendingLabelEditId}
-          onConsumeLabelEditIntent={onConsumeLabelEditIntent}
-          onInsertBackendParam={onInsertBackendParam}
-          onAbandonEphemeralEntry={onAbandonEphemeralEntry}
-          onBackendFlowVariableDrop={
-            enableBackendParamDrop && variant === 'backend' ? commitBackendFlowVariableDrop : undefined
-          }
-          projectId={projectId}
-          flowCanvasId={flowCanvasId}
-          workspaceFlows={workspaceFlows}
-          ifacePointerPreview={ifacePointerPreview}
-          enableRowReorder={enableRowReorder}
-          ifaceReorderDrag={ifaceReorderDrag}
-          reorderDragSourceIdRef={reorderDragSourceIdRef}
-          onIfaceReorderHover={onIfaceReorderHover}
-          onIfaceReorderCommit={onIfaceReorderCommit}
-          backendColumn={backendColumn}
-          variableOptions={variableOptions}
-          onCreateOutputVariable={onCreateOutputVariable}
-          onOutputVariableCreated={onOutputVariableCreated}
-          backendKnownVariableIds={backendKnownVariableIds}
-          backendSendParamKindByWireKey={backendSendParamKindByWireKey}
-          backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
-          backendSendAdvancement={backendSendAdvancement}
-          flatTreeGrid={flatTreeGrid}
-          treeRailWidthPx={backendTreeRailWidthPx}
-          embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
-        />
-      ))}
+      {variant === 'interface' || !useBackendRootAccordion
+        ? tree.map((n) => (
+            <MappingTreeRow
+              key={n.pathKey}
+              node={n}
+              depth={0}
+              variant={variant}
+              collapsed={collapsed}
+              toggleCollapsed={toggleCollapsed}
+              listIdPrefix={listIdPrefix}
+              entries={entries}
+              onEntriesChange={onEntriesChange}
+              enableBackendParamDrop={Boolean(enableBackendParamDrop && variant === 'backend')}
+              showApiFields={variant === 'backend' ? showApiFields : true}
+              dropIndicator={dropIndicator}
+              onBackendParamDragOver={onBackendParamDragOver}
+              pendingLabelEditId={pendingLabelEditId}
+              onConsumeLabelEditIntent={onConsumeLabelEditIntent}
+              onInsertBackendParam={onInsertBackendParam}
+              onAbandonEphemeralEntry={onAbandonEphemeralEntry}
+              onBackendFlowVariableDrop={
+                enableBackendParamDrop && variant === 'backend' ? commitBackendFlowVariableDrop : undefined
+              }
+              projectId={projectId}
+              flowCanvasId={flowCanvasId}
+              workspaceFlows={workspaceFlows}
+              ifacePointerPreview={ifacePointerPreview}
+              enableRowReorder={enableRowReorder}
+              ifaceReorderDrag={ifaceReorderDrag}
+              reorderDragSourceIdRef={reorderDragSourceIdRef}
+              onIfaceReorderHover={onIfaceReorderHover}
+              onIfaceReorderCommit={onIfaceReorderCommit}
+              backendColumn={backendColumn}
+              variableOptions={variableOptions}
+              onCreateOutputVariable={onCreateOutputVariable}
+              onOutputVariableCreated={onOutputVariableCreated}
+              backendKnownVariableIds={backendKnownVariableIds}
+              backendSendParamKindByWireKey={backendSendParamKindByWireKey}
+              backendSendParamEnumByWireKey={backendSendParamEnumByWireKey}
+              backendSendAdvancement={backendSendAdvancement}
+              flatTreeGrid={flatTreeGrid}
+              treeRailWidthPx={backendTreeRailWidthPx}
+              embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+            />
+          ))
+        : tree.map((root) => {
+            const isLeafRoot = Boolean(root.entry && root.children.length === 0);
+            const isGroupRoot = root.children.length > 0 && !root.entry;
+            const isHybridRoot = Boolean(root.entry && root.children.length > 0);
+            if (isHybridRoot) {
+              return (
+                <CollapsiblePanelSection
+                  key={root.pathKey}
+                  compact
+                  title={root.segment}
+                  headerTone="slate"
+                  defaultOpen
+                  open={!closedRootAccordions.has(root.pathKey)}
+                  onOpenChange={(next) => {
+                    setClosedRootAccordions((prev) => {
+                      const nextSet = new Set(prev);
+                      if (next) nextSet.delete(root.pathKey);
+                      else nextSet.add(root.pathKey);
+                      return nextSet;
+                    });
+                  }}
+                  headerTitleClassName="text-left text-[11px] font-semibold text-amber-100/95 normal-case tracking-normal leading-tight"
+                  contentClassName="min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain max-h-[min(50vh,420px)] px-0 py-px"
+                  className="min-w-0 shrink-0 rounded-md"
+                >
+                  <div className="flex flex-col gap-0">
+                    {renderBackendMappingRow(root, 1, undefined)}
+                    {root.children.map((ch) => renderBackendMappingRow(ch, 2, undefined))}
+                  </div>
+                </CollapsiblePanelSection>
+              );
+            }
+            if (isLeafRoot) {
+              return (
+                <div
+                  key={root.pathKey}
+                  className="rounded border border-slate-700/45 bg-slate-950/20 px-0 py-0"
+                >
+                  {renderBackendMappingRow(root, 0, undefined)}
+                </div>
+              );
+            }
+            if (isGroupRoot) {
+              return (
+                <CollapsiblePanelSection
+                  key={root.pathKey}
+                  compact
+                  title={root.segment}
+                  headerTone="slate"
+                  defaultOpen
+                  open={!closedRootAccordions.has(root.pathKey)}
+                  onOpenChange={(next) => {
+                    setClosedRootAccordions((prev) => {
+                      const nextSet = new Set(prev);
+                      if (next) nextSet.delete(root.pathKey);
+                      else nextSet.add(root.pathKey);
+                      return nextSet;
+                    });
+                  }}
+                  headerTitleClassName="text-left text-[11px] font-semibold text-amber-100/95 normal-case tracking-normal leading-tight"
+                  contentClassName="min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain max-h-[min(50vh,420px)] px-0 py-px"
+                  className="min-w-0 shrink-0 rounded-md"
+                >
+                  <div className="flex flex-col gap-0">
+                    {root.children.map((ch) => renderBackendMappingRow(ch, 1, undefined))}
+                  </div>
+                </CollapsiblePanelSection>
+              );
+            }
+            return null;
+          })}
 
       {variant === 'interface' &&
         ifacePointerPreview?.placement === 'append' &&
@@ -1523,6 +1780,13 @@ export function FlowMappingTree({
       )}
     </div>
   );
+}
+
+export function FlowMappingTree(props: FlowMappingTreeProps) {
+  if (props.variant === 'backend') {
+    return <BackendMappingTreeView {...props} />;
+  }
+  return <InterfaceMappingTree {...props} />;
 }
 
 /* eslint-disable react-refresh/only-export-components -- costanti DND esposte per consumer legacy */

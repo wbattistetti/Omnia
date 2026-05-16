@@ -89,6 +89,7 @@ export interface SendParameterValueEditorProps {
   /** Valori ammessi se lo OpenAPI definisce `enum` sul campo. */
   openApiEnumValues?: string[];
   apiField?: string;
+  compactTypography?: boolean;
 }
 
 export function SendParameterValueEditor({
@@ -102,7 +103,9 @@ export function SendParameterValueEditor({
   openApiInputKind,
   openApiEnumValues,
   apiField,
+  compactTypography = false,
 }: SendParameterValueEditorProps) {
+  const textSm = compactTypography ? 'text-xs' : 'text-[10px]';
   const missingSendHintId = useId();
   const flowTr = useActiveFlowMetaTranslationsFlattened();
   const mergedTr = useMemo(
@@ -425,7 +428,7 @@ export function SendParameterValueEditor({
           aria-expanded={false}
           aria-invalid={sendMissingEmpty}
           aria-describedby={sendMissingEmpty ? missingSendHintId : undefined}
-          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 text-[10px] font-medium h-7 min-h-7 leading-7 border ${
+          className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 ${textSm} font-medium h-6 min-h-6 leading-6 border ${
             sendMissingEmpty
               ? 'border-red-500/40 bg-red-950/25 text-red-300 hover:border-red-500/60'
               : `border-transparent hover:border-amber-500/25 ${showEmpty ? emptyClass : accentClassName}`

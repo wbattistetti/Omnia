@@ -392,7 +392,12 @@ export function InterfaceMappingEditor({
       : `flex flex-row ${gap} flex-1 min-h-0 items-stretch`;
   }, [layout, compactBackendPanels, variant]);
 
-  const mappingBlockRootClass = layout === 'stacked' ? 'w-full' : 'flex-1 min-w-0';
+  const mappingBlockRootClass =
+    layout === 'stacked'
+      ? compactBackendPanels && variant === 'backend'
+        ? 'flex flex-1 min-h-0 min-w-0 w-full'
+        : 'w-full'
+      : 'flex-1 min-w-0';
 
   /** Columns inside the Interface shell: equal height (row) or split height (stacked). */
   const ifaceShellColumnClass = useMemo(
@@ -533,7 +538,7 @@ export function InterfaceMappingEditor({
                     {backendSendBodyPrefix ? (
                       <div className="shrink-0">{backendSendBodyPrefix}</div>
                     ) : null}
-                    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-gutter:auto]">
+                    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                       <FlowMappingTree
                         variant="backend"
                         entries={backendSend}
@@ -578,27 +583,26 @@ export function InterfaceMappingEditor({
                   />
                 }
               >
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-                  <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-gutter:auto]">
-                    <FlowMappingTree
-                      variant="backend"
-                      entries={backendReceive}
-                      onEntriesChange={onBackendReceiveChange}
-                      apiOptions={apiOptions}
-                      variableOptions={variableOptions}
-                      listIdPrefix={recvPrefix}
-                      enableBackendParamDrop
-                      showApiFields={showApiFields}
-                      projectId={projectId}
-                      flowCanvasId={flowDropTarget?.flowCanvasId}
-                      siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
-                      backendColumn="receive"
-                      onCreateOutputVariable={onCreateOutputVariable}
-                      onOutputVariableCreated={onOutputVariableCreated}
-                      backendKnownVariableIds={backendVariableIdSet}
-                    />
+                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <FlowMappingTree
+                    variant="backend"
+                    entries={backendReceive}
+                    onEntriesChange={onBackendReceiveChange}
+                    apiOptions={apiOptions}
+                    variableOptions={variableOptions}
+                    listIdPrefix={recvPrefix}
+                    enableBackendParamDrop
+                    showApiFields={showApiFields}
+                    projectId={projectId}
+                    flowCanvasId={flowDropTarget?.flowCanvasId}
+                    siblingOrder={sortBackendReceiveAlphabetical ? 'alphabetical' : 'construction'}
+                    backendColumn="receive"
+                    onCreateOutputVariable={onCreateOutputVariable}
+                    onOutputVariableCreated={onOutputVariableCreated}
+                    backendKnownVariableIds={backendVariableIdSet}
+                    embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
+                  />
                   </div>
-                </div>
               </MappingBlock>
             }
           />

@@ -2360,30 +2360,28 @@ export function AIAgentUseCaseComposer({
                                 u.designer_label_vote,
                                 u.label ?? '',
                                 fieldBaselineByUseCaseId[u.id]?.label
-                              )} ${active ? 'font-semibold' : ''} inline-flex flex-wrap items-center gap-x-1 gap-y-0.5`}
+                              )} ${active ? 'font-semibold' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                               }}
                             >
                               <span className="min-w-0 break-words whitespace-normal">{u.label || u.id}</span>
-                              <UseCaseRowDeployChips
-                                stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
-                                onInspectCompiled={
-                                  onInspectCompiled
-                                    ? () => onInspectCompiled(u.id)
-                                    : undefined
-                                }
-                              />
-                              {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
-                                <span
-                                  className="ml-1 shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"
-                                  title="Messaggio esempio aggiornato con il nuovo stile"
-                                >
-                                  NEW
-                                </span>
-                              ) : null}
                             </button>
+                            <UseCaseRowDeployChips
+                              stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
+                              onInspectCompiled={
+                                onInspectCompiled ? () => onInspectCompiled(u.id) : undefined
+                              }
+                            />
+                            {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
+                              <span
+                                className="shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"
+                                title="Messaggio esempio aggiornato con il nuovo stile"
+                              >
+                                NEW
+                              </span>
+                            ) : null}
                             {/*
                               Toolbar unica (pollici, matita, [+ classico], globo con conferma, cestino):
                               visibile solo su hover/focus header; resta aperta durante menu «Generalizza» o

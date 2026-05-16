@@ -29,6 +29,8 @@ export interface LabelWithPencilEditProps {
    * nella colonna nome con larghezza limitata.
    */
   readOnlyPreferWrap?: boolean;
+  /** Tailwind size class for label text (default `text-[11px]`). */
+  textSizeClass?: string;
   /** Fired when inline rename mode starts or ends (e.g. to hide sibling toolbars). */
   onEditingChange?: (editing: boolean) => void;
 }
@@ -48,6 +50,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
       viewTitle,
       segmentClassName,
       readOnlyPreferWrap = false,
+      textSizeClass = 'text-[11px]',
       onEditingChange,
     },
     ref
@@ -165,8 +168,8 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
         <span
           className={
             readOnlyPreferWrap
-              ? `block max-w-full min-h-[1.25em] whitespace-pre-wrap break-words text-left text-[11px] font-medium text-slate-100 ${segmentClassName || ''}`
-              : `inline-flex max-w-full min-h-[1.25em] items-center truncate text-[11px] font-medium text-slate-100 ${segmentClassName || ''}`
+              ? `block max-w-full min-h-[1.25em] whitespace-pre-wrap break-words text-left ${textSizeClass} font-medium text-slate-100 ${segmentClassName || ''}`
+              : `inline-flex max-w-full min-h-[1.25em] items-center truncate ${textSizeClass} font-medium text-slate-100 ${segmentClassName || ''}`
           }
           title={viewTitle ?? viewLabel}
         >
@@ -232,7 +235,7 @@ export const LabelWithPencilEdit = forwardRef<LabelWithPencilEditHandle, LabelWi
     return (
       <div className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
         <span
-          className={`peer inline-flex min-h-[1.25em] min-w-0 max-w-full cursor-default select-none items-center overflow-hidden text-ellipsis whitespace-nowrap rounded px-0.5 text-[11px] font-medium text-slate-100 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 ${segmentClassName || ''}`}
+          className={`peer inline-flex min-h-[1.25em] min-w-0 max-w-full cursor-default select-none items-center overflow-hidden text-ellipsis whitespace-nowrap rounded px-0.5 ${textSizeClass} font-medium text-slate-100 outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 ${segmentClassName || ''}`}
           tabIndex={0}
           onDoubleClick={() => setEditing(true)}
           onKeyDown={(e) => {

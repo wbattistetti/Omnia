@@ -102,7 +102,7 @@ export function MappingBlock({
 
   return (
     <div
-      className={`flex flex-col min-h-0 overflow-hidden min-w-0 ${frameClass} ${rootClassName}`}
+      className={`flex flex-col min-h-0 overflow-hidden min-w-0 ${fillBodyHeight ? 'h-full' : ''} ${frameClass} ${rootClassName}`}
       {...(flowDropTarget
         ? {
             'data-flow-interface-zone': flowDropTarget.zone,

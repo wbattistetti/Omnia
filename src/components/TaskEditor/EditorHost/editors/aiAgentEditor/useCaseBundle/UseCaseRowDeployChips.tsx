@@ -37,17 +37,25 @@ export function UseCaseRowDeployChips({
 
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         onClick={(e) => {
           e.stopPropagation();
           onInspectCompiled();
         }}
-        className="inline-flex items-center gap-0.5 rounded border border-slate-600/70 bg-slate-800/80 px-1 py-0.5 text-[9px] text-slate-300 hover:border-violet-500/50 hover:text-violet-200"
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          e.stopPropagation();
+          onInspectCompiled();
+        }}
+        className="inline-flex cursor-pointer items-center gap-0.5 rounded border border-slate-600/70 bg-slate-800/80 px-1 py-0.5 text-[9px] text-slate-300 hover:border-violet-500/50 hover:text-violet-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-400/60"
         title="Vedi compilato per questo use case"
+        aria-label="Vedi compilato per questo use case"
       >
         <Eye className="h-2.5 w-2.5 shrink-0" aria-hidden />
-      </button>
+      </span>
     </span>
   );
 }

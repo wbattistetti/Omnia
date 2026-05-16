@@ -22,6 +22,10 @@ export interface MappingRowFieldsProps {
   groupOnlyInterface?: boolean;
   /** Backend: when false, hide API field (variable only). */
   showApiFields?: boolean;
+  /** Backend: nasconde la colonna nome API (es. sotto gruppi dove il trie mostra già il segmento). */
+  hideApiFieldColumn?: boolean;
+  /** Backend Arborist: `text-xs` su valore variabile / API. */
+  compactTypography?: boolean;
   /** Backend: finché il nome interno è effimero, API/Variabile non prendono focus (prima la label). */
   secondaryFieldsLocked?: boolean;
   /** When true, API/var view spans use tabIndex -1 so Tab targets the internal-name label first. */
@@ -48,6 +52,8 @@ export function MappingRowFields({
   groupOnlyBackend,
   groupOnlyInterface,
   showApiFields = true,
+  hideApiFieldColumn = false,
+  compactTypography = false,
   secondaryFieldsLocked = false,
   suppressFieldTabFocus = false,
   datalistApiId,
@@ -66,9 +72,9 @@ export function MappingRowFields({
 
   if (variant === 'backend' && groupOnlyBackend) {
     return (
-      <div className="flex h-7 shrink-0 items-center gap-0 opacity-25 pointer-events-none" aria-hidden>
-        {showApiFields ? <div className="h-6 w-16 shrink-0 rounded bg-slate-800/30" /> : null}
-        <div className="h-6 w-24 shrink-0 rounded bg-slate-800/30" />
+      <div className="flex h-6 shrink-0 items-center gap-0 opacity-25 pointer-events-none" aria-hidden>
+        {showApiFields && !hideApiFieldColumn ? <div className="h-[18px] w-14 shrink-0 rounded bg-slate-800/30" /> : null}
+        <div className="h-[18px] w-[5.5rem] shrink-0 rounded bg-slate-800/30" />
       </div>
     );
   }
@@ -103,9 +109,9 @@ export function MappingRowFields({
     const apiRef = (entry.apiField || '').trim();
     return (
       <div className="flex min-w-0 shrink-0 items-center gap-0">
-        {showApiFields ? (
+        {showApiFields && !hideApiFieldColumn ? (
           <span
-            className="h-7 min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono text-[10px] leading-7 text-slate-400 cursor-default select-none tabular-nums"
+            className={`h-6 min-h-[22px] min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono leading-6 text-slate-400 cursor-default select-none tabular-nums ${compactTypography ? 'text-xs' : 'text-[10px]'}`}
             title={
               apiRef
                 ? `Backend parameter name (read-only): ${apiRef}`
@@ -133,6 +139,7 @@ export function MappingRowFields({
             onCommit={(patch) => onPatch(patch)}
             onCreateVariable={onCreateOutputVariable}
             onVariableCreated={onOutputVariableCreated}
+            compactTypography={compactTypography}
           />
         ) : (
           <SendParameterValueEditor
@@ -144,6 +151,7 @@ export function MappingRowFields({
             openApiInputKind={sendKind}
             openApiEnumValues={sendEnum}
             apiField={entry.apiField}
+            compactTypography={compactTypography}
           />
         )}
       </div>
