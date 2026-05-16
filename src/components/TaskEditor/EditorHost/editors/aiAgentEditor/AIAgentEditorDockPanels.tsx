@@ -6,6 +6,7 @@
  */
 
 import React from 'react';
+import { FontProvider } from '@context/FontContext';
 import { AIAgentStructuredSectionsPanel } from './AIAgentStructuredSectionsPanel';
 import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
@@ -583,6 +584,7 @@ export function EditorUseCasesPanel() {
     return (
       <>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
+        <FontProvider>
         <UseCaseWizardListToolbarProvider>
           <ViewSkaGenerator
             wizard={useCaseGeneratorWizard}
@@ -637,6 +639,7 @@ export function EditorUseCasesPanel() {
             generationStyleFieldDisabled={useCaseComposerBlockingBusy}
           />
         </UseCaseWizardListToolbarProvider>
+        </FontProvider>
       </div>
       <CompiledPhraseInspector
         open={compiledInspectorOpen}

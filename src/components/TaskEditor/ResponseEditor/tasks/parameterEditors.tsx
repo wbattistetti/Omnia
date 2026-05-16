@@ -8,8 +8,9 @@ import {
   getScalarParameterValue,
   getTranslatedParameterText,
 } from '@responseEditor/utils/taskUiText';
-import { useBehaviourUi } from '@responseEditor/behaviour/BehaviourUiContext';
+import { useBehaviourUiOptional } from '@responseEditor/behaviour/BehaviourUiContext';
 import type { BehaviourFocusTarget } from '@responseEditor/behaviour/BehaviourUiContext';
+import { useTaskSequenceFocusOptional } from '@responseEditor/taskSequence/TaskSequenceFocusContext';
 
 export type ParameterEditorProps = {
   task: unknown;
@@ -106,6 +107,15 @@ export type ParameterFieldHostProps = {
  */
 const TRANSLATED_EDITABLE_IDS = new Set(['text', 'smsText']);
 
+function useParameterFocusContext(): {
+  focusedParameter: BehaviourFocusTarget | null;
+  consumeFocusParameter: (target: BehaviourFocusTarget) => void;
+} | null {
+  const behaviour = useBehaviourUiOptional();
+  const sequence = useTaskSequenceFocusOptional();
+  return behaviour ?? sequence;
+}
+
 function FocusAwareTranslatedField({
   task,
   param,
@@ -116,7 +126,9 @@ function FocusAwareTranslatedField({
   onEditingActivity,
   onDeleteTaskIfEmpty,
 }: ParameterFieldHostProps) {
-  const { focusedParameter, consumeFocusParameter } = useBehaviourUi();
+  const focusCtx = useParameterFocusContext();
+  const focusedParameter = focusCtx?.focusedParameter ?? null;
+  const consumeFocusParameter = focusCtx?.consumeFocusParameter;
   const [editing, setEditing] = useState(false);
 
   const setEditingTracked = useCallback(
@@ -128,7 +140,7 @@ function FocusAwareTranslatedField({
   );
 
   useLayoutEffect(() => {
-    if (!focusedParameter) return;
+    if (!focusedParameter || !consumeFocusParameter) return;
     if (!matchesFocus(focusedParameter, escalationIdx, taskIdx, param.parameterId)) return;
     setEditing(true);
     onEditingActivity?.(true);

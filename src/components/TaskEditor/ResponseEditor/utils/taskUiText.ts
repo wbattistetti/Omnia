@@ -37,8 +37,8 @@ export function getTranslatedParameterText(
   translations: Record<string, string>
 ): string {
   const key = resolveTranslationKey(task, parameterId);
-  if (!key) return '';
-  return translations[key] ?? '';
+  if (key) return translations[key] ?? '';
+  return getScalarParameterValue(task, parameterId);
 }
 
 export function getScalarParameterValue(task: unknown, parameterId: string): string {

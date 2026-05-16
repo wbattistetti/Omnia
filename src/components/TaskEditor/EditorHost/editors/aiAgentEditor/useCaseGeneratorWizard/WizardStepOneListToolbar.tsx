@@ -24,6 +24,7 @@
 import React from 'react';
 import {
   BookOpen,
+  LayoutGrid,
   Maximize2,
   MessageSquareText,
   Minimize2,
@@ -335,8 +336,10 @@ export function WizardStepOneListToolbarControls({
     bulkFold,
     showScenario,
     showMessage,
+    showActionsPanel,
     toggleScenario,
     toggleMessage,
+    toggleActionsPanel,
     triggerExpandAll,
     triggerCollapseAll,
   } = ctx;
@@ -410,6 +413,14 @@ export function WizardStepOneListToolbarControls({
           activeClass="text-emerald-300 bg-emerald-500/15"
           icon={<MessageSquareText size={15} aria-hidden />}
           label="Messaggio"
+        />
+        <LabeledInlineToggle
+          active={showActionsPanel}
+          onClick={toggleActionsPanel}
+          title="Mostra/nascondi il pannello azioni (trascina nel response)"
+          activeClass="text-amber-300 bg-amber-500/15"
+          icon={<LayoutGrid size={15} aria-hidden />}
+          label="Azioni"
         />
       </div>
       {/* (rimosso) CompletaCorrezioneButton: la CTA vive ora nel callout sotto la toolbar (vedi `CompletaCorrezioneCallout`). */}

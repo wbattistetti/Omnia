@@ -3,7 +3,9 @@
  * evita limiti di HTML5Backend su scroll/overflow/Dockview rispetto a react-dnd.
  *
  * Esporta lo shell `UseCaseListDndShell` (wrappa la `<ul>`), `UseCaseRowDnDWrapper`,
- * `UseCaseRowHeader` e `UseCaseDropSentinel` con la stessa API usata dal composer.
+ * `UseCaseRowDragHandle`, `UseCaseRowHeader` e `UseCaseDropSentinel` con la stessa API
+ * usata dal composer. Il drag della riga è solo sulla maniglia così react-dnd nel response
+ * (TaskSequenceEditor) non entra in conflitto.
  */
 
 import React from 'react';
@@ -63,6 +65,9 @@ const DROP_PREVIEW_LINE_STYLE: React.CSSProperties = {
 type RowKitContextValue = {
   connectHeaderDrop: (el: HTMLDivElement | null) => void;
   showHeaderInsertLine: boolean;
+  connectDragHandle: (el: HTMLElement | null) => void;
+  dragHandleProps: React.HTMLAttributes<HTMLElement>;
+  dragEnabled: boolean;
 };
 
 const UseCaseRowKitContext = React.createContext<RowKitContextValue | null>(null);
@@ -70,6 +75,31 @@ const UseCaseRowKitContext = React.createContext<RowKitContextValue | null>(null
 /**
  * Header droppabile: preview linea sul bordo superiore (inserimento prima della riga).
  */
+/**
+ * Maniglia grip: unico attivatore del drag riga use case (@dnd-kit).
+ * Va usata nel header; il body (es. TaskSequenceEditor) resta libero per react-dnd.
+ */
+export function UseCaseRowDragHandle({
+  className,
+  children,
+  ...rest
+}: React.HTMLAttributes<HTMLSpanElement>) {
+  const ctx = React.useContext(UseCaseRowKitContext);
+  if (ctx == null) {
+    throw new Error('UseCaseRowDragHandle must be used inside UseCaseRowDnDWrapper');
+  }
+  return (
+    <span
+      ref={ctx.connectDragHandle}
+      className={className}
+      {...ctx.dragHandleProps}
+      {...rest}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function UseCaseRowHeader({
   className,
   children,
@@ -109,7 +139,13 @@ export function UseCaseRowDnDWrapper({
   const rowId = `${ROW_PREFIX}${useCaseId}`;
   const hdrId = `${HDR_PREFIX}${useCaseId}`;
 
-  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    setActivatorNodeRef: setDragHandleRef,
+    isDragging,
+  } = useDraggable({
     id: rowId,
     disabled: !enabled,
     data: { rowId: useCaseId, parentId: parentId ?? null } satisfies RowDragData,
@@ -142,27 +178,42 @@ export function UseCaseRowDnDWrapper({
     [setDropRef]
   );
 
+  const connectDragHandle = React.useCallback(
+    (node: HTMLElement | null) => {
+      setDragHandleRef(node);
+    },
+    [setDragHandleRef]
+  );
+
+  const dragHandleProps = React.useMemo(
+    () =>
+      enabled
+        ? ({
+            ...listeners,
+            ...attributes,
+          } as React.HTMLAttributes<HTMLElement>)
+        : ({} as React.HTMLAttributes<HTMLElement>),
+    [enabled, listeners, attributes]
+  );
+
   const ctxValue = React.useMemo<RowKitContextValue>(
     () => ({
       connectHeaderDrop,
       showHeaderInsertLine,
+      connectDragHandle,
+      dragHandleProps,
+      dragEnabled: enabled,
     }),
-    [connectHeaderDrop, showHeaderInsertLine]
+    [connectHeaderDrop, showHeaderInsertLine, connectDragHandle, dragHandleProps, enabled]
   );
 
   return (
     <UseCaseRowKitContext.Provider value={ctxValue}>
       <div
         ref={setDragRef}
-        {...listeners}
-        {...attributes}
-        className={enabled ? 'cursor-grab active:cursor-grabbing' : undefined}
         style={{
           opacity: isDragging ? 0.5 : 1,
           position: 'relative',
-          userSelect: enabled ? 'none' : undefined,
-          WebkitUserSelect: enabled ? 'none' : undefined,
-          touchAction: enabled ? 'none' : undefined,
         }}
       >
         {children}

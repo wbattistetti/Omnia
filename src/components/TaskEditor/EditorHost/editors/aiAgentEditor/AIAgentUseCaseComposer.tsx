@@ -47,6 +47,8 @@ import {
   type ProjectSlotLexicon,
 } from '@domain/useCaseBundle/projectSlotLexicon';
 import { StructuralVariantsEditor } from './useCaseBundle/StructuralVariantsEditor';
+import { UseCaseResponseEditor } from './UseCaseResponseEditor';
+import { usePatchUseCaseResponseTasks } from './usePatchUseCaseResponseTasks';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { UseCaseRowDeployChips } from './useCaseBundle/UseCaseRowDeployChips';
 import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeployStats';
@@ -158,6 +160,7 @@ import {
   UseCaseDropSentinel,
   UseCaseListDndShell,
   UseCaseRowDnDWrapper,
+  UseCaseRowDragHandle,
   UseCaseRowHeader,
 } from './UseCaseListDndKit';
 
@@ -307,6 +310,15 @@ export function AIAgentUseCaseComposer({
   projectSlotLexicon = emptyProjectSlotLexicon(),
   onInspectCompiled,
 }: AIAgentUseCaseComposerProps) {
+  const patchUseCaseResponseTasks = usePatchUseCaseResponseTasks(setUseCases);
+
+  const seedUseCaseResponse = React.useCallback(
+    (next: AIAgentUseCase) => {
+      setUseCases((prev) => prev.map((x) => (x.id === next.id ? next : x)));
+    },
+    [setUseCases]
+  );
+
   /**
    * Marker locale `[NEW]` aggiunto dal flow «Completa correzione» (toolbar). Vive nel
    * composer (non viene propagato al parent) perché lega vita-e-morte alla baseline:
@@ -2557,7 +2569,7 @@ export function AIAgentUseCaseComposer({
                               >
                                 <Trash2 size={14} aria-hidden />
                               </button>
-                              <span
+                              <UseCaseRowDragHandle
                                 aria-label={
                                   useCaseDragEnabled
                                     ? 'Riordina trascinando la riga (stesso livello gerarchico)'
@@ -2570,14 +2582,15 @@ export function AIAgentUseCaseComposer({
                                 }`}
                                 title={
                                   useCaseDragEnabled
-                                    ? 'Riordina trascinando la riga (stesso livello)'
+                                    ? 'Riordina dalla maniglia (stesso livello)'
                                     : wizardSearchSeed
                                       ? 'Riordino disattivato durante la ricerca'
                                       : 'Riordino disattivato durante operazioni in corso'
                                 }
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 <GripVertical size={14} aria-hidden />
-                              </span>
+                              </UseCaseRowDragHandle>
                             </div>
                           </div>
                         )}
@@ -2722,7 +2735,15 @@ export function AIAgentUseCaseComposer({
                           ) : null}
                           {wizardShowMessage ? (
                             <div className={UC_WIZARD_AGENT_MESSAGE_PANEL}>
-                              {rowAssistant ? (
+                              {primaryGenerateOnRightOnly &&
+                              !isPrimaryPhraseParametricEnabled(u) ? (
+                                <UseCaseResponseEditor
+                                  useCase={u}
+                                  onPatchResponseTasks={patchUseCaseResponseTasks}
+                                  onSeedUseCase={seedUseCaseResponse}
+                                  disabled={busy}
+                                />
+                              ) : rowAssistant ? (
                                 (() => {
                                   /**
                                    * «Mostra Tokens» (Passo 1/3) sostituisce la frase canonica con la

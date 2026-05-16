@@ -17,6 +17,34 @@ export interface TaskRowDnDWrapperProps {
 export const DND_TYPE = 'TASK_ROW';
 export const DND_TYPE_VIEWER = 'TASK_VIEWER';
 
+function resolveDropPosition(
+  node: HTMLDivElement,
+  monitor: { getClientOffset(): { x: number; y: number } | null }
+): 'before' | 'after' | undefined {
+  const clientOffset = monitor.getClientOffset();
+  if (!clientOffset) return undefined;
+  const rect = node.getBoundingClientRect();
+  const hoverMiddleY = (rect.bottom - rect.top) / 2;
+  const hoverClientY = clientOffset.y - rect.top;
+  return hoverClientY < hoverMiddleY ? 'before' : 'after';
+}
+
+function shouldShowRowPreview(
+  item: { type?: string; escalationIdx?: number; taskIdx?: number },
+  escalationIdx: number,
+  taskIdx: number,
+  position: 'before' | 'after'
+): boolean {
+  if (item.type === DND_TYPE_VIEWER) return true;
+  if (item.type !== DND_TYPE) return false;
+  if (item.escalationIdx !== escalationIdx) return true;
+  const itemTaskIdx = item.taskIdx ?? -1;
+  if (itemTaskIdx === taskIdx) return false;
+  if (position === 'before' && itemTaskIdx === taskIdx - 1) return false;
+  if (position === 'after' && itemTaskIdx === taskIdx + 1) return false;
+  return true;
+}
+
 const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
   escalationIdx,
   taskIdx,
@@ -30,7 +58,10 @@ const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
 }) => {
   const ref = React.useRef<HTMLDivElement>(null);
   const [previewPosition, setPreviewPosition] = React.useState<'before' | 'after' | undefined>(undefined);
-  const [canShowPreview, setCanShowPreview] = React.useState(false);
+  const onMoveTaskRef = React.useRef(onMoveTask);
+  const onDropNewTaskRef = React.useRef(onDropNewTask);
+  onMoveTaskRef.current = onMoveTask;
+  onDropNewTaskRef.current = onDropNewTask;
 
   const [{ isDragging }, drag] = useDrag({
     type: DND_TYPE,
@@ -51,133 +82,57 @@ const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
     accept: accepts,
     hover: (item: any, monitor) => {
       if (!ref.current) return;
-      const hoverBoundingRect = ref.current.getBoundingClientRect();
-      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
-      const clientOffset = monitor.getClientOffset();
-      if (!clientOffset) return;
-      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
-      const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
-
-      let show = true;
-      if (item.type === DND_TYPE) {
-        if (item.escalationIdx === escalationIdx) {
-          const itemTaskIdx = item.taskIdx;
-          if (itemTaskIdx === taskIdx) {
-            show = false;
-          } else if (position === 'before' && itemTaskIdx === taskIdx - 1) {
-            show = false;
-          } else if (position === 'after' && itemTaskIdx === taskIdx + 1) {
-            show = false;
-          }
-        }
-      } else if (item.type === DND_TYPE_VIEWER) {
-        // sempre mostra preview per elemento nuovo
-        show = true;
-      }
+      const position = resolveDropPosition(ref.current, monitor);
+      if (!position) return;
+      const show = shouldShowRowPreview(item, escalationIdx, taskIdx, position);
       setPreviewPosition(show ? position : undefined);
-      setCanShowPreview(show);
     },
     drop: (item: any, monitor) => {
-      const debugDrop = () => {
-        try { return localStorage.getItem('debug.drop') === '1'; } catch { return false; }
-      };
-
-      // ✅ Prevent duplicate calls: React DnD may call drop handler multiple times
-      // Check if this drop was already handled by checking monitor.didDrop()
       if (monitor.didDrop()) {
-        if (debugDrop()) {
-          console.log('[DROP_DEBUG][TaskRowDnDWrapper] ⏭️ Drop already handled by child, skipping');
-        }
         return undefined;
       }
 
-      if (debugDrop()) {
-        console.log('[DROP_DEBUG][TaskRowDnDWrapper] 🎬 Drop handler called', {
-          hasRef: !!ref.current,
-          canShowPreview,
-          previewPosition,
-          itemType: item?.type,
-          didDrop: monitor.didDrop()
-        });
-      }
+      const node = ref.current;
+      if (!node) return undefined;
 
-      if (!ref.current) {
-        if (debugDrop()) console.warn('[DROP_DEBUG] No ref.current');
-        return undefined;
-      }
+      const position = resolveDropPosition(node, monitor);
+      if (!position) return undefined;
 
-      // For DND_TYPE_VIEWER, we don't need canShowPreview check - always allow drop
       if (item.type === DND_TYPE_VIEWER) {
-        // Calculate position based on current mouse position
-        const hoverBoundingRect = ref.current.getBoundingClientRect();
-        const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
-        const clientOffset = monitor.getClientOffset();
-        if (!clientOffset) {
-          if (debugDrop()) console.warn('[DROP_DEBUG] No clientOffset');
-          return undefined;
-        }
-        const hoverClientY = clientOffset.y - hoverBoundingRect.top;
-        const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
-
-        if (debugDrop()) {
-          console.log('[DROP_DEBUG][TaskRowDnDWrapper] 🎯 Processing DND_TYPE_VIEWER drop', {
-            escalationIdx,
-            taskIdx,
-            position
-          });
-        }
-
-        if (onDropNewTask) {
-          // ✅ Mark as handled BEFORE calling the handler to prevent duplicate calls
-          const result = { handled: true };
-          onDropNewTask(item, { escalationIdx, taskIdx }, position);
+        if (onDropNewTaskRef.current) {
+          onDropNewTaskRef.current(item, { escalationIdx, taskIdx }, position);
           setPreviewPosition(undefined);
-          setCanShowPreview(false);
-          return result;
-        } else {
-          if (debugDrop()) console.warn('[DROP_DEBUG] onDropNewTask NOT PROVIDED!');
-          return undefined;
+          return { handled: true };
         }
-      }
-
-      // For DND_TYPE (internal reordering), use the existing logic
-      if (!canShowPreview || previewPosition === undefined) {
-        if (debugDrop()) console.warn('[DROP_DEBUG] canShowPreview false or previewPosition undefined');
         return undefined;
       }
 
-      // For DND_TYPE (internal reordering), calculate position and handle
-      const hoverBoundingRect = ref.current.getBoundingClientRect();
-      const hoverMiddleY = (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
-      const clientOffset = monitor.getClientOffset();
-      if (!clientOffset) return undefined;
-      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
-      const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
+      if (item.type !== DND_TYPE) {
+        return undefined;
+      }
+
+      if (!shouldShowRowPreview(item, escalationIdx, taskIdx, position)) {
+        setPreviewPosition(undefined);
+        return undefined;
+      }
+
+      const itemTaskIdx = item.taskIdx;
+      if (item.escalationIdx === escalationIdx && itemTaskIdx === taskIdx) {
+        setPreviewPosition(undefined);
+        return undefined;
+      }
 
       let handled = false;
-
-      if (item.type === DND_TYPE) {
-        const itemTaskIdx = item.taskIdx;
-        if (item.escalationIdx === escalationIdx && itemTaskIdx === taskIdx) {
-          setPreviewPosition(undefined);
-          setCanShowPreview(false);
-          return undefined; // Not handled (same position)
-        }
-        if (onMoveTask) {
-          onMoveTask(item.escalationIdx, itemTaskIdx, escalationIdx, taskIdx, position);
-          handled = true;
-        }
-        if (onDropTask) {
-          onDropTask(item, { escalationIdx, taskIdx }, position);
-          handled = true;
-        }
+      if (onMoveTaskRef.current) {
+        onMoveTaskRef.current(item.escalationIdx, itemTaskIdx, escalationIdx, taskIdx, position);
+        handled = true;
+      }
+      if (onDropTask) {
+        onDropTask(item, { escalationIdx, taskIdx }, position);
+        handled = true;
       }
 
       setPreviewPosition(undefined);
-      setCanShowPreview(false);
-
-      // Return a value to signal that this drop was handled (for monitor.didDrop() in parent)
-      // This prevents CanvasDropWrapper from also handling the same drop
       return handled ? { handled: true } : undefined;
     },
     collect: (monitor) => ({

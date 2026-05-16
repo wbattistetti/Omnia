@@ -11,6 +11,12 @@ import {
   parseAgentUseCaseBundleJson,
   serializeAgentUseCaseBundle,
 } from '../domain/useCaseBundle/parseSerializeBundle';
+import type { AIAgentUseCaseResponse } from '../domain/aiAgentUseCase/useCaseResponseTasks';
+import {
+  ensureUseCaseResponse,
+  parseUseCaseResponseField,
+} from '../domain/aiAgentUseCase/useCaseResponseTasks';
+export type { AIAgentUseCaseResponse } from '../domain/aiAgentUseCase/useCaseResponseTasks';
 
 export type { AIAgentCanonicalPhrase, AIAgentPhraseParametricDimension, AIAgentPhraseParametricRow, AIAgentPhraseParametricConfig, AIAgentPhraseVariant, PhraseCompiledSnapshot, SlotSurfaceMapping } from '../domain/useCaseBundle/schema';
 
@@ -118,6 +124,12 @@ export interface AIAgentUseCase {
    * Assente su record legacy → {@link ensureUseCasePhrases} alla lettura.
    */
   phrases?: AIAgentCanonicalPhrase[];
+
+  /**
+   * Operational response: ordered tasks (sayMessage + actions). Same shape as escalation.tasks.
+   * Absent on legacy rows → {@link ensureUseCaseResponse} at read time.
+   */
+  response?: AIAgentUseCaseResponse;
 }
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
@@ -343,6 +355,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
           ? o.assistant_example_tokenized_source
           : undefined;
       const phrases = parsePhrasesField(o.phrases);
+      const response = parseUseCaseResponseField(o.response);
       out.push({
         id,
         label,
@@ -366,9 +379,10 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
           ? { assistant_example_tokenized_source }
           : {}),
         ...(phrases.length > 0 ? { phrases } : {}),
+        ...(response ? { response } : {}),
       });
     }
-  return out.map((uc) => ensureUseCasePhrases(uc));
+  return out.map((uc) => ensureUseCaseResponse(ensureUseCasePhrases(uc)));
 }
 
 function parsePhrasesField(raw: unknown): AIAgentCanonicalPhrase[] {

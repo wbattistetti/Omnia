@@ -28,6 +28,7 @@ import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarC
 import { isCompletaCorrezioneCalloutSurfaceActive } from '../useCaseSubstantialEdits';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import { UseCaseActionsPalettePanel } from '../UseCaseActionsPalettePanel';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
 const RIGHT_PANEL_MIN_PX = 250;
@@ -339,6 +340,10 @@ export function ViewSkaGenerator({
   const canShowJsonToggle = (isStepOne || isStepTokenization) && useCaseCount > 0;
   const showJsonRightPanel =
     (isStepTokenization && useCaseCount > 0) || (canShowJsonToggle && wizard.showJsonPanel);
+  const showActionsRightPanel =
+    unifiedUseCaseListReview &&
+    Boolean(listToolbarCtx?.showActionsPanel) &&
+    !showJsonRightPanel;
   const stepTheme = STEP_COLOR_THEME[wizard.currentStepId];
   const clearDialogAnchorRef =
     clearScope === 'conversations'
@@ -666,9 +671,11 @@ export function ViewSkaGenerator({
             aria-label={
               showJsonRightPanel
                 ? 'Anteprima JSON conversazionale dello use case selezionato'
-                : correctionReplacesUseCaseTutorial
-                  ? 'Completa correzione messaggi'
-                  : 'Tutorial e azioni del passo'
+                : showActionsRightPanel
+                  ? 'Pannello azioni per il response'
+                  : correctionReplacesUseCaseTutorial
+                    ? 'Completa correzione messaggi'
+                    : 'Tutorial e azioni del passo'
             }
           >
             {showJsonRightPanel ? (
@@ -678,6 +685,8 @@ export function ViewSkaGenerator({
                 onSelectUseCase={onSelectUseCaseRequest}
                 lexicon={projectSlotLexicon}
               />
+            ) : showActionsRightPanel ? (
+              <UseCaseActionsPalettePanel />
             ) : (
               <>
             {!unifiedUseCaseListReview && !unifiedConversationsReview && !unifiedTokenizationReview ? (

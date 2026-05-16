@@ -6,6 +6,7 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { parseAgentUseCasesJsonLegacyArray } from '@types/aiAgentUseCases';
 import { USE_CASE_BUNDLE_SCHEMA_VERSION, type UseCaseBundleV2Wrapper } from './schema';
 import { ensureUseCasePhrases } from './migrateUseCase';
+import { ensureUseCaseResponse } from '../aiAgentUseCase/useCaseResponseTasks';
 
 export function isUseCaseBundleV2Wrapper(value: unknown): value is UseCaseBundleV2Wrapper {
   if (!value || typeof value !== 'object') return false;
@@ -28,7 +29,7 @@ export function parseAgentUseCaseBundleJson(raw: string | undefined): AIAgentUse
     } else {
       return [];
     }
-    return list.map((uc) => ensureUseCasePhrases(uc));
+    return list.map((uc) => ensureUseCaseResponse(ensureUseCasePhrases(uc)));
   } catch {
     return [];
   }

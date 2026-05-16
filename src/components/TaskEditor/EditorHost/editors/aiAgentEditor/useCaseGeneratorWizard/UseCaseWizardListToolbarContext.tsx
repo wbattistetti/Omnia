@@ -30,8 +30,11 @@ export type UseCaseWizardListHandlers = {
 export interface UseCaseWizardListToolbarContextValue {
   showScenario: boolean;
   showMessage: boolean;
+  /** Right aside: actions palette for use case response (replaces tutorial when on). */
+  showActionsPanel: boolean;
   toggleScenario: () => void;
   toggleMessage: () => void;
+  toggleActionsPanel: () => void;
   bulkFold: WizardBulkFoldState;
   setBulkFold: React.Dispatch<React.SetStateAction<WizardBulkFoldState>>;
   registerHandlers: (handlers: UseCaseWizardListHandlers | null) => void;
@@ -100,6 +103,7 @@ export function UseCaseWizardListToolbarProvider({
   const [showScenario, setShowScenario] = React.useState(true);
   /** Triplet UX: scenario + messaggio agente visibili subito dopo generazione IA. */
   const [showMessage, setShowMessage] = React.useState(true);
+  const [showActionsPanel, setShowActionsPanel] = React.useState(false);
   const [bulkFold, setBulkFold] = React.useState<WizardBulkFoldState>('expanded');
   /** Seed search committato (commit esplicito su Enter / clear) — vedi JSDoc del context. */
   const [searchSeed, setSearchSeedRaw] = React.useState<string>('');
@@ -166,6 +170,10 @@ export function UseCaseWizardListToolbarProvider({
     setShowMessage((v) => !v);
   }, []);
 
+  const toggleActionsPanel = React.useCallback(() => {
+    setShowActionsPanel((v) => !v);
+  }, []);
+
   /**
    * Trim difensivo: spazi accidentali in coda non devono cambiare il match (l'utente
    * percepirebbe "non funziona" pur avendo digitato la parola giusta). Il valore
@@ -220,8 +228,10 @@ export function UseCaseWizardListToolbarProvider({
     () => ({
       showScenario,
       showMessage,
+      showActionsPanel,
       toggleScenario,
       toggleMessage,
+      toggleActionsPanel,
       bulkFold,
       setBulkFold,
       registerHandlers,
@@ -243,8 +253,10 @@ export function UseCaseWizardListToolbarProvider({
     [
       showScenario,
       showMessage,
+      showActionsPanel,
       toggleScenario,
       toggleMessage,
+      toggleActionsPanel,
       bulkFold,
       registerHandlers,
       triggerExpandAll,

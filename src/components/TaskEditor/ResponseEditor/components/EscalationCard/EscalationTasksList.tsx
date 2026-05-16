@@ -1,56 +1,24 @@
+/**
+ * Behaviour escalation adapter: reads/writes `escalation.tasks` via TaskSequenceEditor.
+ */
+
 import React from 'react';
-import TaskRowDnDWrapper from '@responseEditor/TaskRowDnDWrapper';
-import TaskRow from '@responseEditor/TaskRow';
-import { getTaskIconNode, getTaskLabel } from '@responseEditor/taskMeta';
-import getIconComponent from '@responseEditor/icons';
-import { ensureHexColor } from '@responseEditor/utils/color';
-import CanvasDropWrapper from '@responseEditor/CanvasDropWrapper';
-import PanelEmptyDropZone from '@responseEditor/PanelEmptyDropZone';
-import {
-  normalizeTaskForEscalation,
-  generateGuid,
-  isMessageLikeEscalationTask,
-  isMessageSemanticTemplateId,
-} from '@responseEditor/utils/escalationHelpers';
-import { TaskType, templateIdToTaskType } from '@types/taskTypes';
-import { useTaskEditing } from '@responseEditor/hooks/useTaskEditing';
 import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
-import { useProjectTranslations } from '@context/ProjectTranslationsContext';
-import { useBehaviourUi } from '@responseEditor/behaviour/BehaviourUiContext';
-import { TaskRowHeader } from '@responseEditor/tasks/TaskRowHeader';
-import { TaskRowBody } from '@responseEditor/tasks/TaskRowBody';
-import { ParameterFieldHost } from '@responseEditor/tasks/parameterEditors';
-import { resolveTranslationKey } from '@responseEditor/utils/taskUiText';
-import type { BehaviourFocusTarget } from '@responseEditor/behaviour/BehaviourUiContext';
 import { useResponseEditorNavigation } from '@responseEditor/context/ResponseEditorNavigationContext';
-
-function matchesAllowedTemplateId(templateId: string | null | undefined, allowed: string[]): boolean {
-  const t = String(templateId ?? '').toLowerCase();
-  return allowed.some((a) => String(a).toLowerCase() === t);
-}
-
-/** First translated field to auto-open after drop/append (extensible). */
-function firstFocusParameterId(task: unknown): string | null {
-  if (isMessageLikeEscalationTask(task as Parameters<typeof isMessageLikeEscalationTask>[0])) {
-    return 'text';
-  }
-  const params = (task as { parameters?: { parameterId?: string }[] })?.parameters;
-  if (Array.isArray(params) && params.some((p) => p?.parameterId === 'smsText')) {
-    return 'smsText';
-  }
-  return null;
-}
+import {
+  TaskSequenceEditor,
+  type TaskSequenceRow,
+} from '@responseEditor/taskSequence/TaskSequenceEditor';
 
 type EscalationTasksListProps = {
-  escalation: any;
+  escalation: { tasks?: TaskSequenceRow[] };
   escalationIdx: number;
   color: string;
   translations: Record<string, string>;
   allowedActions?: string[];
-  updateEscalation: (updater: (esc: any) => any) => void;
-  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
+  updateEscalation: (updater: (esc: { tasks?: TaskSequenceRow[] }) => { tasks?: TaskSequenceRow[] }) => void;
+  updateSelectedNode: (updater: (node: unknown) => unknown, options?: { skipAutoSave?: boolean }) => void;
   stepKey: string;
-  /** Expand DnD target to fill Behaviour panel (single escalation). */
   fillAvailableHeight?: boolean;
 };
 
@@ -64,207 +32,21 @@ export function EscalationTasksList({
   updateSelectedNode,
   stepKey,
   fillAvailableHeight = false,
-}: EscalationTasksListProps) {
-  const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
-  const { requestFocusParameter } = useBehaviourUi();
+}: EscalationTasksListProps): React.ReactElement {
   const { openTasksPanel } = useResponseEditorNavigation();
-  const {
-    translations: contextTranslations,
-    addTranslation,
-    isReady,
-  } = useProjectTranslations();
-
-  const effectiveTranslations = React.useMemo(
-    () => ({ ...contextTranslations, ...(translations ?? {}) }),
-    [contextTranslations, translations]
-  );
-
   const tasks = escalation.tasks ?? [];
 
-  /** Avoid opening Tasks twice when Fix / navigation already opened it (reduces panel flicker). */
-  const emptyPanelAutoOpenedRef = React.useRef(false);
-  React.useEffect(() => {
-    emptyPanelAutoOpenedRef.current = false;
-  }, [stepKey, escalationIdx]);
-
-  /** Empty escalation: open Tasks panel once per empty state (Fix may already have opened it). */
-  React.useEffect(() => {
-    if (!isReady) return;
-    if (tasks.length > 0) {
-      emptyPanelAutoOpenedRef.current = false;
-      return;
-    }
-    if (emptyPanelAutoOpenedRef.current) return;
-    emptyPanelAutoOpenedRef.current = true;
-    openTasksPanel();
-  }, [isReady, tasks.length, openTasksPanel, stepKey, escalationIdx]);
-
-  const loggedEmptyWhileReadyRef = React.useRef(false);
-  React.useEffect(() => {
-    if (!isReady || loggedEmptyWhileReadyRef.current) return;
-    if (Object.keys(effectiveTranslations).length > 0) return;
-    loggedEmptyWhileReadyRef.current = true;
-    if (import.meta.env.DEV) {
-      console.warn('[EscalationTasksList] Translations ready but context + props have no entries', {
-        escalationIdx,
-        stepKey,
-      });
-    }
-  }, [isReady, effectiveTranslations, escalationIdx, stepKey]);
-
-  const pendingFocusRef = React.useRef<BehaviourFocusTarget | null>(null);
-
-  React.useLayoutEffect(() => {
-    if (!isReady) return;
-    const p = pendingFocusRef.current;
-    if (!p) return;
-    if (p.escalationIdx !== escalationIdx) return;
-    if (p.taskIdx < 0 || p.taskIdx >= tasks.length) return;
-    requestFocusParameter(p);
-    pendingFocusRef.current = null;
-  }, [tasks, escalationIdx, requestFocusParameter, isReady]);
-
-  const handleParameterCommit = React.useCallback(
-    (taskIdx: number, parameterId: string, newValue: string) => {
-      const task = tasks[taskIdx];
-      if (!task) return;
-
-      const tKey = resolveTranslationKey(task, parameterId);
-      if (tKey) {
-        if (addTranslation && typeof addTranslation === 'function') {
-          addTranslation(tKey, newValue);
-        }
-        return;
-      }
-
-      updateEscalation((esc) => {
-        const next = [...(esc.tasks ?? [])];
-        const t = { ...next[taskIdx] };
-        t.parameters = (t.parameters ?? []).map((p: { parameterId?: string; value?: unknown }) =>
-          p.parameterId === parameterId ? { ...p, value: newValue } : p
-        );
-        next[taskIdx] = t;
-        return { ...esc, tasks: next };
-      });
-    },
-    [tasks, addTranslation, updateEscalation]
-  );
-
-  const handleAppend = React.useCallback(
-    (task: any) => {
-      if (allowedActions && allowedActions.length > 0) {
-        const tid = task?.templateId ?? task?.id ?? '';
-        if (!matchesAllowedTemplateId(tid, allowedActions)) {
-          return;
-        }
-      }
-
-      let taskRef: ReturnType<typeof normalizeTaskForEscalation>;
-      try {
-        taskRef = normalizeTaskForEscalation(task);
-      } catch (e) {
-        console.error('[EscalationTasksList] normalizeTaskForEscalation failed on append', e, { task });
-        return;
-      }
-      updateEscalation((esc) => {
-        const newTasks = [...(esc.tasks ?? []), taskRef];
-        const newTaskIdx = newTasks.length - 1;
-        const pid = firstFocusParameterId(taskRef);
-        if (pid) {
-          pendingFocusRef.current = {
-            kind: 'parameter',
-            escalationIdx,
-            taskIdx: newTaskIdx,
-            parameterId: pid,
-          };
-        }
-        return { ...esc, tasks: newTasks };
-      });
-    },
-    [updateEscalation, escalationIdx, allowedActions]
-  );
-
-  const handleDelete = React.useCallback(
-    (taskIdx: number) => {
-      updateEscalation((esc) => {
-        const next = (esc.tasks ?? []).filter((_: unknown, j: number) => j !== taskIdx);
-        return { ...esc, tasks: next };
-      });
+  const onTasksChange = React.useCallback(
+    (updater: (prev: readonly TaskSequenceRow[]) => TaskSequenceRow[]) => {
+      updateEscalation((esc) => ({
+        ...esc,
+        tasks: updater(esc.tasks ?? []),
+      }));
     },
     [updateEscalation]
   );
 
-  const handleDropFromViewer = React.useCallback(
-    (
-      incoming: any,
-      to: { escalationIdx: number; taskIdx: number },
-      position: 'before' | 'after'
-    ) => {
-      if (to.escalationIdx !== escalationIdx) {
-        return;
-      }
-
-      const task = incoming?.task || incoming;
-
-      const templateId =
-        task?.templateId !== undefined ? task.templateId : (task?.id ?? null);
-
-      let taskType: number | null =
-        task?.type !== undefined && task?.type !== null ? task.type : null;
-      if (taskType === null && templateId != null) {
-        const inferred = templateIdToTaskType(String(templateId));
-        if (inferred !== TaskType.UNDEFINED) {
-          taskType = inferred;
-        }
-      }
-      if (taskType === undefined || taskType === null) {
-        console.error('[handleDropFromViewer] Task is missing required field "type"', { incoming, task });
-        return;
-      }
-
-      const taskToNormalize = {
-        ...task,
-        type: taskType,
-        templateId,
-      };
-
-      if (allowedActions && allowedActions.length > 0) {
-        if (!matchesAllowedTemplateId(templateId, allowedActions)) {
-          return;
-        }
-      }
-
-      let normalized: ReturnType<typeof normalizeTaskForEscalation>;
-      try {
-        normalized = normalizeTaskForEscalation(taskToNormalize, generateGuid);
-      } catch (e) {
-        console.error('[EscalationTasksList] normalizeTaskForEscalation failed on drop', e, { taskToNormalize });
-        return;
-      }
-
-      const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
-
-      updateEscalation((esc) => {
-        const next = [...(esc.tasks ?? [])];
-        next.splice(insertIdx, 0, normalized);
-        return { ...esc, tasks: next };
-      });
-
-      const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
-      const pid = firstFocusParameterId(normalized);
-      if (pid) {
-        pendingFocusRef.current = {
-          kind: 'parameter',
-          escalationIdx,
-          taskIdx: targetIdx,
-          parameterId: pid,
-        };
-      }
-    },
-    [updateEscalation, escalationIdx, allowedActions]
-  );
-
-  const handleMoveTask = React.useCallback(
+  const onMoveTaskAcrossLists = React.useCallback(
     (
       fromEscIdx: number,
       fromTaskIdx: number,
@@ -302,110 +84,18 @@ export function EscalationTasksList({
   );
 
   return (
-    <CanvasDropWrapper
-      onDropTask={handleAppend}
-      isEmpty={tasks.length === 0}
-      fillAvailable={fillAvailableHeight}
-    >
-      {tasks.length === 0 ? (
-        <PanelEmptyDropZone
-          color={color}
-          onDropTask={handleAppend}
-          compact={!fillAvailableHeight}
-          fillAvailable={fillAvailableHeight}
-          idleLabel="Nessuna azione in questa escalation ancora. La scheda Tasks si apre da sola: trascina un task qui o dal catalogo."
-          overLabel="Rilascia per aggiungere il task"
-        />
-      ) : (
-        tasks.map((task: any, j: number) => {
-          const templateId = task.templateId ?? task.id ?? 'sayMessage';
-          const isMessageRow = isMessageLikeEscalationTask(task);
-          const isEditing = isEditingRow(j);
-          const params = Array.isArray(task.parameters) ? task.parameters : [];
-
-          const header = (
-            <TaskRowHeader
-              icon={
-                isMessageRow
-                  ? undefined
-                  : task.iconName
-                    ? getIconComponent(task.iconName, ensureHexColor(task.color))
-                    : getTaskIconNode(templateId, ensureHexColor(task.color))
-              }
-              showMessageIcon={isMessageRow}
-              label={isMessageRow ? undefined : task.label ?? getTaskLabel(templateId)}
-              color={color}
-            />
-          );
-
-          const openPrimary = () => {
-            if (isMessageRow) {
-              requestFocusParameter({
-                kind: 'parameter',
-                escalationIdx,
-                taskIdx: j,
-                parameterId: 'text',
-              });
-            } else {
-              const pid = firstFocusParameterId(task);
-              if (pid) {
-                requestFocusParameter({
-                  kind: 'parameter',
-                  escalationIdx,
-                  taskIdx: j,
-                  parameterId: pid,
-                });
-              }
-            }
-          };
-
-          const body = (
-            <TaskRowBody>
-              {params.length === 0 ? (
-                <span style={{ color: '#64748b', fontSize: 13 }}>—</span>
-              ) : (
-                params.map((param: { parameterId: string; value: unknown }) => (
-                  <ParameterFieldHost
-                    key={param.parameterId}
-                    task={task}
-                    param={param}
-                    translations={effectiveTranslations}
-                    escalationIdx={escalationIdx}
-                    taskIdx={j}
-                    onCommit={(v) => handleParameterCommit(j, param.parameterId, v)}
-                    onEditingActivity={(active) => handleEditingChange(j)(active)}
-                    onDeleteTaskIfEmpty={() => handleDelete(j)}
-                  />
-                ))
-              )}
-            </TaskRowBody>
-          );
-
-          return (
-            <TaskRowDnDWrapper
-              key={`${escalationIdx}-${j}-${task.id ?? j}`}
-              escalationIdx={escalationIdx}
-              taskIdx={j}
-              task={task}
-              onMoveTask={handleMoveTask}
-              onDropNewTask={(t, to, pos) => handleDropFromViewer(t, to, pos)}
-              allowViewerDrop={true}
-              isEditing={isEditing}
-            >
-              <TaskRow
-                header={header}
-                body={body}
-                color={color}
-                draggable
-                selected={false}
-                onDelete={() => handleDelete(j)}
-                onEditPrimary={params.length > 0 ? openPrimary : undefined}
-                rowEditorActive={isEditing}
-              />
-            </TaskRowDnDWrapper>
-          );
-        })
-      )}
-    </CanvasDropWrapper>
+    <TaskSequenceEditor
+      tasks={tasks}
+      onTasksChange={onTasksChange}
+      listIndex={escalationIdx}
+      color={color}
+      translations={translations}
+      allowedTemplateIds={allowedActions}
+      fillAvailableHeight={fillAvailableHeight}
+      autoOpenTasksPanel
+      onAutoOpenTasksPanel={openTasksPanel}
+      onMoveTaskAcrossLists={onMoveTaskAcrossLists}
+      emptyIdleLabel="Nessuna azione in questa escalation ancora. La scheda Tasks si apre da sola: trascina un task qui o dal catalogo."
+    />
   );
 }
