@@ -11,6 +11,8 @@ import {
   unwrapBracketTokenContainingSelection,
 } from './agentMessageTokenHelpers';
 import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
+import { buildTokenPopoverAnchorBelowCaret } from './agentMessageTokenPopoverAnchor';
+export type { AgentMessageTokenPopoverAnchor } from './agentMessageTokenPopoverAnchor';
 
 export type AgentMessageTextFieldMode = 'live' | 'silent' | 'commit';
 
@@ -122,7 +124,7 @@ export function useAgentMessageTextField({
     const lhParsed = Number.parseFloat(cs.lineHeight);
     const fontSize = Number.parseFloat(cs.fontSize) || 14;
     const lineHeightPx = Number.isFinite(lhParsed) ? lhParsed : fontSize * 1.25;
-    setTokenAnchor({ top: pt.top + lineHeightPx + 6, left: pt.left });
+    setTokenAnchor(buildTokenPopoverAnchorBelowCaret(pt, lineHeightPx));
   }, [disabled, isEditing, pointerSelecting, text, selection, getTextarea]);
 
   React.useLayoutEffect(() => {
@@ -176,6 +178,17 @@ export function useAgentMessageTextField({
     applySelectionPatch(built.next, built.selStart, built.selEnd);
   }, [disabled, isEditing, text, getTextarea, applySelectionPatch, onStyleTokenWrap]);
 
+  const handleDismissTokenPopover = React.useCallback(() => {
+    const ta = getTextarea();
+    const collapseAt = selection.end;
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(collapseAt, collapseAt);
+    }
+    setSelection({ start: collapseAt, end: collapseAt });
+    setTokenAnchor(null);
+  }, [getTextarea, selection.end]);
+
   const handleUnwrapToken = React.useCallback(() => {
     if (disabled || !isEditing) return;
     const ta = getTextarea();
@@ -207,6 +220,7 @@ export function useAgentMessageTextField({
     handleWrapSemanticToken,
     handleWrapStyleToken,
     handleUnwrapToken,
+    handleDismissTokenPopover,
     markPointerSelectingMouse,
     markPointerSelectingTouch,
   };

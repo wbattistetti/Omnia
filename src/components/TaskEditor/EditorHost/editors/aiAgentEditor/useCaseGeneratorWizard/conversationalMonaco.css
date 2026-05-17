@@ -50,3 +50,30 @@
 .omnia-value-tokens {
   color: #fbcfe8 !important; /* pink-200 */
 }
+
+.omnia-key-template {
+  color: #7dd3fc !important; /* sky-300 */
+  font-weight: 600;
+}
+
+.omnia-value-template {
+  color: #e0f2fe !important; /* sky-100 */
+}
+
+.omnia-key-tokens_stile {
+  color: #5eead4 !important; /* teal-300 */
+  font-weight: 600;
+}
+
+.omnia-value-tokens_stile {
+  color: #ccfbf1 !important; /* teal-100 */
+}
+
+.omnia-key-style_rule {
+  color: #fdba74 !important; /* orange-300 */
+  font-weight: 600;
+}
+
+.omnia-value-style_rule {
+  color: #ffedd5 !important; /* orange-100 */
+}

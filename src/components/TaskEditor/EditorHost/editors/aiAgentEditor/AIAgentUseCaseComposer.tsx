@@ -95,6 +95,7 @@ import {
   upsertStyleTokenOnWrap,
 } from '@domain/useCaseBundle/styleTokenPhraseHelpers';
 import { AgentMessageSelectionTokenPopover } from './AgentMessageSelectionTokenPopover';
+import { AgentMessageStyleExamplesWrap } from './AgentMessageStyleExamplesToolbarButton';
 import {
   buildVirtualAgentRuntimeCatalogFromUseCases,
   buildVirtualAgentUseCaseConstrainedPromptAppendix,
@@ -164,6 +165,10 @@ import {
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
+import {
+  buildTokenPopoverAnchorBelowCaret,
+  type AgentMessageTokenPopoverAnchor,
+} from './agentMessageTokenPopoverAnchor';
 import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContract';
 import {
   UseCaseDropSentinel,
@@ -560,10 +565,8 @@ export function AIAgentUseCaseComposer({
     end: 0,
   });
   /** Viewport anchor (caret fine selezione) per toolbar Tokenizza `position: fixed`. */
-  const [agentMsgTokenAnchor, setAgentMsgTokenAnchor] = React.useState<{
-    top: number;
-    left: number;
-  } | null>(null);
+  const [agentMsgTokenAnchor, setAgentMsgTokenAnchor] =
+    React.useState<AgentMessageTokenPopoverAnchor | null>(null);
   /**
    * Durante drag-select (mouse/touch) la selezione nel DOM cambia ma non mostriamo ancora
    * «Tokenizza»: solo al rilascio (mouseup/touchend) la toolbar contestuale può comparire.
@@ -1713,10 +1716,17 @@ export function AIAgentUseCaseComposer({
     const lhParsed = Number.parseFloat(cs.lineHeight);
     const fontSize = Number.parseFloat(cs.fontSize) || 14;
     const lineHeightPx = Number.isFinite(lhParsed) ? lhParsed : fontSize * 1.25;
-    const topBelowCaret = pt.top + lineHeightPx + 6;
+    const anchor = buildTokenPopoverAnchorBelowCaret(pt, lineHeightPx);
     setAgentMsgTokenAnchor((prev) => {
-      if (prev && prev.top === topBelowCaret && prev.left === pt.left) return prev;
-      return { top: topBelowCaret, left: pt.left };
+      if (
+        prev &&
+        prev.top === anchor.top &&
+        prev.left === anchor.left &&
+        prev.caretTop === anchor.caretTop
+      ) {
+        return prev;
+      }
+      return anchor;
     });
   }, [
     busy,
@@ -1737,6 +1747,17 @@ export function AIAgentUseCaseComposer({
       recalcAgentMsgTokenAnchor();
     });
   }, [recalcAgentMsgTokenAnchor]);
+
+  const dismissAgentMsgTokenPopover = React.useCallback(() => {
+    const ta = getActiveAgentTextarea();
+    const collapseAt = agentMsgSelection.end;
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(collapseAt, collapseAt);
+    }
+    setAgentMsgSelection({ start: collapseAt, end: collapseAt });
+    setAgentMsgTokenAnchor(null);
+  }, [getActiveAgentTextarea, agentMsgSelection.end]);
 
   const canWrapAgentToken = React.useMemo(() => {
     if (busy || !agentMsgEditUseCaseId || agentMsgPointerSelecting) return false;
@@ -3067,6 +3088,7 @@ export function AIAgentUseCaseComposer({
                                                     )
                                                 : undefined
                                             }
+                                            onClose={dismissAgentMsgTokenPopover}
                                           />
                                         ) : null}
                                       </div>
@@ -3114,6 +3136,14 @@ export function AIAgentUseCaseComposer({
                                       </div>
                                     </div>
                                   ) : (
+                                    <AgentMessageStyleExamplesWrap
+                                      text={rowAssistant.content}
+                                      styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(u))}
+                                      disabled={busy}
+                                      iconSize={12}
+                                    >
+                                      {({ toolbarButton, panel }) => (
+                                    <div className="w-full">
                                     <div
                                       className="group/agentmsg-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
                                       onDoubleClick={(e) => {
@@ -3204,10 +3234,15 @@ export function AIAgentUseCaseComposer({
                                             >
                                               <Variable size={12} aria-hidden />
                                             </button>
+                                            {toolbarButton}
                                           </span>
                                         </div>
                                       </div>
                                     </div>
+                                    {panel}
+                                    </div>
+                                      )}
+                                    </AgentMessageStyleExamplesWrap>
                                   )}
                                 </>
                                   );
@@ -3421,6 +3456,14 @@ export function AIAgentUseCaseComposer({
                     ) : null}
                     {assistantTurn ? (
                       agentMsgEditUseCaseId === selected.id ? (
+                        <AgentMessageStyleExamplesWrap
+                          text={agentMsgEditDraft}
+                          styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(selected))}
+                          disabled={busy}
+                          iconSize={12}
+                        >
+                          {({ toolbarButton, panel }) => (
+                        <div className="w-full space-y-2">
                         <div className="flex flex-wrap items-start gap-2">
                           {agentMsgFieldLabel}
                           <div className="flex min-w-0 flex-1 flex-col">
@@ -3479,10 +3522,12 @@ export function AIAgentUseCaseComposer({
                                         )
                                     : undefined
                                 }
+                                onClose={dismissAgentMsgTokenPopover}
                               />
                             ) : null}
                           </div>
                           <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                            {toolbarButton}
                             <button
                               type="button"
                               title="Conferma"
@@ -3525,7 +3570,19 @@ export function AIAgentUseCaseComposer({
                             </button>
                           </div>
                         </div>
+                        {panel}
+                        </div>
+                          )}
+                        </AgentMessageStyleExamplesWrap>
                       ) : (
+                        <AgentMessageStyleExamplesWrap
+                          text={assistantTurn.content}
+                          styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(selected))}
+                          disabled={busy}
+                          iconSize={12}
+                        >
+                          {({ toolbarButton, panel }) => (
+                        <div className="w-full">
                         <div
                           className="group/agentmsg-row flex w-full min-w-0 cursor-pointer"
                           onDoubleClick={(e) => {
@@ -3601,10 +3658,15 @@ export function AIAgentUseCaseComposer({
                                 >
                                   <Variable size={12} aria-hidden />
                                 </button>
+                                {toolbarButton}
                               </span>
                             </div>
                           </div>
                         </div>
+                        {panel}
+                        </div>
+                          )}
+                        </AgentMessageStyleExamplesWrap>
                       )
                     ) : (
                       <div className="flex flex-wrap items-start gap-x-2 gap-y-1">

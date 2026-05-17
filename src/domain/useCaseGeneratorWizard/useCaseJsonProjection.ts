@@ -31,7 +31,10 @@ import { compilePhraseVariant } from '../useCaseBundle/semanticCompile';
 import { buildParametricWhenClause } from '../useCaseBundle/parametricPhraseHelpers';
 import { emptyProjectSlotLexicon, type ProjectSlotLexicon } from '../useCaseBundle/projectSlotLexicon';
 import type { AIAgentPhraseVariant } from '../useCaseBundle/schema';
-import { getScenarioLlmText } from '@domain/aiAgentUseCase/scenarioText';
+import {
+  buildUseCaseStyleTokenJsonFields,
+  projectScenarioLlmText,
+} from '../useCaseBundle/styleTokenProjection';
 import {
   getAssistantExample,
   isUseCaseIncludedInConversations,
@@ -51,11 +54,19 @@ export interface UseCaseConversationalVariantJson {
  * Forma JSON di un singolo use case nel «prompt conversazionale» esposto al motore esterno.
  * Schema v2: sempre `variants[]` (anche con una sola voce).
  */
+/** Mappa varianti per token di stile (`styleTokenId` → formulazioni). */
+export type UseCaseConversationalTokensStile = Record<string, string[]>;
+
 export interface UseCaseConversationalJson {
   useCaseId: string;
   label: string;
+  /** Testo scenario LLM; se ci sono token di stile include anche {@link STYLE_RULE_LLM_TEXT}. */
   scenario: string;
   variants: UseCaseConversationalVariantJson[];
+  /** Presente solo con token di stile: template designer con `«…»` e `[…]`. */
+  template?: string;
+  tokens_stile?: UseCaseConversationalTokensStile;
+  style_rule?: { llm: string };
   log?: string;
 }
 
@@ -305,14 +316,22 @@ export function projectUseCaseToConversationalJson(
   const variants = collectVariantProjections(uc, lexicon);
   if (variants.length === 0) return null;
 
-  const scenario = getScenarioLlmText(uc);
+  const scenario = projectScenarioLlmText(uc);
   const label = typeof uc.label === 'string' ? uc.label.trim() : '';
+  const styleFields = buildUseCaseStyleTokenJsonFields(uc);
 
   const projected: UseCaseConversationalJson = {
     useCaseId: uc.id,
     label,
     scenario,
     variants,
+    ...(styleFields
+      ? {
+          template: styleFields.template,
+          tokens_stile: styleFields.tokens_stile,
+          style_rule: styleFields.style_rule,
+        }
+      : {}),
   };
   if (options.includeLog === true) {
     projected.log = buildUseCaseLogValue(label);

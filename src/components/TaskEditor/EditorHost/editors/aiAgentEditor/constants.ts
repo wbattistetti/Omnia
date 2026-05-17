@@ -30,6 +30,9 @@ export const LABEL_AGENT_MSG_SELECTION_SEMANTIC_TOKEN = 'Semantic token';
 export const LABEL_AGENT_MSG_SELECTION_STYLE_TOKEN = 'Style token';
 /** Floating selection menu — remove token (semantic or style). */
 export const LABEL_AGENT_MSG_SELECTION_UNTOKEN = 'Untokenize';
+/** Toolbar messaggio: combinatoria varianti style token. */
+export const TOOLTIP_AGENT_MSG_GENERATE_STYLE_EXAMPLES =
+  'Genera esempi di frasi applicando i vari stili';
 /** Strips all [...] wrappers from the assistant message (plain text again). */
 export const LABEL_AGENT_MSG_STRIP_TOKENS = 'Senza quadre';
 /** Calls LLM to wrap runtime fragments in [slot] and refresh motor JSON preview. */

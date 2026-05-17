@@ -32,6 +32,13 @@ const SEMANTIC_KEYS: ReadonlyArray<{ key: string; keyClass: string; valueClass: 
     valueClass: 'omnia-value-tokenizedExample',
   },
   { key: 'tokens', keyClass: 'omnia-key-tokens', valueClass: 'omnia-value-tokens' },
+  { key: 'template', keyClass: 'omnia-key-template', valueClass: 'omnia-value-template' },
+  {
+    key: 'tokens_stile',
+    keyClass: 'omnia-key-tokens_stile',
+    valueClass: 'omnia-value-tokens_stile',
+  },
+  { key: 'style_rule', keyClass: 'omnia-key-style_rule', valueClass: 'omnia-value-style_rule' },
 ];
 
 let jsonThemeRegistered = false;

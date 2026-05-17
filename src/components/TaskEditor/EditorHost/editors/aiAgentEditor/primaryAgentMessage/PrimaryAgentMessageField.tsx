@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Check, MessageSquareText, Pencil, Trash2, Variable, X } from 'lucide-react';
+import { Check, List, MessageSquareText, Pencil, Trash2, Variable, X } from 'lucide-react';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { AIAgentPhraseStyleToken } from '@domain/useCaseBundle/schema';
 import {
@@ -25,6 +25,9 @@ import { useAgentMessageTextField } from '../useAgentMessageTextField';
 import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
 import { DoubleMessageIcon } from './DoubleMessageIcon';
 import type { PhraseParametricRevertPickProps } from '../useCaseBundle/PhraseParametricEditor';
+import { AgentMessageStyleExamplesPanel } from '../AgentMessageStyleExamplesPanel';
+import { useAgentMessageStyleExamples } from '../useAgentMessageStyleExamples';
+import { TOOLTIP_AGENT_MSG_GENERATE_STYLE_EXAMPLES } from '../constants';
 
 export type { PhraseParametricRevertPickProps as ParametricEditorPickRevertContext };
 
@@ -203,6 +206,36 @@ export function PrimaryAgentMessageField({
     return styleTokens.find((t) => t.defaultSurface === span.inner) ?? null;
   }, [tokenField.activeStyleTokenSpan, styleTokens]);
 
+  const styleExamples = useAgentMessageStyleExamples({
+    text: editing ? draft : text,
+    styleTokens,
+  });
+
+  const styleExamplesToolbarButton = styleExamples.hasStyleTokens ? (
+    <button
+      type="button"
+      disabled={busy || !styleExamples.canGenerate}
+      aria-pressed={styleExamples.open}
+      title={TOOLTIP_AGENT_MSG_GENERATE_STYLE_EXAMPLES}
+      className={`${UC_AGENT_ROW_EDIT_BTN} ${styleExamples.open ? 'text-sky-300' : ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        styleExamples.toggleOpen();
+      }}
+    >
+      <List size={INLINE_TOOLBAR_ICON_PX} aria-hidden />
+    </button>
+  ) : null;
+
+  const styleExamplesPanel =
+    styleExamples.open && styleExamples.hasStyleTokens ? (
+      <AgentMessageStyleExamplesPanel
+        phrases={styleExamples.phrases}
+        truncated={styleExamples.truncated}
+        className="mt-2"
+      />
+    ) : null;
+
   const selectionTokenPopover =
     tokenField.tokenPopoverActionVisible !== 'none' && !busy ? (
       <AgentMessageSelectionTokenPopover
@@ -218,6 +251,7 @@ export function PrimaryAgentMessageField({
             ? (variants) => onStyleTokenVariantsChange(activeStyleToken.styleTokenId, variants)
             : undefined
         }
+        onClose={tokenField.handleDismissTokenPopover}
       />
     ) : null;
 
@@ -269,6 +303,7 @@ export function PrimaryAgentMessageField({
           <Variable size={INLINE_TOOLBAR_ICON_PX} aria-hidden />
         </button>
       ) : null}
+      {styleExamplesToolbarButton}
       {onDeleteMessage ? (
         <button
           type="button"
@@ -375,6 +410,7 @@ export function PrimaryAgentMessageField({
         {selectionTokenPopover}
       </div>
       <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+        {styleExamplesToolbarButton}
         <button
           type="button"
           title="Conferma"
@@ -471,6 +507,7 @@ export function PrimaryAgentMessageField({
               {resolvedParametricEditor}
               {parametricRevertFooter}
             </div>
+            {styleExamplesPanel}
           </>
         ) : (
           <>
@@ -500,6 +537,7 @@ export function PrimaryAgentMessageField({
               {parametricRevertFooter}
             </div>
             ) : null}
+            {styleExamplesPanel}
           </>
         )}
       </div>
@@ -548,6 +586,7 @@ export function PrimaryAgentMessageField({
             {selectionTokenPopover}
           </div>
           <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+            {styleExamplesToolbarButton}
             <button
               type="button"
               title="Conferma"
@@ -568,6 +607,7 @@ export function PrimaryAgentMessageField({
             </button>
           </span>
         </div>
+        {styleExamplesPanel}
       </div>
     );
   }
@@ -590,6 +630,7 @@ export function PrimaryAgentMessageField({
           {inlineToolbar}
         </div>
       </div>
+      {styleExamplesPanel}
     </div>
   );
 }
