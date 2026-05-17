@@ -59,6 +59,10 @@ import { computeLinkMidScreenFromConnection } from './utils/computeLinkMidScreen
 import { computeLinkMidScreenForTempEdgeUnified } from './utils/edgeIntellisenseAnchorFromHandles';
 import { incrementEditorOpenMetric } from '@features/performance';
 import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
+import {
+  useElevenLabsFlowDrop,
+  type ElevenLabsFlowDropMessage,
+} from './hooks/useElevenLabsFlowDrop';
 
 // Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
@@ -293,6 +297,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   /** Runs before {@link useCrossNodeSubflowPortalMove} (registration order → capture phase first). */
   useCrossFlowRowMoveOrchestrator({ projectId: structuralProjectId, projectData });
   useCrossNodeSubflowPortalMove({ flowId, nodes });
+
+  const [elDropBanner, setElDropBanner] = useState<ElevenLabsFlowDropMessage | null>(null);
+  const elDropBannerTimerRef = useRef<number>();
+  const onElevenLabsDropMessage = useCallback((msg: ElevenLabsFlowDropMessage) => {
+    setElDropBanner(msg);
+    window.clearTimeout(elDropBannerTimerRef.current);
+    elDropBannerTimerRef.current = window.setTimeout(() => setElDropBanner(null), 7000);
+  }, []);
+  const { elDropActive, onFlowDragOver, onFlowDragLeave, onFlowDrop } = useElevenLabsFlowDrop({
+    nodes,
+    setNodes,
+    projectId: structuralProjectId,
+    onDropMessage: onElevenLabsDropMessage,
+  });
 
   const nodeActions = useNodeActions({
     nodes,
@@ -744,14 +762,31 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     <FlowSubflowProvider value={subflowContextValue}>
       <FlowCanvasProvider flowId={flowId ?? 'main'}>
       <div
-        className="relative flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden"
+        className={
+          'relative flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden' +
+          (elDropActive ? ' ring-2 ring-inset ring-violet-400/70' : '')
+        }
         ref={canvasRef}
         data-omnia-flowchart-canvas-root={String(flowId ?? 'main').trim()}
         data-flow-canvas-id={String(flowId ?? 'main').trim()}
         onMouseLeave={() => setCursorTooltip(null)}
         onMouseDown={eventHandlers.onMouseDown}
+        onDragOver={onFlowDragOver}
+        onDragLeave={onFlowDragLeave}
+        onDrop={onFlowDrop}
       >
-      {/* Execution State Provider */}
+      {elDropBanner ? (
+        <div
+          className={
+            'pointer-events-none absolute left-1/2 top-3 z-20 max-w-md -translate-x-1/2 rounded-md px-4 py-2 text-center text-xs font-medium shadow-lg ' +
+            (elDropBanner.kind === 'created'
+              ? 'border border-emerald-600/60 bg-emerald-950 text-emerald-100'
+              : 'border border-amber-600/60 bg-amber-950 text-amber-100')
+          }
+        >
+          {elDropBanner.label}: {elDropBanner.detail}
+        </div>
+      ) : null}
       <ExecutionStateProvider
         executionState={propExecutionState ?? FlowStateBridge.getExecutionState()}
         currentTask={propCurrentTask ?? FlowStateBridge.getCurrentTask()}

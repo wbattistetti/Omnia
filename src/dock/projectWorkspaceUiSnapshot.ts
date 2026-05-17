@@ -3,11 +3,12 @@
  * Domain data (graphs, tasks) stays in the project save; this is client-side session layout per project.
  */
 
-import type { DockNode, DockTab, DockTabFlow } from './types';
+import type { DockNode, DockTab, DockTabElevenLabsWorkspace, DockTabFlow } from './types';
 import { mapNode } from './ops';
 import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
 
 export const WORKSPACE_UI_STORAGE_VERSION = 1 as const;
+export const WORKSPACE_UI_STORAGE_VERSION_V2 = 2 as const;
 
 export type SerializableFlowTab = {
   id: string;
@@ -16,11 +17,22 @@ export type SerializableFlowTab = {
   flowId: string;
 };
 
+export type SerializableElevenLabsTab = {
+  id: string;
+  title: string;
+  type: 'elevenlabsWorkspace';
+  agentId: string;
+  agentName?: string;
+  linkedTaskInstanceId?: string;
+};
+
+export type SerializablePersistedTab = SerializableFlowTab | SerializableElevenLabsTab;
+
 export type SerializableDockNode =
   | {
       kind: 'tabset';
       id: string;
-      tabs: SerializableFlowTab[];
+      tabs: SerializablePersistedTab[];
       active: number;
     }
   | {
@@ -35,6 +47,13 @@ export type WorkspaceUiSnapshotV1 = {
   version: typeof WORKSPACE_UI_STORAGE_VERSION;
   root: SerializableDockNode;
 };
+
+export type WorkspaceUiSnapshotV2 = {
+  version: typeof WORKSPACE_UI_STORAGE_VERSION_V2;
+  root: SerializableDockNode;
+};
+
+export type WorkspaceUiSnapshot = WorkspaceUiSnapshotV1 | WorkspaceUiSnapshotV2;
 
 const STORAGE_PREFIX = 'omnia.workspaceUi.v1.';
 
@@ -56,21 +75,43 @@ function isFlowTab(t: DockTab): t is DockTabFlow {
   return t.type === 'flow';
 }
 
-/** Keeps split/tabset structure and only `flow` tabs (editors/chat are not serializable). */
-export function serializeDockTreeToSnapshot(tree: DockNode): WorkspaceUiSnapshotV1 | null {
+function isElevenLabsTab(t: DockTab): t is DockTabElevenLabsWorkspace {
+  return t.type === 'elevenlabsWorkspace';
+}
+
+function serializePersistedTab(t: DockTab): SerializablePersistedTab | null {
+  if (isFlowTab(t)) {
+    const flowId = String(t.flowId || '').trim();
+    if (!flowId) return null;
+    return { id: t.id, title: t.title, type: 'flow', flowId };
+  }
+  if (isElevenLabsTab(t)) {
+    const agentId = String(t.agentId || '').trim();
+    if (!agentId) return null;
+    return {
+      id: t.id,
+      title: t.title,
+      type: 'elevenlabsWorkspace',
+      agentId,
+      agentName: t.agentName,
+      linkedTaskInstanceId: t.linkedTaskInstanceId,
+    };
+  }
+  return null;
+}
+
+/** Keeps split/tabset structure, `flow` tabs, and ElevenLabs workspace tabs (v2). */
+export function serializeDockTreeToSnapshot(tree: DockNode): WorkspaceUiSnapshotV2 | null {
   const root = serializeNode(tree);
   if (!root) return null;
-  return { version: WORKSPACE_UI_STORAGE_VERSION, root };
+  return { version: WORKSPACE_UI_STORAGE_VERSION_V2, root };
 }
 
 function serializeNode(n: DockNode): SerializableDockNode | null {
   if (n.kind === 'tabset') {
-    const tabs: SerializableFlowTab[] = n.tabs.filter(isFlowTab).map((t) => ({
-      id: t.id,
-      title: t.title,
-      type: 'flow' as const,
-      flowId: String(t.flowId || '').trim(),
-    }));
+    const tabs: SerializablePersistedTab[] = n.tabs
+      .map(serializePersistedTab)
+      .filter((t): t is SerializablePersistedTab => t != null);
     if (tabs.length === 0) return null;
     const active = Math.max(0, Math.min(n.active, tabs.length - 1));
     return { kind: 'tabset', id: n.id, tabs, active };
@@ -89,21 +130,23 @@ function serializeNode(n: DockNode): SerializableDockNode | null {
 
 function collectFlowIdsFromSnapshot(node: SerializableDockNode, out: Set<string>): void {
   if (node.kind === 'tabset') {
-    for (const t of node.tabs) out.add(t.flowId);
+    for (const t of node.tabs) {
+      if (t.type === 'flow') out.add(t.flowId);
+    }
     return;
   }
   for (const c of node.children) collectFlowIdsFromSnapshot(c, out);
 }
 
 /** All flow ids referenced by flow tabs in a persisted workspace snapshot (deduped). */
-export function getFlowIdsFromWorkspaceSnapshot(snapshot: WorkspaceUiSnapshotV1): string[] {
+export function getFlowIdsFromWorkspaceSnapshot(snapshot: WorkspaceUiSnapshot): string[] {
   const out = new Set<string>();
   collectFlowIdsFromSnapshot(snapshot.root, out);
   return Array.from(out);
 }
 
 /** True when every flow id in the snapshot exists in the loaded workspace. */
-export function snapshotFlowIdsAreLoaded(snapshot: WorkspaceUiSnapshotV1, flowIds: Set<string>): boolean {
+export function snapshotFlowIdsAreLoaded(snapshot: WorkspaceUiSnapshot, flowIds: Set<string>): boolean {
   const need = new Set<string>();
   collectFlowIdsFromSnapshot(snapshot.root, need);
   for (const id of need) {
@@ -114,7 +157,7 @@ export function snapshotFlowIdsAreLoaded(snapshot: WorkspaceUiSnapshotV1, flowId
 
 /** Drops flow tabs whose canvas is not in the workspace (stale ids). Compacts empty tabsets to null. */
 export function filterSnapshotToExistingFlows(
-  snapshot: WorkspaceUiSnapshotV1,
+  snapshot: WorkspaceUiSnapshot,
   flowIds: Set<string>
 ): SerializableDockNode | null {
   const n = filterNode(snapshot.root, flowIds);
@@ -123,7 +166,7 @@ export function filterSnapshotToExistingFlows(
 
 function filterNode(n: SerializableDockNode, flowIds: Set<string>): SerializableDockNode | null {
   if (n.kind === 'tabset') {
-    const tabs = n.tabs.filter((t) => flowIds.has(t.flowId));
+    const tabs = n.tabs.filter((t) => t.type !== 'flow' || flowIds.has(t.flowId));
     if (tabs.length === 0) return null;
     const active = Math.max(0, Math.min(n.active, tabs.length - 1));
     return { kind: 'tabset', id: n.id, tabs, active };
@@ -151,6 +194,17 @@ export function snapshotToDockNode(
 function deserializeNode(n: SerializableDockNode, flows: Record<string, { title?: string } | undefined>): DockNode {
   if (n.kind === 'tabset') {
     const tabs: DockTab[] = n.tabs.map((tab) => {
+      if (tab.type === 'elevenlabsWorkspace') {
+        const out: DockTabElevenLabsWorkspace = {
+          id: tab.id,
+          title: tab.title,
+          type: 'elevenlabsWorkspace',
+          agentId: tab.agentId,
+          agentName: tab.agentName,
+          linkedTaskInstanceId: tab.linkedTaskInstanceId,
+        };
+        return out;
+      }
       const title = resolveFlowTabDisplayTitle(tab.flowId, flows);
       const out: DockTabFlow = { id: tab.id, title, type: 'flow', flowId: tab.flowId };
       return out;
@@ -210,21 +264,27 @@ export function getLastActiveFlowIdFromDock(tree: DockNode): string | null {
   return last;
 }
 
-export function parseStoredSnapshot(raw: string | null): WorkspaceUiSnapshotV1 | null {
+export function parseStoredSnapshot(raw: string | null): WorkspaceUiSnapshot | null {
   if (!raw || typeof raw !== 'string') return null;
   try {
     const o = JSON.parse(raw) as unknown;
     if (!o || typeof o !== 'object') return null;
     const rec = o as Record<string, unknown>;
-    if (rec.version !== WORKSPACE_UI_STORAGE_VERSION) return null;
-    if (!rec.root || typeof rec.root !== 'object') return null;
-    return { version: WORKSPACE_UI_STORAGE_VERSION, root: rec.root as SerializableDockNode };
+    if (rec.version === WORKSPACE_UI_STORAGE_VERSION_V2) {
+      if (!rec.root || typeof rec.root !== 'object') return null;
+      return { version: WORKSPACE_UI_STORAGE_VERSION_V2, root: rec.root as SerializableDockNode };
+    }
+    if (rec.version === WORKSPACE_UI_STORAGE_VERSION) {
+      if (!rec.root || typeof rec.root !== 'object') return null;
+      return { version: WORKSPACE_UI_STORAGE_VERSION, root: rec.root as SerializableDockNode };
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-export function loadWorkspaceUiSnapshot(projectId: string): WorkspaceUiSnapshotV1 | null {
+export function loadWorkspaceUiSnapshot(projectId: string): WorkspaceUiSnapshot | null {
   const pid = String(projectId || '').trim();
   if (!pid) return null;
   try {
@@ -262,7 +322,7 @@ export function clearWorkspaceUiSnapshot(projectId: string): void {
  * If filtered snapshot is empty, returns default main tab.
  */
 export function buildDockTreeFromSnapshotForFlows(
-  snapshot: WorkspaceUiSnapshotV1,
+  snapshot: WorkspaceUiSnapshot,
   flows: Record<string, { title?: string } | undefined>
 ): DockNode | null {
   const ids = new Set(Object.keys(flows || {}));

@@ -135,9 +135,7 @@ export function AIAgentConstructionStepper({
         {AGENT_WIZARD_STEPS_META.map((meta) => {
           const isPromptsStep = meta.index === 1;
           const isCurrent =
-            !costsActive &&
-            !errorHandlingActive &&
-            meta.index === currentStep;
+            !costsActive && !errorHandlingActive && meta.index === currentStep;
           const isComplete = completion[meta.index] === true;
           const isEnabled = enabled[meta.index] === true;
           const Icon = meta.icon;

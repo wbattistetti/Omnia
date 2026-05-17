@@ -45,10 +45,30 @@ Public NotInheritable Class ElevenLabsEndpoints
             Async Function(context As HttpContext) As Task
                 Await HandleListAgents(context).ConfigureAwait(False)
             End Function)
+        app.MapGet(
+            "/elevenlabs/agents/{agentId}",
+            Async Function(context As HttpContext, agentId As String) As Task
+                Await HandleGetAgent(context, agentId).ConfigureAwait(False)
+            End Function)
+        app.MapPatch(
+            "/elevenlabs/agents/{agentId}",
+            Async Function(context As HttpContext, agentId As String) As Task
+                Await HandlePatchAgent(context, agentId).ConfigureAwait(False)
+            End Function)
         app.MapDelete(
             "/elevenlabs/agents/{agentId}",
             Async Function(context As HttpContext, agentId As String) As Task
                 Await HandleDeleteAgent(context, agentId).ConfigureAwait(False)
+            End Function)
+        app.MapGet(
+            "/elevenlabs/tools",
+            Async Function(context As HttpContext) As Task
+                Await HandleListTools(context).ConfigureAwait(False)
+            End Function)
+        app.MapGet(
+            "/elevenlabs/tools/{toolId}",
+            Async Function(context As HttpContext, toolId As String) As Task
+                Await HandleGetTool(context, toolId).ConfigureAwait(False)
             End Function)
         app.MapPost("/elevenlabs/createAgent", AddressOf HandleCreateAgent)
         app.MapPost("/elevenlabs/startAgent", AddressOf HandleStartAgent)
@@ -335,6 +355,205 @@ Public NotInheritable Class ElevenLabsEndpoints
             .elevenLabsApiBase = apiBaseLogged,
             .details = fatalEx.ToString()
         }).ConfigureAwait(False)
+    End Function
+
+    ''' <summary>
+    ''' GET /elevenlabs/tools — proxy <c>GET /v1/convai/tools</c> (paginazione, filtri opzionali).
+    ''' </summary>
+    Private Shared Async Function HandleListTools(context As HttpContext) As Task
+        Dim fatalEx As Exception = Nothing
+        Dim apiBaseLogged As String = ""
+        Try
+            Dim apiKey = Environment.GetEnvironmentVariable("ELEVENLABS_API_KEY")
+            If String.IsNullOrWhiteSpace(apiKey) Then
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable
+                Await context.Response.WriteAsJsonAsync(New With {.error = "ELEVENLABS_API_KEY is not configured."}).ConfigureAwait(False)
+                Return
+            End If
+
+            Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
+            apiBaseLogged = apiBase
+            Dim q = context.Request.Query
+            Dim pageSize = q("page_size").ToString()
+            If String.IsNullOrWhiteSpace(pageSize) Then pageSize = "100"
+            Dim cursor = q("cursor").ToString()
+            Dim search = q("search").ToString()
+            Dim types = q("types").ToString()
+
+            Dim qParts As New List(Of String) From {
+                "page_size=" & Uri.EscapeDataString(pageSize)
+            }
+            If Not String.IsNullOrWhiteSpace(cursor) Then qParts.Add("cursor=" & Uri.EscapeDataString(cursor))
+            If Not String.IsNullOrWhiteSpace(search) Then qParts.Add("search=" & Uri.EscapeDataString(search))
+            If Not String.IsNullOrWhiteSpace(types) Then qParts.Add("types=" & Uri.EscapeDataString(types))
+            Dim url = apiBase.TrimEnd("/"c) & "/v1/convai/tools?" & String.Join("&", qParts)
+
+            Using req As New HttpRequestMessage(HttpMethod.Get, url)
+                req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
+                Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
+                    Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    If Not resp.IsSuccessStatusCode Then
+                        LogOmniaElevenLabs("listTools·upstreamErr", "status=" & CInt(resp.StatusCode).ToString() & " body=" & respBody)
+                    Else
+                        LogOmniaElevenLabs("listTools·ok", "status=200 bodyLen=" & respBody.Length.ToString())
+                    End If
+                    context.Response.StatusCode = CInt(resp.StatusCode)
+                    context.Response.ContentType = "application/json; charset=utf-8"
+                    Await context.Response.WriteAsync(respBody).ConfigureAwait(False)
+                End Using
+            End Using
+        Catch ex As Exception
+            fatalEx = ex
+        End Try
+
+        If fatalEx Is Nothing Then Return
+        If context.Response.HasStarted Then Return
+
+        LogOmniaElevenLabs("listTools·fatal", fatalEx.ToString(), 8000)
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError
+        context.Response.ContentType = "application/json; charset=utf-8"
+        Await context.Response.WriteAsJsonAsync(New With {
+            .error = "ElevenLabs list tools failed (ApiServer / upstream).",
+            .phase = "listTools",
+            .detail = fatalEx.Message,
+            .elevenLabsApiBase = apiBaseLogged,
+            .details = fatalEx.ToString()
+        }).ConfigureAwait(False)
+    End Function
+
+    ''' <summary>
+    ''' GET /elevenlabs/tools/{toolId} — proxy <c>GET /v1/convai/tools/{tool_id}</c>.
+    ''' </summary>
+    Private Shared Async Function HandleGetTool(context As HttpContext, toolId As String) As Task
+        Dim apiKey = Environment.GetEnvironmentVariable("ELEVENLABS_API_KEY")
+        If String.IsNullOrWhiteSpace(apiKey) Then
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable
+            Await context.Response.WriteAsJsonAsync(New With {.error = "ELEVENLABS_API_KEY is not configured."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim id = If(toolId, "").Trim()
+        If String.IsNullOrWhiteSpace(id) Then
+            context.Response.StatusCode = StatusCodes.Status400BadRequest
+            Await context.Response.WriteAsJsonAsync(New With {.error = "toolId is required."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
+        Dim enc = Uri.EscapeDataString(id)
+        Dim url = $"{apiBase}/v1/convai/tools/{enc}"
+
+        Using req As New HttpRequestMessage(HttpMethod.Get, url)
+            req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
+            Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
+                Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+                If Not resp.IsSuccessStatusCode Then
+                    Dim upstream = CInt(resp.StatusCode)
+                    LogOmniaElevenLabs("getTool·upstreamErr", "toolId=" & id & " status=" & upstream.ToString() & " body=" & respBody)
+                    Dim clientStatus = upstream
+                    If upstream < CInt(HttpStatusCode.BadRequest) OrElse upstream >= 600 Then
+                        clientStatus = StatusCodes.Status502BadGateway
+                    ElseIf upstream >= CInt(HttpStatusCode.InternalServerError) Then
+                        clientStatus = StatusCodes.Status502BadGateway
+                    End If
+                    context.Response.StatusCode = clientStatus
+                    Await context.Response.WriteAsJsonAsync(New With {
+                        .error = "ElevenLabs tools/get failed.",
+                        .statusCode = upstream,
+                        .elevenLabsApiBase = apiBase,
+                        .details = respBody
+                    }).ConfigureAwait(False)
+                    Return
+                End If
+
+                LogOmniaElevenLabs("getTool·ok", "toolId=" & id & " bodyLen=" & respBody.Length.ToString())
+                context.Response.StatusCode = CInt(resp.StatusCode)
+                context.Response.ContentType = "application/json; charset=utf-8"
+                Await context.Response.WriteAsync(respBody).ConfigureAwait(False)
+            End Using
+        End Using
+    End Function
+
+    ''' <summary>
+    ''' GET /elevenlabs/agents/{agentId} — proxy <c>GET /v1/convai/agents/{agent_id}</c>.
+    ''' </summary>
+    Private Shared Async Function HandleGetAgent(context As HttpContext, agentId As String) As Task
+        Await ProxyConvaiAgentById(context, agentId, HttpMethod.Get, Nothing).ConfigureAwait(False)
+    End Function
+
+    ''' <summary>
+    ''' PATCH /elevenlabs/agents/{agentId} — proxy <c>PATCH /v1/convai/agents/{agent_id}</c>.
+    ''' </summary>
+    Private Shared Async Function HandlePatchAgent(context As HttpContext, agentId As String) As Task
+        Dim body As String = Nothing
+        Using reader As New StreamReader(context.Request.Body, Encoding.UTF8)
+            body = Await reader.ReadToEndAsync().ConfigureAwait(False)
+        End Using
+        Await ProxyConvaiAgentById(context, agentId, New HttpMethod("PATCH"), body).ConfigureAwait(False)
+    End Function
+
+    Private Shared Async Function ProxyConvaiAgentById(
+        context As HttpContext,
+        agentId As String,
+        method As HttpMethod,
+        requestBody As String
+    ) As Task
+        Dim apiKey = Environment.GetEnvironmentVariable("ELEVENLABS_API_KEY")
+        If String.IsNullOrWhiteSpace(apiKey) Then
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable
+            Await context.Response.WriteAsJsonAsync(New With {.error = "ELEVENLABS_API_KEY is not configured."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim id = If(agentId, "").Trim()
+        If String.IsNullOrWhiteSpace(id) Then
+            context.Response.StatusCode = StatusCodes.Status400BadRequest
+            Await context.Response.WriteAsJsonAsync(New With {.error = "agentId is required."}).ConfigureAwait(False)
+            Return
+        End If
+
+        Dim apiBase = ElevenLabsApiSettings.GetApiBaseUrl()
+        Dim enc = Uri.EscapeDataString(id)
+        Dim url = $"{apiBase}/v1/convai/agents/{enc}"
+
+        Using req As New HttpRequestMessage(method, url)
+            req.Headers.TryAddWithoutValidation("xi-api-key", apiKey.Trim())
+            If method.Method.Equals("PATCH", StringComparison.OrdinalIgnoreCase) AndAlso Not String.IsNullOrWhiteSpace(requestBody) Then
+                req.Content = New StringContent(requestBody, Encoding.UTF8, "application/json")
+            End If
+            Using resp = Await ElevenLabsApiHttp.SendAsync(req, context.RequestAborted).ConfigureAwait(False)
+                Dim respBody = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+                If Not resp.IsSuccessStatusCode Then
+                    Dim upstream = CInt(resp.StatusCode)
+                    LogOmniaElevenLabs(method.Method.ToLowerInvariant() & "Agent·upstreamErr", "agentId=" & id & " status=" & upstream.ToString() & " body=" & respBody)
+                    Dim clientStatus = upstream
+                    If upstream < CInt(HttpStatusCode.BadRequest) OrElse upstream >= 600 Then
+                        clientStatus = StatusCodes.Status502BadGateway
+                    ElseIf upstream >= CInt(HttpStatusCode.InternalServerError) Then
+                        clientStatus = StatusCodes.Status502BadGateway
+                    End If
+                    context.Response.StatusCode = clientStatus
+                    Await context.Response.WriteAsJsonAsync(New With {
+                        .error = "ElevenLabs agents/" & method.Method.ToLowerInvariant() & " failed.",
+                        .statusCode = upstream,
+                        .elevenLabsApiBase = apiBase,
+                        .details = respBody
+                    }).ConfigureAwait(False)
+                    Return
+                End If
+
+                LogOmniaElevenLabs(method.Method.ToLowerInvariant() & "Agent·ok", "agentId=" & id & " bodyLen=" & respBody.Length.ToString())
+                context.Response.StatusCode = CInt(resp.StatusCode)
+                context.Response.ContentType = "application/json; charset=utf-8"
+                If Not String.IsNullOrWhiteSpace(respBody) Then
+                    Await context.Response.WriteAsync(respBody).ConfigureAwait(False)
+                ElseIf method.Method.Equals("GET", StringComparison.OrdinalIgnoreCase) Then
+                    Await context.Response.WriteAsJsonAsync(New With {.agent_id = id}).ConfigureAwait(False)
+                Else
+                    Await context.Response.WriteAsJsonAsync(New With {.ok = True}).ConfigureAwait(False)
+                End If
+            End Using
+        End Using
     End Function
 
     ''' <summary>

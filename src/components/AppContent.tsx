@@ -23,6 +23,9 @@ import { DockManager } from './Dock/DockManager';
 import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { FlowWorkspaceProvider, useFlowWorkspace, useFlowActions } from '@flows/FlowStore';
 import { upsertAddNextTo, closeTab, activateTab, upsertFlowTabInDualPane } from '../dock/ops';
+import { openElevenLabsWorkspaceInDock } from '../dock/elevenLabsWorkspaceTab';
+import { ensureWorkspacesBootstrapped } from '@workspaces/index';
+import { ImportElevenLabsAgentDialog } from './workspaces/elevenlabs/ImportElevenLabsAgentDialog';
 import { createDefaultDockTree } from '../dock/projectWorkspaceUiSnapshot';
 import { WorkspaceDockLifecycle } from '../dock/WorkspaceDockLifecycle';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
@@ -1086,6 +1089,16 @@ export const AppContent: React.FC<AppContentProps> = ({
   /** Tab Studio da selezionare all’apertura (es. tunnel da errore compilazione). */
   const [studioInitialStep, setStudioInitialStep] = useState<StudioStepKey | undefined>(undefined);
   const [globalDataPanelOpen, setGlobalDataPanelOpen] = useState(false);
+  const [elevenLabsImportDialogOpen, setElevenLabsImportDialogOpen] = useState(false);
+  const handleOpenElevenLabsWorkspaceAgent = useCallback(
+    (agent: { agentId: string; name: string }) => {
+      setDockTree((prev) => openElevenLabsWorkspaceInDock(prev, agent.agentId, agent.name));
+    },
+    [setDockTree]
+  );
+  React.useEffect(() => {
+    ensureWorkspacesBootstrapped();
+  }, []);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
   const [showUseCasePanel, setShowUseCasePanel] = useState(false);
   /** When set, global debugger runs this flow; when null, uses {@link FlowWorkspaceSnapshot.getActiveFlowId}. */
@@ -1925,6 +1938,13 @@ export const AppContent: React.FC<AppContentProps> = ({
             globalDataOpen={globalDataPanelOpen}
             onGlobalDataToggle={() => setGlobalDataPanelOpen((v) => !v)}
             onOpenLibrary={() => setIsSidebarCollapsed(false)}
+            onImportElevenLabsAgent={() => setElevenLabsImportDialogOpen(true)}
+          />
+
+          <ImportElevenLabsAgentDialog
+            open={elevenLabsImportDialogOpen}
+            onClose={() => setElevenLabsImportDialogOpen(false)}
+            onSelectAgent={handleOpenElevenLabsWorkspaceAgent}
           />
 
           <GlobalProjectDataPanel

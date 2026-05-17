@@ -9,7 +9,7 @@ import {
 } from '../projectWorkspaceUiSnapshot';
 
 describe('projectWorkspaceUiSnapshot', () => {
-  it('serializes only flow tabs', () => {
+  it('serializes flow and elevenlabs workspace tabs (v2), skips taskEditor', () => {
     const tree = {
       kind: 'tabset' as const,
       id: 'ts_main',
@@ -21,14 +21,53 @@ describe('projectWorkspaceUiSnapshot', () => {
           type: 'taskEditor' as const,
           task: { id: 'x', instanceId: 'x', type: 1 },
         },
+        {
+          id: 'tel_1',
+          title: 'EL Agent',
+          type: 'elevenlabsWorkspace' as const,
+          agentId: 'agent_abc',
+          agentName: 'My Agent',
+        },
       ],
-      active: 0,
+      active: 2,
     };
     const snap = serializeDockTreeToSnapshot(tree as any);
+    expect(snap?.version).toBe(2);
     expect(snap?.root).toMatchObject({
       kind: 'tabset',
-      tabs: [{ flowId: 'main' }],
+      tabs: [
+        { flowId: 'main' },
+        { type: 'elevenlabsWorkspace', agentId: 'agent_abc', agentName: 'My Agent' },
+      ],
+      active: 1,
     });
+  });
+
+  it('filterSnapshotToExistingFlows keeps elevenlabs tabs when a flow is removed', () => {
+    const snap = {
+      version: 2 as const,
+      root: {
+        kind: 'tabset' as const,
+        id: 'ts',
+        tabs: [
+          { id: 't1', title: 'M', type: 'flow' as const, flowId: 'main' },
+          { id: 't2', title: 'Gone', type: 'flow' as const, flowId: 'deleted' },
+          {
+            id: 'tel',
+            title: 'EL',
+            type: 'elevenlabsWorkspace' as const,
+            agentId: 'a1',
+          },
+        ],
+        active: 2,
+      },
+    };
+    const filtered = filterSnapshotToExistingFlows(snap, new Set(['main']));
+    expect(filtered?.kind).toBe('tabset');
+    if (filtered?.kind === 'tabset') {
+      expect(filtered.tabs.map((t) => t.type)).toEqual(['flow', 'elevenlabsWorkspace']);
+      expect(filtered.active).toBe(1);
+    }
   });
 
   it('getFlowIdsFromWorkspaceSnapshot collects flow tab ids', () => {

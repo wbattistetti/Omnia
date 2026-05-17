@@ -30,7 +30,6 @@ import {
 import { EditorBackendsPanel } from '../EditorBackendsPanel';
 import { EditorIaRuntimePanel } from '../EditorIaRuntimePanel';
 import { EditorTaskCostsPanel } from '../EditorTaskCostsPanel';
-
 export interface AIAgentConstructionWizardShellProps {
   readonly currentStep: AgentWizardStepIndex;
   readonly completion: readonly boolean[];
@@ -155,7 +154,7 @@ export function AIAgentConstructionWizardShell({
           )}
         </main>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <header className="border-b border-slate-800 bg-slate-900/40 px-5 py-3">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3">
               <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-violet-300">
@@ -178,8 +177,8 @@ export function AIAgentConstructionWizardShell({
               </p>
             ) : null}
           </header>
-          <main className="flex-1 min-h-0 overflow-hidden">{renderStepBody()}</main>
-        </>
+          <main className="min-h-0 flex-1 overflow-hidden">{renderStepBody()}</main>
+        </div>
       )}
     </div>
   );

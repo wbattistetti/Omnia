@@ -1488,6 +1488,12 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  const appendProposedFields = React.useCallback((fields: AIAgentProposedVariable[]) => {
+    if (!fields.length) return;
+    setDirty(true);
+    setProposedFields((prev) => [...prev, ...fields]);
+  }, []);
+
   const syncFlowVariableFromLabel = React.useCallback(
     (slotId: string, labelTrimmed: string) => {
       if (!projectId) return;
@@ -2356,6 +2362,7 @@ export function useAIAgentEditorController({
     handleGenerate,
     updateProposedField,
     removeProposedField,
+    appendProposedFields,
     syncFlowVariableFromLabel,
     logicalSteps,
     useCases,

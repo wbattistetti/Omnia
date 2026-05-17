@@ -31,6 +31,7 @@ export default defineConfig({
       '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
       '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
       '@wizard': path.resolve(__dirname, 'src/wizard'),
+      '@workspaces': path.resolve(__dirname, 'src/workspaces'),
     }
   },
   test: {
@@ -54,6 +55,7 @@ export default defineConfig({
         '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
         '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
         '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
+        '@workspaces': path.resolve(__dirname, 'src/workspaces'),
       }
     }
   },
@@ -82,7 +84,18 @@ export default defineConfig({
       '/api/runtime': { target: 'http://localhost:5000', changeOrigin: true },
       /** Backend Call «Test API» proxy — Express :3100 (stesso contratto VB; dev:beNew non avvia ApiServer :5000). */
       '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
-      '/elevenlabs': { target: 'http://localhost:5000', changeOrigin: true },
+      /**
+       * ConvAI agents/tools (workspace, catalog) — Express :3100 con `dev:beNew` e backend/.env.
+       * ApiServer :5000 espone le stesse route se avviato; per dev senza VB usare 3100.
+       */
+      '/elevenlabs/agents': { target: 'http://localhost:3100', changeOrigin: true },
+      '/elevenlabs/tools': { target: 'http://localhost:3100', changeOrigin: true },
+      '/elevenlabs/createAgent': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs/startAgent': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs/sendUserTurn': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs/agentTurn': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs/endConversation': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs': { target: 'http://localhost:3100', changeOrigin: true },
 
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
       '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },

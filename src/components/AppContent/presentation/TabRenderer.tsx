@@ -10,8 +10,10 @@ import type {
   DockTabConditionEditor,
   DockTabChat,
   DockTabFlowMapping,
+  DockTabElevenLabsWorkspace,
   ToolbarButton,
 } from '@dock/types';
+import { ElevenLabsWorkspacePanel } from '@components/workspaces/elevenlabs/ElevenLabsWorkspacePanel';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
@@ -90,6 +92,15 @@ function tabContentComparator(prev: { tab: DockTab }, next: { tab: DockTab }): b
 
   if (prevTab.type === 'flowMapping' && nextTab.type === 'flowMapping') {
     return prevTab.id === nextTab.id && prevTab.initialMode === nextTab.initialMode && prevTab.title === nextTab.title;
+  }
+
+  if (prevTab.type === 'elevenlabsWorkspace' && nextTab.type === 'elevenlabsWorkspace') {
+    return (
+      prevTab.agentId === nextTab.agentId &&
+      prevTab.agentName === nextTab.agentName &&
+      prevTab.linkedTaskInstanceId === nextTab.linkedTaskInstanceId &&
+      prevTab.title === nextTab.title
+    );
   }
 
   // For other tab types, use default behavior (re-render if any prop changes)
@@ -583,6 +594,19 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
           setDockTree={setDockTree}
           editorCloseRefsMap={editorCloseRefsMap}
         />
+      );
+    }
+
+    if (tab.type === 'elevenlabsWorkspace') {
+      const elTab = tab as DockTabElevenLabsWorkspace;
+      return (
+        <div className="flex h-full w-full min-h-0 flex-col overflow-hidden">
+          <ElevenLabsWorkspacePanel
+            agentId={elTab.agentId}
+            agentName={elTab.agentName}
+            linkedTaskInstanceId={elTab.linkedTaskInstanceId}
+          />
+        </div>
       );
     }
 

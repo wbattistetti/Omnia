@@ -40,7 +40,8 @@
       "@TaskBuilderAIWizard/*": ["../TaskBuilderAIWizard/*"],
       "@wizard/*": ["wizard/*"],
       "@domain/*": ["domain/*"],
-      "@diagnostics/*": ["diagnostics/*"]
+      "@diagnostics/*": ["diagnostics/*"],
+      "@workspaces/*": ["workspaces/*"]
     }
   },
   "include": ["src"]

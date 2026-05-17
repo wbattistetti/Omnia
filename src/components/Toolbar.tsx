@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useReducer } from 'react';
-import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown, Database, BookOpen } from 'lucide-react';
+import { Home, Save, Settings, Loader2, CheckCircle, AlertCircle, X, Upload, Copy, ChevronDown, Database, BookOpen, Bot } from 'lucide-react';
 import { ProjectData } from '../types/project';
 import DeploymentDialog, { type DeploymentConfig } from './TaskEditor/ResponseEditor/Deployment/DeploymentDialog';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
@@ -64,6 +64,8 @@ export interface ToolbarProps {
   onGlobalDataToggle?: () => void;
   /** Apre la sidebar Library (template / libreria task). */
   onOpenLibrary?: () => void;
+  /** Apre il dialog per importare un agente ElevenLabs ConvAI in un tab workspace. */
+  onImportElevenLabsAgent?: () => void;
 }
 
 export function Toolbar({
@@ -87,6 +89,7 @@ export function Toolbar({
   globalDataOpen = false,
   onGlobalDataToggle,
   onOpenLibrary,
+  onImportElevenLabsAgent,
 }: ToolbarProps) {
   // ✅ DEBUG: Log component mount and props (log removed to reduce noise)
   // React.useEffect(() => {
@@ -250,6 +253,18 @@ export function Toolbar({
           >
             <Database className="w-4 h-4 flex-shrink-0" strokeWidth={2} aria-hidden />
             <span>Global Data</span>
+          </button>
+        )}
+        {currentProjectId && onImportElevenLabsAgent && (
+          <button
+            type="button"
+            onClick={onImportElevenLabsAgent}
+            className={`${BTN_BASE} ${BTN_SECONDARY} flex-shrink-0 border border-violet-500/40`}
+            title="Importa un agente ElevenLabs ConvAI in un tab workspace"
+            aria-label="Import Eleven Labs Agent"
+          >
+            <Bot className="w-4 h-4 flex-shrink-0 text-violet-300" strokeWidth={2} aria-hidden />
+            <span>Import Eleven Labs Agent</span>
           </button>
         )}
         <div className="relative flex-shrink-0" ref={saveMenuRef}>

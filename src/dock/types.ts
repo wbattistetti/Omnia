@@ -117,8 +117,25 @@ export type DockTabFlowMapping = DockTabBase & {
   initialMode?: 'backend' | 'interface';
 };
 
+/** ElevenLabs ConvAI workflow mirror (remote agent by id). */
+export type DockTabElevenLabsWorkspace = DockTabBase & {
+  type: 'elevenlabsWorkspace';
+  agentId: string;
+  agentName?: string;
+  /** When set, node import targets this AI Agent task (repository + live editor rehydrate). */
+  linkedTaskInstanceId?: string;
+};
+
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat | DockTabFlowMapping; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+export type DockTab =
+  | DockTabFlow
+  | DockTabResponseEditor
+  | DockTabNonInteractive
+  | DockTabConditionEditor
+  | DockTabTaskEditor
+  | DockTabChat
+  | DockTabFlowMapping
+  | DockTabElevenLabsWorkspace;
 
 /** Primary workspace flow (`flowId === 'main'`) must stay open; no dock close button / closeTab. */
 export function isLockedMainFlowTab(tab: DockTab | null | undefined): boolean {

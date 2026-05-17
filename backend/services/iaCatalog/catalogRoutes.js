@@ -657,6 +657,10 @@ function mountIaCatalog(app) {
     cacheFilePath: CACHE_PATH,
     note: 'Variabili da backend/.env caricate all’avvio via dotenv; altrimenti impostale nel sistema. Cercare [iaCatalog:…] al riavvio e durante /refresh.',
   });
+
+  const { mountConvaiAgentsProxyRoutes } = require('../../elevenlabs/convaiAgentsProxyRoutes');
+  mountConvaiAgentsProxyRoutes(app);
+  console.log('[iaCatalog] ElevenLabs ConvAI agents proxy: GET/PATCH/DELETE /elevenlabs/agents');
 }
 
 let intervalId = null;

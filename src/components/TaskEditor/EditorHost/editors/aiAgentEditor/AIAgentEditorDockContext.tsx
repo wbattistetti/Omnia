@@ -57,6 +57,8 @@ export interface AIAgentEditorDockContextValue {
   outputVariableMappings: Record<string, string>;
   onUpdateProposedField: (slotId: string, patch: Partial<AIAgentProposedVariable>) => void;
   onRemoveProposedField: (slotId: string) => void;
+  /** Append proposed variable rows (e.g. Workspace ElevenLabs import). */
+  appendProposedFields: (fields: AIAgentProposedVariable[]) => void;
   onProposedLabelBlur: (slotId: string, labelTrimmed: string) => void;
   logicalSteps: readonly AIAgentLogicalStep[];
   useCases: readonly AIAgentUseCase[];

@@ -881,6 +881,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    */
   const [costsViewActive, setCostsViewActive] = React.useState(false);
   const [errorHandlingPanelOpen, setErrorHandlingPanelOpen] = React.useState(false);
+
   const onSelectWizardStep = React.useCallback(
     (next: AgentWizardStepIndex) => {
       setCostsViewActive(false);
@@ -1169,6 +1170,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     outputVariableMappings: c.outputVariableMappings,
     onUpdateProposedField: c.updateProposedField,
     onRemoveProposedField: c.removeProposedField,
+    appendProposedFields: c.appendProposedFields,
     onProposedLabelBlur: c.syncFlowVariableFromLabel,
     logicalSteps: c.logicalSteps,
     useCases: c.useCases,
