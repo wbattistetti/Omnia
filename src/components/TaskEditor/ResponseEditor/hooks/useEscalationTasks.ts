@@ -17,7 +17,8 @@ export interface UseEscalationTasksParams {
  */
 function normalizeApiTemplate(template: any): { id: string; label: string; [key: string]: any } {
   // Extract id - normalize from _id if needed (explicit transformation, not fallback)
-  const id = template.id || (template._id ? String(template._id).replace('-template', '') : null);
+  const rawId = template.id || (template._id ? String(template._id) : null);
+  const id = rawId ? String(rawId).replace(/-template$/i, '') : null;
   if (!id) {
     throw new Error(`[normalizeApiTemplate] Template missing id: ${JSON.stringify(template).substring(0, 200)}`);
   }

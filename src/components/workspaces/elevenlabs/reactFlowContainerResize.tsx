@@ -10,14 +10,17 @@ export type ReactFlowContainerResizeProps = {
   containerRef: React.RefObject<HTMLDivElement | null>;
   /** When graph structure changes, fit view once. */
   layoutKey?: string;
+  /** Increment to force dimension sync + viewport repaint (e.g. after node drag). */
+  repaintKey?: number;
 };
 
 export function ReactFlowContainerResize({
   containerRef,
   layoutKey = '',
+  repaintKey = 0,
 }: ReactFlowContainerResizeProps): null {
   const storeApi = useStoreApi();
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport, setViewport } = useReactFlow();
   const lastLayoutKeyRef = React.useRef('');
 
   React.useEffect(() => {
@@ -28,6 +31,8 @@ export function ReactFlowContainerResize({
     });
     return () => window.cancelAnimationFrame(t);
   }, [layoutKey, fitView]);
+
+  const applySizeRef = React.useRef<() => void>(() => {});
 
   React.useLayoutEffect(() => {
     const el = containerRef.current;
@@ -43,13 +48,35 @@ export function ReactFlowContainerResize({
       storeApi.setState({ width, height });
     };
 
+    applySizeRef.current = applySize;
     applySize();
     const ro = new ResizeObserver(() => {
       requestAnimationFrame(applySize);
     });
     ro.observe(el);
-    return () => ro.disconnect();
+
+    const onWindowResize = () => requestAnimationFrame(applySize);
+    window.addEventListener('resize', onWindowResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onWindowResize);
+    };
   }, [containerRef, storeApi]);
+
+  React.useEffect(() => {
+    if (!repaintKey) return;
+    const frame = window.requestAnimationFrame(() => {
+      applySizeRef.current();
+      try {
+        const vp = getViewport();
+        setViewport({ x: vp.x, y: vp.y, zoom: vp.zoom }, { duration: 0 });
+      } catch {
+        /* React Flow not ready */
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [repaintKey, getViewport, setViewport]);
 
   return null;
 }

@@ -36,6 +36,10 @@ const {
 } = require('./services/AIAgentCorrectionPropagationService');
 const { tokenizeUseCases } = require('./services/AIAgentTokenizationService');
 const {
+  generateStylePhrasePolish,
+  generateStylePhraseCreative,
+} = require('./services/AIAgentStylePhraseService');
+const {
   generateKbDocumentSnippetMarkdown,
   aggregateKbSystemPromptMarkdown,
   refineSystemPromptMarkdown,
@@ -7050,6 +7054,51 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, updates: result.updates });
+    }
+
+    if (action === 'generate_style_phrase_polish') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_style_phrase_polish`, { provider, model });
+      const candidatePhrases = Array.isArray(body.candidatePhrases) ? body.candidatePhrases : [];
+      const styleTokens = Array.isArray(body.styleTokens) ? body.styleTokens : [];
+      const template = typeof body.template === 'string' ? body.template : '';
+      const phrases = await generateStylePhrasePolish({
+        template,
+        styleTokens,
+        candidatePhrases,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'STYLE_PHRASE_POLISH',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({ success: true, phrases });
+    }
+
+    if (action === 'generate_style_phrase_creative') {
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_style_phrase_creative`, { provider, model });
+      const existingPlainPhrases = Array.isArray(body.existingPlainPhrases)
+        ? body.existingPlainPhrases
+        : [];
+      const styleTokens = Array.isArray(body.styleTokens) ? body.styleTokens : [];
+      const template = typeof body.template === 'string' ? body.template : '';
+      const maxPhrases =
+        typeof body.maxPhrases === 'number' && body.maxPhrases > 0 ? body.maxPhrases : 10;
+      const phrases = await generateStylePhraseCreative({
+        template,
+        styleTokens,
+        existingPlainPhrases,
+        maxPhrases,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'STYLE_PHRASE_CREATIVE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({ success: true, phrases });
     }
 
     if (action === 'annotate_assistant_message_for_json') {

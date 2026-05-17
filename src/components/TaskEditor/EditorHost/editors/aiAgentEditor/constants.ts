@@ -32,7 +32,11 @@ export const LABEL_AGENT_MSG_SELECTION_STYLE_TOKEN = 'Style token';
 export const LABEL_AGENT_MSG_SELECTION_UNTOKEN = 'Untokenize';
 /** Toolbar messaggio: combinatoria varianti style token. */
 export const TOOLTIP_AGENT_MSG_GENERATE_STYLE_EXAMPLES =
-  'Genera esempi di frasi applicando i vari stili';
+  'Combinazioni locali delle varianti stile (senza IA)';
+export const TOOLTIP_AGENT_MSG_STYLE_POLISH =
+  'Rifinisce con IA le combinazioni delle varianti stile (stessa semantica)';
+export const TOOLTIP_AGENT_MSG_STYLE_CREATIVE =
+  'Genera con IA nuove formulazioni oltre le combinazioni degli stili';
 /** Strips all [...] wrappers from the assistant message (plain text again). */
 export const LABEL_AGENT_MSG_STRIP_TOKENS = 'Senza quadre';
 /** Calls LLM to wrap runtime fragments in [slot] and refresh motor JSON preview. */

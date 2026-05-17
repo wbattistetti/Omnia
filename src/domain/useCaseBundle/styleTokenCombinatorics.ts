@@ -3,6 +3,7 @@
  */
 
 import { splitAgentMessageParts } from './agentMessageTokenSyntax';
+import { agentMessageToPlainPreview } from './stylePhrasePlainText';
 import type { AIAgentPhraseStyleToken } from './schema';
 
 export const MAX_STYLE_TOKEN_COMBINATIONS = 30;
@@ -66,8 +67,11 @@ export function buildMaterializedStylePhrases(
   max = MAX_STYLE_TOKEN_COMBINATIONS
 ): { phrases: string[]; truncated: boolean } {
   const { combinations, truncated } = buildStyleTokenCombinations(styleTokens, max);
-  const phrases = combinations.map((pick) =>
-    materializeStyleCombination(template, styleTokens, pick)
-  );
-  return { phrases, truncated };
+  const phrases = combinations
+    .map((pick) => materializeStyleCombination(template, styleTokens, pick))
+    .map((p) => agentMessageToPlainPreview(p))
+    .filter(Boolean);
+  const unique = [...new Set(phrases)];
+  unique.sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
+  return { phrases: unique, truncated };
 }

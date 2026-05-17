@@ -255,13 +255,12 @@ export const EdgeLabel: React.FC<EdgeLabelProps> = ({
         color: labelColor, // ✅ Apply error color to label text
         pointerEvents: isDragging ? 'none' : 'auto', // ✅ CRITICAL FIX: durante drag, lascia passare eventi SVG alle hit-area
         zIndex: isDragging ? 1000 : 10,
-        boxShadow: isDragging
-          ? captionMuted
-            ? '0 4px 12px rgba(100,116,139,0.22)'
-            : '0 4px 12px rgba(139,92,246,0.30)'
-          : captionMuted
-            ? '0 2px 8px rgba(100,116,139,0.12)'
-            : '0 2px 8px rgba(139,92,246,0.10)',
+        boxShadow:
+          edgeErrors && edgeErrors.strokeColor !== 'transparent'
+            ? isDragging
+              ? '0 4px 12px rgba(100,116,139,0.22)'
+              : '0 2px 8px rgba(100,116,139,0.12)'
+            : 'none',
         minWidth: 30,
         minHeight: 18,
         display: 'inline-flex',

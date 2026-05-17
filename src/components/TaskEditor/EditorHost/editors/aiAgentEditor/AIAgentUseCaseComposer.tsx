@@ -7,6 +7,7 @@ import {
   BookOpen,
   Brackets,
   Check,
+  ClipboardPaste,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -142,6 +143,7 @@ import {
 import {
   applyDesignerFieldVoteToggle,
   applyUseCaseHeaderVoteToggle,
+  applyUseCaseValidatedOnMessageCommit,
   type DesignerVoteField,
 } from './useCaseComposerDesignerVotes';
 import { useUseCaseFieldBaselineSync } from './useUseCaseFieldBaselineSync';
@@ -401,6 +403,10 @@ export function AIAgentUseCaseComposer({
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioLlmFormat : false;
   const wizardShowMessage =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
+  const wizardAccordionHeaderMode =
+    primaryGenerateOnRightOnly && listToolbarCtx
+      ? listToolbarCtx.listAccordionHeaderMode
+      : 'label';
   /**
    * Seed di ricerca dalla toolbar wizard. Gli highlight col chip giallo sui messaggi
    * agente sono attivi solo nella vista wizard (`primaryGenerateOnRightOnly`) — è
@@ -431,6 +437,8 @@ export function AIAgentUseCaseComposer({
       return text.includes(lower);
     });
   }, [ordered, wizardSearchSeed]);
+
+  const messageSpellLang = resolveAiAgentOutputLanguage().tag;
 
   const useCaseDragEnabled = !busy && !wizardSearchSeed;
 
@@ -1230,19 +1238,17 @@ export function AIAgentUseCaseComposer({
       setUseCases((prev) =>
         prev.map((u) =>
           u.id === useCaseId
-            ? syncPrimaryPhraseNaturalFromAssistantTurn(
-                {
-                  ...u,
-                  designer_edit_confirmed: true as const,
-                  designer_agent_message_vote: 'up' as const,
-                  designer_label_vote: 'up' as const,
-                  included_in_conversations: true,
-                  dialogue: u.dialogue.map((turn) =>
-                    turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
-                  ),
-                },
-                turnId,
-                content
+            ? applyUseCaseValidatedOnMessageCommit(
+                syncPrimaryPhraseNaturalFromAssistantTurn(
+                  {
+                    ...u,
+                    dialogue: u.dialogue.map((turn) =>
+                      turn.turn_id === turnId ? { ...turn, content, userEdited: true } : turn
+                    ),
+                  },
+                  turnId,
+                  content
+                )
               )
             : u
         )
@@ -1370,6 +1376,13 @@ export function AIAgentUseCaseComposer({
       setUseCases((prev) => prev.map((u) => (u.id === useCaseId ? nextUc : u)));
     },
     [useCases, setUseCases]
+  );
+
+  const handlePatchUseCase = React.useCallback(
+    (useCaseId: string, updater: (uc: AIAgentUseCase) => AIAgentUseCase) => {
+      setUseCases((prev) => prev.map((uc) => (uc.id === useCaseId ? updater(uc) : uc)));
+    },
+    [setUseCases]
   );
 
   const payoffTextareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -2289,25 +2302,59 @@ export function AIAgentUseCaseComposer({
                 ) : null}
               </div>
               {ordered.length === 0 ? (
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6 text-center">
-                  <p className="text-sm text-slate-500 max-w-md">
-                    {onGenerateUseCaseBundle
-                      ? 'Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.'
-                      : isConversationalRulesCatalog
-                        ? 'Le regole predefinite (error handling) compaiono qui. Aggiungi nuove regole nella text box sopra e premi INVIO.'
-                        : primaryGenerateOnRightOnly
-                        ? (
-                          <>
-                            Nessuno use case ancora.
-                            <br />
-                            <br />
-                            1) Se hai gia un insieme di usecase definiti incollali nella text box sopra e premi enter
-                            <br />
-                            2) altrimenti clicca sul pulsante in basso nel pannello di destra "genera use case"
-                          </>
-                        )
-                        : 'Nessuno scenario. Genera con IA o crea il design agent prima.'}
-                  </p>
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6">
+                  {onGenerateUseCaseBundle ? (
+                    <p className="max-w-md text-center text-sm text-slate-500">
+                      Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.
+                    </p>
+                  ) : isConversationalRulesCatalog ? (
+                    <p className="max-w-md text-center text-sm text-slate-500">
+                      Le regole predefinite (error handling) compaiono qui. Aggiungi nuove regole nella
+                      text box sopra e premi INVIO.
+                    </p>
+                  ) : primaryGenerateOnRightOnly ? (
+                    <div
+                      className="flex w-full max-w-xl flex-col items-stretch gap-8 px-2 py-2"
+                      aria-label="Come iniziare con gli use case"
+                    >
+                      <p className="text-center text-xl font-semibold tracking-tight text-amber-200/95 sm:text-2xl">
+                        Nessuno use case ancora.
+                      </p>
+                      <ol className="flex flex-col gap-6">
+                        <li className="flex items-start gap-4">
+                          <span
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-violet-500/35 bg-violet-500/15 text-violet-300 shadow-[0_0_24px_rgba(139,92,246,0.12)]"
+                            aria-hidden
+                          >
+                            <ClipboardPaste size={26} strokeWidth={1.75} />
+                          </span>
+                          <p className="min-w-0 pt-1 text-base font-medium leading-snug text-slate-200 sm:text-lg">
+                            Se hai già un insieme di use case definiti, incollali nella text box sopra e
+                            premi{' '}
+                            <kbd className="rounded border border-slate-600/80 bg-slate-800/90 px-1.5 py-0.5 text-sm font-mono text-violet-200">
+                              Invio
+                            </kbd>
+                          </p>
+                        </li>
+                        <li className="flex items-start gap-4">
+                          <span
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-500/35 bg-emerald-500/15 text-emerald-300 shadow-[0_0_24px_rgba(52,211,153,0.12)]"
+                            aria-hidden
+                          >
+                            <Sparkles size={26} strokeWidth={1.75} />
+                          </span>
+                          <p className="min-w-0 pt-1 text-base font-medium leading-snug text-slate-200 sm:text-lg">
+                            Altrimenti clicca sul pulsante in basso nel pannello di destra{' '}
+                            <span className="text-emerald-300">«{LABEL_GENERATE_USE_CASES}»</span>
+                          </p>
+                        </li>
+                      </ol>
+                    </div>
+                  ) : (
+                    <p className="max-w-md text-center text-sm text-slate-500">
+                      Nessuno scenario. Genera con IA o crea il design agent prima.
+                    </p>
+                  )}
                   {onGenerateUseCaseBundle ? (
                     <button
                       type="button"
@@ -2533,11 +2580,17 @@ export function AIAgentUseCaseComposer({
                               title={descriptionTooltip || undefined}
                               className={`min-w-0 max-w-full text-left text-sm leading-snug ${
                                 primaryGenerateOnRightOnly
-                                  ? useCaseHeaderTitleTextClass(
-                                      u.designer_label_vote,
-                                      active,
-                                      includedInConv
-                                    )
+                                  ? wizardAccordionHeaderMode === 'message'
+                                    ? `${useCaseHeaderTitleTextClass(
+                                        u.designer_agent_message_vote,
+                                        active,
+                                        includedInConv
+                                      )} ${UC_WIZARD_AGENT_MESSAGE_TEXT}`
+                                    : useCaseHeaderTitleTextClass(
+                                        u.designer_label_vote,
+                                        active,
+                                        includedInConv
+                                      )
                                   : fieldTextClass(
                                       u.designer_label_vote,
                                       u.label ?? '',
@@ -2549,7 +2602,28 @@ export function AIAgentUseCaseComposer({
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                               }}
                             >
-                              <span className="min-w-0 break-words whitespace-normal">{u.label || u.id}</span>
+                              <span className="min-w-0 break-words whitespace-normal">
+                                {primaryGenerateOnRightOnly &&
+                                wizardAccordionHeaderMode === 'message' ? (
+                                  rowAssistant?.content?.trim() ? (
+                                    wizardSearchSeed.trim() ? (
+                                      <SeedHighlightedText
+                                        text={rowAssistant.content}
+                                        seed={wizardSearchSeed}
+                                      />
+                                    ) : (
+                                      <BracketTokenHighlightedText
+                                        text={rowAssistant.content}
+                                        className="inline min-w-0 whitespace-pre-wrap align-baseline"
+                                      />
+                                    )
+                                  ) : (
+                                    <span className="text-slate-500">— messaggio vuoto</span>
+                                  )
+                                ) : (
+                                  u.label || u.id
+                                )}
+                              </span>
                             </button>
                             <UseCaseRowDeployChips
                               stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
@@ -2734,6 +2808,7 @@ export function AIAgentUseCaseComposer({
                         <div
                           className={UC_WIZARD_CARD_BODY}
                           onClick={(e) => e.stopPropagation()}
+                          onDoubleClick={(e) => e.stopPropagation()}
                         >
                           {wizardShowScenario ? (
                             <div
@@ -2874,6 +2949,13 @@ export function AIAgentUseCaseComposer({
                                   onAgentMessageVote={(choice) =>
                                     toggleDesignerFieldVote(u.id, 'agentMessage', choice)
                                   }
+                                  onMessageCommitted={() => {
+                                    onClearUseCaseHighlight?.(u.id);
+                                    if (primaryGenerateOnRightOnly) {
+                                      commitCardExpansion(u.id, false, 'programmatic');
+                                      listToolbarCtx?.notifyCardToggle();
+                                    }
+                                  }}
                                   onAssistantPhraseDraftChange={onAssistantPhraseDraftChange}
                                   parametricCartesianFeedback={
                                     parametricCartesianErrorById[u.id] ?? null
@@ -3027,6 +3109,17 @@ export function AIAgentUseCaseComposer({
                                     />
                                   ) : null}
                                   {agentMsgEditUseCaseId === u.id ? (
+                                    <AgentMessageStyleExamplesWrap
+                                      useCase={u}
+                                      text={agentMsgEditDraft}
+                                      styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(u))}
+                                      onPatchUseCase={(updater) => handlePatchUseCase(u.id, updater)}
+                                      disabled={busy}
+                                      iconSize={12}
+                                      toolbarAlwaysVisible
+                                    >
+                                      {({ toolbarButton, panel, error }) => (
+                                    <div className="w-full space-y-2">
                                     <div className="flex flex-wrap items-start gap-2">
                                       {agentMsgFieldLabel}
                                       <div className="flex min-w-0 flex-1 flex-col">
@@ -3049,7 +3142,8 @@ export function AIAgentUseCaseComposer({
                                         disabled={busy}
                                         rows={2}
                                         autoFocus
-                                        spellCheck={false}
+                                        spellCheck
+                                        lang={messageSpellLang}
                                         aria-label="Messaggio agente"
                                         placeholder="Testo esempio per il messaggio agente…"
                                         containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
@@ -3093,6 +3187,7 @@ export function AIAgentUseCaseComposer({
                                         ) : null}
                                       </div>
                                       <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                                        {toolbarButton}
                                         <button
                                           type="button"
                                           title="Conferma"
@@ -3120,7 +3215,7 @@ export function AIAgentUseCaseComposer({
                                               ? 'Disattiva messaggio parametrico'
                                               : 'Rendi il messaggio parametrico'
                                           }
-                                          className={`${UC_AGENT_ROW_EDIT_BTN} ${
+                                          className={`${UC_AGENT_ROW_EDIT_BTN} opacity-100 ${
                                             isPrimaryPhraseParametricEnabled(u) ? 'text-emerald-400' : ''
                                           }`}
                                           onClick={(e) => {
@@ -3135,14 +3230,23 @@ export function AIAgentUseCaseComposer({
                                         </button>
                                       </div>
                                     </div>
+                                    {error ? (
+                                      <p className="text-xs text-rose-300/90">{error}</p>
+                                    ) : null}
+                                    {panel}
+                                    </div>
+                                      )}
+                                    </AgentMessageStyleExamplesWrap>
                                   ) : (
                                     <AgentMessageStyleExamplesWrap
+                                      useCase={u}
                                       text={rowAssistant.content}
                                       styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(u))}
+                                      onPatchUseCase={(updater) => handlePatchUseCase(u.id, updater)}
                                       disabled={busy}
                                       iconSize={12}
                                     >
-                                      {({ toolbarButton, panel }) => (
+                                      {({ toolbarButton, panel, error }) => (
                                     <div className="w-full">
                                     <div
                                       className="group/agentmsg-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
@@ -3457,12 +3561,15 @@ export function AIAgentUseCaseComposer({
                     {assistantTurn ? (
                       agentMsgEditUseCaseId === selected.id ? (
                         <AgentMessageStyleExamplesWrap
+                          useCase={selected}
                           text={agentMsgEditDraft}
                           styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(selected))}
+                          onPatchUseCase={(updater) => handlePatchUseCase(selected.id, updater)}
                           disabled={busy}
                           iconSize={12}
+                          toolbarAlwaysVisible
                         >
-                          {({ toolbarButton, panel }) => (
+                          {({ toolbarButton, panel, error }) => (
                         <div className="w-full space-y-2">
                         <div className="flex flex-wrap items-start gap-2">
                           {agentMsgFieldLabel}
@@ -3488,7 +3595,8 @@ export function AIAgentUseCaseComposer({
                             disabled={busy}
                             rows={2}
                             autoFocus
-                            spellCheck={false}
+                            spellCheck
+                            lang={messageSpellLang}
                             aria-label="Messaggio agente"
                             placeholder="Seleziona testo: al rilascio del mouse compare Tokenizza o Rimuovi token; oppure usa i pulsanti Token / Senza quadre."
                             containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
@@ -3570,18 +3678,23 @@ export function AIAgentUseCaseComposer({
                             </button>
                           </div>
                         </div>
+                        {error ? (
+                          <p className="text-xs text-rose-300/90">{error}</p>
+                        ) : null}
                         {panel}
                         </div>
                           )}
                         </AgentMessageStyleExamplesWrap>
                       ) : (
                         <AgentMessageStyleExamplesWrap
+                          useCase={selected}
                           text={assistantTurn.content}
                           styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(selected))}
+                          onPatchUseCase={(updater) => handlePatchUseCase(selected.id, updater)}
                           disabled={busy}
                           iconSize={12}
                         >
-                          {({ toolbarButton, panel }) => (
+                          {({ toolbarButton, panel, error }) => (
                         <div className="w-full">
                         <div
                           className="group/agentmsg-row flex w-full min-w-0 cursor-pointer"

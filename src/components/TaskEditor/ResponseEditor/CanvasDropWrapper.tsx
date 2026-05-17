@@ -11,6 +11,8 @@ interface CanvasDropWrapperProps {
   isEmpty?: boolean; // ✅ NEW: Indicates if escalation is empty (for flex fix)
   /** Grow with parent so the whole area accepts drops (single-escalation Behaviour). */
   fillAvailable?: boolean;
+  /** See {@link PanelEmptyDropZoneProps.passPaletteDragPayload}. */
+  passPaletteDragPayload?: boolean;
   // Legacy prop for backward compatibility
   onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
@@ -21,22 +23,31 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({
   children,
   isEmpty = false,
   fillAvailable = false,
+  passPaletteDragPayload = false,
 }) => {
   const handleDrop = onDropTask ?? onDropAction;
+  const handleDropRef = React.useRef(handleDrop);
+  handleDropRef.current = handleDrop;
 
-  const [, drop] = useDrop(() => ({
-    accept: [DND_TYPE_VIEWER],
-    drop: (item: any, monitor) => {
-      // ✅ CRITICAL: Check if a child (TaskRowDnDWrapper or PanelEmptyDropZone) handled the drop
-      if (monitor.didDrop()) {
-        return undefined; // Child already handled it
-      }
-      const normalized = createTask(item);
-      handleDrop?.(normalized);
-      return { handled: true };
-    },
-    collect: () => ({}) // No visual feedback - completely invisible
-  }), [handleDrop]);
+  const [, drop] = useDrop(
+    () => ({
+      accept: [DND_TYPE_VIEWER],
+      drop: (item: unknown, monitor) => {
+        if (monitor.didDrop()) {
+          return undefined;
+        }
+        if (passPaletteDragPayload) {
+          handleDropRef.current?.(item as TaskReference);
+        } else {
+          const normalized = createTask(item);
+          handleDropRef.current?.(normalized);
+        }
+        return { handled: true };
+      },
+      collect: () => ({}),
+    }),
+    [passPaletteDragPayload]
+  );
 
   /** When empty in a fixed-height card (e.g. tree view), grow so the whole slot is a drop target. */
   const fillEmptySlot = isEmpty && !fillAvailable;

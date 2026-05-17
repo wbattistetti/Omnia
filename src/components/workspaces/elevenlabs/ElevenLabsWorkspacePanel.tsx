@@ -478,9 +478,7 @@ export function ElevenLabsWorkspacePanel({
                 graph={snapshot.workflow}
                 selectedNodeId={selectedNodeId}
                 onSelectNode={setSelectedNodeId}
-                onEditInOmnia={runImportForNode}
                 onDragToOmniaFlow={handleDragToOmniaFlow}
-                importBusy={importBusy}
                 positionOverrides={nodePositionOverrides}
                 onPositionOverridesChange={setNodePositionOverrides}
               />

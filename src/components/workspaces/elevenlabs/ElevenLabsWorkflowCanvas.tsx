@@ -10,11 +10,11 @@ import ReactFlow, {
   ReactFlowProvider,
   useNodesState,
   useEdgesState,
-  useReactFlow,
   type Node,
   type NodeDragHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import './elevenLabsWorkflowCanvas.css';
 import type { WorkspaceWorkflowGraph } from '@workspaces/core/types';
 import {
   buildReactFlowFromWorkspaceGraph,
@@ -27,6 +27,7 @@ import {
 } from '@workspaces/elevenlabs/workflowLayoutPositions';
 import { ElevenLabsWorkflowNodeCard } from './ElevenLabsWorkflowNodeCard';
 import { ReactFlowContainerResize } from './reactFlowContainerResize';
+import { useElWorkflowRigidDrag } from './useElWorkflowRigidDrag';
 
 const nodeTypes = { elWorkflow: ElevenLabsWorkflowNodeCard };
 
@@ -34,9 +35,7 @@ export type ElevenLabsWorkflowCanvasProps = {
   graph: WorkspaceWorkflowGraph;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string | null) => void;
-  onEditInOmnia?: (nodeId: string) => void;
   onDragToOmniaFlow?: (nodeId: string, dataTransfer: DataTransfer) => void;
-  importBusy?: boolean;
   /** Persisted layout overrides from session (merged before build). */
   positionOverrides?: WorkflowPositionOverrides;
   onPositionOverridesChange?: (overrides: WorkflowPositionOverrides) => void;
@@ -46,9 +45,7 @@ function CanvasInner({
   graph,
   selectedNodeId,
   onSelectNode,
-  onEditInOmnia,
   onDragToOmniaFlow,
-  importBusy = false,
   positionOverrides,
   onPositionOverridesChange,
 }: ElevenLabsWorkflowCanvasProps): React.ReactElement {
@@ -65,9 +62,16 @@ function CanvasInner({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(built.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(built.edges);
+  const [repaintKey, setRepaintKey] = React.useState(0);
   const nodesRef = React.useRef(nodes);
   nodesRef.current = nodes;
   const graphKeyRef = React.useRef('');
+  const bumpCanvasRepaint = React.useCallback(() => {
+    setRepaintKey((k) => k + 1);
+  }, []);
+
+  const { onNodeDragStart, onNodeDrag, onNodeDragStop: onRigidDragStop } =
+    useElWorkflowRigidDrag(edges, setNodes);
 
   const graphStructureKey = React.useMemo(() => {
     const nIds = graph.nodes.map((n) => n.id).join(',');
@@ -84,7 +88,8 @@ function CanvasInner({
     graphKeyRef.current = graphStructureKey;
     setNodes(built.nodes);
     setEdges(built.edges);
-  }, [graphStructureKey, built.nodes, built.edges, setNodes, setEdges]);
+    bumpCanvasRepaint();
+  }, [graphStructureKey, built.nodes, built.edges, setNodes, setEdges, bumpCanvasRepaint]);
 
   React.useEffect(() => {
     setNodes((prev) =>
@@ -96,20 +101,23 @@ function CanvasInner({
           selected: n.id === selectedNodeId,
           data: {
             ...n.data,
-            showEditInOmnia: editable,
-            importBusy,
-            onEditInOmnia: editable ? onEditInOmnia : undefined,
             onDragToOmniaFlow: editable ? onDragToOmniaFlow : undefined,
           },
         };
       })
     );
-  }, [selectedNodeId, setNodes, onEditInOmnia, onDragToOmniaFlow, importBusy]);
+  }, [selectedNodeId, setNodes, onDragToOmniaFlow]);
 
-  const onNodeDragStop: NodeDragHandler = React.useCallback(() => {
-    if (!onPositionOverridesChange) return;
-    onPositionOverridesChange(overridesFromReactFlowNodes(nodesRef.current));
-  }, [onPositionOverridesChange]);
+  const onNodeDragStop: NodeDragHandler = React.useCallback(
+    (...args) => {
+      onRigidDragStop(...args);
+      if (onPositionOverridesChange) {
+        onPositionOverridesChange(overridesFromReactFlowNodes(nodesRef.current));
+      }
+      bumpCanvasRepaint();
+    },
+    [onRigidDragStop, onPositionOverridesChange, bumpCanvasRepaint]
+  );
 
   const onNodeClick = React.useCallback(
     (_: React.MouseEvent, node: Node<ElWorkflowNodeData>) => {
@@ -131,8 +139,12 @@ function CanvasInner({
   }
 
   return (
-    <div ref={containerRef} className="relative h-full min-h-0 w-full">
+    <div
+      ref={containerRef}
+      className="el-workflow-canvas relative flex h-full min-h-0 w-full flex-1 flex-col"
+    >
       <ReactFlow
+        className="h-full w-full"
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -140,6 +152,8 @@ function CanvasInner({
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         nodesDraggable
         nodesConnectable={false}
@@ -152,12 +166,16 @@ function CanvasInner({
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
       >
-        <ReactFlowContainerResize containerRef={containerRef} layoutKey={graphStructureKey} />
+        <ReactFlowContainerResize
+          containerRef={containerRef}
+          layoutKey={graphStructureKey}
+          repaintKey={repaintKey}
+        />
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#334155" />
         <Controls showInteractive={false} className="!border-slate-700 !bg-slate-900/90" />
       </ReactFlow>
       <p className="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-slate-900/80 px-2 py-1 text-[10px] text-slate-500">
-        Trascina i nodi per riposizionare · tasto centrale per pan · ⋮⋮ verso canvas Omnia
+        Trascina i nodi per riposizionare · ancoraggio per spostare il ramo · tasto centrale per pan · ⋮⋮ verso canvas Omnia
       </p>
     </div>
   );

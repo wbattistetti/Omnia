@@ -7,14 +7,135 @@ import {
   isMessageLikeEscalationTask,
   normalizeTaskForEscalation,
 } from '@responseEditor/utils/escalationHelpers';
-import { TaskType, templateIdToTaskType } from '@types/taskTypes';
+import { TaskType, templateIdToTaskType, taskTypeToTemplateId } from '@types/taskTypes';
+
+/** Factory / Mongo template ids often end with `-template`; palette may omit `templateId`. */
+const PALETTE_TEMPLATE_ALIASES: Record<string, string> = {
+  readbackend: 'readFromBackend',
+  readfrombackend: 'readFromBackend',
+  writebackend: 'writeToBackend',
+  writetobackend: 'writeToBackend',
+  tohuman: 'escalateToHuman',
+  escalatetohuman: 'escalateToHuman',
+  waitagent: 'waitForAgent',
+  waitforagent: 'waitForAgent',
+  sendsms: 'sendSMS',
+};
+
+/**
+ * Numeric types from `/api/factory/tasks` (VB escalation) — not always aligned with client `TaskType`.
+ */
+const FACTORY_ESCALATION_TYPE_TEMPLATE_ID: Record<number, string> = {
+  6: 'sendSMS',
+  8: 'escalateToHuman',
+  10: 'readFromBackend',
+  11: 'writeToBackend',
+  19: 'waitForAgent',
+};
+
+function normalizeTemplateKey(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Canonical template id for allowlist checks (strips `-template`, aliases, factory type fallback).
+ */
+export function canonicalPaletteTemplateId(
+  templateId: string | null | undefined,
+  options?: { fallbackId?: string | null; taskType?: number | null }
+): string {
+  const stripSuffix = (raw: string): string => {
+    const t = raw.trim();
+    if (!t) return '';
+    return t.replace(/-template$/i, '');
+  };
+
+  if (templateId != null && String(templateId).trim()) {
+    const stripped = stripSuffix(String(templateId));
+    const key = normalizeTemplateKey(stripped);
+    return PALETTE_TEMPLATE_ALIASES[key] ?? stripped;
+  }
+
+  const fallback = options?.fallbackId != null ? stripSuffix(String(options.fallbackId)) : '';
+  if (fallback) {
+    const key = normalizeTemplateKey(fallback);
+    if (PALETTE_TEMPLATE_ALIASES[key]) return PALETTE_TEMPLATE_ALIASES[key];
+    if (!looksLikeTaskInstanceGuid(fallback)) {
+      return fallback;
+    }
+  }
+
+  const taskType = options?.taskType;
+  if (typeof taskType === 'number' && !Number.isNaN(taskType)) {
+    const factory = FACTORY_ESCALATION_TYPE_TEMPLATE_ID[taskType];
+    if (factory) return factory;
+    const fromClient = taskTypeToTemplateId(taskType as TaskType);
+    if (fromClient) return fromClient;
+  }
+
+  return fallback;
+}
+
+function looksLikeTaskInstanceGuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
+/** Coerce API / JSON task `type` (number or numeric string). */
+export function coerceNumericTaskType(raw: unknown): number | null {
+  if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+const FACTORY_TEMPLATE_TO_TYPE: Record<string, number> = {
+  sendsms: 6,
+  escalatetohuman: 8,
+  readfrombackend: 10,
+  writetobackend: 11,
+  waitforagent: 19,
+};
+
+export function factoryTaskTypeFromTemplateId(templateId: string | null | undefined): number | null {
+  const canonical = canonicalPaletteTemplateId(templateId);
+  if (!canonical) return null;
+  return FACTORY_TEMPLATE_TO_TYPE[normalizeTemplateKey(canonical)] ?? null;
+}
+
+/** Resolve template id from a palette drag item or post-`createTask` payload. */
+export function resolveIncomingPaletteTemplateId(incoming: unknown): string {
+  const envelope = incoming as { task?: Record<string, unknown> };
+  const raw =
+    envelope?.task && typeof envelope.task === 'object'
+      ? envelope.task
+      : (incoming as Record<string, unknown>);
+
+  if (!raw || typeof raw !== 'object') return '';
+
+  const templateId =
+    raw.templateId !== undefined && raw.templateId !== null
+      ? String(raw.templateId)
+      : null;
+  const id = raw.id !== undefined && raw.id !== null ? String(raw.id) : null;
+  const taskType = coerceNumericTaskType(raw.type);
+
+  return canonicalPaletteTemplateId(templateId, { fallbackId: id, taskType });
+}
+
+/** Messaggio quando il template non è nell'allowlist (sequenza generica / escalation). */
+export const DROP_TEMPLATE_NOT_ALLOWED_MESSAGE =
+  'Questa azione non è ammessa in questa sequenza: tipo di task non supportato.';
 
 export function matchesAllowedTemplateId(
   templateId: string | null | undefined,
   allowed: readonly string[]
 ): boolean {
-  const t = String(templateId ?? '').toLowerCase();
-  return allowed.some((a) => String(a).toLowerCase() === t);
+  const canonical = canonicalPaletteTemplateId(templateId);
+  if (!canonical) return false;
+  const t = canonical.toLowerCase();
+  return allowed.some((a) => canonicalPaletteTemplateId(a).toLowerCase() === t);
 }
 
 /** First parameter to auto-focus after drop/append. */
@@ -36,11 +157,12 @@ export function normalizeIncomingPaletteTask(incoming: unknown): ReturnType<type
   const raw = (incoming as { task?: unknown })?.task ?? incoming;
   const task = raw as Record<string, unknown>;
 
-  const templateId =
-    task?.templateId !== undefined ? task.templateId : (task?.id ?? null);
+  const templateId = resolveIncomingPaletteTemplateId(incoming) || null;
 
-  let taskType: number | null =
-    task?.type !== undefined && task?.type !== null ? (task.type as number) : null;
+  let taskType: number | null = coerceNumericTaskType(task?.type);
+  if (taskType === null && templateId != null) {
+    taskType = factoryTaskTypeFromTemplateId(templateId);
+  }
   if (taskType === null && templateId != null) {
     const inferred = templateIdToTaskType(String(templateId));
     if (inferred !== TaskType.UNDEFINED) {

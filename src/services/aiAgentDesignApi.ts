@@ -68,6 +68,7 @@ import {
 import type { StructuredRefinementOp } from '../components/TaskEditor/EditorHost/editors/aiAgentEditor/structuredRefinementOps';
 import { emitDesignAiLlmBurstFromErrorResponse } from '../utils/aiAgentHighFrequencyAlert';
 import { confirmAiAgentGenerateIfEnabled } from '../utils/aiAgentGenerateConfirmGate';
+import { parseDesignApiJsonResponse } from './designApiResponse';
 import { designAiFetch } from './designAiRequestPipeline';
 
 async function fetchAiAgentDesignAgentGenerate(init: RequestInit): Promise<Response> {
@@ -153,7 +154,7 @@ export async function extractStructuredDesign(params: {
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; structured_design: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body.success) {
@@ -220,7 +221,7 @@ export async function generateAIAgentDesign(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | AIAgentDesignApiSuccess
       | AIAgentDesignApiError
       | {
@@ -293,7 +294,7 @@ export async function induceStyleRuleFromCorrectionApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as { success: true; rule_text: string } | AIAgentDesignApiError;
+    const body = (await parseDesignApiJsonResponse(res)) as { success: true; rule_text: string } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
       emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
@@ -365,7 +366,7 @@ export async function analyzeDebuggerTurnUseCaseApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | ({ success: true } & Record<string, unknown>)
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -465,7 +466,7 @@ export async function generateAIAgentUseCases(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | {
           success: true;
           logical_steps?: unknown;
@@ -562,7 +563,7 @@ export async function regenerateAIAgentUseCaseApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
+    const body = (await parseDesignApiJsonResponse(res)) as { success: true; use_case: unknown } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
       emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
@@ -636,7 +637,7 @@ export async function generalizeAIAgentUseCaseMetaApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; label: string; payoff: string }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -711,7 +712,7 @@ export async function createAIAgentUseCaseApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as { success: true; use_case: unknown } | AIAgentDesignApiError;
+    const body = (await parseDesignApiJsonResponse(res)) as { success: true; use_case: unknown } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
       emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
@@ -792,7 +793,7 @@ export async function propagateExamplePhraseStyleApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -945,7 +946,7 @@ export async function propagateCorrectionStyleApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -1039,7 +1040,7 @@ export async function propagateCorrectionStylePreviewApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: combinedSignal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | ({ success: true } & Record<string, unknown>)
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -1090,7 +1091,7 @@ export async function regenerateAIAgentUseCaseTurnApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as { success: true; turn: unknown } | AIAgentDesignApiError;
+    const body = (await parseDesignApiJsonResponse(res)) as { success: true; turn: unknown } | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
       emitDesignAiLlmBurstFromErrorResponse(res, body);
       const err = body as AIAgentDesignApiError;
@@ -1160,7 +1161,7 @@ export async function annotateAIAgentAssistantMessageForJsonApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; content: string; motor: AgentMessageMotorPayload }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -1178,6 +1179,108 @@ export async function annotateAIAgentAssistantMessageForJsonApi(
       throw new Error('Risposta non valida: motor mancante.');
     }
     return { content, motor: body.motor };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+const STYLE_PHRASE_GENERATE_TIMEOUT_MS = 120000;
+
+export interface GenerateStylePhrasePolishParams {
+  template: string;
+  styleTokens: readonly { styleTokenId: string; defaultSurface: string; variants: string[] }[];
+  candidatePhrases: readonly string[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+export async function generateStylePhrasePolishApi(
+  params: GenerateStylePhrasePolishParams
+): Promise<string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), STYLE_PHRASE_GENERATE_TIMEOUT_MS);
+  try {
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        applyCallMetaToBody(
+          {
+            action: 'generate_style_phrase_polish',
+            template: params.template,
+            styleTokens: params.styleTokens,
+            candidatePhrases: params.candidatePhrases,
+            provider: params.provider.toLowerCase(),
+            model: params.model,
+            ...(params.outputLanguage?.trim() ? { outputLanguage: params.outputLanguage.trim() } : {}),
+          },
+          params.callMeta
+        )
+      ),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | { success: true; phrases: string[] }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return Array.isArray(body.phrases) ? body.phrases.map((p) => String(p).trim()).filter(Boolean) : [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface GenerateStylePhraseCreativeParams {
+  template: string;
+  styleTokens: readonly { styleTokenId: string; defaultSurface: string; variants: string[] }[];
+  existingPlainPhrases: readonly string[];
+  maxPhrases?: number;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+export async function generateStylePhraseCreativeApi(
+  params: GenerateStylePhraseCreativeParams
+): Promise<string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), STYLE_PHRASE_GENERATE_TIMEOUT_MS);
+  try {
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        applyCallMetaToBody(
+          {
+            action: 'generate_style_phrase_creative',
+            template: params.template,
+            styleTokens: params.styleTokens,
+            existingPlainPhrases: params.existingPlainPhrases,
+            maxPhrases: params.maxPhrases ?? 10,
+            provider: params.provider.toLowerCase(),
+            model: params.model,
+            ...(params.outputLanguage?.trim() ? { outputLanguage: params.outputLanguage.trim() } : {}),
+          },
+          params.callMeta
+        )
+      ),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | { success: true; phrases: string[] }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return Array.isArray(body.phrases) ? body.phrases.map((p) => String(p).trim()).filter(Boolean) : [];
   } finally {
     clearTimeout(timeout);
   }
@@ -1407,7 +1510,7 @@ export async function assembleAIAgentConversationApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; conversation: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -1539,7 +1642,7 @@ export async function proofreadAIAgentConversationAgentTurnsApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -1618,7 +1721,7 @@ export async function tokenizeAIAgentUseCasesApi(
       body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
       signal: controller.signal,
     });
-    const body = (await res.json()) as
+    const body = (await parseDesignApiJsonResponse(res)) as
       | { success: true; updates: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {

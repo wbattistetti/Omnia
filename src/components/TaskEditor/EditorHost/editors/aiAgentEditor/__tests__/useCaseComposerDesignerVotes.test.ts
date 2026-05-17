@@ -8,6 +8,7 @@ import {
   applyAllDesignerVotesUp,
   applyDesignerFieldVoteToggle,
   applyUseCaseHeaderVoteToggle,
+  applyUseCaseValidatedOnMessageCommit,
 } from '../useCaseComposerDesignerVotes';
 
 function minimalUseCase(id: string): AIAgentUseCase {
@@ -65,6 +66,21 @@ describe('applyDesignerFieldVoteToggle', () => {
     const next = applyDesignerFieldVoteToggle(prev, 'y', 'payoff', 'down');
     expect(next[0].designer_payoff_vote).toBeUndefined();
     expect(next[1].designer_payoff_vote).toBe('down');
+  });
+});
+
+describe('applyUseCaseValidatedOnMessageCommit', () => {
+  it('sets green votes and includes use case in conversations', () => {
+    const prev = {
+      ...minimalUseCase('a'),
+      included_in_conversations: false,
+      designer_label_vote: undefined,
+    };
+    const next = applyUseCaseValidatedOnMessageCommit(prev);
+    expect(next.designer_edit_confirmed).toBe(true);
+    expect(next.designer_label_vote).toBe('up');
+    expect(next.designer_agent_message_vote).toBe('up');
+    expect(next.included_in_conversations).toBe(true);
   });
 });
 

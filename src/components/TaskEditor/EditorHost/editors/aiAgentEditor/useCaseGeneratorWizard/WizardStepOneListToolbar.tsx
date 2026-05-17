@@ -2,7 +2,10 @@
  * Controlli compatti del passo 1 (use_case_list), renderizzati inline dentro il pill
  * attivo dello stepper. Layout v10 (single-line, gruppi separati):
  *
- *   [⤢ Espandi | ⤡ Collassa]   [📖 Scenario (☑ LLM) | 💬 Messaggio]   A↓B   { }   [ ]
+ *   [⤢ Espandi | ⤡ Collassa]   [(○) Scenario (☑ LLM) | (○) Messaggio]   A↓B   { }   [ ]
+ *
+ * Radio (○): intestazione riga UC — etichetta vs messaggio agente. Pill Scenario/Messaggio:
+ * toggle indipendenti visibilità corpo espanso (non legati al radio).
  *
  * Le icone scenario/messaggio agente sono colorate con lo **stesso** colore del font usato
  * nei pill scenario/messaggio dentro lo use case body (vedi `UC_PILL_SCENARIO` /
@@ -257,6 +260,33 @@ function UseCaseListSearchInput({
  * è cambiata.
  */
 
+const WIZARD_ACCORDION_FOCUS_RADIO = 'wizard-accordion-list-focus';
+
+function AccordionFocusRadio({
+  checked,
+  value,
+  ariaLabel,
+  onSelect,
+}: {
+  checked: boolean;
+  value: string;
+  ariaLabel: string;
+  onSelect: () => void;
+}): React.ReactElement {
+  return (
+    <input
+      type="radio"
+      name={WIZARD_ACCORDION_FOCUS_RADIO}
+      value={value}
+      checked={checked}
+      aria-label={ariaLabel}
+      className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-violet-500"
+      onChange={() => onSelect()}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
 function LabeledInlineToggle({
   active,
   onClick,
@@ -431,9 +461,11 @@ export function WizardStepOneListToolbarControls({
   if (!ctx) return null;
   const {
     bulkFold,
+    listAccordionHeaderMode,
+    selectListAccordionHeaderMode,
     showScenario,
-    showScenarioLlmFormat,
     showMessage,
+    showScenarioLlmFormat,
     showActionsPanel,
     toggleScenario,
     toggleScenarioLlmFormat,
@@ -497,21 +529,37 @@ export function WizardStepOneListToolbarControls({
         role="group"
         aria-label="Campi visibili nello use case"
       >
-        <ScenarioWithLlmToggle
-          showScenario={showScenario}
-          showScenarioLlmFormat={showScenarioLlmFormat}
-          onToggleScenario={toggleScenario}
-          onToggleScenarioLlmFormat={toggleScenarioLlmFormat}
-          activeClass="text-violet-300 bg-violet-500/15"
-        />
-        <LabeledInlineToggle
-          active={showMessage}
-          onClick={toggleMessage}
-          title="Mostra/nascondi il messaggio agente"
-          activeClass="text-emerald-300 bg-emerald-500/15"
-          icon={<MessageSquareText size={15} aria-hidden />}
-          label="Messaggio"
-        />
+        <span className="inline-flex items-center gap-0.5">
+          <AccordionFocusRadio
+            checked={listAccordionHeaderMode === 'label'}
+            value="label"
+            ariaLabel="Intestazione riga: etichetta use case"
+            onSelect={() => selectListAccordionHeaderMode('label')}
+          />
+          <ScenarioWithLlmToggle
+            showScenario={showScenario}
+            showScenarioLlmFormat={showScenarioLlmFormat}
+            onToggleScenario={toggleScenario}
+            onToggleScenarioLlmFormat={toggleScenarioLlmFormat}
+            activeClass="text-violet-300 bg-violet-500/15"
+          />
+        </span>
+        <span className="inline-flex items-center gap-0.5">
+          <AccordionFocusRadio
+            checked={listAccordionHeaderMode === 'message'}
+            value="message"
+            ariaLabel="Intestazione riga: messaggio agente"
+            onSelect={() => selectListAccordionHeaderMode('message')}
+          />
+          <LabeledInlineToggle
+            active={showMessage}
+            onClick={toggleMessage}
+            title="Mostra/nascondi il blocco messaggio nel corpo espanso"
+            activeClass="text-emerald-300 bg-emerald-500/15"
+            icon={<MessageSquareText size={15} aria-hidden />}
+            label="Messaggio"
+          />
+        </span>
         <LabeledInlineToggle
           active={showActionsPanel}
           onClick={toggleActionsPanel}

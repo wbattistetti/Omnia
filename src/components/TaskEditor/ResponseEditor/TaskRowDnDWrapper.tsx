@@ -12,6 +12,8 @@ export interface TaskRowDnDWrapperProps {
   children: React.ReactNode;
   allowViewerDrop?: boolean;
   isEditing?: boolean; // Disable drag when editing
+  /** Last row: hide palette "after" line so append zone is the sole end-of-list preview. */
+  suppressPaletteAfterPreview?: boolean;
 }
 
 export const DND_TYPE = 'TASK_ROW';
@@ -55,6 +57,7 @@ const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
   children,
   allowViewerDrop = true,
   isEditing = false,
+  suppressPaletteAfterPreview = false,
 }) => {
   const ref = React.useRef<HTMLDivElement>(null);
   const [previewPosition, setPreviewPosition] = React.useState<'before' | 'after' | undefined>(undefined);
@@ -84,7 +87,15 @@ const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
       if (!ref.current) return;
       const position = resolveDropPosition(ref.current, monitor);
       if (!position) return;
-      const show = shouldShowRowPreview(item, escalationIdx, taskIdx, position);
+      let show = shouldShowRowPreview(item, escalationIdx, taskIdx, position);
+      if (
+        show &&
+        item.type === DND_TYPE_VIEWER &&
+        suppressPaletteAfterPreview &&
+        position === 'after'
+      ) {
+        show = false;
+      }
       setPreviewPosition(show ? position : undefined);
     },
     drop: (item: any, monitor) => {
@@ -141,6 +152,10 @@ const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
   });
 
   drag(drop(ref));
+
+  React.useEffect(() => {
+    if (!isOver) setPreviewPosition(undefined);
+  }, [isOver]);
 
   return (
     <div

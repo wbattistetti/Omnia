@@ -10,7 +10,8 @@ import { useFontContext } from '@context/FontContext';
 
 export type TaskRowProps = {
   header: React.ReactNode;
-  body: React.ReactNode;
+  /** Omit or pass `null` for header-only rows (no parameter body). */
+  body?: React.ReactNode | null;
   color?: string;
   onDelete?: () => void;
   draggable?: boolean;
@@ -57,15 +58,15 @@ function TaskRowInner({
         }}
       >
         {header}
-        {body}
-        {!rowEditorActive && (
+        {body != null ? body : null}
+        {!rowEditorActive && (onEditPrimary != null || onDelete != null) ? (
           <TaskRowActions
             onEdit={onEditPrimary}
             onDelete={onDelete}
             color="#94a3b8"
             style={{ marginLeft: 10, alignSelf: 'flex-start' }}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );

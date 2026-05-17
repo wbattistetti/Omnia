@@ -3,7 +3,9 @@
  */
 
 import React from 'react';
-import { Check, List, MessageSquareText, Pencil, Trash2, Variable, X } from 'lucide-react';
+import { Check, Pencil, Trash2, Variable, X } from 'lucide-react';
+import { useAIProvider } from '@context/AIProviderContext';
+import { resolveAiAgentOutputLanguage } from '../resolveAiAgentOutputLanguage';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { AIAgentPhraseStyleToken } from '@domain/useCaseBundle/schema';
 import {
@@ -23,11 +25,17 @@ import {
 } from '../useCaseComposerPresentation';
 import { useAgentMessageTextField } from '../useAgentMessageTextField';
 import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
+import { AgentMessageKindIcon } from './AgentMessageKindIcon';
+import {
+  hasStyleVariationsInMessage,
+  resolveAgentMessageIconKind,
+} from './agentMessageIconKind';
 import { DoubleMessageIcon } from './DoubleMessageIcon';
+import { StyleVariationsDoubleMessageIcon } from './StyleVariationsDoubleMessageIcon';
 import type { PhraseParametricRevertPickProps } from '../useCaseBundle/PhraseParametricEditor';
 import { AgentMessageStyleExamplesPanel } from '../AgentMessageStyleExamplesPanel';
-import { useAgentMessageStyleExamples } from '../useAgentMessageStyleExamples';
-import { TOOLTIP_AGENT_MSG_GENERATE_STYLE_EXAMPLES } from '../constants';
+import { useStylePhraseExamplesPanel } from '../useStylePhraseExamplesPanel';
+import { StylePhraseToolbarButtons } from '../StylePhraseToolbarButtons';
 
 export type { PhraseParametricRevertPickProps as ParametricEditorPickRevertContext };
 
@@ -54,6 +62,10 @@ export type PrimaryAgentMessageFieldProps = {
   onStyleTokenWrap?: (surface: string) => void;
   onStyleTokenUnwrap?: (surface: string) => void;
   onStyleTokenVariantsChange?: (styleTokenId: string, variants: string[]) => void;
+  /** Persistenza `phrases[0].styleExamples` e azioni Magic. */
+  onPatchUseCase?: (updater: (uc: AIAgentUseCase) => AIAgentUseCase) => void;
+  /** Vista messaggio wizard: nasconde il corpo testo (icona + toolbar + versioni restano). */
+  hideCanonicalPhraseText?: boolean;
 };
 
 const INLINE_TOOLBAR_ICON_PX = 18;
@@ -61,18 +73,6 @@ const EDIT_MODE_ICON_PX = 21;
 
 const INLINE_ACTIONS =
   'ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline opacity-0 transition-opacity group-hover/agentmsg-row:opacity-100 group-focus-within/agentmsg-row:opacity-100';
-
-function SingleMessageIcon(): React.ReactElement {
-  return (
-    <span
-      title="Messaggio agente"
-      aria-label="Messaggio agente"
-      className="shrink-0 inline-flex h-6 w-6 items-center justify-center text-emerald-300"
-    >
-      <MessageSquareText size={15} aria-hidden />
-    </span>
-  );
-}
 
 export function PrimaryAgentMessageField({
   useCase,
@@ -96,7 +96,11 @@ export function PrimaryAgentMessageField({
   onStyleTokenWrap,
   onStyleTokenUnwrap,
   onStyleTokenVariantsChange,
+  onPatchUseCase,
+  hideCanonicalPhraseText = false,
 }: PrimaryAgentMessageFieldProps): React.ReactElement {
+  const { provider, model } = useAIProvider();
+  const outputLanguage = resolveAiAgentOutputLanguage().tag;
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(text);
   const [parametricExpanded, setParametricExpanded] = React.useState(false);
@@ -169,11 +173,11 @@ export function PrimaryAgentMessageField({
   const showParametricBody = parametricEnabled && (parametricExpanded || editing);
 
   const beginEdit = React.useCallback(() => {
-    if (busy || readOnlyTokenized) return;
+    if (busy || readOnlyTokenized || editing) return;
     setDraft(text);
     setEditing(true);
     onPhraseDraftChange?.(text);
-  }, [busy, readOnlyTokenized, text, onPhraseDraftChange]);
+  }, [busy, readOnlyTokenized, editing, text, onPhraseDraftChange]);
 
   const cancelEdit = React.useCallback(() => {
     setEditing(false);
@@ -206,34 +210,92 @@ export function PrimaryAgentMessageField({
     return styleTokens.find((t) => t.defaultSurface === span.inner) ?? null;
   }, [tokenField.activeStyleTokenSpan, styleTokens]);
 
-  const styleExamples = useAgentMessageStyleExamples({
-    text: editing ? draft : text,
+  const noopPatch = React.useCallback((updater: (uc: AIAgentUseCase) => AIAgentUseCase) => {
+    void updater;
+  }, []);
+
+  const stylePanel = useStylePhraseExamplesPanel({
+    useCase,
+    messageText: editing ? draft : text,
     styleTokens,
+    onPatchUseCase: onPatchUseCase ?? noopPatch,
+    ai:
+      provider && model
+        ? { provider, model, outputLanguage }
+        : null,
   });
 
-  const styleExamplesToolbarButton = styleExamples.hasStyleTokens ? (
+  const styleBusy = busy || stylePanel.generating !== null;
+
+  const hasStyleVariations = hasStyleVariationsInMessage({
+    hasStyleTokens: stylePanel.hasStyleTokens,
+    styleExampleCount: stylePanel.examples.length,
+  });
+
+  const iconKind = resolveAgentMessageIconKind({
+    parametricEnabled,
+    hasStyleVariations,
+  });
+
+  const styleToggleButton = (
     <button
       type="button"
-      disabled={busy || !styleExamples.canGenerate}
-      aria-pressed={styleExamples.open}
-      title={TOOLTIP_AGENT_MSG_GENERATE_STYLE_EXAMPLES}
-      className={`${UC_AGENT_ROW_EDIT_BTN} ${styleExamples.open ? 'text-sky-300' : ''}`}
+      disabled={busy}
+      className="shrink-0 rounded p-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-sky-500/80"
+      title={
+        stylePanel.open ? 'Comprimi versioni messaggio' : 'Espandi versioni messaggio'
+      }
+      aria-expanded={stylePanel.open}
+      aria-label="Versioni messaggio stile"
       onClick={(e) => {
         e.stopPropagation();
-        styleExamples.toggleOpen();
+        stylePanel.setOpen((open) => !open);
       }}
     >
-      <List size={INLINE_TOOLBAR_ICON_PX} aria-hidden />
+      <StyleVariationsDoubleMessageIcon />
     </button>
-  ) : null;
+  );
+
+  const renderLeadingMessageIcon = (opts: { styleToggleInteractive: boolean }) => {
+    if (iconKind === 'style' && opts.styleToggleInteractive) {
+      return styleToggleButton;
+    }
+    return <AgentMessageKindIcon kind={iconKind} />;
+  };
+
+  const messageTextForStyle = (editing ? draft : text).trim();
+
+  const renderStyleToolbarButtons = (showMagic: boolean, alwaysVisible: boolean) => (
+    <StylePhraseToolbarButtons
+      hasStyleTokens={stylePanel.hasStyleTokens}
+      canRunCreative={messageTextForStyle.length > 0}
+      open={stylePanel.open}
+      generating={stylePanel.generating}
+      canUseAi={stylePanel.canUseAi}
+      busy={styleBusy}
+      showMagic={showMagic}
+      iconSize={INLINE_TOOLBAR_ICON_PX}
+      alwaysVisible={alwaysVisible}
+      onLoadLocalCombinatorics={stylePanel.loadLocalCombinatorics}
+      onRunPolish={() => void stylePanel.runPolish()}
+      onRunCreative={() => void stylePanel.runCreative()}
+    />
+  );
 
   const styleExamplesPanel =
-    styleExamples.open && styleExamples.hasStyleTokens ? (
-      <AgentMessageStyleExamplesPanel
-        phrases={styleExamples.phrases}
-        truncated={styleExamples.truncated}
-        className="mt-2"
-      />
+    stylePanel.open && (stylePanel.hasStyleTokens || stylePanel.examples.length > 0) ? (
+      <div className="mt-2 space-y-1">
+        {stylePanel.error ? (
+          <p className="text-xs text-rose-300/90">{stylePanel.error}</p>
+        ) : null}
+        <AgentMessageStyleExamplesPanel
+          examples={stylePanel.examples}
+          truncated={stylePanel.truncated}
+          busy={styleBusy}
+          onClose={stylePanel.close}
+          {...stylePanel.handlers}
+        />
+      </div>
     ) : null;
 
   const selectionTokenPopover =
@@ -303,7 +365,7 @@ export function PrimaryAgentMessageField({
           <Variable size={INLINE_TOOLBAR_ICON_PX} aria-hidden />
         </button>
       ) : null}
-      {styleExamplesToolbarButton}
+      {renderStyleToolbarButtons(false, false)}
       {onDeleteMessage ? (
         <button
           type="button"
@@ -322,6 +384,9 @@ export function PrimaryAgentMessageField({
   );
 
   const renderDisplayBody = () => {
+    if (hideCanonicalPhraseText && !editing) {
+      return null;
+    }
     if (tokenizedDisplayText?.trim()) {
       return (
         <TokenizedHighlightedText
@@ -380,7 +445,8 @@ export function PrimaryAgentMessageField({
           disabled={busy}
           rows={2}
           autoFocus
-          spellCheck={false}
+          spellCheck
+          lang={outputLanguage}
           aria-label="Messaggio agente"
           placeholder="Testo esempio per il messaggio agente…"
           containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px] w-full`}
@@ -410,7 +476,7 @@ export function PrimaryAgentMessageField({
         {selectionTokenPopover}
       </div>
       <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-        {styleExamplesToolbarButton}
+        {renderStyleToolbarButtons(true, true)}
         <button
           type="button"
           title="Conferma"
@@ -547,8 +613,11 @@ export function PrimaryAgentMessageField({
   if (editing) {
     return (
       <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
-        <div className="flex flex-wrap items-start gap-2">
-          <SingleMessageIcon />
+        <div
+          className="flex min-h-[52px] flex-wrap items-start gap-2"
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {renderLeadingMessageIcon({ styleToggleInteractive: false })}
           <div className="min-w-0 flex-1 flex-col">
             <BracketTokenHighlightedTextarea
               ref={tokenField.textareaRef}
@@ -556,7 +625,8 @@ export function PrimaryAgentMessageField({
               disabled={busy}
               rows={2}
               autoFocus
-              spellCheck={false}
+              spellCheck
+              lang={outputLanguage}
               aria-label="Messaggio agente"
               placeholder="Testo esempio per il messaggio agente…"
               containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px] w-full`}
@@ -586,7 +656,7 @@ export function PrimaryAgentMessageField({
             {selectionTokenPopover}
           </div>
           <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-            {styleExamplesToolbarButton}
+            {renderStyleToolbarButtons(true, true)}
             <button
               type="button"
               title="Conferma"
@@ -615,7 +685,7 @@ export function PrimaryAgentMessageField({
   return (
     <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
       <div
-        className="group/agentmsg-row flex w-full min-w-0 cursor-pointer flex-wrap items-end gap-x-1 gap-y-1 rounded px-0.5 py-0"
+        className="group/agentmsg-row flex min-h-[52px] w-full min-w-0 cursor-pointer flex-wrap items-end gap-x-1 gap-y-1 rounded px-0.5 py-0"
         onDoubleClick={(e) => {
           if (busy) return;
           if ((e.target as HTMLElement).closest('button')) return;
@@ -624,7 +694,7 @@ export function PrimaryAgentMessageField({
           beginEdit();
         }}
       >
-        <SingleMessageIcon />
+        {renderLeadingMessageIcon({ styleToggleInteractive: true })}
         <div className={`min-w-0 ${displayTextClass}`}>
           {renderDisplayBody()}
           {inlineToolbar}

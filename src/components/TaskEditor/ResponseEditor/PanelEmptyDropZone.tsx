@@ -17,6 +17,11 @@ interface PanelEmptyDropZoneProps {
   compactHalf?: boolean;
   /** Fill parent height (single escalation): full-panel drop target. */
   fillAvailable?: boolean;
+  /**
+   * When true, forwards the raw react-dnd palette item to `onDropTask` (for TaskSequenceEditor
+   * which runs `normalizeIncomingPaletteTask`). Default false keeps legacy `createTask` path.
+   */
+  passPaletteDragPayload?: boolean;
   // Legacy prop for backward compatibility
   onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
@@ -30,21 +35,31 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
   compact = false,
   compactHalf = false,
   fillAvailable = false,
+  passPaletteDragPayload = false,
 }) => {
   const handleDrop = onDropTask ?? onDropAction;
+  const handleDropRef = React.useRef(handleDrop);
+  handleDropRef.current = handleDrop;
   const [isOver, setIsOver] = useState(false);
 
-  const [{ isOver: isDropping }, drop] = useDrop(() => ({
-    accept: [DND_TYPE_VIEWER],
-    drop: (item: any, monitor) => {
-      const normalized = createTask(item);
-      handleDrop?.(normalized);
-      return { handled: true };
-    },
-    collect: (monitor) => ({
-      isOver: monitor.isOver()
-    })
-  }), [handleDrop]);
+  const [{ isOver: isDropping }, drop] = useDrop(
+    () => ({
+      accept: [DND_TYPE_VIEWER],
+      drop: (item: unknown) => {
+        if (passPaletteDragPayload) {
+          handleDropRef.current?.(item as TaskReference);
+        } else {
+          const normalized = createTask(item);
+          handleDropRef.current?.(normalized);
+        }
+        return { handled: true };
+      },
+      collect: (monitor) => ({
+        isOver: monitor.isOver(),
+      }),
+    }),
+    [passPaletteDragPayload]
+  );
 
   // Aggiorna stato locale per feedback visivo
   React.useEffect(() => {
@@ -66,7 +81,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
     : compact
       ? {
           flex: 1,
-          minHeight: compactHalf ? '28px' : '56px',
+          minHeight: compactHalf ? '48px' : '56px',
           alignSelf: 'stretch',
           maxWidth: '100%',
           width: '100%',
@@ -104,7 +119,13 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({
         boxSizing: 'border-box',
       }}
     >
-      {isOver ? over : idle}
+      {isOver ? (
+        over
+      ) : typeof idle === 'string' ? (
+        idle
+      ) : (
+        <span className="inline">{idle}</span>
+      )}
     </div>
   );
 };

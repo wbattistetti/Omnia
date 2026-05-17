@@ -99,9 +99,9 @@ export function ElevenLabsWorkflowSplitLayout({
   }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row lg:items-stretch">
+    <div className="flex h-full min-h-0 flex-1 flex-col lg:flex-row lg:items-stretch">
       <div className="flex min-h-[240px] min-w-0 flex-1 flex-col overflow-hidden border-b border-slate-800 lg:min-h-0 lg:border-b-0">
-        {canvas}
+        <div className="flex min-h-0 flex-1 flex-col h-full">{canvas}</div>
       </div>
       <div
         role="separator"

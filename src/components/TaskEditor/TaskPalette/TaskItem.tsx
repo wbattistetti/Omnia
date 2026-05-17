@@ -4,6 +4,7 @@ import styles from './TaskItem.module.css';
 import { useDrag } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
 import { DND_TYPE_VIEWER } from '../ResponseEditor/TaskRowDnDWrapper';
+import { setPaletteTaskDragActive } from '../ResponseEditor/paletteTaskDragBridge';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -41,6 +42,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, icon, iconName, label, color,
   const [{ isDragging }, dragRef, preview] = useDrag({
     type: DND_TYPE_VIEWER,
     item: () => {
+      setPaletteTaskDragActive(true);
       return {
         type: DND_TYPE_VIEWER,
         task,
@@ -51,10 +53,20 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, icon, iconName, label, color,
         parameters
       };
     },
+    end: () => {
+      setPaletteTaskDragActive(false);
+    },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   });
+
+  React.useEffect(() => {
+    if (isDragging) setPaletteTaskDragActive(true);
+    return () => {
+      if (isDragging) setPaletteTaskDragActive(false);
+    };
+  }, [isDragging]);
 
   // Nasconde il preview nativo del browser per evitare doppio rendering durante il drag
   React.useEffect(() => {

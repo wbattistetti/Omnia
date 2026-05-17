@@ -17,6 +17,7 @@ import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { useBehaviourUiOptional } from '@responseEditor/behaviour/BehaviourUiContext';
 import { TaskRowHeader } from '@responseEditor/tasks/TaskRowHeader';
 import { TaskRowBody } from '@responseEditor/tasks/TaskRowBody';
+import TaskRowActions from '@responseEditor/TaskRowActions';
 import { ParameterFieldHost } from '@responseEditor/tasks/parameterEditors';
 import { resolveTranslationKey } from '@responseEditor/utils/taskUiText';
 import type { BehaviourFocusTarget } from '@responseEditor/behaviour/BehaviourUiContext';
@@ -24,8 +25,10 @@ import { useTaskSequenceFocusOptional } from './TaskSequenceFocusContext';
 import {
   firstFocusParameterId,
   matchesAllowedTemplateId,
+  DROP_TEMPLATE_NOT_ALLOWED_MESSAGE,
   normalizeIncomingPaletteTask,
   reorderTasksInList,
+  resolveIncomingPaletteTemplateId,
 } from './taskSequenceUtils';
 import { TaskSequenceAppendDropZone } from './TaskSequenceAppendDropZone';
 
@@ -69,6 +72,10 @@ export type TaskSequenceEditorProps = {
     toTaskIdx: number,
     position: 'before' | 'after'
   ) => void;
+  /** Drop rifiutato (template non ammesso, payload invalido). */
+  onDropRejected?: (message: string) => void;
+  /** Messaggio se il template non è in `allowedTemplateIds`. */
+  dropTemplateNotAllowedMessage?: string;
 };
 
 const DEFAULT_EMPTY_IDLE =
@@ -89,7 +96,11 @@ export function TaskSequenceEditor({
   autoOpenTasksPanel = false,
   onAutoOpenTasksPanel,
   onMoveTaskAcrossLists,
+  onDropRejected,
+  dropTemplateNotAllowedMessage = DROP_TEMPLATE_NOT_ALLOWED_MESSAGE,
 }: TaskSequenceEditorProps): React.ReactElement {
+  const onDropRejectedRef = React.useRef(onDropRejected);
+  onDropRejectedRef.current = onDropRejected;
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
   const behaviourFocus = useBehaviourUiOptional();
   const sequenceFocus = useTaskSequenceFocusOptional();
@@ -176,15 +187,6 @@ export function TaskSequenceEditor({
 
   const handleAppend = React.useCallback(
     (incoming: unknown) => {
-      if (allowedTemplateIds && allowedTemplateIds.length > 0) {
-        const raw = (incoming as { task?: { templateId?: string; id?: string } })?.task ?? incoming;
-        const tid =
-          (raw as { templateId?: string })?.templateId ?? (raw as { id?: string })?.id ?? '';
-        if (!matchesAllowedTemplateId(tid, allowedTemplateIds)) {
-          return;
-        }
-      }
-
       let taskRef: TaskSequenceRow;
       try {
         taskRef = normalizeIncomingPaletteTask(incoming);
@@ -192,7 +194,17 @@ export function TaskSequenceEditor({
         console.error('[TaskSequenceEditor] normalizeIncomingPaletteTask failed on append', e, {
           incoming,
         });
+        onDropRejectedRef.current?.('Impossibile aggiungere il task: payload non valido.');
         return;
+      }
+
+      if (allowedTemplateIds && allowedTemplateIds.length > 0) {
+        const tid =
+          taskRef.templateId ?? (resolveIncomingPaletteTemplateId(incoming) || null);
+        if (!matchesAllowedTemplateId(tid, allowedTemplateIds)) {
+          onDropRejectedRef.current?.(dropTemplateNotAllowedMessage);
+          return;
+        }
       }
 
       onTasksChange((prev) => {
@@ -203,7 +215,7 @@ export function TaskSequenceEditor({
         return newTasks;
       });
     },
-    [onTasksChange, allowedTemplateIds, queueFocus]
+    [onTasksChange, allowedTemplateIds, queueFocus, dropTemplateNotAllowedMessage]
   );
 
   const handleDelete = React.useCallback(
@@ -221,15 +233,6 @@ export function TaskSequenceEditor({
     ) => {
       if (to.escalationIdx !== listIndex) return;
 
-      if (allowedTemplateIds && allowedTemplateIds.length > 0) {
-        const raw = (incoming as { task?: { templateId?: string; id?: string } })?.task ?? incoming;
-        const templateId =
-          (raw as { templateId?: string })?.templateId ?? (raw as { id?: string })?.id ?? null;
-        if (!matchesAllowedTemplateId(templateId, allowedTemplateIds)) {
-          return;
-        }
-      }
-
       let normalized: TaskSequenceRow;
       try {
         normalized = normalizeIncomingPaletteTask(incoming);
@@ -237,7 +240,17 @@ export function TaskSequenceEditor({
         console.error('[TaskSequenceEditor] normalizeIncomingPaletteTask failed on drop', e, {
           incoming,
         });
+        onDropRejectedRef.current?.('Impossibile aggiungere il task: payload non valido.');
         return;
+      }
+
+      if (allowedTemplateIds && allowedTemplateIds.length > 0) {
+        const tid =
+          normalized.templateId ?? (resolveIncomingPaletteTemplateId(incoming) || null);
+        if (!matchesAllowedTemplateId(tid, allowedTemplateIds)) {
+          onDropRejectedRef.current?.(dropTemplateNotAllowedMessage);
+          return;
+        }
       }
 
       const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
@@ -251,7 +264,7 @@ export function TaskSequenceEditor({
       const pid = firstFocusParameterId(normalized);
       if (pid) queueFocus(insertIdx, pid);
     },
-    [listIndex, onTasksChange, allowedTemplateIds, queueFocus]
+    [listIndex, onTasksChange, allowedTemplateIds, queueFocus, dropTemplateNotAllowedMessage]
   );
 
   const handleMoveTask = React.useCallback(
@@ -303,6 +316,7 @@ export function TaskSequenceEditor({
       onDropTask={handleAppend}
       isEmpty={taskList.length === 0}
       fillAvailable={fillAvailableHeight}
+      passPaletteDragPayload
     >
       {taskList.length === 0 ? (
         <PanelEmptyDropZone
@@ -313,37 +327,60 @@ export function TaskSequenceEditor({
           fillAvailable={fillAvailableHeight}
           idleLabel={emptyIdleLabel}
           overLabel={emptyOverLabel}
+          passPaletteDragPayload
         />
       ) : (
         <>
         {taskList.map((task, j) => {
           const templateId = task.templateId ?? task.id ?? 'sayMessage';
           const rowKey = task.id ?? `row-${listIndex}-${j}`;
+          const isLastRow = j === taskList.length - 1;
           const isMessageRow = isMessageLikeEscalationTask(task);
           const isEditing = isEditingRow(j);
           const params = Array.isArray(task.parameters) ? task.parameters : [];
 
-          const header = (
+          const actionLabel = task.label ?? getTaskLabel(templateId);
+          const header = isMessageRow ? (
             <TaskRowHeader
-              icon={
-                isMessageRow
-                  ? undefined
-                  : task.iconName
-                    ? getIconComponent(task.iconName, ensureHexColor(task.color))
-                    : getTaskIconNode(templateId, ensureHexColor(task.color))
-              }
-              showMessageIcon={isMessageRow}
-              label={isMessageRow ? undefined : task.label ?? getTaskLabel(templateId)}
+              showMessageIcon
               color={color}
             />
+          ) : (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                flexShrink: 0,
+              }}
+            >
+              <TaskRowHeader
+                icon={
+                  task.iconName
+                    ? getIconComponent(task.iconName, ensureHexColor(task.color))
+                    : getTaskIconNode(templateId, ensureHexColor(task.color))
+                }
+                label={actionLabel}
+                color={color}
+              />
+              {!isEditing ? (
+                <TaskRowActions
+                  onDelete={() => handleDelete(j)}
+                  color="#94a3b8"
+                  style={{
+                    marginLeft: 0,
+                    opacity: 1,
+                    pointerEvents: 'auto',
+                  }}
+                />
+              ) : null}
+            </span>
           );
 
-          const body = (
-            <TaskRowBody>
-              {params.length === 0 ? (
-                <span style={{ color: '#64748b', fontSize: 13 }}>—</span>
-              ) : (
-                params.map((param) => (
+          const body =
+            params.length === 0 ? null : (
+              <TaskRowBody>
+                {params.map((param) => (
                   <ParameterFieldHost
                     key={param.parameterId}
                     task={task}
@@ -355,10 +392,9 @@ export function TaskSequenceEditor({
                     onEditingActivity={(active) => handleEditingChange(j)(active)}
                     onDeleteTaskIfEmpty={() => handleDelete(j)}
                   />
-                ))
-              )}
-            </TaskRowBody>
-          );
+                ))}
+              </TaskRowBody>
+            );
 
           return (
             <TaskRowDnDWrapper
@@ -370,6 +406,7 @@ export function TaskSequenceEditor({
               onDropNewTask={(t, to, pos) => handleDropFromViewer(t, to, pos)}
               allowViewerDrop={true}
               isEditing={isEditing}
+              suppressPaletteAfterPreview={isLastRow}
             >
               <TaskRow
                 header={header}
@@ -377,8 +414,10 @@ export function TaskSequenceEditor({
                 color={color}
                 draggable
                 selected={false}
-                onDelete={() => handleDelete(j)}
-                onEditPrimary={params.length > 0 ? () => openPrimary(j, task) : undefined}
+                onDelete={isMessageRow ? () => handleDelete(j) : undefined}
+                onEditPrimary={
+                  isMessageRow && params.length > 0 ? () => openPrimary(j, task) : undefined
+                }
                 rowEditorActive={isEditing}
               />
             </TaskRowDnDWrapper>

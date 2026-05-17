@@ -42,7 +42,7 @@ describe('styleTokenCombinatorics', () => {
     const { phrases, truncated } = buildMaterializedStylePhrases('«A» «X»', tokens, 30);
     expect(truncated).toBe(false);
     expect(phrases).toHaveLength(6);
-    expect(phrases).toContain('«A» «X»');
-    expect(phrases).toContain('«B» «Z»');
+    expect(phrases).toContain('A X');
+    expect(phrases).toContain('B Z');
   });
 });

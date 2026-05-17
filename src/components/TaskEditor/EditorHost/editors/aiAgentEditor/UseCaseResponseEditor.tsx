@@ -42,6 +42,7 @@ import { PrimaryAgentMessageField } from './primaryAgentMessage';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
+import { applyUseCaseValidatedOnMessageCommit } from './useCaseComposerDesignerVotes';
 
 const AI_AGENT_RESPONSE_ALLOWED_TEMPLATES = [
   'sayMessage',
@@ -53,6 +54,15 @@ const AI_AGENT_RESPONSE_ALLOWED_TEMPLATES = [
   'escalateToHuman',
   'waitForAgent',
 ] as const;
+
+/** Stable reference — avoids recreating drop handlers on every parent render. */
+const AI_AGENT_ACTION_ALLOWED_TEMPLATE_IDS: readonly string[] =
+  AI_AGENT_RESPONSE_ALLOWED_TEMPLATES.filter(
+    (id) => !['sayMessage', 'message', 'Message'].includes(id)
+  );
+
+const AI_AGENT_ACTION_DROP_NOT_ALLOWED_MESSAGE =
+  'Questa azione non è supportata nel response dell’use case. Sono ammesse: invio SMS, lettura o scrittura backend, escalation a operatore, attesa operatore.';
 
 export interface UseCaseResponseEditorProps {
   useCase: AIAgentUseCase;
@@ -68,6 +78,10 @@ export interface UseCaseResponseEditorProps {
   showTokenizedAgentMessage?: boolean;
   tokenizedByUseCaseId?: Record<string, string>;
   className?: string;
+  /** Vista messaggio wizard: nasconde il testo della frase canonica (restano versioni/azioni). */
+  hideCanonicalPhraseText?: boolean;
+  /** Dopo commit testo messaggio (collasso card wizard, clear highlight). */
+  onMessageCommitted?: () => void;
 }
 
 export function UseCaseResponseEditor({
@@ -83,6 +97,8 @@ export function UseCaseResponseEditor({
   showTokenizedAgentMessage = false,
   tokenizedByUseCaseId,
   className = '',
+  hideCanonicalPhraseText = false,
+  onMessageCommitted,
 }: UseCaseResponseEditorProps): React.ReactElement {
   const persistedTasks = getUseCaseResponseTasks(useCase);
   const tasks =
@@ -149,10 +165,28 @@ export function UseCaseResponseEditor({
   const onMessageTextChange = React.useCallback(
     (next: string, mode: 'live' | 'silent' | 'commit') => {
       if (mode === 'live') return;
+      if (busy) return;
       onPatchResponseTasks(useCase.id, (prev) => mapTasksUpdatingMessageText(prev, next));
-      onPatchUseCase((uc) => (uc.id === useCase.id ? syncPhraseFromMessageText(uc, next) : uc));
+      onPatchUseCase((uc) => {
+        if (uc.id !== useCase.id) return uc;
+        let patched = syncPhraseFromMessageText(uc, next);
+        if (mode === 'commit') {
+          patched = applyUseCaseValidatedOnMessageCommit(patched);
+        }
+        return patched;
+      });
+      if (mode === 'commit') {
+        onMessageCommitted?.();
+      }
     },
-    [busy, onPatchResponseTasks, onPatchUseCase, syncPhraseFromMessageText, useCase.id]
+    [
+      busy,
+      onPatchResponseTasks,
+      onPatchUseCase,
+      syncPhraseFromMessageText,
+      useCase.id,
+      onMessageCommitted,
+    ]
   );
 
   const styleTokens = React.useMemo(
@@ -172,23 +206,39 @@ export function UseCaseResponseEditor({
   const hasOnlyMessage = tasks.length === 1 && messageTasks.length === 1 && actionTasks.length === 0;
 
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
+  const [actionDropFeedback, setActionDropFeedback] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!actionDropFeedback) return;
+    const t = window.setTimeout(() => setActionDropFeedback(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [actionDropFeedback]);
+
+  const onActionDropRejected = React.useCallback(
+    (message: string) => {
+      setActionDropFeedback(message);
+      listToolbarCtx?.openActionsPanel();
+    },
+    [listToolbarCtx]
+  );
+
   const actionsDropIdleLabel = React.useMemo(
     () => (
-      <>
+      <span className="inline text-center">
         Puoi trascinare delle{' '}
         <button
           type="button"
-          className="underline decoration-current underline-offset-2 hover:text-amber-200"
+          className="inline underline decoration-current underline-offset-2 hover:text-amber-200"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            listToolbarCtx?.toggleActionsPanel();
+            listToolbarCtx?.openActionsPanel();
           }}
         >
           azioni
         </button>{' '}
-        qui..
-      </>
+        qui.
+      </span>
     ),
     [listToolbarCtx]
   );
@@ -213,10 +263,14 @@ export function UseCaseResponseEditor({
       aria-label="Response — sequenza messaggio e azioni"
     >
       <TaskSequenceFocusProvider>
-        <div className="space-y-2 p-2">
+        <div
+          className="space-y-2 p-2"
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
           <PrimaryAgentMessageField
             useCase={useCase}
             text={messageText}
+            hideCanonicalPhraseText={hideCanonicalPhraseText}
             busy={busy}
             wizardCompact
             searchSeed={searchSeed}
@@ -294,39 +348,29 @@ export function UseCaseResponseEditor({
                 uc.id === useCase.id ? patchStyleTokenVariants(uc, styleTokenId, variants) : uc
               )
             }
+            onPatchUseCase={patchUseCase}
             onTextChange={onMessageTextChange}
             onPhraseDraftChange={(draft) => onAssistantPhraseDraftChange?.(useCase.id, draft)}
           />
 
-          {actionTasks.length > 0 ? (
-            <TaskSequenceEditor
-              tasks={actionTasks}
-              onTasksChange={onActionTasksChange}
-              listIndex={0}
-              color="#fbbf24"
-              allowedTemplateIds={AI_AGENT_RESPONSE_ALLOWED_TEMPLATES.filter(
-                (id) => !['sayMessage', 'message', 'Message'].includes(id)
-              )}
-              fillAvailableHeight={false}
-              compactEmptyDropZone
-              emptyIdleLabel={actionsDropIdleLabel}
-              emptyOverLabel="Rilascia per aggiungere al response"
-            />
-          ) : (
-            <TaskSequenceEditor
-              tasks={[]}
-              onTasksChange={onActionTasksChange}
-              listIndex={0}
-              color="#fbbf24"
-              allowedTemplateIds={AI_AGENT_RESPONSE_ALLOWED_TEMPLATES.filter(
-                (id) => !['sayMessage', 'message', 'Message'].includes(id)
-              )}
-              fillAvailableHeight={false}
-              compactEmptyDropZone
-              emptyIdleLabel={actionsDropIdleLabel}
-              emptyOverLabel="Rilascia per aggiungere al response"
-            />
-          )}
+          {actionDropFeedback ? (
+            <p className="text-[11px] text-amber-300/95 px-0.5" role="status">
+              {actionDropFeedback}
+            </p>
+          ) : null}
+          <TaskSequenceEditor
+            tasks={actionTasks}
+            onTasksChange={onActionTasksChange}
+            listIndex={0}
+            color="#fbbf24"
+            allowedTemplateIds={AI_AGENT_ACTION_ALLOWED_TEMPLATE_IDS}
+            dropTemplateNotAllowedMessage={AI_AGENT_ACTION_DROP_NOT_ALLOWED_MESSAGE}
+            fillAvailableHeight={false}
+            compactEmptyDropZone
+            emptyIdleLabel={actionsDropIdleLabel}
+            emptyOverLabel="Rilascia per aggiungere al response"
+            onDropRejected={onActionDropRejected}
+          />
         </div>
       </TaskSequenceFocusProvider>
     </div>

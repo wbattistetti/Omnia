@@ -21,7 +21,10 @@ export function StyleTokenVariantsEditor({
   const inputRefs = React.useRef<Array<HTMLInputElement | null>>([]);
 
   React.useEffect(() => {
-    setDraft([...token.variants]);
+    const sorted = [...token.variants].sort((a, b) =>
+      a.localeCompare(b, 'it', { sensitivity: 'base' })
+    );
+    setDraft(sorted);
   }, [token.styleTokenId, token.variants]);
 
   const commit = React.useCallback(

@@ -8,7 +8,7 @@
  * (TaskSequenceEditor) non entra in conflitto.
  */
 
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
 import {
   DndContext,
   MeasuringStrategy,
@@ -21,6 +21,10 @@ import {
   useSensors,
   pointerWithin,
 } from '@dnd-kit/core';
+import {
+  getPaletteTaskDragActive,
+  subscribePaletteTaskDrag,
+} from '@responseEditor/paletteTaskDragBridge';
 
 const ROW_PREFIX = 'uc-row-';
 const HDR_PREFIX = 'uc-hdr-';
@@ -313,7 +317,13 @@ export function UseCaseListDndShell({
   const reorderEnabledRef = React.useRef(reorderEnabled);
   reorderEnabledRef.current = reorderEnabled;
 
-  const sensors = useSensors(
+  const paletteDragActive = useSyncExternalStore(
+    subscribePaletteTaskDrag,
+    getPaletteTaskDragActive,
+    () => false
+  );
+
+  const rowReorderSensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 10 },
     })
@@ -340,7 +350,7 @@ export function UseCaseListDndShell({
 
   return (
     <DndContext
-      sensors={sensors}
+      sensors={paletteDragActive ? [] : rowReorderSensors}
       collisionDetection={pointerWithin}
       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragEnd={onDragEnd}

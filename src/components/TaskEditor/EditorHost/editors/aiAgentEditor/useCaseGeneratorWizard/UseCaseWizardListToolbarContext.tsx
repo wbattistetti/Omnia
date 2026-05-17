@@ -7,6 +7,9 @@ import React from 'react';
 
 export type WizardBulkFoldState = 'expanded' | 'collapsed' | 'mixed';
 
+/** Intestazione riga use case nell'accordion: etichetta UC oppure testo messaggio agente. */
+export type WizardAccordionHeaderMode = 'label' | 'message';
+
 export type CorrectionPreviewRow = {
   readonly useCaseId: string;
   readonly useCaseLabel: string;
@@ -28,9 +31,14 @@ export type UseCaseWizardListHandlers = {
 };
 
 export interface UseCaseWizardListToolbarContextValue {
+  /** Radio: cosa mostrare nell'intestazione di ogni riga UC (non il corpo espanso). */
+  listAccordionHeaderMode: WizardAccordionHeaderMode;
+  selectListAccordionHeaderMode: (mode: WizardAccordionHeaderMode) => void;
+  /** Pill Scenario: corpo espanso — blocco scenario visibile. */
   showScenario: boolean;
   /** Se true, le card mostrano `scenario.llm` invece della narrativa umana. */
   showScenarioLlmFormat: boolean;
+  /** Pill Messaggio: corpo espanso — blocco messaggio visibile. */
   showMessage: boolean;
   /** Right aside: actions palette for use case response (replaces tutorial when on). */
   showActionsPanel: boolean;
@@ -40,6 +48,8 @@ export interface UseCaseWizardListToolbarContextValue {
   toggleScenarioLlmFormat: () => void;
   toggleMessage: () => void;
   toggleActionsPanel: () => void;
+  /** Apre il pannello azioni; se già aperto non fa nulla (no toggle). */
+  openActionsPanel: () => void;
   toggleSlotMappingPanel: () => void;
   bulkFold: WizardBulkFoldState;
   setBulkFold: React.Dispatch<React.SetStateAction<WizardBulkFoldState>>;
@@ -111,10 +121,11 @@ export function UseCaseWizardListToolbarProvider({
 }: {
   children: React.ReactNode;
 }): React.ReactElement {
-  const [showScenario, setShowScenario] = React.useState(true);
+  const [listAccordionHeaderMode, setListAccordionHeaderMode] =
+    React.useState<WizardAccordionHeaderMode>('label');
+  const [showScenarioVisible, setShowScenarioVisible] = React.useState(true);
+  const [showMessageVisible, setShowMessageVisible] = React.useState(true);
   const [showScenarioLlmFormat, setShowScenarioLlmFormat] = React.useState(false);
-  /** Triplet UX: scenario + messaggio agente visibili subito dopo generazione IA. */
-  const [showMessage, setShowMessage] = React.useState(true);
   const [showActionsPanel, setShowActionsPanel] = React.useState(false);
   const [showSlotMappingPanel, setShowSlotMappingPanel] = React.useState(false);
   const [bulkFold, setBulkFold] = React.useState<WizardBulkFoldState>('expanded');
@@ -176,8 +187,12 @@ export function UseCaseWizardListToolbarProvider({
     setBulkFold('mixed');
   }, []);
 
+  const selectListAccordionHeaderMode = React.useCallback((mode: WizardAccordionHeaderMode) => {
+    setListAccordionHeaderMode(mode);
+  }, []);
+
   const toggleScenario = React.useCallback(() => {
-    setShowScenario((v) => !v);
+    setShowScenarioVisible((v) => !v);
   }, []);
 
   const toggleScenarioLlmFormat = React.useCallback(() => {
@@ -185,7 +200,7 @@ export function UseCaseWizardListToolbarProvider({
   }, []);
 
   const toggleMessage = React.useCallback(() => {
-    setShowMessage((v) => !v);
+    setShowMessageVisible((v) => !v);
   }, []);
 
   const toggleActionsPanel = React.useCallback(() => {
@@ -194,6 +209,11 @@ export function UseCaseWizardListToolbarProvider({
       if (next) setShowSlotMappingPanel(false);
       return next;
     });
+  }, []);
+
+  const openActionsPanel = React.useCallback(() => {
+    setShowSlotMappingPanel(false);
+    setShowActionsPanel(true);
   }, []);
 
   const toggleSlotMappingPanel = React.useCallback(() => {
@@ -268,15 +288,18 @@ export function UseCaseWizardListToolbarProvider({
 
   const value = React.useMemo<UseCaseWizardListToolbarContextValue>(
     () => ({
-      showScenario,
+      listAccordionHeaderMode,
+      selectListAccordionHeaderMode,
+      showScenario: showScenarioVisible,
       showScenarioLlmFormat,
-      showMessage,
+      showMessage: showMessageVisible,
       showActionsPanel,
       showSlotMappingPanel,
       toggleScenario,
       toggleScenarioLlmFormat,
       toggleMessage,
       toggleActionsPanel,
+      openActionsPanel,
       toggleSlotMappingPanel,
       bulkFold,
       setBulkFold,
@@ -300,15 +323,18 @@ export function UseCaseWizardListToolbarProvider({
       setCorrectionPreviewState,
     }),
     [
-      showScenario,
+      listAccordionHeaderMode,
+      selectListAccordionHeaderMode,
+      showScenarioVisible,
       showScenarioLlmFormat,
-      showMessage,
+      showMessageVisible,
       showActionsPanel,
       showSlotMappingPanel,
       toggleScenario,
       toggleScenarioLlmFormat,
       toggleMessage,
       toggleActionsPanel,
+      openActionsPanel,
       toggleSlotMappingPanel,
       bulkFold,
       registerHandlers,

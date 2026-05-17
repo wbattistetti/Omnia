@@ -75,8 +75,8 @@
     {
       "providerId": "google",
       "modelId": "gemma-4-26b-a4b-it",
-      "inputUsdPer1M": 0.07,
-      "outputUsdPer1M": 0.33999999999999997,
+      "inputUsdPer1M": 0.06,
+      "outputUsdPer1M": 0.33,
       "contextLength": 262144,
       "rawId": "google/gemma-4-26b-a4b-it"
     },
@@ -917,8 +917,8 @@
     "google::gemma-4-26b-a4b-it": {
       "providerId": "google",
       "modelId": "gemma-4-26b-a4b-it",
-      "inputUsdPer1M": 0.07,
-      "outputUsdPer1M": 0.33999999999999997,
+      "inputUsdPer1M": 0.06,
+      "outputUsdPer1M": 0.33,
       "contextLength": 262144,
       "rawId": "google/gemma-4-26b-a4b-it"
     },
@@ -1686,6 +1686,6 @@
   "meta": {
     "source": "openrouter",
     "count": 105,
-    "updatedAt": "2026-05-17T12:16:11.359Z"
+    "updatedAt": "2026-05-17T18:23:41.610Z"
   }
 }

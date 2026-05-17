@@ -80,6 +80,10 @@ export const UC_SCENARIO_ROW_EDIT_BTN =
 export const UC_AGENT_ROW_EDIT_BTN =
   'shrink-0 rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-violet-300 group-hover/agentmsg-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:opacity-40';
 
+/** Toolbar stile / Magic in modifica messaggio: sempre visibile accanto a ✓ / ✗. */
+export const UC_AGENT_STYLE_TOOL_BTN =
+  'shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:text-sky-300 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:opacity-40';
+
 export const UC_HEAD_VOTE_BTN =
   'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-200/90 dark:hover:bg-slate-800/80 group-hover/uc-head:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50 disabled:opacity-40';
 export const UC_SCENARIO_VOTE_BTN =

@@ -3,15 +3,33 @@
  */
 
 import React from 'react';
-import { Handle, NodeToolbar, Position, type NodeProps } from 'reactflow';
+import { Handle, Position, type NodeProps } from 'reactflow';
 import type { ElWorkflowNodeData } from '@workspaces/elevenlabs/convaiWorkflowToReactFlow';
-import { Bot, CircleDot, Flag, GripVertical, Wrench } from 'lucide-react';
+import { Anchor, Bot, CircleDot, Flag, GripVertical, Wrench } from 'lucide-react';
+import { EL_RIGID_ANCHOR_CLASS } from './useElWorkflowRigidDrag';
 
 function kindIcon(kind: string): React.ReactElement {
   if (kind === 'start') return <Flag className="h-3.5 w-3.5 text-emerald-400" aria-hidden />;
   if (kind === 'tool') return <Wrench className="h-3.5 w-3.5 text-amber-400" aria-hidden />;
   if (kind === 'subagent') return <Bot className="h-3.5 w-3.5 text-violet-400" aria-hidden />;
   return <CircleDot className="h-3.5 w-3.5 text-slate-400" aria-hidden />;
+}
+
+/** Anchor: drag su React Flow sposta il nodo e tutti i discendenti (vedi useElWorkflowRigidDrag). */
+function RigidSubtreeAnchor(): React.ReactElement {
+  return (
+    <button
+      type="button"
+      title="Trascina nodo e ramo discendente"
+      aria-label="Trascina nodo e ramo discendente"
+      className={
+        `${EL_RIGID_ANCHOR_CLASS} cursor-grab rounded-md border border-amber-600/70 ` +
+        'bg-amber-950/90 p-1 text-amber-200 shadow active:cursor-grabbing'
+      }
+    >
+      <Anchor className="h-3.5 w-3.5" aria-hidden />
+    </button>
+  );
 }
 
 /** Grip isolato dal pan React Flow: solo questo elemento avvia il drag HTML5 verso Omnia. */
@@ -38,22 +56,18 @@ function OmniaFlowDragHandle({
   };
 
   return (
-    <div
-      className="absolute -right-1 -top-1 z-10 flex opacity-80 transition-opacity group-hover:opacity-100"
+    <button
+      type="button"
+      draggable
       title="Trascina sul canvas Omnia (tasto sinistro)"
+      aria-label={`Trascina «${label}» sul canvas Omnia`}
+      className="nodrag nopan cursor-grab rounded-md border border-violet-600/70 bg-violet-950 p-1 text-violet-200 shadow active:cursor-grabbing"
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDragStart={handleDragStart}
     >
-      <button
-        type="button"
-        draggable
-        aria-label={`Trascina «${label}» sul canvas Omnia`}
-        className="nodrag nopan cursor-grab rounded-md border border-violet-600/70 bg-violet-950 p-1 text-violet-200 shadow active:cursor-grabbing"
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onDragStart={handleDragStart}
-      >
-        <GripVertical className="h-3.5 w-3.5" aria-hidden />
-      </button>
-    </div>
+      <GripVertical className="h-3.5 w-3.5" aria-hidden />
+    </button>
   );
 }
 
@@ -75,34 +89,11 @@ export function ElevenLabsWorkflowNodeCard({
   const isStart = data.kind === 'start';
   const isEnd = data.kind === 'end';
   const canOmnia = data.kind === 'subagent' || data.kind === 'tool';
-  const showToolbar = selected && canOmnia && data.onEditInOmnia;
   const targetHandle = data.targetHandlePosition ?? targetPositionProp ?? Position.Left;
   const sourceHandle = data.sourceHandlePosition ?? sourcePositionProp ?? Position.Right;
 
   return (
     <>
-      {showToolbar ? (
-        <NodeToolbar
-          isVisible
-          position={Position.Top}
-          offset={10}
-          className="!border-0 !bg-transparent !shadow-none"
-        >
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={data.importBusy}
-              onClick={(e) => {
-                e.stopPropagation();
-                data.onEditInOmnia?.(id);
-              }}
-              className="rounded-md border border-violet-500/70 bg-violet-950 px-3 py-1.5 text-xs font-semibold text-violet-50 shadow-lg hover:bg-violet-900 disabled:opacity-50"
-            >
-              {data.importBusy ? 'Import…' : 'Edit in Omnia'}
-            </button>
-          </div>
-        </NodeToolbar>
-      ) : null}
       <div
         className={
           'group relative min-w-[200px] max-w-[260px] rounded-lg border px-3 py-2.5 shadow-lg ' +
@@ -120,12 +111,15 @@ export function ElevenLabsWorkflowNodeCard({
             className="!h-2 !w-2 !border-amber-700/80 !bg-amber-900/90"
           />
         ) : null}
-        {canOmnia && data.onDragToOmniaFlow ? (
-          <OmniaFlowDragHandle
-            label={data.label}
-            onDragStart={(dataTransfer) => data.onDragToOmniaFlow?.(id, dataTransfer)}
-          />
-        ) : null}
+        <div className="absolute -right-1 -top-1 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <RigidSubtreeAnchor />
+          {canOmnia && data.onDragToOmniaFlow ? (
+            <OmniaFlowDragHandle
+              label={data.label}
+              onDragStart={(dataTransfer) => data.onDragToOmniaFlow?.(id, dataTransfer)}
+            />
+          ) : null}
+        </div>
         <div className="flex items-start gap-2 pr-4">
           {kindIcon(data.kind)}
           <div className="min-w-0 flex-1">

@@ -1,0 +1,13 @@
+/**
+ * ElevenLabs workflow canvas: plain edge labels (no background rect, no stroke halo).
+ */
+
+.el-workflow-canvas .react-flow__edge-textbg {
+  display: none !important;
+}
+
+.el-workflow-canvas .react-flow__edge-text {
+  fill: #e2e8f0 !important;
+  stroke: none !important;
+  font-weight: 600;
+}

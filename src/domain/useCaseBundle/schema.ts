@@ -72,6 +72,21 @@ export interface AIAgentPhraseStyleToken {
   variants: string[];
 }
 
+export type AIAgentPhraseStyleExampleSource =
+  | 'combinatoric'
+  | 'polish'
+  | 'creative'
+  | 'manual';
+
+/** Esempio di frase validato a design-time (testo plain, senza delimitatori token). */
+export interface AIAgentPhraseStyleExample {
+  exampleId: string;
+  plainText: string;
+  /** Se true, incluso come esempio accettato (pollice su o checkbox). */
+  accepted: boolean;
+  source: AIAgentPhraseStyleExampleSource;
+}
+
 /** Frase canonica del designer (una o più per use case). */
 export interface AIAgentCanonicalPhrase {
   phraseId: string;
@@ -80,6 +95,8 @@ export interface AIAgentCanonicalPhrase {
   variants: AIAgentPhraseVariant[];
   /** Style token `«…»` con varianti editabili (design-time). */
   styleTokens?: AIAgentPhraseStyleToken[];
+  /** Varianti di frase generate/validate a design-time. */
+  styleExamples?: AIAgentPhraseStyleExample[];
   /**
    * Opzionale (schema v2+): quando `enabled`, le varianti deploy per questa frase derivano dalla
    * griglia combinazioni (+ variante default dal canonico), non dalla lista `variants` structural.

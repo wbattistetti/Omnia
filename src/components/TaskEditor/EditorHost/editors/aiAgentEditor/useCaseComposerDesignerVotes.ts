@@ -53,6 +53,21 @@ export function applyDesignerFieldVoteToggle(
  * Manteniamo qui la regola per evitare che UI diverse applichino solo metà
  * dell'invariante (colore rosso senza esclusione).
  */
+/**
+ * Conferma correzione messaggio a design-time: pollice verde su use case e messaggio,
+ * use case incluso nelle conversazioni (stesso effetto del commit in
+ * `setAssistantTurnContentForUseCase`).
+ */
+export function applyUseCaseValidatedOnMessageCommit(uc: AIAgentUseCase): AIAgentUseCase {
+  return {
+    ...uc,
+    designer_edit_confirmed: true,
+    designer_agent_message_vote: 'up',
+    designer_label_vote: 'up',
+    included_in_conversations: true,
+  };
+}
+
 export function applyUseCaseHeaderVoteToggle(
   prev: readonly AIAgentUseCase[],
   useCaseId: string,

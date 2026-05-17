@@ -20,10 +20,6 @@ export type ElWorkflowNodeData = {
   kind: string;
   promptPreview: string;
   inheritsGlobalPrompt: boolean;
-  /** When true, selected node shows «Edit in Omnia» toolbar. */
-  showEditInOmnia?: boolean;
-  importBusy?: boolean;
-  onEditInOmnia?: (nodeId: string) => void;
   /** HTML5 drag source (handle ⋮⋮) → Omnia flow canvas. */
   onDragToOmniaFlow?: (nodeId: string, dataTransfer: DataTransfer) => void;
   targetHandlePosition?: Position;
