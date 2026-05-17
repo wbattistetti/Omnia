@@ -29,12 +29,15 @@ export type UseCaseWizardListHandlers = {
 
 export interface UseCaseWizardListToolbarContextValue {
   showScenario: boolean;
+  /** Se true, le card mostrano `scenario.llm` invece della narrativa umana. */
+  showScenarioLlmFormat: boolean;
   showMessage: boolean;
   /** Right aside: actions palette for use case response (replaces tutorial when on). */
   showActionsPanel: boolean;
   /** Right aside: Slot Mapping (sostituisce tutorial). */
   showSlotMappingPanel: boolean;
   toggleScenario: () => void;
+  toggleScenarioLlmFormat: () => void;
   toggleMessage: () => void;
   toggleActionsPanel: () => void;
   toggleSlotMappingPanel: () => void;
@@ -109,6 +112,7 @@ export function UseCaseWizardListToolbarProvider({
   children: React.ReactNode;
 }): React.ReactElement {
   const [showScenario, setShowScenario] = React.useState(true);
+  const [showScenarioLlmFormat, setShowScenarioLlmFormat] = React.useState(false);
   /** Triplet UX: scenario + messaggio agente visibili subito dopo generazione IA. */
   const [showMessage, setShowMessage] = React.useState(true);
   const [showActionsPanel, setShowActionsPanel] = React.useState(false);
@@ -174,6 +178,10 @@ export function UseCaseWizardListToolbarProvider({
 
   const toggleScenario = React.useCallback(() => {
     setShowScenario((v) => !v);
+  }, []);
+
+  const toggleScenarioLlmFormat = React.useCallback(() => {
+    setShowScenarioLlmFormat((v) => !v);
   }, []);
 
   const toggleMessage = React.useCallback(() => {
@@ -261,10 +269,12 @@ export function UseCaseWizardListToolbarProvider({
   const value = React.useMemo<UseCaseWizardListToolbarContextValue>(
     () => ({
       showScenario,
+      showScenarioLlmFormat,
       showMessage,
       showActionsPanel,
       showSlotMappingPanel,
       toggleScenario,
+      toggleScenarioLlmFormat,
       toggleMessage,
       toggleActionsPanel,
       toggleSlotMappingPanel,
@@ -291,10 +301,12 @@ export function UseCaseWizardListToolbarProvider({
     }),
     [
       showScenario,
+      showScenarioLlmFormat,
       showMessage,
       showActionsPanel,
       showSlotMappingPanel,
       toggleScenario,
+      toggleScenarioLlmFormat,
       toggleMessage,
       toggleActionsPanel,
       toggleSlotMappingPanel,

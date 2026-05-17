@@ -23,6 +23,19 @@ function mapMappingTreeNode(node: MappingTreeNode): BackendArboristNodeData {
 }
 
 /** Apre tutti i prefissi del path nell’albero Arborist (visibilità dopo insert/drop). */
+/** Conta i nodi dell’albero (tutti espansi con `openByDefault`). */
+export function countArboristVisibleNodes(nodes: readonly BackendArboristNodeData[]): number {
+  let count = 0;
+  const walk = (list: readonly BackendArboristNodeData[]) => {
+    for (const node of list) {
+      count += 1;
+      if (node.children?.length) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return count;
+}
+
 export function expandArboristAncestors(
   open: (id: string) => void,
   wireKey: string

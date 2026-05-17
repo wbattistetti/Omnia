@@ -19,6 +19,8 @@ MAX_BODY_BYTES = 6 * 1024 * 1024
 _BASE_HEADERS = {
     "Accept": "application/json, */*",
     "User-Agent": "Omnia-OpenAPI-Proxy/1.0",
+    # ngrok free: evita pagina HTML "Visit Site" su richieste server-side (Read API).
+    "ngrok-skip-browser-warning": "true",
 }
 
 
@@ -63,6 +65,9 @@ async def probe_openapi_url(
             return None, f"corpo > {MAX_BODY_BYTES // (1024 * 1024)} MiB", status
         ctype = (r.headers.get("content-type") or "").lower()
         if "text/html" in ctype and not r.content.strip().startswith(b"{"):
+            body_l = r.content[:4096].lower()
+            if b"ngrok" in body_l and (b"visit site" in body_l or b"browser-warning" in body_l):
+                return None, "interstiziale ngrok (manca header skip o tunnel non raggiungibile)", status
             return None, "risposta HTML (probabile login)", status
         data = r.json()
         if not isinstance(data, dict):

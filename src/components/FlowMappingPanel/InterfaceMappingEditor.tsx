@@ -231,6 +231,11 @@ export interface InterfaceMappingEditorProps {
   enableAgentBackendParamDrop?: boolean;
   /** Embedded backend editor: drag leaf params to agent Interface. */
   agentParamDragSource?: import('./backendMappingTreeContext').AgentParamDragSource;
+  /**
+   * Workspace inspector embed: niente scroll interno su SEND/RECEIVE;
+   * l’albero cresce e scrolla il pannello padre.
+   */
+  scrollMappingInParent?: boolean;
 }
 
 export function InterfaceMappingEditor({
@@ -285,6 +290,7 @@ export function InterfaceMappingEditor({
   onInterfaceOutputDrop: onInterfaceOutputDropProp,
   enableAgentBackendParamDrop = false,
   agentParamDragSource,
+  scrollMappingInParent = false,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -499,12 +505,14 @@ export function InterfaceMappingEditor({
   const inPrefix = `${listIdPrefix}-ifaceIn`;
   const outPrefix = `${listIdPrefix}-ifaceOut`;
 
+  const backendBlockGrow = scrollMappingInParent;
+
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col h-full min-h-0 w-full text-slate-100 ${
-        compactBackendPanels ? 'bg-transparent' : 'bg-[#0c0f14]'
-      } ${className}`}
+      className={`flex flex-col w-full text-slate-100 ${
+        scrollMappingInParent ? '' : 'h-full min-h-0'
+      } ${compactBackendPanels ? 'bg-transparent' : 'bg-[#0c0f14]'} ${className}`}
     >
       {(title || (showVariantToggle && onVariantChange)) && (
         <header className="shrink-0 border-b border-amber-900/30 px-3 py-2 flex flex-wrap items-center gap-2 bg-slate-950/80">
@@ -558,12 +566,14 @@ export function InterfaceMappingEditor({
       )}
 
       <div
-        className={`flex-1 min-h-0 flex flex-col ${
-          compactBackendPanels && variant === 'backend' ? 'p-0' : 'p-3'
-        } ${
-          variant === 'backend' || (interfaceFlowTitle && variant === 'interface')
-            ? 'min-h-0 overflow-hidden'
-            : 'overflow-y-auto'
+        className={`flex flex-col ${
+          scrollMappingInParent ? '' : 'flex-1 min-h-0'
+        } ${compactBackendPanels && variant === 'backend' ? 'p-0' : 'p-3'} ${
+          scrollMappingInParent
+            ? 'overflow-visible'
+            : variant === 'backend' || (interfaceFlowTitle && variant === 'interface')
+              ? 'min-h-0 overflow-hidden'
+              : 'overflow-y-auto'
         } ${innerClassName}`}
       >
         {showLayoutHint ? (
@@ -574,7 +584,13 @@ export function InterfaceMappingEditor({
         ) : null}
 
         {variant === 'backend' && (
-          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <div
+            className={
+              scrollMappingInParent
+                ? 'relative flex min-w-0 flex-col'
+                : 'relative flex min-h-0 min-w-0 flex-1 flex-col'
+            }
+          >
             {isFullSpanAdvancement && advancementOpenKey && backendSendAdvancementOverlay ? (
               <BackendSendAdvancementOverlayPanel
                 openWireKey={advancementOpenKey}
@@ -592,13 +608,17 @@ export function InterfaceMappingEditor({
               compactGap={Boolean(compactBackendPanels)}
               sendBasisClamp={backendSendReceiveSplitClamp}
               splitContainerRef={backendSplitRowRef}
+              growWithContent={backendBlockGrow}
               send={
                 <MappingBlock
                   accent="send"
                   flat={compactBackendPanels}
-                  rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
-                  fillBodyHeight
-                  containBodyOverflow
+                  rootClassName={
+                    backendBlockGrow ? 'w-full' : 'flex flex-1 min-h-0 min-w-0 w-full'
+                  }
+                  fillBodyHeight={!backendBlockGrow}
+                  containBodyOverflow={!backendBlockGrow}
+                  bodyGrowsWithContent={backendBlockGrow}
                   backendMappingDropTarget={
                     flowDropTarget?.flowCanvasId
                       ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'send' }
@@ -611,7 +631,13 @@ export function InterfaceMappingEditor({
                     />
                   }
                 >
-                  <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                  <div
+                    className={
+                      backendBlockGrow
+                        ? 'relative flex min-w-0 flex-col'
+                        : 'relative flex min-h-0 min-w-0 flex-1 flex-col'
+                    }
+                  >
                     {showSendColumnAdvancementOverlay && advancementOpenKey && backendSendAdvancementOverlay ? (
                       <BackendSendAdvancementOverlayPanel
                         openWireKey={advancementOpenKey}
@@ -624,7 +650,13 @@ export function InterfaceMappingEditor({
                     {backendSendBodyPrefix ? (
                       <div className="shrink-0">{backendSendBodyPrefix}</div>
                     ) : null}
-                    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <div
+                      className={
+                        backendBlockGrow
+                          ? 'relative flex min-w-0 flex-col'
+                          : 'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+                      }
+                    >
                       <FlowMappingTree
                         variant="backend"
                         entries={backendSend}
@@ -646,6 +678,7 @@ export function InterfaceMappingEditor({
                         backendSendAdvancement={backendSendAdvancement}
                         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
                         agentParamDragSource={agentParamDragSource}
+                        scrollMappingInParent={backendBlockGrow}
                       />
                     </div>
                   </div>
@@ -655,9 +688,12 @@ export function InterfaceMappingEditor({
               <MappingBlock
                 accent="receive"
                 flat={compactBackendPanels}
-                rootClassName="flex flex-1 min-h-0 min-w-0 w-full"
-                fillBodyHeight
-                containBodyOverflow
+                rootClassName={
+                  backendBlockGrow ? 'w-full' : 'flex flex-1 min-h-0 min-w-0 w-full'
+                }
+                fillBodyHeight={!backendBlockGrow}
+                containBodyOverflow={!backendBlockGrow}
+                bodyGrowsWithContent={backendBlockGrow}
                 backendMappingDropTarget={
                   flowDropTarget?.flowCanvasId
                     ? { flowCanvasId: flowDropTarget.flowCanvasId, zone: 'receive' }
@@ -670,7 +706,13 @@ export function InterfaceMappingEditor({
                   />
                 }
               >
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <div
+                  className={
+                    backendBlockGrow
+                      ? 'relative flex min-w-0 flex-col'
+                      : 'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+                  }
+                >
                   <FlowMappingTree
                     variant="backend"
                     entries={backendReceive}
@@ -689,8 +731,9 @@ export function InterfaceMappingEditor({
                     backendKnownVariableIds={backendVariableIdSet}
                     embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
                     agentParamDragSource={agentParamDragSource}
+                    scrollMappingInParent={backendBlockGrow}
                   />
-                  </div>
+                </div>
               </MappingBlock>
             }
           />

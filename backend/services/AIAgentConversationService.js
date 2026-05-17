@@ -11,6 +11,7 @@
 // Il servizio è separato da AIAgentUseCaseService per SRP (file < 300 righe).
 
 const { extractJsonString } = require('./AIAgentDesignService');
+const { scenarioTextForLlm } = require('./useCaseScenarioFields');
 
 const ASSEMBLE_CONVERSATION_TIMEOUT_MS = 180000;
 const PROOFREAD_CONVERSATION_TIMEOUT_MS = 120000;
@@ -71,10 +72,7 @@ function summarizeUseCasesForConversationPrompt(useCases) {
     return {
       id: typeof u?.id === 'string' ? u.id : '',
       label: typeof u?.label === 'string' ? u.label : '',
-      payoff:
-        typeof u?.payoff === 'string'
-          ? String(u.payoff).slice(0, 600)
-          : '',
+      payoff: String(scenarioTextForLlm(u) || u?.payoff || '').slice(0, 600),
       assistant_example:
         assistant && typeof assistant.content === 'string' ? assistant.content : '',
     };

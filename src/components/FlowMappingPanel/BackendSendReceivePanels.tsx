@@ -23,6 +23,8 @@ export type BackendSendReceivePanelsProps = {
   splitContainerRef: React.RefObject<HTMLDivElement | null>;
   send: React.ReactNode;
   receive: React.ReactNode;
+  /** Colonne a altezza naturale; scroll sul contenitore padre. */
+  growWithContent?: boolean;
 };
 
 export function BackendSendReceivePanels({
@@ -35,6 +37,7 @@ export function BackendSendReceivePanels({
   splitContainerRef,
   send,
   receive,
+  growWithContent = false,
 }: BackendSendReceivePanelsProps) {
   const gap = compactGap ? 'gap-2' : 'gap-3';
   const dragRef = useRef<{ pointerId: number; startX: number; startRatio: number } | null>(null);
@@ -86,7 +89,7 @@ export function BackendSendReceivePanels({
 
   if (layoutMode === 'stacked') {
     return (
-      <div className={`flex flex-col ${gap} flex-1 min-h-0 min-w-0`}>
+      <div className={`flex flex-col ${gap} ${growWithContent ? 'min-w-0' : 'flex-1 min-h-0 min-w-0'}`}>
         {send}
         {receiveVisible ? receive : null}
       </div>
@@ -101,9 +104,12 @@ export function BackendSendReceivePanels({
     compactGap && receiveVisible ? 'min-w-[min(11rem,36%)]' : compactGap ? 'min-w-[12rem]' : 'min-w-0';
 
   return (
-    <div ref={splitContainerRef} className="flex flex-row flex-1 min-h-0 min-w-0 items-stretch gap-0">
+    <div
+      ref={splitContainerRef}
+      className={`flex flex-row min-w-0 items-stretch gap-0 ${growWithContent ? '' : 'flex-1 min-h-0'}`}
+    >
       <div
-        className={`flex min-h-0 flex-col ${sendPanelMin}`}
+        className={`flex flex-col ${growWithContent ? '' : 'min-h-0'} ${sendPanelMin}`}
         style={
           receiveVisible
             ? { flex: `0 0 ${pct}%` }
@@ -123,7 +129,10 @@ export function BackendSendReceivePanels({
           >
             <div className="pointer-events-none absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-slate-600/90 group-hover:bg-teal-400/90" />
           </div>
-          <div className={`flex min-h-0 flex-1 flex-col ${receivePanelMin}`} style={{ flex: '1 1 0%' }}>
+          <div
+            className={`flex flex-col ${growWithContent ? '' : 'min-h-0 flex-1'} ${receivePanelMin}`}
+            style={{ flex: '1 1 0%' }}
+          >
             {receive}
           </div>
         </>

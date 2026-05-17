@@ -113,6 +113,30 @@ export function setPrimaryPhraseParametricEnabled(
   });
 }
 
+/**
+ * Disattiva il parametrico: il testo della riga scelta diventa l'unico messaggio canonico;
+ * griglia e dimensioni vengono svuotate.
+ */
+export function applyParametricRevertToSingleMessage(
+  uc: AIAgentUseCase,
+  selectedRowId: string
+): AIAgentUseCase {
+  return patchPrimaryPhrase(uc, (p0) => {
+    const cfg = ensureParametric(p0.parametric);
+    const row = cfg.rows.find((r) => r.rowId === selectedRowId);
+    const chosenText = (row?.promptNaturalText ?? '').trim() || p0.naturalText;
+    return stripCompiledFromVariants({
+      ...p0,
+      naturalText: chosenText,
+      parametric: {
+        enabled: false,
+        dimensions: [],
+        rows: [],
+      },
+    });
+  });
+}
+
 export function addParametricCatalogDimension(uc: AIAgentUseCase, catalogKey: string): AIAgentUseCase {
   const base = ensureUseCasePhrases(uc);
   const phrase0 = base.phrases?.[0];

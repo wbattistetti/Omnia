@@ -1192,6 +1192,29 @@ export function extractNestedSpecUrlsFromEndpoint(endpointUrl: string): string[]
   }
 }
 
+/** Headers per fetch OpenAPI (ngrok free: evita interstiziale HTML). */
+export function openApiFetchHeadersForUrl(url: string): HeadersInit {
+  const headers: Record<string, string> = {
+    Accept: 'application/json, */*',
+  };
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host.includes('ngrok')) {
+      headers['ngrok-skip-browser-warning'] = 'true';
+    }
+  } catch {
+    /* ignore */
+  }
+  return headers;
+}
+
+/** Spec sullo stesso path dell'endpoint operativo (es. …/bookfromagenda/openapi.json). */
+export function operationalPathOpenApiCandidateUrls(origin: string, pathname: string): string[] {
+  const p = pathname.replace(/\/+$/, '');
+  if (!p || p === '/') return [];
+  return [`${origin}${p}/openapi.json`, `${origin}${p}/swagger.json`];
+}
+
 function collectCandidateUrlsForSeed(seed: string): string[] {
   let base: URL;
   try {
@@ -1204,13 +1227,16 @@ function collectCandidateUrlsForSeed(seed: string): string[] {
   }
   const origin = `${base.protocol}//${base.host}`;
   const urls: string[] = [seed];
-  for (const sp of SPEC_CANDIDATE_PATHS) {
-    urls.push(`${origin}${sp}`);
+  for (const u of operationalPathOpenApiCandidateUrls(origin, base.pathname)) {
+    urls.push(u);
   }
   for (const prefix of pathnamePrefixes(base.pathname)) {
     for (const sp of SPEC_CANDIDATE_PATHS) {
       urls.push(joinOriginSpec(origin, prefix, sp));
     }
+  }
+  for (const sp of SPEC_CANDIDATE_PATHS) {
+    urls.push(`${origin}${sp}`);
   }
   return urls;
 }
@@ -1324,7 +1350,10 @@ async function fetchOpenApiDocumentDirect(
   }
 
   const tryParse = async (url: string): Promise<Record<string, unknown>> => {
-    const res = await fetch(url, { credentials: 'omit' });
+    const res = await fetch(url, {
+      credentials: 'omit',
+      headers: openApiFetchHeadersForUrl(url),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as unknown;
     if (!isRecord(data)) throw new Error('Risposta non JSON');

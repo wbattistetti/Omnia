@@ -2,12 +2,19 @@
 
 const { extractJsonString } = require('./AIAgentDesignService');
 const { mergeCreateUseCaseWithDraft } = require('./mergeCreateUseCaseDraft');
+const { normalizeUseCaseScenarioFields, scenarioTextForLlm } = require('./useCaseScenarioFields');
+const {
+  flattenUseCasesDepthFirst,
+  applyNarrativeOrder,
+} = require('./useCaseNarrativeOrder');
 
 /**
  * HTTP timeout for the OpenAI/Groq request (BaseProvider.makeRequest).
  * Must stay >= client abort in src/services/aiAgentDesignApi.ts (GENERATE_USE_CASES_TIMEOUT_MS).
  */
 const GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS = 300000;
+/** Second pass: narrative reorder of generated use_cases (same HTTP request as bundle). */
+const NARRATIVE_REORDER_USE_CASES_TIMEOUT_MS = 120000;
 
 /** Regenerate single scenario / turn: allow more than default 60s provider cap. */
 const REGENERATE_USE_CASE_TIMEOUT_MS = 120000;
@@ -22,7 +29,7 @@ Respond with a single valid JSON object only (no markdown fences, no commentary)
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
 When OUTPUT_LANGUAGE is set, write every human-readable string in that language.
 Never output "editable" (the platform injects it).
-Each use case must include a clear "payoff" (scenario context narrative) and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
+Each use case must include a clear human scenario ("scenario.descrittivo" / "payoff") plus a minimal "scenario.llm" line for routing, and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
 For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.
 The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. **Do not collapse to exactly four scenarios by habit** (a frequent shortcut); vary the count with real coverage.`;
 
@@ -94,12 +101,9 @@ function normalizeUseCase(uc, globalStyleId) {
   if (!uc || typeof uc !== 'object') return uc;
   const dialogueIn = Array.isArray(uc.dialogue) ? uc.dialogue : [];
   const dialogue = normalizeDialogueAgentOnly(dialogueIn);
-  let payoff = '';
-  if (typeof uc.payoff === 'string' && uc.payoff.trim()) payoff = uc.payoff.trim().slice(0, 8000);
-  else if (typeof uc.description === 'string' && uc.description.trim()) payoff = uc.description.trim().slice(0, 8000);
   const style_id = coerceStyleId(globalStyleId ?? uc.style_id ?? uc.style);
   const { style: _drop, editable: _e, ...rest } = uc;
-  return { ...rest, dialogue, style_id, payoff };
+  return normalizeUseCaseScenarioFields({ ...rest, dialogue, style_id });
 }
 
 /**
@@ -216,7 +220,10 @@ Produce JSON with exactly:
 2) "use_cases" — array. **No fixed count:** derive how many from DESIGNER_TASK_DESCRIPTION plus REQUEST_SCENARIO_BAND above. Typical non-trivial flows need **several distinct scenarios**; complex domains need **many**. **Never pad** with shallow duplicates. **Do not treat “four” as a batch size.** A **tiny** micro-task may need **2–3** scenarios; a broad task should **greatly exceed four** when coverage demands it. Each object:
    - "id": string (unique among all use_cases)
    - "label": string — short title for this scenario (shown in the UI tree).
-   - "payoff": string — clear narrative of the negotiation/dialog CONTEXT for this scenario (who wants what, what happens). This is NOT the agent script; it explains the situation for designers.
+   - "scenario": object with exactly:
+     - "descrittivo": string — human-readable narrative (who wants what, constraints, outcome). Full prose for designers/reviewers. NOT the agent script.
+     - "llm": string — same facts in minimal synthetic form for LLM routing (short bullets or telegraphic clauses; no storytelling; max ~2–4 lines).
+   - "payoff": string — MUST equal "scenario.descrittivo" exactly (backward compatibility).
    - "parent_id": string | null — null = root; if a string, it MUST equal the "id" of another object in this same "use_cases" array (no dangling references)
    - "sort_order": number — among siblings (same parent_id), use 0-based integers 0,1,2,... with strictly increasing order (no ties per sibling group)
    - "refinement_prompt": string (may be "")
@@ -231,7 +238,8 @@ ID rules:
 
 Content rules:
 - Every human-readable string must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
-- "payoff" must make the scenario understandable without a multi-turn transcript.
+- "scenario.descrittivo" must make the scenario understandable without a multi-turn transcript.
+- "scenario.llm" must not introduce facts absent from "descrittivo".
 
 Coverage (not a four-item checklist): where relevant, span situation types such as success path, corrections/clarifications, ambiguity, refusals/guardrails — using **as many use_cases as appropriate** (multiple rows per type if needed, or parent/child structure). **Listing these themes does not mean “output exactly four use_cases”.**
 Return valid JSON only.`;
@@ -285,13 +293,10 @@ function summarizeExistingUseCasesForPrompt(existingUseCases) {
   const arr = Array.isArray(existingUseCases) ? existingUseCases : [];
   return arr.map((u) => ({
     label: typeof u.label === 'string' ? u.label.slice(0, 160) : '',
-    payoff_excerpt:
-      typeof u.payoff === 'string'
-        ? String(u.payoff)
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 280)
-        : '',
+    payoff_excerpt: String(scenarioTextForLlm(u) || u.payoff || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 280),
   }));
 }
 
@@ -351,7 +356,7 @@ ${existingJson}
 ${band}
 Produce JSON with **exactly one** top-level key:
 "use_cases" — array of **NEW** scenarios only (minimum 1). Each object uses the same shape as in the full bundle:
-"id", "label", "payoff", "parent_id", "sort_order", "refinement_prompt",
+"id", "label", "scenario" ({ "descrittivo", "llm" }), "payoff" (= descrittivo), "parent_id", "sort_order", "refinement_prompt",
 "dialogue" (exactly one assistant turn), "notes", "bubble_notes".
 
 Rules:
@@ -445,6 +450,109 @@ async function generateUseCaseBundleExtend({
  * @param {string} [params.model]
  * @param {import('./AIProviderService')} params.aiProviderService
  */
+const NARRATIVE_REORDER_SYSTEM = `You order design-time use cases for OMNIA in a reasonably chronological narrative flow.
+Respond with a single valid JSON object only (no markdown fences, no commentary).
+Do NOT rewrite scenario text, labels, or dialogue — only permute order.`;
+
+/**
+ * @param {string} [outputLanguage]
+ * @param {object[]} useCases normalized use cases (post pass 1)
+ * @param {object[]} logicalSteps
+ */
+function buildNarrativeReorderUserMessage(outputLanguage, useCases, logicalSteps) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const compact = flattenUseCasesDepthFirst(useCases).map((u) => ({
+    id: u.id,
+    label: typeof u.label === 'string' ? u.label.slice(0, 80) : '',
+    parent_id: u.parent_id ?? null,
+    scenario_llm: scenarioTextForLlm(u).slice(0, 320),
+  }));
+  return `${lang}Reorder the use cases below into a **reasonably chronological** narrative sequence — as if walking through a typical conversation (not a rigid state machine).
+
+Preferred progression among roots and siblings (adapt to domain):
+ingresso / richiesta iniziale → chiarimenti → varianti / alternative → correzioni → casi problematici / rifiuti → conferma finale.
+
+Rules:
+- Include **every** id exactly once in "ordered_use_case_ids".
+- Use **depth-first** order: parent before its children; siblings ordered by narrative position.
+- Alternative branches (mutually exclusive paths) may sit adjacent; note ambiguity in ordering_note_it if needed.
+- Do not omit or invent ids.
+
+LOGICAL_STEPS (context):
+${JSON.stringify(logicalSteps).slice(0, 4000)}
+
+USE_CASES (id, label, parent_id, scenario_llm):
+${JSON.stringify(compact).slice(0, 14000)}
+
+Return JSON:
+{
+  "ordered_use_case_ids": ["<id>", ...],
+  "ordering_note_it": "<1–2 sentences: order is indicative / reasonably chronological, not a strict runtime pipeline>"
+}`;
+}
+
+/**
+ * @param {object} params
+ */
+async function reorderUseCasesNarratively({
+  useCases,
+  logicalSteps,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  if (!Array.isArray(useCases) || useCases.length < 2) {
+    return {
+      use_cases: useCases,
+      ordering_note_it:
+        'Ordinamento narrativo non applicato: meno di due scenari nella lista.',
+    };
+  }
+  const messages = [
+    { role: 'system', content: NARRATIVE_REORDER_SYSTEM },
+    {
+      role: 'user',
+      content: buildNarrativeReorderUserMessage(outputLanguage, useCases, logicalSteps || []),
+    },
+  ];
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.35,
+    maxTokens: provider === 'openai' ? 4096 : 8192,
+    timeout: NARRATIVE_REORDER_USE_CASES_TIMEOUT_MS,
+    purpose: purpose || 'USE_CASE_BUNDLE_NARRATIVE_ORDER',
+    taskId,
+    taskLabel,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    const err = new Error(`Narrative reorder returned non-JSON: ${e.message}`);
+    err.rawSnippet = jsonStr.slice(0, 500);
+    throw err;
+  }
+  const orderedIds = parsed.ordered_use_case_ids;
+  if (!Array.isArray(orderedIds)) {
+    throw new Error('Narrative reorder: missing ordered_use_case_ids array');
+  }
+  const reordered = applyNarrativeOrder(useCases, orderedIds);
+  const note =
+    typeof parsed.ordering_note_it === 'string' && parsed.ordering_note_it.trim()
+      ? parsed.ordering_note_it.trim().slice(0, 500)
+      : 'Ordine ragionevolmente cronologico per lettura designer; in conversazioni reali alcuni percorsi sono paralleli o saltabili.';
+  return { use_cases: reordered, ordering_note_it: note };
+}
+
 async function generateUseCaseBundle({
   userDesc,
   runtimeContext,
@@ -496,7 +604,23 @@ async function generateUseCaseBundle({
   }
   const bundle = validateUseCaseBundle(parsed);
   logUseCaseDialogueDiagnostics('bundle', model, bundle.use_cases);
-  return normalizeUseCaseBundle(bundle, globalStyleId);
+  let normalized = normalizeUseCaseBundle(bundle, globalStyleId);
+  const { use_cases: reordered, ordering_note_it } = await reorderUseCasesNarratively({
+    useCases: normalized.use_cases,
+    logicalSteps: normalized.logical_steps,
+    outputLanguage,
+    provider,
+    model,
+    purpose: 'USE_CASE_BUNDLE_NARRATIVE_ORDER',
+    taskId,
+    taskLabel,
+    aiProviderService,
+  });
+  return {
+    logical_steps: normalized.logical_steps,
+    use_cases: reordered,
+    use_case_ordering_note: ordering_note_it,
+  };
 }
 
 function buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps, globalStyleContract) {
@@ -505,7 +629,7 @@ function buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, lo
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
   const styleBlock = buildGlobalStyleBlock(globalStyleContract);
-  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReuse tone from existing use cases.${styleBlock}\n\nThe designer may have edited "payoff" (scenario) — if so, you MUST:\n- Update "label" to a short UI title (max ~64 chars) that matches the CURRENT payoff (do not keep an obsolete label).\n- Rewrite "dialogue"[0].content so it fits the scenario and GLOBAL_STYLE_CONTRACT.\n- Bracket only runtime-varying fragments; **Italian:** keep \`al\`, \`alle\`, \`alla\`, … outside brackets (\`alle [8]\` not \`[alle 8]\`).\n- "dialogue" content must be non-empty after refinement.\n\nReturn JSON with a single key "use_case" containing the full updated object. Requirements:\n- "payoff": keep or lightly polish the scenario narrative (respect user edits).\n- "label": short tree title aligned with payoff.\n- "dialogue": exactly ONE assistant turn { turn_id, role "assistant", content } — virtual agent output example only; non-empty content.\n- Do NOT include "editable". Preserve "id" and "parent_id". Valid JSON only.`;
+  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReuse tone from existing use cases.${styleBlock}\n\nThe designer may have edited "scenario.descrittivo" / "payoff" — if so, you MUST:\n- Update "label" to a short UI title (max ~64 chars) that matches the CURRENT descrittivo (do not keep an obsolete label).\n- Refresh "scenario.llm" to match the same facts in minimal telegraphic form.\n- Set "payoff" equal to "scenario.descrittivo".\n- Rewrite "dialogue"[0].content so it fits the scenario and GLOBAL_STYLE_CONTRACT.\n- Bracket only runtime-varying fragments; **Italian:** keep \`al\`, \`alle\`, \`alla\`, … outside brackets (\`alle [8]\` not \`[alle 8]\`).\n- "dialogue" content must be non-empty after refinement.\n\nReturn JSON with a single key "use_case" containing the full updated object. Requirements:\n- "scenario": { "descrittivo", "llm" } — keep or lightly polish descrittivo (respect user edits); sync llm.\n- "payoff": equal to scenario.descrittivo.\n- "label": short tree title aligned with descrittivo.\n- "dialogue": exactly ONE assistant turn { turn_id, role "assistant", content } — virtual agent output example only; non-empty content.\n- Do NOT include "editable". Preserve "id" and "parent_id". Valid JSON only.`;
 }
 
 /**
@@ -1494,6 +1618,7 @@ Legacy synonym (accept internally): matched_wrong_response → treat as exists_b
 module.exports = {
   generateUseCaseBundle,
   generateUseCaseBundleExtend,
+  reorderUseCasesNarratively,
   createUseCase,
   regenerateUseCase,
   generalizeUseCaseMeta,
@@ -1503,4 +1628,5 @@ module.exports = {
   validateUseCaseBundle,
   analyzeDebuggerTurnUseCase,
   summarizeExistingUseCasesForPrompt,
+  applyNarrativeOrder,
 };

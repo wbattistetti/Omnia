@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildOpenApiCandidateUrlList,
+  openApiFetchHeadersForUrl,
   buildOperationDocBlurbFromOpenApiFields,
   extractNestedSpecUrlsFromEndpoint,
   extractOperationFields,
@@ -162,6 +163,21 @@ describe('openApiBackendCallSpec', () => {
   it('buildOpenApiCandidateUrlList includes nested swagger URL from Redoc', () => {
     const redoc = 'https://redocly.github.io/redoc/?url=https://petstore.swagger.io/v2/swagger.json';
     expect(buildOpenApiCandidateUrlList(redoc)).toContain('https://petstore.swagger.io/v2/swagger.json');
+  });
+
+  it('buildOpenApiCandidateUrlList prioritizes operational path openapi.json (BookFromAgenda)', () => {
+    const op = 'https://example.ngrok-free.app/api/runtime/bookfromagenda';
+    const list = buildOpenApiCandidateUrlList(op);
+    const specUrl = 'https://example.ngrok-free.app/api/runtime/bookfromagenda/openapi.json';
+    expect(list[0]).toBe(op);
+    expect(list[1]).toBe(specUrl);
+  });
+
+  it('openApiFetchHeadersForUrl adds ngrok-skip-browser-warning on ngrok hosts', () => {
+    const h = openApiFetchHeadersForUrl('https://abc.ngrok-free.app/x') as Record<string, string>;
+    expect(h['ngrok-skip-browser-warning']).toBe('true');
+    const plain = openApiFetchHeadersForUrl('https://api.example.com/x') as Record<string, string>;
+    expect(plain['ngrok-skip-browser-warning']).toBeUndefined();
   });
 
   it('pickOpenApiPathForReadApi strips Swagger 2 basePath for real API URL', () => {

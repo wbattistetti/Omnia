@@ -71,4 +71,41 @@ describe('buildAgentToolInventory', () => {
     expect(inv.allTools.some((t) => t.nodeId === 'n1' && t.id === 'node_tool_1')).toBe(true);
     expect(convaiToolApi.resolveConvaiToolIds).toHaveBeenCalledTimes(2);
   });
+
+  it('dedupes same webhook from tool_ids and inline tools by URL', async () => {
+    const webhookUrl = 'https://example.test/api/runtime/bookfromagenda';
+    vi.mocked(convaiToolApi.resolveConvaiToolIds).mockResolvedValueOnce([
+      {
+        id: 'tool_convai_uuid_1',
+        name: 'bookfromagenda',
+        kind: 'webhook',
+        url: webhookUrl,
+        httpMethod: 'POST',
+        enabled: true,
+        scope: 'agent',
+      },
+    ]);
+
+    const inv = await buildAgentToolInventory(
+      {
+        agent: {
+          prompt: {
+            tool_ids: ['tool_convai_uuid_1'],
+            tools: [
+              {
+                type: 'webhook',
+                name: 'bookfromagenda',
+                api_schema: { url: webhookUrl, method: 'POST' },
+              },
+            ],
+          },
+        },
+      },
+      { nodes: [], edges: [] }
+    );
+
+    expect(inv.agentTools).toHaveLength(1);
+    expect(inv.agentTools[0]?.name).toBe('bookfromagenda');
+    expect(inv.agentTools[0]?.id).toBe('tool_convai_uuid_1');
+  });
 });

@@ -1,11 +1,13 @@
 /**
- * Selection + bracket tokenize helpers for assistant message textareas (composer + response).
+ * Selection + semantic/style token helpers for assistant message textareas.
  */
 
 import React from 'react';
 import {
   buildBracketWrapForSelection,
+  buildStyleWrapForSelection,
   computeAgentTokenSelectionPopoverAction,
+  findTokenSpanAtSelection,
   unwrapBracketTokenContainingSelection,
 } from './agentMessageTokenHelpers';
 import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
@@ -17,6 +19,10 @@ export type UseAgentMessageTextFieldOptions = {
   disabled?: boolean;
   isEditing: boolean;
   onTextChange: (next: string, mode: AgentMessageTextFieldMode) => void;
+  /** Dopo wrap `«…»` (surface = inner). */
+  onStyleTokenWrap?: (surface: string) => void;
+  /** Dopo untokenize di uno style token. */
+  onStyleTokenUnwrap?: (surface: string) => void;
 };
 
 export function useAgentMessageTextField({
@@ -24,6 +30,8 @@ export function useAgentMessageTextField({
   disabled = false,
   isEditing,
   onTextChange,
+  onStyleTokenWrap,
+  onStyleTokenUnwrap,
 }: UseAgentMessageTextFieldOptions) {
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [selection, setSelection] = React.useState({ start: 0, end: 0 });
@@ -83,6 +91,12 @@ export function useAgentMessageTextField({
 
   const tokenPopoverActionVisible = pointerSelecting ? ('none' as const) : tokenPopoverAction;
 
+  const activeStyleTokenSpan = React.useMemo(() => {
+    if (tokenPopoverAction !== 'untokenize') return null;
+    const span = findTokenSpanAtSelection(text, selection.start, selection.end);
+    return span?.kind === 'style' ? span : null;
+  }, [tokenPopoverAction, text, selection.start, selection.end]);
+
   const recalcTokenAnchor = React.useCallback(() => {
     if (disabled || !isEditing || pointerSelecting) {
       setTokenAnchor(null);
@@ -135,7 +149,7 @@ export function useAgentMessageTextField({
     [onTextChange, getTextarea]
   );
 
-  const handleWrapToken = React.useCallback(() => {
+  const handleWrapSemanticToken = React.useCallback(() => {
     if (disabled || !isEditing) return;
     const ta = getTextarea();
     if (!ta) return;
@@ -148,14 +162,31 @@ export function useAgentMessageTextField({
     applySelectionPatch(built.next, built.selStart, built.selEnd);
   }, [disabled, isEditing, text, getTextarea, applySelectionPatch]);
 
+  const handleWrapStyleToken = React.useCallback(() => {
+    if (disabled || !isEditing) return;
+    const ta = getTextarea();
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start === end) return;
+    if (computeAgentTokenSelectionPopoverAction(text, start, end) !== 'tokenize') return;
+    const built = buildStyleWrapForSelection(text, start, end);
+    if (!built) return;
+    onStyleTokenWrap?.(built.inner);
+    applySelectionPatch(built.next, built.selStart, built.selEnd);
+  }, [disabled, isEditing, text, getTextarea, applySelectionPatch, onStyleTokenWrap]);
+
   const handleUnwrapToken = React.useCallback(() => {
     if (disabled || !isEditing) return;
     const ta = getTextarea();
     if (!ta) return;
     const result = unwrapBracketTokenContainingSelection(text, ta.selectionStart, ta.selectionEnd);
     if (!result) return;
+    if (result.kind === 'style') {
+      onStyleTokenUnwrap?.(result.inner);
+    }
     applySelectionPatch(result.next, result.selStart, result.selEnd);
-  }, [disabled, isEditing, text, getTextarea, applySelectionPatch]);
+  }, [disabled, isEditing, text, getTextarea, applySelectionPatch, onStyleTokenUnwrap]);
 
   const markPointerSelectingMouse = React.useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -172,7 +203,9 @@ export function useAgentMessageTextField({
     queueRecalcTokenAnchor,
     tokenPopoverActionVisible,
     tokenAnchor,
-    handleWrapToken,
+    activeStyleTokenSpan,
+    handleWrapSemanticToken,
+    handleWrapStyleToken,
     handleUnwrapToken,
     markPointerSelectingMouse,
     markPointerSelectingTouch,

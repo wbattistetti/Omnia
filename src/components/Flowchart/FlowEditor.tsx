@@ -309,6 +309,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     nodes,
     setNodes,
     projectId: structuralProjectId,
+    flowId: flowId ?? 'main',
     onDropMessage: onElevenLabsDropMessage,
   });
 

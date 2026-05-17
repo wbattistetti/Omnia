@@ -19,9 +19,16 @@ import { CompactToolbarStringEdit } from './CompactToolbarStringEdit';
 const FREE_PARAM_GUIDE_PLACEHOLDER =
   'Nome parametro — es. tipo visita, sede, canale…';
 
+export type PhraseParametricRevertPickProps = {
+  revertPickMode: boolean;
+  revertSelectedRowId: string | null;
+  onRevertSelectedRowIdChange: (rowId: string) => void;
+};
+
 export interface PhraseParametricEditorProps {
   useCase: AIAgentUseCase;
   busy: boolean;
+  revertPick?: PhraseParametricRevertPickProps;
   onAddCatalogDimension: (catalogKey: string) => void;
   onAddFreeDimension: () => void;
   onRemoveDimension: (dimensionId: string) => void;
@@ -55,6 +62,7 @@ function dimensionHeaderCell(d: AIAgentPhraseParametricDimension): React.ReactNo
 export function PhraseParametricEditor({
   useCase,
   busy,
+  revertPick,
   onAddCatalogDimension,
   onAddFreeDimension,
   onRemoveDimension,
@@ -74,6 +82,9 @@ export function PhraseParametricEditor({
   };
   const dims = cfg.dimensions;
   const rows = cfg.rows;
+  const revertPickMode = Boolean(revertPick?.revertPickMode);
+  const revertSelectedRowId = revertPick?.revertSelectedRowId ?? null;
+  const tableInputsDisabled = busy || revertPickMode;
 
   const [addMenuOpen, setAddMenuOpen] = React.useState(false);
   const addMenuWrapRef = React.useRef<HTMLDivElement>(null);
@@ -115,7 +126,7 @@ export function PhraseParametricEditor({
     >
       <div
         ref={addMenuWrapRef}
-        className="relative flex w-full flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-500/35 pb-1 dark:border-slate-600/40"
+        className={`relative flex w-full flex-wrap items-center gap-x-1 gap-y-1 border-b border-slate-500/35 pb-1 dark:border-slate-600/40 ${revertPickMode ? 'pointer-events-none opacity-50' : ''}`}
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1">
           <span className="inline-flex shrink-0 items-center gap-1 font-medium text-slate-200 dark:text-slate-200/95">
@@ -258,6 +269,11 @@ export function PhraseParametricEditor({
           <table className="w-full table-auto border-collapse text-sm">
             <thead>
               <tr className="border-b border-slate-600/40 dark:border-slate-600/50">
+                {revertPickMode ? (
+                  <th className="w-8 px-1 py-1 text-left font-medium text-slate-200" scope="col">
+                    <span className="sr-only">Messaggio unico</span>
+                  </th>
+                ) : null}
                 {dims.map((d) => (
                   <th
                     key={d.dimensionId}
@@ -273,7 +289,23 @@ export function PhraseParametricEditor({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.rowId} className="border-b border-slate-600/30 dark:border-slate-700/40">
+                <tr
+                  key={row.rowId}
+                  className={`border-b border-slate-600/30 dark:border-slate-700/40 ${revertPickMode && revertSelectedRowId === row.rowId ? 'bg-sky-950/25' : ''}`}
+                >
+                  {revertPickMode ? (
+                    <td className="w-8 px-1 py-1 align-top">
+                      <input
+                        type="radio"
+                        name="parametric-revert-row"
+                        disabled={busy}
+                        checked={revertSelectedRowId === row.rowId}
+                        aria-label="Usa questa riga come messaggio unico"
+                        onChange={() => revertPick?.onRevertSelectedRowIdChange(row.rowId)}
+                        className="mt-1 h-3.5 w-3.5 accent-sky-400"
+                      />
+                    </td>
+                  ) : null}
                   {dims.map((d) => {
                     const placeholder =
                       d.kind === 'free'
@@ -282,7 +314,7 @@ export function PhraseParametricEditor({
                     return (
                       <td key={d.dimensionId} className="w-px whitespace-nowrap px-1 py-0.5 align-top">
                         <input
-                          disabled={busy}
+                          disabled={tableInputsDisabled}
                           type="text"
                           value={row.valuesByDimensionId[d.dimensionId] ?? ''}
                           placeholder={placeholder}
@@ -295,7 +327,7 @@ export function PhraseParametricEditor({
                   <td className="min-w-0 max-w-full px-1 py-0.5 align-top">
                     <BracketTokenHighlightedTextarea
                       value={row.promptNaturalText}
-                      disabled={busy}
+                      disabled={tableInputsDisabled}
                       rows={2}
                       spellCheck={false}
                       onChange={(e) => onPatchPrompt(row.rowId, e.target.value)}

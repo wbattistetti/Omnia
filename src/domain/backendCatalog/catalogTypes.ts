@@ -81,6 +81,18 @@ export interface BackendCallSpecMeta {
 /** Come è stata creata la riga nel catalogo (wizard passo Backend). */
 export type ManualBackendCreationMode = 'import' | 'emulate';
 
+/** Tipo tool ConvAI nel workspace ElevenLabs (v1: solo webhook attivo). */
+export type ElevenLabsWorkspaceToolKind = 'webhook' | 'client' | 'integration';
+
+/** Metadati per backend catalogo creati da «Aggiungi strumento» nel workspace ElevenLabs. */
+export interface ElevenLabsWorkspaceToolMeta {
+  kind: ElevenLabsWorkspaceToolKind;
+  scope: 'agent' | 'node';
+  /** Richiesto se `scope === 'node'`. */
+  nodeId?: string;
+  agentId?: string;
+}
+
 /** Voce manuale nel progetto (`project.backendCatalog.manualEntries`). */
 export interface ManualCatalogEntry {
   id: string;
@@ -103,6 +115,8 @@ export interface ManualCatalogEntry {
   creationMode?: ManualBackendCreationMode;
   /** Import: true dopo primo Recupera OpenAPI ok (mostra Nome/Descrizione). */
   importSpecRevealed?: boolean;
+  /** Presente se la voce è un tool draft dal workspace ElevenLabs (non dal wizard Agente AI). */
+  elevenLabsWorkspaceTool?: ElevenLabsWorkspaceToolMeta;
 }
 
 export interface CatalogFrozenMeta {

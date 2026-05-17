@@ -36,5 +36,6 @@ describe('buildReactFlowFromWorkspaceGraph', () => {
       ],
     });
     expect(edges[0]?.label).toBe('sempre');
+    expect(edges[0]?.type).toBe('default');
   });
 });

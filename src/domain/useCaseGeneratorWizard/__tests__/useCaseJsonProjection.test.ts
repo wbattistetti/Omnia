@@ -191,6 +191,16 @@ describe('projectUseCaseToConversationalJson', () => {
 });
 
 describe('projectAllUseCasesToConversationalJson', () => {
+  it('uses scenario.llm for conversational JSON scenario field', () => {
+    const item = makeUseCase({
+      id: 'uc-llm',
+      payoff: 'Narrativa lunga per il designer.',
+      scenario: { descrittivo: 'Narrativa lunga per il designer.', llm: 'INGRESSO|richiesta aperta' },
+    });
+    const json = projectUseCaseToConversationalJson(item);
+    expect(json?.scenario).toBe('INGRESSO|richiesta aperta');
+  });
+
   it('skips non-projectable use cases and preserves sort_order ascending', () => {
     const ucs: AIAgentUseCase[] = [
       makeUseCase({ id: 'uc-b', sort_order: 2 }),

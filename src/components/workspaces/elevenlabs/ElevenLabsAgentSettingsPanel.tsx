@@ -1,16 +1,28 @@
 /**
- * «Agente» tab: read-only mirror of ElevenLabs global agent settings.
+ * «Agente» tab: mirror of ElevenLabs settings + editable Markdown system prompt (workspace session).
  */
 
 import React from 'react';
 import type { WorkspaceAgentSettings, WorkspaceAgentToolInventory } from '@workspaces/core/types';
+import type { ProjectData } from '@types/project';
+import type { KbLocalSnippetInput } from '@workspaces/elevenlabs/api/kbPromptApi';
 import { ElevenLabsToolListRow } from './ElevenLabsToolListRow';
+import { ElevenLabsAgentSystemPromptEditor } from './ElevenLabsAgentSystemPromptEditor';
+import { ElevenLabsWorkspaceWebhookSection } from './ElevenLabsWorkspaceWebhookSection';
 
 export type ElevenLabsAgentSettingsPanelProps = {
   settings: WorkspaceAgentSettings;
   agentName: string;
   agentId: string;
   toolInventory: WorkspaceAgentToolInventory;
+  systemPromptMarkdown: string;
+  onSystemPromptChange: (markdown: string) => void;
+  collectKbSnippets: () => readonly KbLocalSnippetInput[];
+  /** Remote ConvAI prompt (read-only reference). */
+  remoteGlobalPrompt?: string;
+  projectData?: ProjectData | null;
+  projectId?: string;
+  updateProjectData?: (data: ProjectData) => void;
 };
 
 function Field({
@@ -27,7 +39,7 @@ function Field({
     <section className="space-y-1.5">
       <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</h4>
       {multiline ? (
-        <pre className="whitespace-pre-wrap rounded-md border border-slate-700/80 bg-slate-900/80 p-3 text-xs leading-relaxed text-slate-200">
+        <pre className="max-h-40 overflow-y-auto overscroll-y-contain whitespace-pre-wrap rounded-md border border-slate-700/80 bg-slate-900/80 p-3 text-xs leading-relaxed text-slate-400 [scrollbar-gutter:stable]">
           {display}
         </pre>
       ) : (
@@ -44,19 +56,45 @@ export function ElevenLabsAgentSettingsPanel({
   agentName,
   agentId,
   toolInventory,
+  systemPromptMarkdown,
+  onSystemPromptChange,
+  collectKbSnippets,
+  remoteGlobalPrompt,
+  projectData,
+  projectId,
+  updateProjectData,
 }: ElevenLabsAgentSettingsPanelProps): React.ReactElement {
   const agentTools = toolInventory.agentTools;
+  const remotePrompt = (remoteGlobalPrompt ?? settings.globalPrompt).trim();
+
   return (
-    <div className="h-full overflow-y-auto px-4 py-4">
+    <div className="h-full overflow-y-auto overscroll-y-contain px-4 py-4 [scrollbar-gutter:stable]">
       <div className="mx-auto max-w-3xl space-y-6">
         <header>
           <h2 className="text-lg font-semibold text-violet-100">{agentName || agentId}</h2>
           <p className="mt-0.5 font-mono text-[11px] text-slate-500">{agentId}</p>
           <p className="mt-2 text-xs text-slate-400">
-            Vista specchio (sola lettura). Modifica su ElevenLabs e usa Aggiorna nel tab.
+            Prompt di sistema editabile in sessione workspace (Markdown). Il mirror ElevenLabs resta
+            in sola lettura sotto; sync remoto in un passo successivo.
           </p>
         </header>
-        <Field label="Prompt di sistema" value={settings.globalPrompt} multiline />
+
+        <section className="space-y-2">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Prompt di sistema (workspace)
+          </h4>
+          <ElevenLabsAgentSystemPromptEditor
+            systemPromptMarkdown={systemPromptMarkdown}
+            onSystemPromptChange={onSystemPromptChange}
+            collectKbSnippets={collectKbSnippets}
+            editorHeightPx={320}
+          />
+        </section>
+
+        {remotePrompt ? (
+          <Field label="Prompt remoto ElevenLabs (specchio)" value={remotePrompt} multiline />
+        ) : null}
+
         <Field label="Primo messaggio" value={settings.firstMessage} multiline />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Lingua" value={settings.language} />
@@ -64,13 +102,23 @@ export function ElevenLabsAgentSettingsPanel({
           <Field label="Voice ID" value={settings.voiceId} />
           <Field label="Modello TTS" value={settings.ttsModel} />
         </div>
+        <section className="space-y-3">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Webhook workspace (agente)
+          </h4>
+          <ElevenLabsWorkspaceWebhookSection
+            projectData={projectData}
+            projectId={projectId}
+            updateDataDirectly={updateProjectData}
+            catalogScope={{ scope: 'agent', agentId }}
+          />
+        </section>
         <section className="space-y-2">
           <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Strumenti agente ({agentTools.length})
+            Strumenti ConvAI ({agentTools.length})
           </h4>
           <p className="text-xs text-slate-400">
-            Tool webhook/client dal prompt globale ConvAI (`tool_ids` / `tools` inline). I nodi possono
-            ereditarli o aggiungerne di locali.
+            Tool webhook/client risolti dal mirror remoto ElevenLabs.
           </p>
           {agentTools.length > 0 ? (
             <ul className="space-y-1.5">

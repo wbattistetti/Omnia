@@ -407,6 +407,8 @@ export interface GenerateAIAgentUseCasesParams {
 export interface GenerateAIAgentUseCasesResult {
   logicalSteps: AIAgentLogicalStep[];
   useCases: AIAgentUseCase[];
+  /** Nota dal pass di riordino narrativo (ordinamento indicativo, non rigido). */
+  useCaseOrderingNote?: string;
 }
 
 /**
@@ -469,6 +471,7 @@ export async function generateAIAgentUseCases(
           logical_steps?: unknown;
           use_cases: unknown;
           extend_mode?: boolean;
+          use_case_ordering_note?: string;
         }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
@@ -495,7 +498,11 @@ export async function generateAIAgentUseCases(
     if (logicalSteps.length === 0) {
       throw new Error('Risposta use case non valida: logical_steps vuoti dopo la normalizzazione.');
     }
-    return { logicalSteps, useCases };
+    const useCaseOrderingNote =
+      typeof body.use_case_ordering_note === 'string' && body.use_case_ordering_note.trim()
+        ? body.use_case_ordering_note.trim()
+        : undefined;
+    return { logicalSteps, useCases, useCaseOrderingNote };
   } finally {
     clearTimeout(timeout);
   }

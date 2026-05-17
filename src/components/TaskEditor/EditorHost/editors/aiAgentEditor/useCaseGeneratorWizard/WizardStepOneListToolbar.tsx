@@ -2,7 +2,7 @@
  * Controlli compatti del passo 1 (use_case_list), renderizzati inline dentro il pill
  * attivo dello stepper. Layout v10 (single-line, gruppi separati):
  *
- *   [⤢ Espandi | ⤡ Collassa]   [📖 Scenario | 💬 Messaggio]   A↓B   { }   [ ]
+ *   [⤢ Espandi | ⤡ Collassa]   [📖 Scenario (☑ LLM) | 💬 Messaggio]   A↓B   { }   [ ]
  *
  * Le icone scenario/messaggio agente sono colorate con lo **stesso** colore del font usato
  * nei pill scenario/messaggio dentro lo use case body (vedi `UC_PILL_SCENARIO` /
@@ -291,6 +291,74 @@ function LabeledInlineToggle({
   );
 }
 
+const SCENARIO_LLM_CHECKBOX_TITLE =
+  'Seleziona per visualizzare gli scenari nel formato sintetico LLM; deseleziona per la versione narrativa umana.';
+
+/**
+ * Toggle scenario + opzione formato LLM nello stesso pill: «Scenario (☑ LLM)».
+ */
+function ScenarioWithLlmToggle({
+  showScenario,
+  showScenarioLlmFormat,
+  onToggleScenario,
+  onToggleScenarioLlmFormat,
+  activeClass,
+}: {
+  showScenario: boolean;
+  showScenarioLlmFormat: boolean;
+  onToggleScenario: () => void;
+  onToggleScenarioLlmFormat: () => void;
+  activeClass: string;
+}): React.ReactElement {
+  return (
+    <button
+      type="button"
+      aria-pressed={showScenario}
+      title="Mostra/nascondi lo scenario"
+      onClick={onToggleScenario}
+      className={[
+        'inline-flex h-8 items-center gap-1.5 rounded-md pl-2 pr-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+        showScenario ? activeClass : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300',
+      ].join(' ')}
+    >
+      <BookOpen size={15} aria-hidden />
+      <span className="inline-flex items-baseline gap-0">
+        <span>Scenario</span>
+        <span
+          className={[
+            'inline-flex items-center gap-0 font-normal tracking-tight',
+            showScenario ? '' : 'pointer-events-none opacity-45',
+          ].join(' ')}
+          aria-hidden={!showScenario}
+        >
+          <span className="text-[10px] text-slate-500/90 select-none">(</span>
+          <label
+            className={[
+              'inline-flex cursor-pointer items-center gap-0.5 px-0',
+              showScenarioLlmFormat ? 'text-violet-200' : 'text-slate-400',
+            ].join(' ')}
+            title={SCENARIO_LLM_CHECKBOX_TITLE}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              className="m-0 h-2.5 w-2.5 shrink-0 rounded border-slate-500 accent-violet-500"
+              checked={showScenarioLlmFormat}
+              disabled={!showScenario}
+              onChange={() => onToggleScenarioLlmFormat()}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Visualizza scenario in formato sintetico LLM"
+            />
+            <span className="text-[10px] font-semibold leading-none">LLM</span>
+          </label>
+          <span className="text-[10px] text-slate-500/90 select-none">)</span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /**
  * Toggle «Mostra Tokens» riusabile (Passo 1, Passo 3 e — implicitamente — Passo 2 via
  * la toolbar conversazioni). Quando ON:
@@ -364,9 +432,11 @@ export function WizardStepOneListToolbarControls({
   const {
     bulkFold,
     showScenario,
+    showScenarioLlmFormat,
     showMessage,
     showActionsPanel,
     toggleScenario,
+    toggleScenarioLlmFormat,
     toggleMessage,
     toggleActionsPanel,
     triggerExpandAll,
@@ -427,13 +497,12 @@ export function WizardStepOneListToolbarControls({
         role="group"
         aria-label="Campi visibili nello use case"
       >
-        <LabeledInlineToggle
-          active={showScenario}
-          onClick={toggleScenario}
-          title="Mostra/nascondi lo scenario"
+        <ScenarioWithLlmToggle
+          showScenario={showScenario}
+          showScenarioLlmFormat={showScenarioLlmFormat}
+          onToggleScenario={toggleScenario}
+          onToggleScenarioLlmFormat={toggleScenarioLlmFormat}
           activeClass="text-violet-300 bg-violet-500/15"
-          icon={<BookOpen size={15} aria-hidden />}
-          label="Scenario"
         />
         <LabeledInlineToggle
           active={showMessage}

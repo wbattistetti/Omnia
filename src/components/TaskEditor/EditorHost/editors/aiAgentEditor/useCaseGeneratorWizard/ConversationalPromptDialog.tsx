@@ -69,6 +69,12 @@ const MONACO_PROMPT_OPTIONS = {
   folding: true,
   renderLineHighlight: 'line',
   contextmenu: false,
+  scrollbar: {
+    vertical: 'visible',
+    verticalScrollbarSize: 12,
+    useShadows: true,
+  },
+  overviewRulerLanes: 0,
 } as const;
 
 export function ConversationalPromptDialog({
@@ -106,6 +112,23 @@ export function ConversationalPromptDialog({
 
   const [copyJustSucceeded, setCopyJustSucceeded] = React.useState(false);
   const [copyError, setCopyError] = React.useState<string | null>(null);
+  const monacoHostRef = React.useRef<HTMLDivElement>(null);
+  const [editorHeightPx, setEditorHeightPx] = React.useState(320);
+
+  /** Altezza esplicita in px: `height="100%"` su react-monaco-editor spesso non scrolla. */
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const el = monacoHostRef.current;
+    if (!el) return;
+    const syncHeight = () => {
+      const h = Math.floor(el.getBoundingClientRect().height);
+      if (h > 0) setEditorHeightPx(h);
+    };
+    syncHeight();
+    const observer = new ResizeObserver(syncHeight);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open]);
 
   const handleCopyAll = React.useCallback(async () => {
     const text = promptResult.value;
@@ -228,12 +251,13 @@ export function ConversationalPromptDialog({
             </div>
           ) : null}
           <div
+            ref={monacoHostRef}
             className="min-h-0 flex-1 overflow-hidden rounded-md border border-slate-700/80"
             aria-label="Prompt conversazionale (sola lettura)"
           >
             <MonacoEditor
               width="100%"
-              height="100%"
+              height={editorHeightPx}
               language={getConversationalPromptLanguageId()}
               theme={getConversationalPromptThemeId()}
               value={promptResult.value}

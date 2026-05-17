@@ -1,5 +1,5 @@
 /**
- * Operazioni sul modello phrase/variant (schema v2): sincronismo con dialogue legacy e varianti strutturali.
+ * Operazioni sul modello phrase/variant (schema v2): sincronismo con dialogue legacy.
  */
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
@@ -35,70 +35,6 @@ export function syncPrimaryPhraseNaturalFromAssistantTurn(
     naturalText: content,
     variants: variantsWithoutCompiled(phrases[0].variants),
   };
-  phrases[0] = p0;
-  return { ...base, phrases };
-}
-
-function nextStructuralVariantId(variants: readonly AIAgentPhraseVariant[]): string {
-  let max = 0;
-  for (const v of variants) {
-    const m = /^structural_(\d+)$/.exec(v.variantId);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  return `structural_${max + 1}`;
-}
-
-/** Aggiunge una variante strutturale vuota sulla prima frase (template dedicato + when). */
-export function addStructuralVariantToPrimaryPhrase(uc: AIAgentUseCase): AIAgentUseCase {
-  const base = ensureUseCasePhrases(uc);
-  const phrases = [...(base.phrases ?? [])];
-  if (phrases.length === 0) return base;
-
-  const p0 = { ...phrases[0], variants: [...phrases[0].variants] };
-  const nv: AIAgentPhraseVariant = {
-    variantId: nextStructuralVariantId(p0.variants),
-    naturalText: '',
-    when: '',
-  };
-  p0.variants = [...p0.variants, nv];
-  phrases[0] = p0;
-  return { ...base, phrases };
-}
-
-export function removeStructuralVariant(uc: AIAgentUseCase, variantId: string): AIAgentUseCase {
-  if (variantId === 'default') return uc;
-  const base = ensureUseCasePhrases(uc);
-  const phrases = [...(base.phrases ?? [])];
-  if (phrases.length === 0) return base;
-
-  const p0 = {
-    ...phrases[0],
-    variants: phrases[0].variants.filter((v) => v.variantId !== variantId),
-  };
-  phrases[0] = p0;
-  return { ...base, phrases };
-}
-
-export function patchStructuralVariant(
-  uc: AIAgentUseCase,
-  variantId: string,
-  patch: { naturalText?: string; when?: string }
-): AIAgentUseCase {
-  const base = ensureUseCasePhrases(uc);
-  const phrases = [...(base.phrases ?? [])];
-  if (phrases.length === 0) return base;
-
-  const p0 = { ...phrases[0], variants: [...phrases[0].variants] };
-  p0.variants = p0.variants.map((v) =>
-    v.variantId !== variantId
-      ? v
-      : {
-          ...v,
-          ...(patch.naturalText !== undefined ? { naturalText: patch.naturalText } : {}),
-          ...(patch.when !== undefined ? { when: patch.when } : {}),
-          compiled: undefined,
-        }
-  );
   phrases[0] = p0;
   return { ...base, phrases };
 }

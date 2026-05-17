@@ -1,10 +1,12 @@
 /**
- * Single resolved ConvAI tool row (webhook / client) for workspace tool lists.
+ * ConvAI tool row as backend accordion: header = BookOpen + name; body = URL + OpenAPI SEND/RECEIVE.
  */
 
 import React from 'react';
 import type { WorkspaceResolvedTool } from '@workspaces/core/types';
-import { BookOpen, CornerDownRight, PlugZap, MessageSquare } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
+import { deriveBackendLabelFromUrl } from '@domain/backendCatalog';
+import { ElevenLabsToolBackendSignaturePanel } from './ElevenLabsToolBackendSignaturePanel';
 
 export type ElevenLabsToolListRowProps = {
   tool: WorkspaceResolvedTool;
@@ -12,56 +14,90 @@ export type ElevenLabsToolListRowProps = {
   inherited?: boolean;
 };
 
-function kindLabel(kind: WorkspaceResolvedTool['kind']): string {
-  if (kind === 'webhook') return 'webhook';
-  if (kind === 'client') return 'client';
-  if (kind === 'api_integration_webhook') return 'integrazione';
-  return kind;
+function toolHasEndpoint(tool: WorkspaceResolvedTool): boolean {
+  return Boolean(tool.url?.trim());
 }
 
-function ToolIcon({
-  tool,
-  inherited,
-}: {
-  tool: WorkspaceResolvedTool;
-  inherited?: boolean;
-}): React.ReactElement {
-  if (inherited) {
-    return <CornerDownRight className="h-3.5 w-3.5 shrink-0 text-violet-400" aria-hidden />;
-  }
-  if (tool.kind === 'webhook' || tool.kind === 'api_integration_webhook') {
-    return <BookOpen className="h-3.5 w-3.5 shrink-0 text-sky-400" aria-hidden />;
-  }
-  if (tool.kind === 'client') {
-    return <MessageSquare className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden />;
-  }
-  return <PlugZap className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />;
+function backendDisplayName(tool: WorkspaceResolvedTool): string {
+  const fromUrl = deriveBackendLabelFromUrl(tool.url ?? '');
+  const fromName = tool.name.trim();
+  return fromUrl || fromName || tool.id;
+}
+
+function sanitizeListIdPrefix(id: string): string {
+  return `elws-${id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)}`;
+}
+
+function normalizeMethod(m: string | undefined): string {
+  const u = (m || 'GET').trim().toUpperCase();
+  if (u === 'GET' || u === 'POST' || u === 'PUT' || u === 'DELETE' || u === 'PATCH') return u;
+  return 'GET';
 }
 
 export function ElevenLabsToolListRow({
   tool,
-  inherited = false,
 }: ElevenLabsToolListRowProps): React.ReactElement {
-  const subtitle = [tool.httpMethod, tool.url].filter(Boolean).join(' · ');
+  const hasEndpoint = toolHasEndpoint(tool);
+  const [expanded, setExpanded] = React.useState(false);
+  const backendName = backendDisplayName(tool);
+  const url = tool.url?.trim() ?? '';
+  const method = normalizeMethod(tool.httpMethod);
+
+  const toggle = () => {
+    if (!hasEndpoint) return;
+    setExpanded((v) => !v);
+  };
+
+  if (!hasEndpoint) {
+    return (
+      <li
+        className="flex items-center gap-2 rounded-lg border border-slate-700/55 bg-slate-950/35 px-2.5 py-2 text-xs"
+        title={tool.description || tool.name}
+      >
+        <BookOpen className="h-4 w-4 shrink-0 text-violet-300/90" aria-hidden />
+        <span className="min-w-0 truncate font-medium text-amber-100/90">{backendName}</span>
+      </li>
+    );
+  }
+
+  const accordionFrame = 'overflow-hidden rounded-lg border border-slate-700/55 bg-slate-950/35';
+  const accordionRoot = `grid min-h-0 grid-cols-1 ${accordionFrame} ${
+    expanded ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[auto_minmax(0,0fr)]'
+  }`;
+
   return (
-    <li
-      className="flex items-start gap-2 rounded-md border border-slate-700/60 bg-slate-900/50 px-2.5 py-2 text-xs"
-      title={tool.url || tool.description || tool.name}
-    >
-      <ToolIcon tool={tool} inherited={inherited} />
-      <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-1.5">
-          <span className="font-medium text-slate-200">{tool.name}</span>
-          <span className="rounded bg-slate-800 px-1 py-0.5 text-[10px] uppercase text-slate-500">
-            {kindLabel(tool.kind)}
-          </span>
+    <li className={accordionRoot} title={url}>
+      <button
+        type="button"
+        className="flex w-full min-w-0 items-center gap-2 border-b border-slate-800/65 bg-slate-950/50 px-2 py-2 text-left text-xs hover:bg-slate-900/60"
+        onClick={toggle}
+        aria-expanded={expanded}
+        aria-label={expanded ? `Comprimi ${backendName}` : `Espandi ${backendName}`}
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center text-slate-400">
+          {expanded ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
         </span>
-        {subtitle ? (
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-slate-500">{subtitle}</span>
-        ) : (
-          <span className="mt-0.5 block font-mono text-[10px] text-slate-600">{tool.id}</span>
-        )}
-      </span>
+        <BookOpen className="h-4 w-4 shrink-0 text-violet-300/90" aria-hidden />
+        <span className="min-w-0 truncate font-medium text-amber-100/90">{backendName}</span>
+      </button>
+
+      <div className="min-h-0 overflow-hidden">
+        {expanded ? (
+          <div className="space-y-2 border-t border-slate-800/50 px-2.5 py-2.5">
+            <p className="break-all font-mono text-[11px] leading-relaxed text-slate-400">
+              <span className="font-semibold text-violet-200/90">{method}</span>
+              <span className="text-slate-600"> · </span>
+              <span className="text-amber-100/80">{url}</span>
+            </p>
+            <ElevenLabsToolBackendSignaturePanel
+              operationalUrl={url}
+              httpMethod={tool.httpMethod}
+              listIdPrefix={sanitizeListIdPrefix(tool.id)}
+              active
+            />
+          </div>
+        ) : null}
+      </div>
     </li>
   );
 }

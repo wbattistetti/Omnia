@@ -33,6 +33,10 @@ export type OmniaBackendCatalogTargets = {
   setConvaiBackendToolTaskIds: (ids: string[]) => void;
 };
 
+export type ElevenLabsWebhookImportScope = 'node' | 'agent';
+
+export type ElevenLabsDescriptionImportMode = 'block' | 'promptOnly';
+
 export type ElevenLabsOmniaImportInput = {
   node: WorkspaceWorkflowNode;
   agentName: string;
@@ -40,6 +44,10 @@ export type ElevenLabsOmniaImportInput = {
   toolInventory: WorkspaceAgentToolInventory;
   targets: OmniaImportTargets;
   backends?: OmniaBackendCatalogTargets;
+  /** `agent` = tutti i webhook dell'agente remoto; `node` = ereditati + locali del nodo (default). */
+  webhookScope?: ElevenLabsWebhookImportScope;
+  /** `promptOnly` = solo system prompt in descrizione (drop canvas). */
+  descriptionImportMode?: ElevenLabsDescriptionImportMode;
 };
 
 function buildImportHeader(node: WorkspaceWorkflowNode, agentName: string): string {
@@ -67,6 +75,17 @@ function isWebhookLikeTool(t: WorkspaceResolvedTool): boolean {
     t.kind === 'api_integration_webhook' ||
     Boolean(t.url?.trim())
   );
+}
+
+/** Tutti i webhook/tool con URL a livello agente remoto (per import drop su canvas Omnia). */
+export function collectAgentWebhookTools(
+  toolInventory: WorkspaceAgentToolInventory
+): WorkspaceResolvedTool[] {
+  const byId = new Map<string, WorkspaceResolvedTool>();
+  for (const t of toolInventory.agentTools) {
+    if (isWebhookLikeTool(t)) byId.set(t.id, t);
+  }
+  return [...byId.values()];
 }
 
 /** Agent-inherited + node-local webhook tools applicable to this node. */
@@ -165,18 +184,41 @@ export function mergeElevenLabsBackendsIntoCatalog(
 /**
  * Imports system prompt → design description, template vars, and webhook backends (catalog + ConvAI ids).
  */
+function resolveWebhookToolsForImport(
+  input: ElevenLabsOmniaImportInput
+): WorkspaceResolvedTool[] {
+  if (input.webhookScope === 'agent') {
+    return collectAgentWebhookTools(input.toolInventory);
+  }
+  return collectWebhookToolsForNode(input.node, input.toolInventory);
+}
+
 export function importElevenLabsNodeToOmnia(input: ElevenLabsOmniaImportInput): ImportNodeToOmniaResult {
-  const { node, agentName, settings, toolInventory, targets, backends } = input;
+  const {
+    node,
+    agentName,
+    settings,
+    toolInventory,
+    targets,
+    backends,
+    descriptionImportMode = 'block',
+  } = input;
   const prompt = resolveSystemPromptForImport(node, settings);
-  const header = buildImportHeader(node, agentName);
   const inheritNote =
     node.inheritsGlobalPrompt && !prompt
-      ? '\n\n(Prompt di sistema agente vuoto su ElevenLabs.)'
+      ? '(Prompt di sistema agente vuoto su ElevenLabs.)'
       : '';
-  const block = prompt ? `${header}\n\n${prompt}` : `${header}${inheritNote}`;
+
+  let block: string;
+  if (descriptionImportMode === 'promptOnly') {
+    block = prompt || inheritNote;
+  } else {
+    const header = buildImportHeader(node, agentName);
+    block = prompt ? `${header}\n\n${prompt}` : `${header}${inheritNote ? `\n\n${inheritNote}` : ''}`;
+  }
 
   const prev = String(targets.designDescription || '').trim();
-  targets.setDesignDescription(prev ? `${block}\n\n---\n\n${prev}` : block);
+  targets.setDesignDescription(prev && block ? `${block}\n\n---\n\n${prev}` : block || prev);
 
   const variableNames = extractTemplateVariableNames(prompt);
   const existingLabels = new Set(
@@ -200,8 +242,9 @@ export function importElevenLabsNodeToOmnia(input: ElevenLabsOmniaImportInput): 
 
   let backendsAdded = 0;
   let backendsLinked = 0;
+  const webhookToolsForCount = resolveWebhookToolsForImport(input);
   if (backends) {
-    const webhookTools = collectWebhookToolsForNode(node, toolInventory);
+    const webhookTools = webhookToolsForCount;
     const merged = mergeElevenLabsBackendsIntoCatalog(
       webhookTools,
       backends.manualEntries,
@@ -221,7 +264,7 @@ export function importElevenLabsNodeToOmnia(input: ElevenLabsOmniaImportInput): 
   return {
     promptApplied: prompt.length > 0,
     variableNames,
-    toolCount: collectWebhookToolsForNode(node, toolInventory).length,
+    toolCount: webhookToolsForCount.length,
     backendsAdded,
     backendsLinked,
   };

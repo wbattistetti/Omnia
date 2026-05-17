@@ -31,6 +31,7 @@ import { compilePhraseVariant } from '../useCaseBundle/semanticCompile';
 import { buildParametricWhenClause } from '../useCaseBundle/parametricPhraseHelpers';
 import { emptyProjectSlotLexicon, type ProjectSlotLexicon } from '../useCaseBundle/projectSlotLexicon';
 import type { AIAgentPhraseVariant } from '../useCaseBundle/schema';
+import { getScenarioLlmText } from '@domain/aiAgentUseCase/scenarioText';
 import {
   getAssistantExample,
   isUseCaseIncludedInConversations,
@@ -304,7 +305,7 @@ export function projectUseCaseToConversationalJson(
   const variants = collectVariantProjections(uc, lexicon);
   if (variants.length === 0) return null;
 
-  const scenario = typeof uc.payoff === 'string' ? uc.payoff.trim() : '';
+  const scenario = getScenarioLlmText(uc);
   const label = typeof uc.label === 'string' ? uc.label.trim() : '';
 
   const projected: UseCaseConversationalJson = {

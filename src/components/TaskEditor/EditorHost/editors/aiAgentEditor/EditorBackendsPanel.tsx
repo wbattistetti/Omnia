@@ -59,7 +59,7 @@ function showBackendIdentityFields(entry: ManualCatalogEntry): boolean {
   return Boolean(entry.importSpecRevealed || entry.frozenMeta?.importState === 'ok');
 }
 
-function ManualBackendAccordion({
+export function ManualBackendAccordion({
   entry,
   expanded,
   projectId,
@@ -76,6 +76,7 @@ function ManualBackendAccordion({
   creationMode,
   wizardUi,
   fillAvailableHeight = false,
+  embedInWorkspaceInspector = false,
   focusName,
   onNameFocused,
 }: {
@@ -102,6 +103,8 @@ function ManualBackendAccordion({
    * scroll solo in SEND/RECEIVE (non sulla lista catalogo).
    */
   fillAvailableHeight?: boolean;
+  /** Workspace ElevenLabs inspector: niente altezza 88dvh; scroll sul pannello padre. */
+  embedInWorkspaceInspector?: boolean;
   focusName?: boolean;
   onNameFocused?: () => void;
 }) {
@@ -124,8 +127,11 @@ function ManualBackendAccordion({
   const inputShellBase = `${barH} box-border rounded border bg-slate-950 ${fieldPad} ${monoCls} outline-none transition-colors focus-visible:border-slate-500 focus-visible:ring-1 focus-visible:ring-slate-500/35`;
   /** Campi a larghezza piena (emulate nome, textarea). Non usarlo per i chip in barra import: `w-full` forza un wrap su riga dedicata. */
   const inputShell = `${inputShellBase} w-full min-w-0`;
-  /** Nome interno in barra (sola lettura / preview): larghezza contenuta, stesso shell senza `w-full`. */
-  const inputShellBarReadonly = `${inputShellBase} w-[min(12rem,32vw)] max-w-[min(18rem,48vw)] shrink-0 cursor-default`;
+  /** Nome in barra: larghezza dal testo (`field-sizing: content`, come URL). */
+  const nameBarSizing =
+    'min-w-[6ch] max-w-[min(28rem,50vw)] [field-sizing:content] w-max shrink';
+  const inputShellBarName = `${inputShellBase} ${nameBarSizing}`;
+  const inputShellBarNameReadonly = `${inputShellBarName} cursor-default`;
 
   const editorTask = React.useMemo(() => {
     if (!expanded || !canShowParameterPanel) return null;
@@ -383,21 +389,26 @@ function ManualBackendAccordion({
       : 'https://… o …/v3/api-docs';
 
   const internalPreviewFromUrl = deriveBackendLabelFromUrl(entry.endpointUrl.trim());
-  const retrieveBtnCls = `inline-flex ${barH} shrink-0 items-center gap-1.5 rounded border border-violet-600/80 bg-violet-950/50 px-2.5 text-xs font-semibold text-violet-100 hover:bg-violet-900/60 disabled:pointer-events-none disabled:opacity-45`;
+  const recuperaSpecTooltip =
+    'Scarica OpenAPI dall’URL (swagger/openapi.json) e compila i parametri SEND e RECEIVE del backend.';
+  const recuperaSpecBtnCls = `inline-flex ${barH} w-9 shrink-0 items-center justify-center rounded border border-violet-600/70 bg-violet-950/40 text-violet-100 hover:bg-violet-900/60 disabled:pointer-events-none disabled:opacity-45`;
   const chevronWrapCls = `flex ${barH} w-9 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-800`;
   const headerPadX = wizardUi ? 'px-3' : 'px-2';
   /** URL: larghezza legata al contenuto dove supportato (field-sizing). */
   const urlSizing = 'min-w-0 [field-sizing:content] w-max max-w-full shrink';
 
-  const accordionFrame =
-    'overflow-hidden rounded-lg border border-slate-700/55 bg-slate-950/35';
+  const accordionFrame = embedInWorkspaceInspector
+    ? 'rounded-lg border border-slate-700/55 bg-slate-950/35'
+    : 'overflow-hidden rounded-lg border border-slate-700/55 bg-slate-950/35';
   const accordionRootClass = fillAvailableHeight
     ? expanded
       ? `flex min-h-0 flex-1 flex-col ${accordionFrame}`
       : `shrink-0 ${accordionFrame}`
-    : `grid min-h-0 grid-cols-1 ${accordionFrame} ${
-        expanded ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[auto_minmax(0,0fr)]'
-      }`;
+    : embedInWorkspaceInspector
+      ? `min-h-0 ${accordionFrame}`
+      : `grid min-h-0 grid-cols-1 ${accordionFrame} ${
+          expanded ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-[auto_minmax(0,0fr)]'
+        }`;
 
   return (
     <div className={accordionRootClass} data-convai-tool-backend-id={entry.id}>
@@ -424,7 +435,7 @@ function ManualBackendAccordion({
                   id={`${entry.id}-internal-name`}
                   ref={labelInputRef}
                   type="text"
-                  className={`${inputShell} min-w-0 flex-1 border-slate-600/70 text-amber-100/90 focus:border-sky-600/60 focus:ring-sky-500/35`}
+                  className={`${inputShellBarName} border-slate-600/70 text-amber-100/90 focus:border-sky-600/60 focus:ring-sky-500/35`}
                   value={entry.label}
                   onChange={(e) =>
                     onPatch(entry.id, {
@@ -474,7 +485,7 @@ function ManualBackendAccordion({
                   type="text"
                   readOnly
                   tabIndex={-1}
-                  className={`${inputShellBarReadonly} border-slate-700 bg-slate-900/85 text-amber-100/90`}
+                  className={`${inputShellBarNameReadonly} border-slate-700 bg-slate-900/85 text-amber-100/90`}
                   value={internalPreviewFromUrl}
                   placeholder="—"
                   aria-label="Internal name (preview until import)"
@@ -484,15 +495,15 @@ function ManualBackendAccordion({
                   type="button"
                   disabled={readBusy || !entry.endpointUrl.trim()}
                   onClick={() => void runReadApiCollapsed()}
-                  className={retrieveBtnCls}
-                  title="Scarica swagger e compila SEND/RECEIVE"
+                  className={recuperaSpecBtnCls}
+                  title={recuperaSpecTooltip}
+                  aria-label="Recupera specifiche OpenAPI"
                 >
                   {readBusy ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                   ) : (
                     <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
                   )}
-                  <span className="whitespace-nowrap">Recupera specifiche</span>
                 </button>
                 <button
                   type="button"
@@ -530,12 +541,20 @@ function ManualBackendAccordion({
                 />
                 <input
                   type="text"
-                  readOnly
-                  tabIndex={-1}
-                  className={`${inputShellBarReadonly} border-slate-600/70 bg-slate-900/80 text-amber-100/90`}
-                  value={backendIdentifierDisplay}
-                  aria-label="Internal backend name"
-                  title="Set after successful OpenAPI import"
+                  className={`${inputShellBarName} border-slate-600/70 bg-slate-900/80 text-amber-100/90 focus:border-sky-600/60 focus:ring-sky-500/35`}
+                  value={entry.label}
+                  onChange={(e) => {
+                    const label = e.target.value;
+                    onPatch(entry.id, {
+                      label,
+                      lastStructuralEditAt: new Date().toISOString(),
+                    });
+                    ensureManualCatalogBackendTask({ ...entry, label }, projectId);
+                    taskRepository.updateTask(entry.id, { label } as Partial<Task>, projectId);
+                  }}
+                  placeholder={backendIdentifierDisplay || 'nome backend'}
+                  aria-label="Nome backend"
+                  title="Nome interno nel catalogo (larghezza automatica dal testo)"
                 />
                 {httpMethodOpenApiUi.locked ? (
                   <span
@@ -560,15 +579,15 @@ function ManualBackendAccordion({
                   type="button"
                   disabled={readBusy || !entry.endpointUrl.trim()}
                   onClick={() => void runReadApiCollapsed()}
-                  className={retrieveBtnCls}
-                  title="Aggiorna parametri da OpenAPI"
+                  className={recuperaSpecBtnCls}
+                  title={recuperaSpecTooltip}
+                  aria-label="Recupera specifiche OpenAPI"
                 >
                   {readBusy ? (
                     <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                   ) : (
                     <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
                   )}
-                  <span className="whitespace-nowrap">Recupera specifiche</span>
                 </button>
                 <button
                   type="button"
@@ -586,10 +605,26 @@ function ManualBackendAccordion({
       </div>
 
       {expanded ? (
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          <div className={`flex min-h-0 min-w-0 flex-1 gap-2 overflow-hidden pt-0 pb-2 ${headerPadX}`}>
-            <div className="w-9 shrink-0" aria-hidden />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+        <div
+          className={
+            embedInWorkspaceInspector
+              ? 'flex min-w-0 flex-col'
+              : 'flex h-full min-h-0 min-w-0 flex-col overflow-hidden'
+          }
+        >
+          <div
+            className={`flex min-w-0 gap-2 pt-0 pb-2 ${headerPadX} ${
+              embedInWorkspaceInspector
+                ? 'flex-col'
+                : 'min-h-0 min-w-0 flex-1 overflow-hidden'
+            }`}
+          >
+            {!embedInWorkspaceInspector ? <div className="w-9 shrink-0" aria-hidden /> : null}
+            <div
+              className={`flex min-w-0 flex-col gap-2 ${
+                embedInWorkspaceInspector ? '' : 'min-h-0 flex-1 overflow-hidden'
+              }`}
+            >
               {showIdentity ? (
                 <div className="min-w-0 shrink-0">
                   <textarea
@@ -630,7 +665,9 @@ function ManualBackendAccordion({
                   className={
                     fillAvailableHeight
                       ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                      : 'flex h-[min(88dvh,920px)] min-h-[240px] flex-1 flex-col overflow-hidden'
+                      : embedInWorkspaceInspector
+                        ? 'flex flex-col'
+                        : 'flex h-[min(88dvh,920px)] min-h-[240px] flex-1 flex-col overflow-hidden'
                   }
                 >
                   <EmbeddedBackendCallEditor
@@ -638,6 +675,7 @@ function ManualBackendAccordion({
                     task={editorTask}
                     endpointExternalRevision={endpointRev}
                     hideEndpointRow={creationMode === 'import'}
+                    workspaceInspectorEmbed={embedInWorkspaceInspector}
                   />
                 </div>
               ) : expanded && !canShowParameterPanel ? (

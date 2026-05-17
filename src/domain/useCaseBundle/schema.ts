@@ -61,12 +61,25 @@ export interface AIAgentPhraseParametricConfig {
   rows: AIAgentPhraseParametricRow[];
 }
 
+/**
+ * Varianti di stile conversazionale per uno span `«defaultSurface»` nel naturalText.
+ */
+export interface AIAgentPhraseStyleToken {
+  styleTokenId: string;
+  /** Testo mostrato nel messaggio (contenuto tra « e »). */
+  defaultSurface: string;
+  /** Formulazioni alternative ammesse (include di norma {@link defaultSurface}). */
+  variants: string[];
+}
+
 /** Frase canonica del designer (una o più per use case). */
 export interface AIAgentCanonicalPhrase {
   phraseId: string;
   naturalText: string;
   localMappings?: SlotSurfaceMapping[];
   variants: AIAgentPhraseVariant[];
+  /** Style token `«…»` con varianti editabili (design-time). */
+  styleTokens?: AIAgentPhraseStyleToken[];
   /**
    * Opzionale (schema v2+): quando `enabled`, le varianti deploy per questa frase derivano dalla
    * griglia combinazioni (+ variante default dal canonico), non dalla lista `variants` structural.

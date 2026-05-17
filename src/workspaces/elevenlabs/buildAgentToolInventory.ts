@@ -10,16 +10,40 @@ import type {
 import { resolveConvaiToolIds } from './api/convaiToolApi';
 import { extractPromptToolIdsAndInline, parseConvaiInlineTool } from './parseConvaiInlineTools';
 
+/** Dedupe key: ConvAI often lists the same webhook in `tool_ids` and inline `tools[]` with different ids. */
+export function agentToolDedupeKey(t: WorkspaceResolvedTool): string {
+  const url = t.url?.trim().toLowerCase();
+  if (url) {
+    const method = (t.httpMethod ?? 'POST').trim().toUpperCase() || 'POST';
+    return `url:${method}:${url}`;
+  }
+  const name = (t.name || '').trim().toLowerCase();
+  if (name) return `name:${name}`;
+  const id = (t.id || '').trim();
+  return id ? `id:${id}` : '';
+}
+
+function toolMergeScore(t: WorkspaceResolvedTool): number {
+  let score = 0;
+  if (t.url?.trim()) score += 2;
+  if (t.id.trim() && t.id.trim() !== (t.name || '').trim()) score += 2;
+  if (t.httpMethod?.trim()) score += 1;
+  return score;
+}
+
 function mergeAgentTools(
   inline: WorkspaceResolvedTool[],
   resolved: WorkspaceResolvedTool[]
 ): WorkspaceResolvedTool[] {
   const byKey = new Map<string, WorkspaceResolvedTool>();
-  for (const t of [...inline, ...resolved]) {
-    const key = t.id || t.name;
+  for (const t of [...resolved, ...inline]) {
+    const key = agentToolDedupeKey(t);
     if (!key) continue;
     const prev = byKey.get(key);
-    if (!prev || (t.url && !prev.url)) byKey.set(key, { ...t, scope: 'agent' });
+    const next = { ...t, scope: 'agent' as const };
+    if (!prev || toolMergeScore(next) > toolMergeScore(prev)) {
+      byKey.set(key, next);
+    }
   }
   return [...byKey.values()];
 }

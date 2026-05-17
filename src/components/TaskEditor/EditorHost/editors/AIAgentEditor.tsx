@@ -65,6 +65,7 @@ import {
 } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
+import { parseElevenLabsImportRecapFromIaJson } from '@workspaces/elevenlabs/elevenLabsImportRecap';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
@@ -258,7 +259,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       if (result.mode === 'extend' && result.addedCount > 0) {
         setUseCaseBundleFeedback(`Ho aggiunto ${result.addedCount} use case.`);
       } else if (result.mode === 'replace' && result.addedCount > 0) {
-        setUseCaseBundleFeedback(`Generati ${result.addedCount} use case.`);
+        const base = `Generati ${result.addedCount} use case.`;
+        setUseCaseBundleFeedback(
+          result.useCaseOrderingNote ? `${base} ${result.useCaseOrderingNote}` : base
+        );
       } else {
         setUseCaseBundleFeedback(null);
       }
@@ -871,6 +875,18 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    */
   const showWelcomeTutor = !c.agentWizardTutorAcknowledged;
 
+  const [elRecapDismissed, setElRecapDismissed] = React.useState(false);
+  React.useEffect(() => {
+    setElRecapDismissed(false);
+  }, [instanceId]);
+  const elevenLabsImportRecap = React.useMemo(() => {
+    if (elRecapDismissed) return null;
+    return parseElevenLabsImportRecapFromIaJson(task?.agentIaRuntimeOverrideJson);
+  }, [task?.agentIaRuntimeOverrideJson, elRecapDismissed]);
+  const onDismissElevenLabsRecap = React.useCallback(() => {
+    setElRecapDismissed(true);
+  }, []);
+
   const stepSetter = c.setAgentWizardCurrentStep;
   const ackTutor = c.acknowledgeAgentWizardTutor;
   /**
@@ -1440,6 +1456,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}
               bypassGating={c.hasAgentGeneration}
+              elevenLabsImportRecap={elevenLabsImportRecap}
+              onDismissElevenLabsRecap={onDismissElevenLabsRecap}
             />
           </AIAgentEditorDockProvider>
         )}

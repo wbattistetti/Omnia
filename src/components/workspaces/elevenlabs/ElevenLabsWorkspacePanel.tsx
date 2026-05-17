@@ -14,6 +14,7 @@ import {
   getElevenLabsWorkspaceSession,
   setElevenLabsWorkspaceSession,
 } from '@workspaces/elevenlabs/elevenLabsWorkspaceSessionCache';
+import type { WorkflowPositionOverrides } from '@workspaces/elevenlabs/workflowLayoutPositions';
 import { appendAuditEntry } from '../../../application/backendCatalog/appendOnlyAuditLog';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import { setConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
@@ -24,7 +25,10 @@ import { ElevenLabsNodeInspector } from './ElevenLabsNodeInspector';
 import { ElevenLabsAgentSettingsPanel } from './ElevenLabsAgentSettingsPanel';
 import { ElevenLabsWebhooksPanel } from './ElevenLabsWebhooksPanel';
 import { ElevenLabsWorkflowCanvas } from './ElevenLabsWorkflowCanvas';
+import { ElevenLabsWorkflowSplitLayout } from './ElevenLabsWorkflowSplitLayout';
 import { ELEVENLABS_WORKSPACE_TABS, type ElevenLabsWorkspaceTab } from './elevenLabsWorkspaceTabs';
+import { useElevenLabsKbWorkspace } from '@workspaces/elevenlabs/useElevenLabsStagedNodeFiles';
+import { getKbWorkspacePersist } from '@workspaces/elevenlabs/kbWorkspacePersist';
 
 export type ElevenLabsWorkspacePanelProps = {
   /** Remote ConvAI agent id (required in dock tab mode). */
@@ -60,8 +64,19 @@ export function ElevenLabsWorkspacePanel({
   const [error, setError] = React.useState<string | null>(null);
   const [importMessage, setImportMessage] = React.useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = React.useState<ElevenLabsWorkspaceTab>('workflow');
-
+  const [nodePositionOverrides, setNodePositionOverrides] = React.useState<WorkflowPositionOverrides>({});
   const resolvedAgentId = (showAgentPicker ? pickerAgentId : lockedAgentId).trim();
+  const {
+    getStaged,
+    getStagedKb,
+    addStaged,
+    addKbFiles,
+    removeStaged,
+    updateKbDoc,
+    agentSystemPromptMarkdown,
+    setAgentSystemPromptMarkdown,
+    collectAllKbSnippets,
+  } = useElevenLabsKbWorkspace(projectData?.id, resolvedAgentId);
   const displayAgentName =
     lockedAgentName?.trim() ||
     agents.find((a) => a.agentId === resolvedAgentId)?.name?.trim() ||
@@ -95,9 +110,10 @@ export function ElevenLabsWorkspacePanel({
         snapshot: snap,
         selectedNodeId: first,
         workspaceTab,
+        nodePositionOverrides,
       });
     },
-    [projectData?.id, workspaceTab]
+    [projectData?.id, workspaceTab, nodePositionOverrides]
   );
 
   const loadAgentDetail = React.useCallback(
@@ -107,6 +123,7 @@ export function ElevenLabsWorkspacePanel({
       if (!opts?.forceNetwork) {
         const cached = getElevenLabsWorkspaceSession(pid, id);
         if (cached?.snapshot?.ref.agentId === id) {
+          setNodePositionOverrides(cached.nodePositionOverrides ?? {});
           applySnapshot(cached.snapshot, cached.selectedNodeId);
           setWorkspaceTab(cached.workspaceTab);
           return;
@@ -115,6 +132,9 @@ export function ElevenLabsWorkspacePanel({
       setAgentLoading(true);
       setError(null);
       setImportMessage(null);
+      if (opts?.forceNetwork) {
+        setNodePositionOverrides({});
+      }
       try {
         const snap = await provider.getAgent(remoteAgentRef(ELEVENLABS_WORKSPACE_PROVIDER_ID, id));
         applySnapshot(snap, null);
@@ -152,8 +172,9 @@ export function ElevenLabsWorkspacePanel({
       snapshot,
       selectedNodeId,
       workspaceTab,
+      nodePositionOverrides,
     });
-  }, [snapshot, selectedNodeId, workspaceTab, projectData?.id]);
+  }, [snapshot, selectedNodeId, workspaceTab, projectData?.id, nodePositionOverrides]);
 
   React.useEffect(() => {
     if (showAgentPicker) void loadAgentList();
@@ -164,6 +185,23 @@ export function ElevenLabsWorkspacePanel({
     if (snapshot?.ref.agentId === resolvedAgentId) return;
     void loadAgentDetail(resolvedAgentId);
   }, [resolvedAgentId, snapshot?.ref.agentId, loadAgentDetail]);
+
+  React.useEffect(() => {
+    if (!snapshot || snapshot.ref.agentId !== resolvedAgentId) return;
+    const persisted = getKbWorkspacePersist(projectData?.id, resolvedAgentId);
+    if (persisted.agentSystemPromptMarkdown.trim()) return;
+    const remote = snapshot.settings.globalPrompt?.trim();
+    if (remote) setAgentSystemPromptMarkdown(remote);
+  }, [snapshot, resolvedAgentId, projectData?.id, setAgentSystemPromptMarkdown]);
+
+  const collectKbSnippets = React.useCallback(() => {
+    if (!snapshot) return [];
+    const nodeLabelsById: Record<string, string> = {};
+    for (const n of snapshot.workflow.nodes) {
+      nodeLabelsById[n.id] = n.label?.trim() || n.id;
+    }
+    return collectAllKbSnippets(nodeLabelsById);
+  }, [snapshot, collectAllKbSnippets]);
 
   const selectedNode =
     snapshot?.workflow.nodes.find((n) => n.id === selectedNodeId) ?? null;
@@ -319,6 +357,7 @@ export function ElevenLabsWorkspacePanel({
               onChange={(e) => {
                 setPickerAgentId(e.target.value);
                 setSnapshot(null);
+                setNodePositionOverrides({});
                 if (e.target.value) void loadAgentDetail(e.target.value);
               }}
             >
@@ -409,48 +448,92 @@ export function ElevenLabsWorkspacePanel({
             agentName={displayAgentName}
             agentId={resolvedAgentId}
             toolInventory={snapshot.toolInventory}
+            systemPromptMarkdown={agentSystemPromptMarkdown}
+            onSystemPromptChange={setAgentSystemPromptMarkdown}
+            collectKbSnippets={collectKbSnippets}
+            remoteGlobalPrompt={snapshot.settings.globalPrompt}
+            projectData={projectData}
+            projectId={projectData?.id}
+            updateProjectData={updateDataDirectly}
           />
         </div>
       ) : null}
       {snapshot && workspaceTab === 'webhooks' ? (
         <div className="min-h-0 flex-1 overflow-hidden">
-          <ElevenLabsWebhooksPanel toolInventory={snapshot.toolInventory} />
+          <ElevenLabsWebhooksPanel
+            toolInventory={snapshot.toolInventory}
+            agentId={resolvedAgentId}
+            projectData={projectData}
+            projectId={projectData?.id}
+            updateProjectData={updateDataDirectly}
+          />
         </div>
       ) : null}
-      <div
-        className={
-          'grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_minmax(280px,32%)] ' +
-          (snapshot && (workspaceTab === 'agent' || workspaceTab === 'webhooks') ? 'hidden' : '')
-        }
-      >
-        <div className="min-h-[240px] border-b border-slate-800 lg:border-b-0 lg:border-r lg:border-slate-800">
-          {snapshot ? (
-            <ElevenLabsWorkflowCanvas
-              graph={snapshot.workflow}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={setSelectedNodeId}
-              onEditInOmnia={runImportForNode}
-              onDragToOmniaFlow={handleDragToOmniaFlow}
+      {workspaceTab === 'workflow' ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ElevenLabsWorkflowSplitLayout
+          canvas={
+            snapshot ? (
+              <ElevenLabsWorkflowCanvas
+                graph={snapshot.workflow}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={setSelectedNodeId}
+                onEditInOmnia={runImportForNode}
+                onDragToOmniaFlow={handleDragToOmniaFlow}
+                importBusy={importBusy}
+                positionOverrides={nodePositionOverrides}
+                onPositionOverridesChange={setNodePositionOverrides}
+              />
+            ) : (
+              <p className="p-4 text-xs text-slate-500">
+                {resolvedAgentId
+                  ? 'Caricamento workflow…'
+                  : 'Seleziona un agente per visualizzare il workflow.'}
+              </p>
+            )
+          }
+          inspector={
+            <ElevenLabsNodeInspector
+              node={selectedNode}
+              globalPrompt={snapshot?.globalPrompt}
+              agentSettings={snapshot?.settings}
+              toolInventory={snapshot?.toolInventory}
+              onOpenAgentTab={() => setWorkspaceTab('agent')}
+              onImportNode={selectedNode ? handleImport : undefined}
               importBusy={importBusy}
+              stagedKbDocuments={selectedNode ? getStagedKb(selectedNode.id) : []}
+              onAddKbFiles={
+                selectedNode ? (files) => addKbFiles(selectedNode.id, files) : undefined
+              }
+              onRemoveStagedKbFile={
+                selectedNode ? (fileId) => removeStaged(selectedNode.id, 'kb', fileId) : undefined
+              }
+              onUpdateKbDoc={
+                selectedNode
+                  ? (docId, patch) => updateKbDoc(selectedNode.id, docId, patch)
+                  : undefined
+              }
+              stagedToolFiles={selectedNode ? getStaged(selectedNode.id, 'tools') : []}
+              onAddToolFiles={
+                selectedNode ? (files) => addStaged(selectedNode.id, 'tools', files) : undefined
+              }
+              onRemoveStagedToolFile={
+                selectedNode
+                  ? (fileId) => removeStaged(selectedNode.id, 'tools', fileId)
+                  : undefined
+              }
+              systemPromptMarkdown={agentSystemPromptMarkdown}
+              onSystemPromptChange={setAgentSystemPromptMarkdown}
+              collectKbSnippets={collectKbSnippets}
+              agentId={resolvedAgentId}
+              projectData={projectData}
+              projectId={projectData?.id}
+              updateProjectData={updateDataDirectly}
             />
-          ) : (
-            <p className="p-4 text-xs text-slate-500">
-              {resolvedAgentId
-                ? 'Caricamento workflow…'
-                : 'Seleziona un agente per visualizzare il workflow.'}
-            </p>
-          )}
-        </div>
-        <ElevenLabsNodeInspector
-          node={selectedNode}
-          globalPrompt={snapshot?.globalPrompt}
-          agentSettings={snapshot?.settings}
-          toolInventory={snapshot?.toolInventory}
-          onOpenAgentTab={() => setWorkspaceTab('agent')}
-          onImportNode={selectedNode ? handleImport : undefined}
-          importBusy={importBusy}
+          }
         />
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

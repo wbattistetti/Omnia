@@ -4,12 +4,15 @@
 
 import type { WorkspaceAgentSnapshot } from '../core/types';
 import type { ElevenLabsWorkspaceTab } from '../../components/workspaces/elevenlabs/elevenLabsWorkspaceTabs';
+import type { WorkflowPositionOverrides } from './workflowLayoutPositions';
 
 export type ElevenLabsWorkspaceSessionEntry = {
   snapshot: WorkspaceAgentSnapshot;
   selectedNodeId: string | null;
   workspaceTab: ElevenLabsWorkspaceTab;
   fetchedAt: number;
+  /** Local canvas layout overrides (drag on workspace workflow). */
+  nodePositionOverrides?: WorkflowPositionOverrides;
 };
 
 const memory = new Map<string, ElevenLabsWorkspaceSessionEntry>();

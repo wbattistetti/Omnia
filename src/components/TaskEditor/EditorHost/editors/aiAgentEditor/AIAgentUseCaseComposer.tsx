@@ -46,7 +46,6 @@ import {
   emptyProjectSlotLexicon,
   type ProjectSlotLexicon,
 } from '@domain/useCaseBundle/projectSlotLexicon';
-import { StructuralVariantsEditor } from './useCaseBundle/StructuralVariantsEditor';
 import { UseCaseResponseEditor } from './UseCaseResponseEditor';
 import { usePatchUseCaseResponseTasks } from './usePatchUseCaseResponseTasks';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
@@ -56,14 +55,14 @@ import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeploySta
 import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
 } from '@types/aiAgentPreview';
+import {
+  getScenarioDescrittivoText,
+  getScenarioDisplayText,
+  withScenarioDescrittivo,
+} from '@domain/aiAgentUseCase/scenarioText';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 import { applySiblingReorderForPersist } from './useCaseHierarchy';
-import {
-  addStructuralVariantToPrimaryPhrase,
-  patchStructuralVariant,
-  removeStructuralVariant,
-  syncPrimaryPhraseNaturalFromAssistantTurn,
-} from '@domain/useCaseBundle/phraseVariantHelpers';
+import { syncPrimaryPhraseNaturalFromAssistantTurn } from '@domain/useCaseBundle/phraseVariantHelpers';
 import {
   AI_AGENT_GLOBAL_USE_CASE_STYLES,
   LABEL_AGENT_MSG_STRIP_TOKENS,
@@ -82,11 +81,19 @@ import {
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import {
   computeAgentTokenSelectionPopoverAction,
-  messageHasSlotBrackets,
-  stripAgentMessageSlotBrackets,
+  messageHasAgentTokens,
+  stripAgentMessageTokens,
   unwrapBracketTokenContainingSelection,
   buildBracketWrapForSelection,
+  buildStyleWrapForSelection,
+  findTokenSpanAtSelection,
 } from './agentMessageTokenHelpers';
+import {
+  getPrimaryPhraseStyleTokens,
+  patchStyleTokenVariants,
+  removeStyleTokenOnUnwrap,
+  upsertStyleTokenOnWrap,
+} from '@domain/useCaseBundle/styleTokenPhraseHelpers';
 import { AgentMessageSelectionTokenPopover } from './AgentMessageSelectionTokenPopover';
 import {
   buildVirtualAgentRuntimeCatalogFromUseCases,
@@ -385,6 +392,8 @@ export function AIAgentUseCaseComposer({
   );
   const wizardShowScenario =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
+  const wizardScenarioLlmFormat =
+    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioLlmFormat : false;
   const wizardShowMessage =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
   /**
@@ -674,7 +683,9 @@ export function AIAgentUseCaseComposer({
       const agentMessage =
         agentMsgEditUseCaseId === u.id ? agentMsgEditDraft : committedAgent;
       const scenario =
-        payoffEditUseCaseId === u.id ? payoffEditDraft : (u.payoff ?? '');
+        payoffEditUseCaseId === u.id
+          ? payoffEditDraft
+          : getScenarioDescrittivoText(u);
       return {
         id: u.id,
         current: { scenario, agentMessage },
@@ -1242,37 +1253,6 @@ export function AIAgentUseCaseComposer({
     [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
   );
 
-  const handleAddStructuralVariant = React.useCallback(
-    (useCaseId: string) => {
-      setUseCases((prev) =>
-        prev.map((uc) => (uc.id === useCaseId ? addStructuralVariantToPrimaryPhrase(uc) : uc))
-      );
-    },
-    [setUseCases]
-  );
-
-  const handlePatchStructuralVariant = React.useCallback(
-    (useCaseId: string, variantId: string, patch: { naturalText?: string; when?: string }) => {
-      setUseCases((prev) =>
-        prev.map((uc) =>
-          uc.id === useCaseId ? patchStructuralVariant(uc, variantId, patch) : uc
-        )
-      );
-    },
-    [setUseCases]
-  );
-
-  const handleRemoveStructuralVariant = React.useCallback(
-    (useCaseId: string, variantId: string) => {
-      setUseCases((prev) =>
-        prev.map((uc) =>
-          uc.id === useCaseId ? removeStructuralVariant(uc, variantId) : uc
-        )
-      );
-    },
-    [setUseCases]
-  );
-
   const [parametricCartesianErrorById, setParametricCartesianErrorById] = React.useState<
     Record<string, string>
   >({});
@@ -1448,8 +1428,7 @@ export function AIAgentUseCaseComposer({
         prev.map((u) =>
           u.id === useCaseId
             ? {
-                ...u,
-                payoff: value,
+                ...withScenarioDescrittivo(u, value),
                 designer_edit_confirmed: true as const,
                 designer_payoff_vote: 'up' as const,
               }
@@ -1613,8 +1592,8 @@ export function AIAgentUseCaseComposer({
     if (!selected) return false;
     const b = fieldBaselineByUseCaseId[selected.id];
     if (!b) return false;
-    return (selected.payoff ?? '') !== b.payoff;
-  }, [selected, selected?.payoff, fieldBaselineByUseCaseId]);
+    return getScenarioDescrittivoText(selected) !== b.payoff;
+  }, [selected, fieldBaselineByUseCaseId]);
 
   const agentMessageEmpty = React.useMemo(
     () => !assistantTurn || !String(assistantTurn.content ?? '').trim(),
@@ -1767,7 +1746,7 @@ export function AIAgentUseCaseComposer({
   }, [busy, agentMsgEditUseCaseId, agentMsgPointerSelecting, agentMsgSelection, agentMsgTokenPopoverAction]);
 
   const canStripAgentTokens = React.useMemo(
-    () => Boolean(agentMsgEditUseCaseId && !busy && messageHasSlotBrackets(agentMsgEditDraft)),
+    () => Boolean(agentMsgEditUseCaseId && !busy && messageHasAgentTokens(agentMsgEditDraft)),
     [agentMsgEditUseCaseId, busy, agentMsgEditDraft]
   );
 
@@ -1815,6 +1794,91 @@ export function AIAgentUseCaseComposer({
     onAssistantPhraseDraftChange,
   ]);
 
+  const handleWrapStyleAgentToken = React.useCallback(() => {
+    if (!agentMsgEditUseCaseId || busy) return;
+    const turnId = agentMsgEditTurnIdRef.current;
+    if (!turnId) return;
+    const ta = getActiveAgentTextarea();
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start === end) return;
+    const content = agentMsgEditDraft;
+    if (computeAgentTokenSelectionPopoverAction(content, start, end) !== 'tokenize') return;
+    const built = buildStyleWrapForSelection(content, start, end);
+    if (!built) return;
+    const { next, selStart, selEnd, inner } = built;
+    setUseCases((prev) =>
+      prev.map((uc) =>
+        uc.id === agentMsgEditUseCaseId ? upsertStyleTokenOnWrap(uc, inner) : uc
+      )
+    );
+    setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, turnId, next, { mode: 'silent' });
+    setAgentMsgEditDraft(next);
+    liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = next;
+    if (selected?.id === agentMsgEditUseCaseId) {
+      liveAgentContentRef.current = next;
+    }
+    onAssistantPhraseDraftChange?.(agentMsgEditUseCaseId, next);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = getActiveAgentTextarea();
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(selStart, selEnd);
+        syncDetailTextareaHeights();
+        syncWizardTextareaHeights();
+        setAgentMsgSelection({ start: selStart, end: selEnd });
+      });
+    });
+  }, [
+    agentMsgEditUseCaseId,
+    busy,
+    agentMsgEditDraft,
+    getActiveAgentTextarea,
+    selected?.id,
+    setAssistantTurnContentForUseCase,
+    setUseCases,
+    syncDetailTextareaHeights,
+    syncWizardTextareaHeights,
+    onAssistantPhraseDraftChange,
+  ]);
+
+  const agentMsgEditingStyleTokens = React.useMemo(() => {
+    if (!agentMsgEditUseCaseId) return [];
+    const uc = useCases.find((u) => u.id === agentMsgEditUseCaseId);
+    return uc ? getPrimaryPhraseStyleTokens(uc) : [];
+  }, [agentMsgEditUseCaseId, useCases]);
+
+  const agentMsgActiveStyleToken = React.useMemo(() => {
+    if (agentMsgTokenPopoverAction !== 'untokenize') return null;
+    const span = findTokenSpanAtSelection(
+      agentMsgEditDraft,
+      agentMsgSelection.start,
+      agentMsgSelection.end
+    );
+    if (span?.kind !== 'style') return null;
+    return agentMsgEditingStyleTokens.find((t) => t.defaultSurface === span.inner) ?? null;
+  }, [
+    agentMsgTokenPopoverAction,
+    agentMsgEditDraft,
+    agentMsgSelection.start,
+    agentMsgSelection.end,
+    agentMsgEditingStyleTokens,
+  ]);
+
+  const handlePatchAgentStyleTokenVariants = React.useCallback(
+    (styleTokenId: string, variants: string[]) => {
+      if (!agentMsgEditUseCaseId || busy) return;
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === agentMsgEditUseCaseId ? patchStyleTokenVariants(uc, styleTokenId, variants) : uc
+        )
+      );
+    },
+    [agentMsgEditUseCaseId, busy, setUseCases]
+  );
+
   const handleUnwrapAgentTokenAtSelection = React.useCallback(() => {
     if (!agentMsgEditUseCaseId || busy) return;
     const turnId = agentMsgEditTurnIdRef.current;
@@ -1826,7 +1890,14 @@ export function AIAgentUseCaseComposer({
     const content = agentMsgEditDraft;
     const result = unwrapBracketTokenContainingSelection(content, start, end);
     if (!result) return;
-    const { next, selStart, selEnd } = result;
+    const { next, selStart, selEnd, kind, inner } = result;
+    if (kind === 'style') {
+      setUseCases((prev) =>
+        prev.map((uc) =>
+          uc.id === agentMsgEditUseCaseId ? removeStyleTokenOnUnwrap(uc, inner) : uc
+        )
+      );
+    }
     setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, turnId, next, { mode: 'silent' });
     setAgentMsgEditDraft(next);
     liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = next;
@@ -1855,6 +1926,7 @@ export function AIAgentUseCaseComposer({
     syncDetailTextareaHeights,
     syncWizardTextareaHeights,
     onAssistantPhraseDraftChange,
+    setUseCases,
   ]);
 
   const handleStripAgentTokens = React.useCallback(() => {
@@ -1862,8 +1934,8 @@ export function AIAgentUseCaseComposer({
     const turnId = agentMsgEditTurnIdRef.current;
     if (!turnId) return;
     const content = agentMsgEditDraft;
-    if (!messageHasSlotBrackets(content)) return;
-    const next = stripAgentMessageSlotBrackets(content);
+    if (!messageHasAgentTokens(content)) return;
+    const next = stripAgentMessageTokens(content);
     setAssistantTurnContentForUseCase(agentMsgEditUseCaseId, turnId, next, { mode: 'silent' });
     setAgentMsgEditDraft(next);
     liveAgentContentByIdRef.current[agentMsgEditUseCaseId] = next;
@@ -2698,13 +2770,16 @@ export function AIAgentUseCaseComposer({
                                 </div>
                               ) : (
                                 <div
-                                  className="group/payoff-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
+                                  className={[
+                                    'group/payoff-row flex w-full min-w-0 rounded px-0.5 py-0',
+                                    wizardScenarioLlmFormat ? '' : 'cursor-pointer',
+                                  ].join(' ')}
                                   onDoubleClick={(e) => {
-                                    if (busy) return;
+                                    if (busy || wizardScenarioLlmFormat) return;
                                     if ((e.target as HTMLElement).closest('button')) return;
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    beginPayoffEdit(u.id, u.payoff ?? '');
+                                    beginPayoffEdit(u.id, getScenarioDescrittivoText(u));
                                   }}
                                 >
                                   <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1">
@@ -2713,39 +2788,49 @@ export function AIAgentUseCaseComposer({
                                       <span
                                         className={`inline whitespace-pre-wrap align-baseline ${UC_SCENARIO_BODY_TEXT} ${
                                           primaryGenerateOnRightOnly
-                                            ? UC_WIZARD_SCENARIO_TEXT
+                                            ? wizardScenarioLlmFormat
+                                              ? 'font-mono text-[11px] text-violet-200/90'
+                                              : UC_WIZARD_SCENARIO_TEXT
                                             : fieldTextClass(
                                                 u.designer_payoff_vote,
-                                                (u.payoff ?? '').trim() ? (u.payoff ?? '') : '',
+                                                getScenarioDescrittivoText(u),
                                                 rowBaseline?.payoff
                                               )
                                         }`}
                                       >
-                                        {(u.payoff ?? '').trim() ? (
-                                          u.payoff
+                                        {getScenarioDisplayText(u, wizardScenarioLlmFormat).trim() ? (
+                                          getScenarioDisplayText(u, wizardScenarioLlmFormat)
                                         ) : (
                                           <span className="text-slate-500">
-                                            — passa il mouse e usa la matita a destra
+                                            {wizardScenarioLlmFormat
+                                              ? '— nessun testo LLM'
+                                              : '— passa il mouse e usa la matita a destra'}
                                           </span>
                                         )}
                                       </span>
-                                      <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                                        <VoteThumbPair
-                                          vote={u.designer_payoff_vote}
-                                          disabled={busy}
-                                          outerBtnClass={UC_SCENARIO_VOTE_BTN}
-                                          onVote={(choice) => toggleDesignerFieldVote(u.id, 'payoff', choice)}
-                                        />
-                                        <button
-                                          type="button"
-                                          disabled={busy}
-                                          title="Modifica scenario"
-                                          className={UC_SCENARIO_ROW_EDIT_BTN}
-                                          onClick={() => beginPayoffEdit(u.id, u.payoff ?? '')}
-                                        >
-                                          <Pencil size={12} aria-hidden />
-                                        </button>
-                                      </span>
+                                      {!wizardScenarioLlmFormat ? (
+                                        <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
+                                          <VoteThumbPair
+                                            vote={u.designer_payoff_vote}
+                                            disabled={busy}
+                                            outerBtnClass={UC_SCENARIO_VOTE_BTN}
+                                            onVote={(choice) =>
+                                              toggleDesignerFieldVote(u.id, 'payoff', choice)
+                                            }
+                                          />
+                                          <button
+                                            type="button"
+                                            disabled={busy}
+                                            title="Modifica scenario"
+                                            className={UC_SCENARIO_ROW_EDIT_BTN}
+                                            onClick={() =>
+                                              beginPayoffEdit(u.id, getScenarioDescrittivoText(u))
+                                            }
+                                          >
+                                            <Pencil size={12} aria-hidden />
+                                          </button>
+                                        </span>
+                                      ) : null}
                                     </div>
                                   </div>
                                 </div>
@@ -2882,36 +2967,10 @@ export function AIAgentUseCaseComposer({
                                                 >
                                                   <Variable size={12} aria-hidden />
                                                 </button>
-                                                {!isPrimaryPhraseParametricEnabled(u) ? (
-                                                  <button
-                                                    type="button"
-                                                    disabled={busy}
-                                                    title="Aggiungi variante strutturale (formula alternativa nel prompt)"
-                                                    className={UC_AGENT_ROW_EDIT_BTN}
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      handleAddStructuralVariant(u.id);
-                                                    }}
-                                                  >
-                                                    <Plus size={12} aria-hidden />
-                                                  </button>
-                                                ) : null}
                                               </span>
                                             </div>
                                           </div>
                                         </div>
-                                        {!isPrimaryPhraseParametricEnabled(u) ? (
-                                          <StructuralVariantsEditor
-                                            useCase={u}
-                                            busy={busy}
-                                            onPatch={(variantId, patch) =>
-                                              handlePatchStructuralVariant(u.id, variantId, patch)
-                                            }
-                                            onRemove={(variantId) =>
-                                              handleRemoveStructuralVariant(u.id, variantId)
-                                            }
-                                          />
-                                        ) : null}
                                       </>
                                     );
                                   }
@@ -2994,9 +3053,20 @@ export function AIAgentUseCaseComposer({
                                           <AgentMessageSelectionTokenPopover
                                             action={agentMsgTokenPopoverActionVisible}
                                             disabled={busy}
-                                            onTokenize={handleWrapAgentToken}
+                                            onSemanticToken={handleWrapAgentToken}
+                                            onStyleToken={handleWrapStyleAgentToken}
                                             onUntokenize={handleUnwrapAgentTokenAtSelection}
                                             fixedAnchor={agentMsgTokenAnchor}
+                                            activeStyleToken={agentMsgActiveStyleToken}
+                                            onStyleTokenVariantsChange={
+                                              agentMsgActiveStyleToken
+                                                ? (variants) =>
+                                                    handlePatchAgentStyleTokenVariants(
+                                                      agentMsgActiveStyleToken.styleTokenId,
+                                                      variants
+                                                    )
+                                                : undefined
+                                            }
                                           />
                                         ) : null}
                                       </div>
@@ -3041,20 +3111,6 @@ export function AIAgentUseCaseComposer({
                                         >
                                           <Variable size={12} aria-hidden />
                                         </button>
-                                        {!isPrimaryPhraseParametricEnabled(u) ? (
-                                          <button
-                                            type="button"
-                                            disabled={busy}
-                                            title="Aggiungi variante strutturale"
-                                            className={UC_AGENT_ROW_EDIT_BTN}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleAddStructuralVariant(u.id);
-                                            }}
-                                          >
-                                            <Plus size={12} aria-hidden />
-                                          </button>
-                                        ) : null}
                                       </div>
                                     </div>
                                   ) : (
@@ -3148,37 +3204,11 @@ export function AIAgentUseCaseComposer({
                                             >
                                               <Variable size={12} aria-hidden />
                                             </button>
-                                            {!isPrimaryPhraseParametricEnabled(u) ? (
-                                              <button
-                                                type="button"
-                                                disabled={busy}
-                                                title="Aggiungi variante strutturale (formula alternativa nel prompt)"
-                                                className={UC_AGENT_ROW_EDIT_BTN}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleAddStructuralVariant(u.id);
-                                                }}
-                                              >
-                                                <Plus size={12} aria-hidden />
-                                              </button>
-                                            ) : null}
                                           </span>
                                         </div>
                                       </div>
                                     </div>
                                   )}
-                                  {rowAssistant && !isPrimaryPhraseParametricEnabled(u) ? (
-                                    <StructuralVariantsEditor
-                                      useCase={u}
-                                      busy={busy}
-                                      onPatch={(variantId, patch) =>
-                                        handlePatchStructuralVariant(u.id, variantId, patch)
-                                      }
-                                      onRemove={(variantId) =>
-                                        handleRemoveStructuralVariant(u.id, variantId)
-                                      }
-                                    />
-                                  ) : null}
                                 </>
                                   );
                                 })()
@@ -3299,7 +3329,7 @@ export function AIAgentUseCaseComposer({
                           if ((e.target as HTMLElement).closest('button')) return;
                           e.preventDefault();
                           e.stopPropagation();
-                          beginPayoffEdit(selected.id, selected.payoff ?? '');
+                          beginPayoffEdit(selected.id, getScenarioDescrittivoText(selected));
                         }}
                       >
                         <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
@@ -3307,13 +3337,13 @@ export function AIAgentUseCaseComposer({
                           <div
                             className={`min-w-0 flex-1 text-sm leading-snug ${UC_SCENARIO_BODY_TEXT} ${fieldTextClass(
                               selected.designer_payoff_vote,
-                              selected.payoff ?? '',
+                              getScenarioDescrittivoText(selected),
                               fieldBaselineByUseCaseId[selected.id]?.payoff
                             )}`}
                           >
                             <span className="inline whitespace-pre-wrap align-baseline">
-                              {(selected.payoff ?? '').trim() ? (
-                                selected.payoff
+                              {getScenarioDescrittivoText(selected).trim() ? (
+                                getScenarioDescrittivoText(selected)
                               ) : (
                                 <span className="text-slate-500">
                                   — passa il mouse sulla riga e usa la matita a destra
@@ -3435,9 +3465,20 @@ export function AIAgentUseCaseComposer({
                               <AgentMessageSelectionTokenPopover
                                 action={agentMsgTokenPopoverActionVisible}
                                 disabled={busy}
-                                onTokenize={handleWrapAgentToken}
+                                onSemanticToken={handleWrapAgentToken}
+                                onStyleToken={handleWrapStyleAgentToken}
                                 onUntokenize={handleUnwrapAgentTokenAtSelection}
                                 fixedAnchor={agentMsgTokenAnchor}
+                                activeStyleToken={agentMsgActiveStyleToken}
+                                onStyleTokenVariantsChange={
+                                  agentMsgActiveStyleToken
+                                    ? (variants) =>
+                                        handlePatchAgentStyleTokenVariants(
+                                          agentMsgActiveStyleToken.styleTokenId,
+                                          variants
+                                        )
+                                    : undefined
+                                }
                               />
                             ) : null}
                           </div>
@@ -3482,20 +3523,6 @@ export function AIAgentUseCaseComposer({
                             >
                               <Variable size={12} aria-hidden />
                             </button>
-                            {!isPrimaryPhraseParametricEnabled(selected) ? (
-                              <button
-                                type="button"
-                                disabled={busy}
-                                title="Aggiungi variante strutturale"
-                                className={UC_AGENT_ROW_EDIT_BTN}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddStructuralVariant(selected.id);
-                                }}
-                              >
-                                <Plus size={12} aria-hidden />
-                              </button>
-                            ) : null}
                           </div>
                         </div>
                       ) : (
@@ -3574,20 +3601,6 @@ export function AIAgentUseCaseComposer({
                                 >
                                   <Variable size={12} aria-hidden />
                                 </button>
-                                {!isPrimaryPhraseParametricEnabled(selected) ? (
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    title="Aggiungi variante strutturale (formula alternativa nel prompt)"
-                                    className={UC_AGENT_ROW_EDIT_BTN}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAddStructuralVariant(selected.id);
-                                    }}
-                                  >
-                                    <Plus size={12} aria-hidden />
-                                  </button>
-                                ) : null}
                               </span>
                             </div>
                           </div>
@@ -3612,18 +3625,6 @@ export function AIAgentUseCaseComposer({
                         </div>
                       </div>
                     )}
-                    {assistantTurn && !isPrimaryPhraseParametricEnabled(selected) ? (
-                      <StructuralVariantsEditor
-                        useCase={selected}
-                        busy={busy}
-                        onPatch={(variantId, patch) =>
-                          handlePatchStructuralVariant(selected.id, variantId, patch)
-                        }
-                        onRemove={(variantId) =>
-                          handleRemoveStructuralVariant(selected.id, variantId)
-                        }
-                      />
-                    ) : null}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1 border-t border-emerald-800/40 pt-1.5">
                       {assistantTurn && !agentMessageEmpty ? (
                         <>

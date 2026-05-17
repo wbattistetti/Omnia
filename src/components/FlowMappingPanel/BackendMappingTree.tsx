@@ -20,6 +20,7 @@ import { parseFlowInterfaceDropFromDataTransfer } from './flowInterfaceDragTypes
 import { mergeBackendMappingVariableDrop } from './backendMappingVariableDrop';
 import {
   mappingForestToArboristData,
+  countArboristVisibleNodes,
   expandArboristAncestors,
   type BackendArboristNodeData,
 } from './backendMappingArboristData';
@@ -80,6 +81,8 @@ export interface BackendMappingTreeProps {
   embeddedSignatureSubToolbarOpen?: boolean;
   variableOptions: string[];
   agentParamDragSource?: import('./backendMappingTreeContext').AgentParamDragSource;
+  /** Altezza da righe visibili; scroll delegato al contenitore padre (workspace inspector). */
+  scrollMappingInParent?: boolean;
 }
 
 export function BackendMappingTree({
@@ -101,6 +104,7 @@ export function BackendMappingTree({
   embeddedSignatureSubToolbarOpen,
   variableOptions,
   agentParamDragSource,
+  scrollMappingInParent = false,
 }: BackendMappingTreeProps) {
   const treeRef = useRef<TreeApi<BackendArboristNodeData> | null>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -117,7 +121,15 @@ export function BackendMappingTree({
 
   const arboristData = useMemo(() => mappingForestToArboristData(forest), [forest]);
 
+  const naturalTreeHeight = useMemo(() => {
+    const rows = countArboristVisibleNodes(arboristData);
+    return Math.max(BACKEND_TREE_MIN_VIEWPORT_PX, rows * BACKEND_ARBORIST_ROW_HEIGHT);
+  }, [arboristData]);
+
+  const effectiveTreeHeight = scrollMappingInParent ? naturalTreeHeight : treeHeight;
+
   useEffect(() => {
+    if (scrollMappingInParent) return;
     const el = viewportRef.current ?? measureRef.current;
     if (!el) return;
     const apply = () => {
@@ -130,7 +142,7 @@ export function BackendMappingTree({
     ro.observe(el);
     apply();
     return () => ro.disconnect();
-  }, [forest.length]);
+  }, [forest.length, scrollMappingInParent]);
 
   useEffect(() => {
     const clear = () => {
@@ -328,7 +340,11 @@ export function BackendMappingTree({
     <BackendMappingTreeProvider value={contextValue}>
       <div
         ref={measureRef}
-        className="flex h-full min-h-0 flex-1 flex-col"
+        className={
+          scrollMappingInParent
+            ? 'flex min-w-0 flex-col'
+            : 'flex h-full min-h-0 flex-1 flex-col'
+        }
         onDragOver={enableBackendParamDrop ? rootDragOver : undefined}
       >
         {enableBackendParamDrop ? (
@@ -362,7 +378,14 @@ export function BackendMappingTree({
           </div>
         ) : null}
 
-        <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={viewportRef}
+          className={
+            scrollMappingInParent
+              ? 'relative shrink-0 overflow-visible'
+              : 'relative min-h-0 flex-1 overflow-hidden'
+          }
+        >
             <Tree
               ref={treeRef}
               data={arboristData}
@@ -370,13 +393,17 @@ export function BackendMappingTree({
               childrenAccessor="children"
               openByDefault
               width="100%"
-              height={treeHeight}
+              height={effectiveTreeHeight}
               indent={0}
               rowHeight={BACKEND_ARBORIST_ROW_HEIGHT}
               overscanCount={8}
               disableDrag
               disableEdit
-              className="omnia-backend-mapping-arborist h-full"
+              className={
+                scrollMappingInParent
+                  ? 'omnia-backend-mapping-arborist'
+                  : 'omnia-backend-mapping-arborist h-full'
+              }
             >
               {BackendMappingTreeNode}
             </Tree>

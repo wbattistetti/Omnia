@@ -1,48 +1,34 @@
 /**
- * Plain textarea with a lightweight mirror layer that highlights complete
- * bracket tokens (`[value]`) as soft yellow pills while preserving native input.
- *
- * Caret-alignment invariant: the mirror MUST occupy the exact same horizontal
- * width per character as the underlying textarea. Any padding/margin around the
- * token spans would shift downstream characters in the mirror but NOT in the
- * textarea, breaking click-to-caret mapping (e.g. clicking before a glyph would
- * land the caret one char ahead). The pill effect is therefore layout-neutral:
- * background + inset shadow only, no horizontal padding/margin, no border.
+ * Plain textarea with a mirror layer highlighting semantic `[…]` (giallo) and style `«…»` (blu).
+ * Caret-alignment: pill solo background/inset, nessun padding orizzontale extra.
  */
 
 import React from 'react';
+import { splitAgentMessageParts, type AgentMessageTextPart } from '@domain/useCaseBundle/agentMessageTokenSyntax';
 
 type BracketTokenHighlightedTextareaProps = Omit<
   React.TextareaHTMLAttributes<HTMLTextAreaElement>,
   'value'
 > & {
   value: string;
-  /** Visual classes that used to live on the textarea (border, bg, padding, font, size). */
   containerClassName: string;
 };
 
-type TextPart = {
-  text: string;
-  token: boolean;
-};
+function tokenPillClass(kind: 'semantic' | 'style'): string {
+  return kind === 'semantic'
+    ? 'rounded-[0.28rem] bg-amber-300/18 text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.34)]'
+    : 'rounded-[0.28rem] bg-sky-300/16 text-sky-100 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.32)]';
+}
 
-const BRACKET_TOKEN_PATTERN = /\[[^\[\]\r\n]+\]/g;
-
-function splitBracketTokens(text: string): TextPart[] {
-  const parts: TextPart[] = [];
-  let lastIndex = 0;
-  for (const match of text.matchAll(BRACKET_TOKEN_PATTERN)) {
-    const index = match.index ?? 0;
-    if (index > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, index), token: false });
-    }
-    parts.push({ text: match[0], token: true });
-    lastIndex = index + match[0].length;
+function renderPart(part: AgentMessageTextPart, index: number): React.ReactNode {
+  if (part.kind === 'text') {
+    return <React.Fragment key={index}>{part.text}</React.Fragment>;
   }
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), token: false });
-  }
-  return parts.length > 0 ? parts : [{ text: '', token: false }];
+  return (
+    <span key={index} className={tokenPillClass(part.kind)}>
+      {part.text}
+    </span>
+  );
 }
 
 export function BracketTokenHighlightedText({
@@ -54,21 +40,10 @@ export function BracketTokenHighlightedText({
   className?: string;
   strike?: boolean;
 }): React.ReactElement {
-  const parts = React.useMemo(() => splitBracketTokens(text), [text]);
+  const parts = React.useMemo(() => splitAgentMessageParts(text), [text]);
   return (
     <span className={[className ?? '', strike ? 'line-through' : ''].filter(Boolean).join(' ')}>
-      {parts.map((part, index) =>
-        part.token ? (
-          <span
-            key={index}
-            className="rounded-[0.28rem] bg-amber-300/18 text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.34)]"
-          >
-            {part.text}
-          </span>
-        ) : (
-          <React.Fragment key={index}>{part.text}</React.Fragment>
-        )
-      )}
+      {parts.map((part, index) => renderPart(part, index))}
     </span>
   );
 }
@@ -81,7 +56,7 @@ export const BracketTokenHighlightedTextarea = React.forwardRef<
   forwardedRef
 ) {
   const mirrorRef = React.useRef<HTMLDivElement | null>(null);
-  const parts = React.useMemo(() => splitBracketTokens(value), [value]);
+  const parts = React.useMemo(() => splitAgentMessageParts(value), [value]);
 
   const handleScroll = React.useCallback(
     (event: React.UIEvent<HTMLTextAreaElement>) => {
@@ -106,18 +81,7 @@ export const BracketTokenHighlightedTextarea = React.forwardRef<
         {value.length === 0 && placeholder ? (
           <span className="text-current opacity-45">{placeholder}</span>
         ) : (
-          parts.map((part, index) =>
-            part.token ? (
-              <span
-                key={index}
-                className="rounded-[0.28rem] bg-amber-300/18 text-amber-100 shadow-[inset_0_0_0_1px_rgba(252,211,77,0.34)]"
-              >
-                {part.text}
-              </span>
-            ) : (
-              <React.Fragment key={index}>{part.text}</React.Fragment>
-            )
-          )
+          parts.map((part, index) => renderPart(part, index))
         )}
       </div>
       <textarea

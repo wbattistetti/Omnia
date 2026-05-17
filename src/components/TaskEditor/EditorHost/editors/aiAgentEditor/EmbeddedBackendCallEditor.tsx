@@ -19,17 +19,21 @@ export function EmbeddedBackendCallEditor({
    * In modalità «specs» emulate l’URL è opzionale e si modifica nell’editor.
    */
   hideEndpointRow = true,
+  workspaceInspectorEmbed = false,
 }: {
   task: Task;
   /** Incrementato dal parent quando URL/metodo sono aggiornati fuori dall'editor (header accordion). */
   endpointExternalRevision?: number;
   hideEndpointRow?: boolean;
+  /** ElevenLabs workspace inspector: scroll unico sul pannello padre. */
+  workspaceInspectorEmbed?: boolean;
 }) {
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
   const [signatureSubOpen, setSignatureSubOpen] = React.useState(false);
 
   return (
     <BackendCallEmbeddedLayout
+      deferScrollToParent={workspaceInspectorEmbed}
       toolbar={
         <EmbeddedBackendToolbar
           buttons={toolbarButtons}
@@ -45,6 +49,7 @@ export function EmbeddedBackendCallEditor({
         endpointExternalRevision={endpointExternalRevision}
         embeddedSignatureSubToolbarOpen={signatureSubOpen}
         embeddedCloseSignatureToolbar={() => setSignatureSubOpen(false)}
+        workspaceInspectorEmbed={workspaceInspectorEmbed}
         onToolbarUpdate={(btns) => setToolbarButtons(btns)}
       />
     </BackendCallEmbeddedLayout>

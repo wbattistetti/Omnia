@@ -57,6 +57,8 @@ export interface MappingBlockProps {
   backendMappingDropTarget?: { flowCanvasId: string; zone: 'send' | 'receive' };
   /** When true, tree body grows with the column (Interface double-column layout). */
   fillBodyHeight?: boolean;
+  /** Parent scroll container owns vertical scroll (e.g. workspace inspector). */
+  bodyGrowsWithContent?: boolean;
   /**
    * Con `fillBodyHeight`: niente scroll sul corpo del blocco — solo `overflow-hidden` così lo scroll
    * resta ai figli (es. lista parametri Backend); evita doppia scrollbar.
@@ -87,6 +89,7 @@ export function MappingBlock({
   backendMappingDropTarget,
   fillBodyHeight = false,
   containBodyOverflow = false,
+  bodyGrowsWithContent = false,
   flat = false,
   onBodyDragOverCapture,
   onBodyDrop,
@@ -107,7 +110,7 @@ export function MappingBlock({
 
   return (
     <div
-      className={`flex flex-col min-h-0 overflow-hidden min-w-0 ${fillBodyHeight ? 'h-full' : ''} ${frameClass} ${rootClassName}`}
+      className={`flex flex-col min-w-0 ${bodyGrowsWithContent ? 'overflow-visible' : 'min-h-0 overflow-hidden'} ${fillBodyHeight && !bodyGrowsWithContent ? 'h-full' : ''} ${frameClass} ${rootClassName}`}
       {...(flowDropTarget
         ? {
             'data-flow-interface-zone': flowDropTarget.zone,
@@ -131,11 +134,13 @@ export function MappingBlock({
       </header>
       <div
         className={
-          fillBodyHeight
-            ? containBodyOverflow
-              ? `flex min-h-0 min-w-0 flex-1 flex-col ${bodyPad} overflow-hidden`
-              : `min-h-0 min-w-0 flex-1 ${bodyPad} overflow-y-auto overflow-x-hidden`
-            : `min-h-0 min-w-0 ${bodyPad} overflow-y-auto overflow-x-hidden ${BODY_MAX_H}`
+          bodyGrowsWithContent
+            ? `min-w-0 ${bodyPad} overflow-visible`
+            : fillBodyHeight
+              ? containBodyOverflow
+                ? `flex min-h-0 min-w-0 flex-1 flex-col ${bodyPad} overflow-hidden`
+                : `min-h-0 min-w-0 flex-1 ${bodyPad} overflow-y-auto overflow-x-hidden`
+              : `min-h-0 min-w-0 ${bodyPad} overflow-y-auto overflow-x-hidden ${BODY_MAX_H}`
         }
         onDragOverCapture={onBodyDragOverCapture}
         onDrop={onBodyDrop}

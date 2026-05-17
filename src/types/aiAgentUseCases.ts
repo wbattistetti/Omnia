@@ -31,6 +31,12 @@ export interface AIAgentLogicalStep {
   description: string;
 }
 
+/** Scenario: narrativa umana + forma sintetica per motori LLM. */
+export interface AIAgentUseCaseScenario {
+  descrittivo: string;
+  llm: string;
+}
+
 export interface AIAgentUseCaseTurn {
   turn_id: string;
   role: 'user' | 'assistant';
@@ -52,7 +58,11 @@ export interface AIAgentUseCase {
   /** Global style id (cortese / ironico / formale) for this use case contract. */
   style_id?: string;
   /**
-   * Narrativa sintetica del contesto di negoziazione / dialogo per questo scenario (chi fa cosa).
+   * Scenario strutturato: `descrittivo` per designer, `llm` per catalogo/runtime LLM.
+   */
+  scenario?: AIAgentUseCaseScenario;
+  /**
+   * Alias persistito di `scenario.descrittivo` (backward compat e edit UI).
    */
   payoff?: string;
   dialogue: AIAgentUseCaseTurn[];
@@ -277,9 +287,26 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
               String((o as Record<string, unknown>).style).trim()
             ? String((o as Record<string, unknown>).style).trim()
             : undefined;
-      let payoff = '';
-      if (typeof o.payoff === 'string' && o.payoff.trim()) payoff = o.payoff.trim();
-      else if (typeof o.description === 'string' && o.description.trim()) payoff = o.description.trim();
+      let descrittivo = '';
+      let llm = '';
+      const rawScenario = o.scenario;
+      if (rawScenario && typeof rawScenario === 'object' && !Array.isArray(rawScenario)) {
+        const so = rawScenario as Record<string, unknown>;
+        if (typeof so.descrittivo === 'string' && so.descrittivo.trim()) {
+          descrittivo = so.descrittivo.trim();
+        }
+        if (typeof so.llm === 'string' && so.llm.trim()) {
+          llm = so.llm.trim();
+        }
+      }
+      if (!descrittivo && typeof o.payoff === 'string' && o.payoff.trim()) descrittivo = o.payoff.trim();
+      else if (!descrittivo && typeof o.description === 'string' && o.description.trim()) {
+        descrittivo = o.description.trim();
+      }
+      if (!llm && descrittivo) llm = descrittivo.slice(0, Math.min(400, descrittivo.length));
+      const payoff = descrittivo;
+      const scenario =
+        descrittivo || llm ? { descrittivo, llm } : undefined;
       const notesRaw = o.notes && typeof o.notes === 'object' ? (o.notes as Record<string, unknown>) : {};
       const behavior = typeof notesRaw.behavior === 'string' ? notesRaw.behavior : '';
       const tone = typeof notesRaw.tone === 'string' ? notesRaw.tone : '';
@@ -363,6 +390,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
         sort_order,
         refinement_prompt,
         ...(style_id ? { style_id } : {}),
+        ...(scenario ? { scenario } : {}),
         ...(payoff ? { payoff } : {}),
         dialogue,
         notes: { behavior, tone },

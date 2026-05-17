@@ -14,6 +14,7 @@ import {
   findCanvasNodeIdByElevenLabsNodeId,
 } from '@workspaces/elevenlabs/dropElevenLabsNodeOnFlow';
 import type { FlowNode } from '../types/flowTypes';
+import { TaskType } from '@types/taskTypes';
 
 export type ElevenLabsFlowDropMessage = {
   kind: 'created' | 'exists';
@@ -25,6 +26,7 @@ export function useElevenLabsFlowDrop(params: {
   nodes: Node<FlowNode>[];
   setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>;
   projectId: string | undefined;
+  flowId?: string;
   onDropMessage?: (msg: ElevenLabsFlowDropMessage) => void;
 }): {
   elDropActive: boolean;
@@ -32,7 +34,7 @@ export function useElevenLabsFlowDrop(params: {
   onFlowDragLeave: (e: React.DragEvent) => void;
   onFlowDrop: (e: React.DragEvent) => void;
 } {
-  const { nodes, setNodes, projectId, onDropMessage } = params;
+  const { nodes, setNodes, projectId, flowId, onDropMessage } = params;
   const reactFlowInstance = useReactFlow();
   const [elDropActive, setElDropActive] = useState(false);
 
@@ -82,6 +84,21 @@ export function useElevenLabsFlowDrop(params: {
 
       setNodes((prev) => [...prev, result.newNode]);
 
+      const fid = String(flowId ?? '').trim();
+      window.setTimeout(() => {
+        document.dispatchEvent(
+          new CustomEvent('taskEditor:open', {
+            bubbles: true,
+            detail: {
+              id: result.taskId,
+              type: TaskType.AIAgent,
+              label: result.label,
+              ...(fid ? { flowId: fid } : {}),
+            },
+          })
+        );
+      }, 0);
+
       const parts: string[] = [`Creato Agente AI «${result.label}» sul canvas`];
       if (result.importSummary.promptApplied) parts.push('prompt importato');
       if (result.importSummary.backendsAdded > 0) {
@@ -93,7 +110,7 @@ export function useElevenLabsFlowDrop(params: {
         detail: parts.join(' · '),
       });
     },
-    [nodes, setNodes, projectId, reactFlowInstance, onDropMessage]
+    [nodes, setNodes, projectId, flowId, reactFlowInstance, onDropMessage]
   );
 
   return { elDropActive, onFlowDragOver, onFlowDragLeave, onFlowDrop };

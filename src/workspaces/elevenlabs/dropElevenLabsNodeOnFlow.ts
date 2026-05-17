@@ -11,6 +11,7 @@ import { TaskType, type Task } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
 import { generateSafeGuid } from '@utils/idGenerator';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
+import { AGENT_WIZARD_FIRST_STEP_INDEX } from '@domain/aiAgentConstruction/agentConstructionPhase';
 
 export type DropElevenLabsNodeOnFlowResult = {
   canvasNodeId: string;
@@ -53,6 +54,8 @@ export function dropElevenLabsNodeOnFlow(params: {
       ...basePayload,
       label,
       name: label,
+      agentWizardTutorAcknowledged: true,
+      agentWizardCurrentStep: AGENT_WIZARD_FIRST_STEP_INDEX,
       agentIaRuntimeOverrideJson: JSON.stringify(iaOverride),
     } as Partial<Task>,
     taskId,
@@ -64,7 +67,13 @@ export function dropElevenLabsNodeOnFlow(params: {
     payload.node,
     payload.remoteAgentName || payload.snapshot.ref.name || '',
     payload.snapshot.settings,
-    payload.snapshot.toolInventory
+    payload.snapshot.toolInventory,
+    {
+      fromFlowDrop: true,
+      remoteAgentId: payload.remoteAgentId,
+      webhookScope: 'agent',
+      descriptionImportMode: 'promptOnly',
+    }
   );
 
   const newNode: Node<FlowNode> = {
@@ -72,7 +81,7 @@ export function dropElevenLabsNodeOnFlow(params: {
     type: 'custom',
     position: { x: position.x, y: position.y },
     data: {
-      label,
+      label: '',
       rows: [
         {
           id: taskId,

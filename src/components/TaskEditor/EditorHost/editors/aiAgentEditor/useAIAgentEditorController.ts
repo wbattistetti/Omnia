@@ -214,6 +214,8 @@ export interface GenerateUseCaseBundleOutcome {
   addedCount: number;
   /** Id da evidenziare nel composer. */
   highlightIds: readonly string[];
+  /** Nota ordinamento narrativo (solo generazione full replace). */
+  useCaseOrderingNote?: string;
 }
 
 export interface UseAIAgentEditorControllerParams {
@@ -1561,7 +1563,11 @@ export function useAIAgentEditorController({
         };
       }
 
-      const { logicalSteps: ls, useCases: ucs } = await generateAIAgentUseCases({
+      const {
+        logicalSteps: ls,
+        useCases: ucs,
+        useCaseOrderingNote,
+      } = await generateAIAgentUseCases({
         userDesc,
         provider,
         model,
@@ -1587,6 +1593,7 @@ export function useAIAgentEditorController({
         mode: 'replace',
         addedCount: normalized.length,
         highlightIds: ids,
+        useCaseOrderingNote,
       };
     } catch (e) {
       setUseCaseComposerError(e instanceof Error ? e.message : String(e));

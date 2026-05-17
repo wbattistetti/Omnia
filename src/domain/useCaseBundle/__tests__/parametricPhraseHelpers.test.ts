@@ -7,6 +7,7 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { ensureUseCasePhrases } from '../migrateUseCase';
 import {
   addParametricCatalogDimension,
+  applyParametricRevertToSingleMessage,
   setPrimaryPhraseParametricEnabled,
 } from '../parametricPhraseHelpers';
 
@@ -33,5 +34,35 @@ describe('parametricPhraseHelpers', () => {
     const again = addParametricCatalogDimension(uc, 'prestazione');
     expect(again.phrases?.[0]?.parametric?.dimensions?.length).toBe(1);
     expect(again).toBe(uc);
+  });
+
+  it('applyParametricRevertToSingleMessage picks row prompt and clears parametric grid', () => {
+    let uc = minimalUc();
+    uc = setPrimaryPhraseParametricEnabled(uc, true);
+    uc = addParametricCatalogDimension(uc, 'prestazione');
+    const rowId = uc.phrases?.[0]?.parametric?.rows[0]?.rowId;
+    expect(rowId).toBeTruthy();
+    uc = {
+      ...uc,
+      phrases: [
+        {
+          ...uc.phrases![0],
+          parametric: {
+            ...uc.phrases![0].parametric!,
+            rows: [
+              {
+                ...uc.phrases![0].parametric!.rows[0],
+                promptNaturalText: 'Messaggio scelto [slot]',
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const out = applyParametricRevertToSingleMessage(uc, rowId!);
+    expect(out.phrases?.[0]?.naturalText).toBe('Messaggio scelto [slot]');
+    expect(out.phrases?.[0]?.parametric?.enabled).toBe(false);
+    expect(out.phrases?.[0]?.parametric?.dimensions).toEqual([]);
+    expect(out.phrases?.[0]?.parametric?.rows).toEqual([]);
   });
 });

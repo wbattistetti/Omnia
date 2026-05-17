@@ -69,11 +69,15 @@ export function ElevenLabsWorkflowNodeCard({
   id,
   data,
   selected,
+  sourcePosition: sourcePositionProp,
+  targetPosition: targetPositionProp,
 }: NodeProps<ElWorkflowNodeData>): React.ReactElement {
   const isStart = data.kind === 'start';
   const isEnd = data.kind === 'end';
   const canOmnia = data.kind === 'subagent' || data.kind === 'tool';
   const showToolbar = selected && canOmnia && data.onEditInOmnia;
+  const targetHandle = data.targetHandlePosition ?? targetPositionProp ?? Position.Left;
+  const sourceHandle = data.sourceHandlePosition ?? sourcePositionProp ?? Position.Right;
 
   return (
     <>
@@ -110,7 +114,11 @@ export function ElevenLabsWorkflowNodeCard({
         }
       >
         {!isStart ? (
-          <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-slate-500 !bg-slate-600" />
+          <Handle
+            type="target"
+            position={targetHandle}
+            className="!h-2 !w-2 !border-amber-700/80 !bg-amber-900/90"
+          />
         ) : null}
         {canOmnia && data.onDragToOmniaFlow ? (
           <OmniaFlowDragHandle
@@ -140,7 +148,11 @@ export function ElevenLabsWorkflowNodeCard({
           </div>
         </div>
         {!isEnd ? (
-          <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-slate-500 !bg-slate-600" />
+          <Handle
+            type="source"
+            position={sourceHandle}
+            className="!h-2 !w-2 !border-amber-700/80 !bg-amber-900/90"
+          />
         ) : null}
       </div>
     </>

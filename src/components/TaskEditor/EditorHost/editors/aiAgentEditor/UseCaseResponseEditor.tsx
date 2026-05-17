@@ -15,12 +15,15 @@ import {
   splitResponseMessageAndActions,
 } from '@domain/aiAgentUseCase/useCaseResponseTasks';
 import { isMessageLikeEscalationTask } from '@responseEditor/utils/escalationHelpers';
-import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
+import { ensureUseCasePhrases, syncDialogueFromPrimaryPhrase } from '@domain/useCaseBundle/migrateUseCase';
+import { syncPrimaryPhraseNaturalFromAssistantTurn } from '@domain/useCaseBundle/phraseVariantHelpers';
 import {
-  addStructuralVariantToPrimaryPhrase,
-  patchStructuralVariant,
-  removeStructuralVariant,
-} from '@domain/useCaseBundle/phraseVariantHelpers';
+  getPrimaryPhraseStyleTokens,
+  patchStyleTokenVariants,
+  pruneStyleTokensToNaturalText,
+  removeStyleTokenOnUnwrap,
+  upsertStyleTokenOnWrap,
+} from '@domain/useCaseBundle/styleTokenPhraseHelpers';
 import {
   addParametricCatalogDimension,
   addParametricFreeDimension,
@@ -30,13 +33,13 @@ import {
   patchParametricRowCell,
   patchParametricRowPrompt,
   removeParametricDimension,
+  applyParametricRevertToSingleMessage,
   setPrimaryPhraseParametricEnabled,
 } from '@domain/useCaseBundle/parametricPhraseHelpers';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { PatchUseCaseResponseTasksFn } from './usePatchUseCaseResponseTasks';
 import { PrimaryAgentMessageField } from './primaryAgentMessage';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
-import { StructuralVariantsEditor } from './useCaseBundle/StructuralVariantsEditor';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 
@@ -54,7 +57,7 @@ const AI_AGENT_RESPONSE_ALLOWED_TEMPLATES = [
 export interface UseCaseResponseEditorProps {
   useCase: AIAgentUseCase;
   onPatchResponseTasks: PatchUseCaseResponseTasksFn;
-  /** Full use case patch (parametric, structural variants, votes). */
+  /** Full use case patch (parametric, votes). */
   onPatchUseCase: (updater: (uc: AIAgentUseCase) => AIAgentUseCase) => void;
   onAgentMessageVote?: (choice: 'up' | 'down') => void;
   onSeedUseCase?: (next: AIAgentUseCase) => void;
@@ -131,12 +134,30 @@ export function UseCaseResponseEditor({
     [busy, onPatchResponseTasks, useCase.id]
   );
 
+  const syncPhraseFromMessageText = React.useCallback(
+    (uc: AIAgentUseCase, next: string) => {
+      const withPhrases = ensureUseCasePhrases(uc);
+      const assistant = withPhrases.dialogue.find((t) => t.role === 'assistant');
+      if (!assistant) return withPhrases;
+      return pruneStyleTokensToNaturalText(
+        syncPrimaryPhraseNaturalFromAssistantTurn(withPhrases, assistant.turn_id, next)
+      );
+    },
+    []
+  );
+
   const onMessageTextChange = React.useCallback(
     (next: string, mode: 'live' | 'silent' | 'commit') => {
       if (mode === 'live') return;
       onPatchResponseTasks(useCase.id, (prev) => mapTasksUpdatingMessageText(prev, next));
+      onPatchUseCase((uc) => (uc.id === useCase.id ? syncPhraseFromMessageText(uc, next) : uc));
     },
-    [busy, onPatchResponseTasks, useCase.id]
+    [busy, onPatchResponseTasks, onPatchUseCase, syncPhraseFromMessageText, useCase.id]
+  );
+
+  const styleTokens = React.useMemo(
+    () => getPrimaryPhraseStyleTokens(ensureUseCasePhrases(useCase)),
+    [useCase]
   );
 
   const parametricEnabled = isPrimaryPhraseParametricEnabled(useCase);
@@ -206,11 +227,12 @@ export function UseCaseResponseEditor({
             onToggleParametric={(enabled) =>
               patchUseCase((uc) => setPrimaryPhraseParametricEnabled(uc, enabled))
             }
-            parametricEditor={
+            renderParametricEditor={(revertPick) =>
               parametricEnabled ? (
                 <PhraseParametricEditor
                   useCase={ensureUseCasePhrases(useCase)}
                   busy={busy}
+                  revertPick={revertPick}
                   cartesianFeedback={parametricCartesianFeedback}
                   onAddCatalogDimension={(ck) =>
                     patchUseCase((uc) => addParametricCatalogDimension(uc, ck))
@@ -233,21 +255,21 @@ export function UseCaseResponseEditor({
                 />
               ) : null
             }
-            structuralVariantsEditor={
-              <StructuralVariantsEditor
-                useCase={useCase}
-                busy={busy}
-                onPatch={(variantId, patch) =>
-                  patchUseCase((uc) => patchStructuralVariant(uc, variantId, patch))
-                }
-                onRemove={(variantId) =>
-                  patchUseCase((uc) => removeStructuralVariant(uc, variantId))
-                }
-              />
-            }
-            onAddStructuralVariant={() =>
-              patchUseCase((uc) => addStructuralVariantToPrimaryPhrase(uc))
-            }
+            onApplyParametricRevert={(selectedRowId) => {
+              const phrase = ensureUseCasePhrases(useCase).phrases?.[0];
+              const row = phrase?.parametric?.rows.find((r) => r.rowId === selectedRowId);
+              const chosenText =
+                (row?.promptNaturalText ?? '').trim() || phrase?.naturalText || messageText;
+              patchUseCase((uc) => {
+                if (uc.id !== useCase.id) return uc;
+                return syncDialogueFromPrimaryPhrase(
+                  applyParametricRevertToSingleMessage(uc, selectedRowId)
+                );
+              });
+              onPatchResponseTasks(useCase.id, (prev) =>
+                mapTasksUpdatingMessageText(prev, chosenText)
+              );
+            }}
             onDeleteMessage={
               actionTasks.length > 0
                 ? () =>
@@ -255,6 +277,22 @@ export function UseCaseResponseEditor({
                       prev.filter((t) => !isMessageLikeEscalationTask(t))
                     )
                 : undefined
+            }
+            styleTokens={styleTokens}
+            onStyleTokenWrap={(surface) =>
+              patchUseCase((uc) =>
+                uc.id === useCase.id ? upsertStyleTokenOnWrap(uc, surface) : uc
+              )
+            }
+            onStyleTokenUnwrap={(surface) =>
+              patchUseCase((uc) =>
+                uc.id === useCase.id ? removeStyleTokenOnUnwrap(uc, surface) : uc
+              )
+            }
+            onStyleTokenVariantsChange={(styleTokenId, variants) =>
+              patchUseCase((uc) =>
+                uc.id === useCase.id ? patchStyleTokenVariants(uc, styleTokenId, variants) : uc
+              )
             }
             onTextChange={onMessageTextChange}
             onPhraseDraftChange={(draft) => onAssistantPhraseDraftChange?.(useCase.id, draft)}

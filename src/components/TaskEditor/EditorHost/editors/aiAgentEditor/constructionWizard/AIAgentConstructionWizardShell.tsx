@@ -30,6 +30,11 @@ import {
 import { EditorBackendsPanel } from '../EditorBackendsPanel';
 import { EditorIaRuntimePanel } from '../EditorIaRuntimePanel';
 import { EditorTaskCostsPanel } from '../EditorTaskCostsPanel';
+import {
+  ElevenLabsImportRecapBanner,
+  type ElevenLabsImportRecapBannerProps,
+} from './ElevenLabsImportRecapBanner';
+
 export interface AIAgentConstructionWizardShellProps {
   readonly currentStep: AgentWizardStepIndex;
   readonly completion: readonly boolean[];
@@ -72,6 +77,9 @@ export interface AIAgentConstructionWizardShellProps {
    * i task vergini.
    */
   readonly bypassGating?: boolean;
+  /** Riepilogo post-drop ElevenLabs (null = nascosto). */
+  readonly elevenLabsImportRecap?: ElevenLabsImportRecapBannerProps['recap'] | null;
+  readonly onDismissElevenLabsRecap?: () => void;
 }
 
 /**
@@ -112,6 +120,8 @@ export function AIAgentConstructionWizardShell({
   taskLabel,
   deploySlot = null,
   bypassGating = false,
+  elevenLabsImportRecap = null,
+  onDismissElevenLabsRecap,
 }: AIAgentConstructionWizardShellProps): React.ReactElement {
   const safeStep: AgentWizardStepIndex =
     STEP_RENDERERS[currentStep] !== undefined ? currentStep : AGENT_WIZARD_FIRST_STEP_INDEX;
@@ -138,6 +148,13 @@ export function AIAgentConstructionWizardShell({
         deploySlot={deploySlot}
         bypassGating={bypassGating}
       />
+      {elevenLabsImportRecap && taskId && onDismissElevenLabsRecap ? (
+        <ElevenLabsImportRecapBanner
+          taskId={taskId}
+          recap={elevenLabsImportRecap}
+          onDismiss={onDismissElevenLabsRecap}
+        />
+      ) : null}
       {costsActive ? (
         /*
          * Vista "Costi" del task: sostituisce intero header+body. Il pannello ha gi\u00e0 il proprio

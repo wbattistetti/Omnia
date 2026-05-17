@@ -9,7 +9,13 @@ import type {
   WorkspaceAgentToolInventory,
   WorkspaceWorkflowNode,
 } from '../core/types';
-import { importElevenLabsNodeToOmnia } from './elevenLabsOmniaImport';
+import {
+  importElevenLabsNodeToOmnia,
+  type ElevenLabsDescriptionImportMode,
+  type ElevenLabsWebhookImportScope,
+} from './elevenLabsOmniaImport';
+import type { ElevenLabsImportRecap } from './elevenLabsImportRecap';
+import { AGENT_WIZARD_FIRST_STEP_INDEX } from '@domain/aiAgentConstruction/agentConstructionPhase';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import { taskRepository } from '@services/TaskRepository';
 import type { Task } from '@types/taskTypes';
@@ -34,6 +40,14 @@ function parseIaConfig(task: Task): IAAgentConfig {
   }
 }
 
+export type PersistElevenLabsImportOptions = {
+  webhookScope?: ElevenLabsWebhookImportScope;
+  descriptionImportMode?: ElevenLabsDescriptionImportMode;
+  /** Dopo drop canvas: salta tutor, marca generazione, recap in runtime JSON. */
+  fromFlowDrop?: boolean;
+  remoteAgentId?: string;
+};
+
 /**
  * Merges remote node content into task + project backend catalog; notifies open AI Agent editors.
  */
@@ -42,7 +56,8 @@ export function persistElevenLabsImportToTask(
   node: WorkspaceWorkflowNode,
   agentName: string,
   settings: WorkspaceAgentSettings,
-  toolInventory: WorkspaceAgentToolInventory
+  toolInventory: WorkspaceAgentToolInventory,
+  options?: PersistElevenLabsImportOptions
 ): {
   promptApplied: boolean;
   variableNames: readonly string[];
@@ -76,6 +91,8 @@ export function persistElevenLabsImportToTask(
     agentName,
     settings,
     toolInventory,
+    webhookScope: options?.webhookScope,
+    descriptionImportMode: options?.descriptionImportMode,
     targets: {
       designDescription: nextDescription,
       setDesignDescription: (value) => {
@@ -122,17 +139,50 @@ export function persistElevenLabsImportToTask(
     (window as { __projectData?: ProjectData }).__projectData = updated;
   }
 
+  const hasImportedContent =
+    result.promptApplied || result.variableNames.length > 0 || result.backendsLinked > 0;
+
+  let recap: ElevenLabsImportRecap | undefined;
+  if (options?.fromFlowDrop) {
+    recap = {
+      nodeLabel: String(node.label || '').trim() || 'Nodo ElevenLabs',
+      remoteAgentId: String(options.remoteAgentId || iaCfg.convaiAgentId || '').trim(),
+      remoteAgentName: agentName.trim(),
+      promptApplied: result.promptApplied,
+      variableCount: result.variableNames.length,
+      backendsAdded: result.backendsAdded,
+      backendsLinked: result.backendsLinked,
+      importedAt: new Date().toISOString(),
+    };
+  }
+
   const nextIaJson = JSON.stringify({
     ...iaCfg,
     platform: iaCfg.platform ?? 'elevenlabs',
     convaiBackendToolTaskIds: nextConvaiIds,
+    ...(options?.fromFlowDrop
+      ? {
+          elevenLabsWorkflowNodeId: node.id,
+          ...(recap ? { elevenLabsImportRecap: recap } : {}),
+        }
+      : {}),
   });
 
-  taskRepository.updateTask(taskInstanceId, {
+  const taskPatch: Partial<Task> = {
     agentDesignDescription: nextDescription,
     agentProposedFields: proposedFields,
     agentIaRuntimeOverrideJson: nextIaJson,
-  } as Partial<Task>);
+  };
+
+  if (options?.fromFlowDrop) {
+    taskPatch.agentWizardTutorAcknowledged = true;
+    taskPatch.agentWizardCurrentStep = AGENT_WIZARD_FIRST_STEP_INDEX;
+    if (hasImportedContent) {
+      taskPatch.agentDesignHasGeneration = true;
+    }
+  }
+
+  taskRepository.updateTask(taskInstanceId, taskPatch);
 
   document.dispatchEvent(
     new CustomEvent(OMNIA_AI_AGENT_REHYDRATE_FROM_REPO, {

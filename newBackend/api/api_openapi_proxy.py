@@ -85,13 +85,22 @@ def _nested_spec_urls_from_query(parsed) -> list[str]:
     return deduped
 
 
+def _operational_path_spec_candidates(origin: str, pathname: str) -> list[str]:
+    """Spec accanto all'endpoint operativo (es. POST …/bookfromagenda → …/bookfromagenda/openapi.json)."""
+    p = (pathname or "/").rstrip("/")
+    if not p or p == "/":
+        return []
+    return [f"{origin}{p}/openapi.json", f"{origin}{p}/swagger.json"]
+
+
 def _candidate_urls_for_origin_path(origin: str, pathname: str) -> list[str]:
     urls: list[str] = []
-    for sp in SPEC_CANDIDATE_PATHS:
-        urls.append(origin + sp)
+    urls.extend(_operational_path_spec_candidates(origin, pathname))
     for prefix in _pathname_prefixes(pathname or "/"):
         for sp in SPEC_CANDIDATE_PATHS:
             urls.append(_join_origin_spec(origin, prefix, sp))
+    for sp in SPEC_CANDIDATE_PATHS:
+        urls.append(origin + sp)
     return urls
 
 
@@ -119,7 +128,7 @@ async def proxy_openapi(
             detail={"code": e.code, "message": e.message, "origin": normalize_origin(raw)},
         ) from e
 
-    timeout = httpx.Timeout(45.0, connect=15.0)
+    timeout = httpx.Timeout(20.0, connect=8.0)
     auth_required = False
     async with httpx.AsyncClient(
         follow_redirects=True,
@@ -145,6 +154,15 @@ async def proxy_openapi(
             logger.info("[openapi-proxy] OK seed=%r connection=%r", raw, connection_id)
             return JSONResponse(content=doc)
 
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        for candidate in _operational_path_spec_candidates(origin, parsed.path or "/"):
+            doc = await try_one(candidate)
+            if doc is not None:
+                logger.info(
+                    "[openapi-proxy] OK operational-spec %r seed=%r", candidate, raw
+                )
+                return JSONResponse(content=doc)
+
         for nested in _nested_spec_urls_from_query(parsed):
             doc = await try_one(nested)
             if doc is not None:
@@ -157,7 +175,6 @@ async def proxy_openapi(
                     if doc is not None:
                         return JSONResponse(content=doc)
 
-        origin = f"{parsed.scheme}://{parsed.netloc}"
         for candidate in _candidate_urls_for_origin_path(origin, parsed.path or "/"):
             doc = await try_one(candidate)
             if doc is not None:

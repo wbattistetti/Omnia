@@ -36,6 +36,12 @@ const {
 } = require('./services/AIAgentCorrectionPropagationService');
 const { tokenizeUseCases } = require('./services/AIAgentTokenizationService');
 const {
+  generateKbDocumentSnippetMarkdown,
+  aggregateKbSystemPromptMarkdown,
+  refineSystemPromptMarkdown,
+  sendKbMarkdownHttpResponse,
+} = require('./services/ElevenLabsKbPromptService');
+const {
   assertAiCallContract,
   aiCallContractErrorResponse,
   readCallMetaFromBody,
@@ -6578,6 +6584,80 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     const globalStyleIdNorm =
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
 
+    if (action === 'kb_snippet') {
+      const {
+        documentName,
+        howToUse,
+        variables,
+        existingMarkdown,
+      } = body;
+      const { provider, model } = assertAiCallContract({
+        provider: providerInput,
+        model: modelInput,
+        action: 'KB snippet Analyze',
+      });
+      const callMeta = readCallMetaFromBody(body, { purpose: 'EL_KB_SNIPPET' });
+      const markdown = await generateKbDocumentSnippetMarkdown({
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        howToUse: typeof howToUse === 'string' ? howToUse : '',
+        variables: Array.isArray(variables) ? variables : [],
+        existingMarkdown: typeof existingMarkdown === 'string' ? existingMarkdown : '',
+        provider,
+        model,
+        aiProviderService,
+        outputLanguage,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return sendKbMarkdownHttpResponse(res, markdown);
+    }
+
+    if (action === 'kb_refine_prompt') {
+      const { existingPromptMarkdown } = body;
+      const { provider, model } = assertAiCallContract({
+        provider: providerInput,
+        model: modelInput,
+        action: 'KB refine system prompt',
+      });
+      const callMeta = readCallMetaFromBody(body, { purpose: 'EL_KB_REFINE_PROMPT' });
+      const markdown = await refineSystemPromptMarkdown({
+        existingPromptMarkdown:
+          typeof existingPromptMarkdown === 'string' ? existingPromptMarkdown : '',
+        provider,
+        model,
+        aiProviderService,
+        outputLanguage,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return sendKbMarkdownHttpResponse(res, markdown);
+    }
+
+    if (action === 'kb_aggregate_prompt') {
+      const { localSnippets, existingPromptMarkdown } = body;
+      const { provider, model } = assertAiCallContract({
+        provider: providerInput,
+        model: modelInput,
+        action: 'KB aggregate system prompt',
+      });
+      const callMeta = readCallMetaFromBody(body, { purpose: 'EL_KB_AGGREGATE' });
+      const markdown = await aggregateKbSystemPromptMarkdown({
+        localSnippets: Array.isArray(localSnippets) ? localSnippets : [],
+        existingPromptMarkdown:
+          typeof existingPromptMarkdown === 'string' ? existingPromptMarkdown : '',
+        provider,
+        model,
+        aiProviderService,
+        outputLanguage,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return sendKbMarkdownHttpResponse(res, markdown);
+    }
+
     if (action === 'generate_use_cases') {
       const extendExisting = body.extendExisting === true;
       const existingUseCases = Array.isArray(body.existingUseCases) ? body.existingUseCases : [];
@@ -6627,6 +6707,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         success: true,
         logical_steps: bundle.logical_steps,
         use_cases: bundle.use_cases,
+        ...(typeof bundle.use_case_ordering_note === 'string' && bundle.use_case_ordering_note.trim()
+          ? { use_case_ordering_note: bundle.use_case_ordering_note.trim() }
+          : {}),
       });
     }
 

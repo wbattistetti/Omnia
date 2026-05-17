@@ -1,12 +1,11 @@
 /**
- * Primary assistant message field for use cases: bracket highlights, tokenize popover,
- * inline toolbar (vote, edit, parametric, variants, delete). Shared by response editor
- * and composer list.
+ * Primary assistant message field: testo canonico, tokenize, messaggio parametrico (accordion).
  */
 
 import React from 'react';
-import { Check, MessageSquareText, Pencil, Plus, Trash2, Variable, X } from 'lucide-react';
+import { Check, MessageSquareText, Pencil, Trash2, Variable, X } from 'lucide-react';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import type { AIAgentPhraseStyleToken } from '@domain/useCaseBundle/schema';
 import {
   BracketTokenHighlightedText,
   BracketTokenHighlightedTextarea,
@@ -23,6 +22,11 @@ import {
   fieldTextClass,
 } from '../useCaseComposerPresentation';
 import { useAgentMessageTextField } from '../useAgentMessageTextField';
+import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
+import { DoubleMessageIcon } from './DoubleMessageIcon';
+import type { PhraseParametricRevertPickProps } from '../useCaseBundle/PhraseParametricEditor';
+
+export type { PhraseParametricRevertPickProps as ParametricEditorPickRevertContext };
 
 export type PrimaryAgentMessageFieldProps = {
   useCase: AIAgentUseCase;
@@ -30,27 +34,42 @@ export type PrimaryAgentMessageFieldProps = {
   busy?: boolean;
   wizardCompact?: boolean;
   searchSeed?: string;
-  /** When set, read-only view shows tokenized yellow overlay instead of bracket pills. */
   tokenizedDisplayText?: string;
   assistantVote?: 'up' | 'down';
   onAssistantVote?: (choice: 'up' | 'down') => void;
   assistantContentBaseline?: string;
   parametricEnabled?: boolean;
   onToggleParametric?: (enabled: boolean) => void;
+  /** @deprecated Prefer {@link renderParametricEditor}. */
   parametricEditor?: React.ReactNode;
-  structuralVariantsEditor?: React.ReactNode;
-  onAddStructuralVariant?: () => void;
+  renderParametricEditor?: (revertPick: PhraseParametricRevertPickProps) => React.ReactNode;
+  onApplyParametricRevert?: (selectedRowId: string) => void;
   onDeleteMessage?: () => void;
   onTextChange: (next: string, mode: 'live' | 'silent' | 'commit') => void;
   onPhraseDraftChange?: (draft: string | null) => void;
+  styleTokens?: readonly AIAgentPhraseStyleToken[];
+  onStyleTokenWrap?: (surface: string) => void;
+  onStyleTokenUnwrap?: (surface: string) => void;
+  onStyleTokenVariantsChange?: (styleTokenId: string, variants: string[]) => void;
 };
 
-/** Inline toolbar icons: 12px baseline × 1.5. */
 const INLINE_TOOLBAR_ICON_PX = 18;
 const EDIT_MODE_ICON_PX = 21;
 
 const INLINE_ACTIONS =
   'ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline opacity-0 transition-opacity group-hover/agentmsg-row:opacity-100 group-focus-within/agentmsg-row:opacity-100';
+
+function SingleMessageIcon(): React.ReactElement {
+  return (
+    <span
+      title="Messaggio agente"
+      aria-label="Messaggio agente"
+      className="shrink-0 inline-flex h-6 w-6 items-center justify-center text-emerald-300"
+    >
+      <MessageSquareText size={15} aria-hidden />
+    </span>
+  );
+}
 
 export function PrimaryAgentMessageField({
   useCase,
@@ -65,20 +84,86 @@ export function PrimaryAgentMessageField({
   parametricEnabled = false,
   onToggleParametric,
   parametricEditor,
-  structuralVariantsEditor,
-  onAddStructuralVariant,
+  renderParametricEditor,
+  onApplyParametricRevert,
   onDeleteMessage,
   onTextChange,
   onPhraseDraftChange,
+  styleTokens = [],
+  onStyleTokenWrap,
+  onStyleTokenUnwrap,
+  onStyleTokenVariantsChange,
 }: PrimaryAgentMessageFieldProps): React.ReactElement {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(text);
+  const [parametricExpanded, setParametricExpanded] = React.useState(false);
+  const [revertPickMode, setRevertPickMode] = React.useState(false);
+  const [revertSelectedRowId, setRevertSelectedRowId] = React.useState<string | null>(null);
+
+  const parametricRows = React.useMemo(() => {
+    const phrase = ensureUseCasePhrases(useCase).phrases?.[0];
+    return phrase?.parametric?.rows ?? [];
+  }, [useCase]);
 
   React.useEffect(() => {
     if (!editing) setDraft(text);
   }, [text, editing]);
 
+  React.useEffect(() => {
+    if (editing) setParametricExpanded(true);
+  }, [editing]);
+
+  React.useEffect(() => {
+    if (!parametricEnabled) {
+      setParametricExpanded(false);
+      setRevertPickMode(false);
+    }
+  }, [parametricEnabled]);
+
+  React.useEffect(() => {
+    if (!parametricExpanded) setRevertPickMode(false);
+  }, [parametricExpanded]);
+
+  const beginParametricRevertPick = React.useCallback(() => {
+    const firstId = parametricRows[0]?.rowId ?? null;
+    setRevertSelectedRowId(firstId);
+    setRevertPickMode(true);
+  }, [parametricRows]);
+
+  const cancelParametricRevertPick = React.useCallback(() => {
+    setRevertPickMode(false);
+    setRevertSelectedRowId(null);
+  }, []);
+
+  const applyParametricRevertPick = React.useCallback(() => {
+    if (!revertSelectedRowId || !onApplyParametricRevert) return;
+    onApplyParametricRevert(revertSelectedRowId);
+    setRevertPickMode(false);
+    setRevertSelectedRowId(null);
+    setParametricExpanded(false);
+  }, [revertSelectedRowId, onApplyParametricRevert]);
+
+  const revertPickProps: PhraseParametricRevertPickProps = React.useMemo(
+    () => ({
+      revertPickMode,
+      revertSelectedRowId,
+      onRevertSelectedRowIdChange: setRevertSelectedRowId,
+    }),
+    [revertPickMode, revertSelectedRowId]
+  );
+
+  const resolvedParametricEditor = React.useMemo(() => {
+    if (renderParametricEditor) return renderParametricEditor(revertPickProps);
+    return parametricEditor ?? null;
+  }, [renderParametricEditor, parametricEditor, revertPickProps]);
+
+  const collapseParametricPanel = React.useCallback(() => {
+    setParametricExpanded(false);
+    setRevertPickMode(false);
+  }, []);
+
   const readOnlyTokenized = Boolean(tokenizedDisplayText?.trim());
+  const showParametricBody = parametricEnabled && (parametricExpanded || editing);
 
   const beginEdit = React.useCallback(() => {
     if (busy || readOnlyTokenized) return;
@@ -106,21 +191,35 @@ export function PrimaryAgentMessageField({
     onTextChange: (next, mode) => {
       setDraft(next);
       onPhraseDraftChange?.(next);
-      if (mode !== 'live') {
-        onTextChange(next, mode);
-      }
+      if (mode !== 'live') onTextChange(next, mode);
     },
+    onStyleTokenWrap,
+    onStyleTokenUnwrap,
   });
 
-  const fieldLabel = wizardCompact ? (
-    <span
-      title="Messaggio agente"
-      aria-label="Messaggio agente"
-      className="shrink-0 inline-flex h-6 w-6 items-center justify-center text-emerald-300"
-    >
-      <MessageSquareText size={15} aria-hidden />
-    </span>
-  ) : null;
+  const activeStyleToken = React.useMemo(() => {
+    const span = tokenField.activeStyleTokenSpan;
+    if (!span) return null;
+    return styleTokens.find((t) => t.defaultSurface === span.inner) ?? null;
+  }, [tokenField.activeStyleTokenSpan, styleTokens]);
+
+  const selectionTokenPopover =
+    tokenField.tokenPopoverActionVisible !== 'none' && !busy ? (
+      <AgentMessageSelectionTokenPopover
+        action={tokenField.tokenPopoverActionVisible}
+        disabled={busy}
+        onSemanticToken={tokenField.handleWrapSemanticToken}
+        onStyleToken={tokenField.handleWrapStyleToken}
+        onUntokenize={tokenField.handleUnwrapToken}
+        fixedAnchor={tokenField.tokenAnchor}
+        activeStyleToken={activeStyleToken}
+        onStyleTokenVariantsChange={
+          activeStyleToken && onStyleTokenVariantsChange
+            ? (variants) => onStyleTokenVariantsChange(activeStyleToken.styleTokenId, variants)
+            : undefined
+        }
+      />
+    ) : null;
 
   const displayTextClass = wizardCompact
     ? UC_WIZARD_AGENT_MESSAGE_TEXT
@@ -162,24 +261,12 @@ export function PrimaryAgentMessageField({
           className={`${UC_AGENT_ROW_EDIT_BTN} ${parametricEnabled ? 'text-emerald-400' : ''}`}
           onClick={(e) => {
             e.stopPropagation();
-            onToggleParametric(!parametricEnabled);
+            const next = !parametricEnabled;
+            onToggleParametric(next);
+            if (next) setParametricExpanded(true);
           }}
         >
           <Variable size={INLINE_TOOLBAR_ICON_PX} aria-hidden />
-        </button>
-      ) : null}
-      {!parametricEnabled && onAddStructuralVariant ? (
-        <button
-          type="button"
-          disabled={busy}
-          title="Aggiungi variante strutturale"
-          className={UC_AGENT_ROW_EDIT_BTN}
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddStructuralVariant();
-          }}
-        >
-          <Plus size={INLINE_TOOLBAR_ICON_PX} aria-hidden />
         </button>
       ) : null}
       {onDeleteMessage ? (
@@ -231,13 +318,199 @@ export function PrimaryAgentMessageField({
     );
   };
 
-  return (
-    <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
-      {parametricEnabled && parametricEditor ? parametricEditor : null}
+  const parametricToggleButton = (
+    <button
+      type="button"
+      disabled={busy}
+      className="shrink-0 rounded p-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/80"
+      title={showParametricBody ? 'Comprimi messaggio parametrico' : 'Espandi messaggio parametrico'}
+      aria-expanded={showParametricBody}
+      aria-label="Messaggio parametrico"
+      onClick={(e) => {
+        e.stopPropagation();
+        setParametricExpanded((v) => !v);
+      }}
+    >
+      <DoubleMessageIcon />
+    </button>
+  );
 
-      {editing ? (
+  const renderCanonicalEdit = () => (
+    <div className="flex w-full flex-wrap items-start gap-2">
+      {parametricToggleButton}
+      <div className="min-w-0 flex-1 flex-col">
+        <BracketTokenHighlightedTextarea
+          ref={tokenField.textareaRef}
+          value={draft}
+          disabled={busy}
+          rows={2}
+          autoFocus
+          spellCheck={false}
+          aria-label="Messaggio agente"
+          placeholder="Testo esempio per il messaggio agente…"
+          containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px] w-full`}
+          onChange={(e) => {
+            const v = e.target.value;
+            setDraft(v);
+            onPhraseDraftChange?.(v);
+            tokenField.syncSelection();
+          }}
+          onMouseDown={tokenField.markPointerSelectingMouse}
+          onTouchStart={tokenField.markPointerSelectingTouch}
+          onMouseUp={tokenField.syncSelection}
+          onSelect={tokenField.syncSelection}
+          onKeyUp={tokenField.syncSelection}
+          onScroll={tokenField.queueRecalcTokenAnchor}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelEdit();
+            }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              commitEdit();
+            }
+          }}
+        />
+        {selectionTokenPopover}
+      </div>
+      <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+        <button
+          type="button"
+          title="Conferma"
+          disabled={busy}
+          className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
+          onClick={commitEdit}
+        >
+          <Check size={EDIT_MODE_ICON_PX} aria-hidden />
+        </button>
+        <button
+          type="button"
+          title="Annulla"
+          disabled={busy}
+          className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
+          onClick={cancelEdit}
+        >
+          <X size={EDIT_MODE_ICON_PX} aria-hidden />
+        </button>
+      </span>
+    </div>
+  );
+
+  const parametricRevertFooter =
+    revertPickMode && onApplyParametricRevert ? (
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-600/40 pt-2">
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded border border-slate-500/50 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800/60 disabled:opacity-40"
+          onClick={(e) => {
+            e.stopPropagation();
+            cancelParametricRevertPick();
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy || !revertSelectedRowId}
+          className="rounded border border-emerald-600/55 bg-emerald-950/50 px-2.5 py-1 text-xs font-semibold text-emerald-100 hover:bg-emerald-900/50 disabled:opacity-40"
+          onClick={(e) => {
+            e.stopPropagation();
+            applyParametricRevertPick();
+          }}
+        >
+          Applica
+        </button>
+      </div>
+    ) : null;
+
+  const parametricExpandedHeader = (
+    <div className="flex min-w-0 flex-1 items-center gap-x-2 gap-y-1">
+      <span className="shrink-0 text-sm font-semibold text-slate-950 dark:text-slate-100">
+        Messaggio parametrico
+      </span>
+      {!revertPickMode && onApplyParametricRevert ? (
+        <button
+          type="button"
+          disabled={busy || parametricRows.length === 0}
+          title="Cliccando su Annulla il messaggio non sarà più parametrico"
+          className="shrink-0 rounded border border-slate-500/45 px-2 py-0.5 text-xs font-medium text-slate-300 hover:bg-slate-800/50 disabled:opacity-40"
+          onClick={(e) => {
+            e.stopPropagation();
+            beginParametricRevertPick();
+          }}
+        >
+          Annulla
+        </button>
+      ) : null}
+      <span className="ms-auto inline-flex shrink-0 items-center gap-0.5">{inlineToolbar}</span>
+      <button
+        type="button"
+        disabled={busy}
+        title="Chiudi pannello messaggio parametrico"
+        aria-label="Chiudi pannello messaggio parametrico"
+        className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 disabled:opacity-40"
+        onClick={(e) => {
+          e.stopPropagation();
+          collapseParametricPanel();
+        }}
+      >
+        <X size={16} aria-hidden />
+      </button>
+    </div>
+  );
+
+  if (parametricEnabled && resolvedParametricEditor) {
+    return (
+      <div className="space-y-0" data-uc-primary-agent-message={useCase.id}>
+        {editing ? (
+          <>
+            {renderCanonicalEdit()}
+            <div className="mt-1 space-y-2 border-t border-emerald-800/25 pt-1">
+              {resolvedParametricEditor}
+              {parametricRevertFooter}
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              className={`group/agentmsg-row flex w-full min-w-0 gap-x-1 rounded px-0.5 py-0 ${showParametricBody ? 'items-center' : 'flex-wrap items-end gap-y-1 cursor-pointer'}`}
+              onDoubleClick={(e) => {
+                if (showParametricBody || busy || readOnlyTokenized) return;
+                if ((e.target as HTMLElement).closest('button')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                beginEdit();
+              }}
+            >
+              {parametricToggleButton}
+              {showParametricBody ? (
+                parametricExpandedHeader
+              ) : (
+                <div className={`min-w-0 flex-1 ${displayTextClass}`}>
+                  {renderDisplayBody()}
+                  {inlineToolbar}
+                </div>
+              )}
+            </div>
+            {showParametricBody ? (
+              <div className="mt-1 space-y-2 border-t border-emerald-800/25 pt-1">
+              {resolvedParametricEditor}
+              {parametricRevertFooter}
+            </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
         <div className="flex flex-wrap items-start gap-2">
-          {fieldLabel}
+          <SingleMessageIcon />
           <div className="min-w-0 flex-1 flex-col">
             <BracketTokenHighlightedTextarea
               ref={tokenField.textareaRef}
@@ -272,15 +545,7 @@ export function PrimaryAgentMessageField({
                 }
               }}
             />
-            {tokenField.tokenPopoverActionVisible !== 'none' && !busy ? (
-              <AgentMessageSelectionTokenPopover
-                action={tokenField.tokenPopoverActionVisible}
-                disabled={busy}
-                onTokenize={tokenField.handleWrapToken}
-                onUntokenize={tokenField.handleUnwrapToken}
-                fixedAnchor={tokenField.tokenAnchor}
-              />
-            ) : null}
+            {selectionTokenPopover}
           </div>
           <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
             <button
@@ -303,26 +568,28 @@ export function PrimaryAgentMessageField({
             </button>
           </span>
         </div>
-      ) : (
-        <div
-          className="group/agentmsg-row flex w-full min-w-0 cursor-pointer flex-wrap items-end gap-x-1 gap-y-1 rounded px-0.5 py-0"
-          onDoubleClick={(e) => {
-            if (busy) return;
-            if ((e.target as HTMLElement).closest('button')) return;
-            e.preventDefault();
-            e.stopPropagation();
-            beginEdit();
-          }}
-        >
-          {fieldLabel}
-          <div className={`min-w-0 ${displayTextClass}`}>
-            {renderDisplayBody()}
-            {inlineToolbar}
-          </div>
-        </div>
-      )}
+      </div>
+    );
+  }
 
-      {!parametricEnabled && structuralVariantsEditor ? structuralVariantsEditor : null}
+  return (
+    <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
+      <div
+        className="group/agentmsg-row flex w-full min-w-0 cursor-pointer flex-wrap items-end gap-x-1 gap-y-1 rounded px-0.5 py-0"
+        onDoubleClick={(e) => {
+          if (busy) return;
+          if ((e.target as HTMLElement).closest('button')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          beginEdit();
+        }}
+      >
+        <SingleMessageIcon />
+        <div className={`min-w-0 ${displayTextClass}`}>
+          {renderDisplayBody()}
+          {inlineToolbar}
+        </div>
+      </div>
     </div>
   );
 }

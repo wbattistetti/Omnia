@@ -22,10 +22,14 @@ export const LABEL_GENERALIZE_USE_CASE_META_CONFIRM = 'Generalizza';
 export const LABEL_REGENERATE_AGENT_EXAMPLE = 'Rigenera esempio messaggio';
 /** Wraps current textarea selection in [...] as a runtime slot. */
 export const LABEL_AGENT_MSG_WRAP_TOKEN = 'Token';
-/** Floating selection menu — wrap selection in a single slot. */
+/** @deprecated Usare semantic/style token. */
 export const LABEL_AGENT_MSG_SELECTION_TOKENIZE = 'Tokenizza';
-/** Floating selection menu — remove brackets for the slot that contains the selection. */
-export const LABEL_AGENT_MSG_SELECTION_UNTOKEN = 'Rimuovi token';
+/** Floating selection menu — semantic slot `[…]`. */
+export const LABEL_AGENT_MSG_SELECTION_SEMANTIC_TOKEN = 'Semantic token';
+/** Floating selection menu — style token `«…»`. */
+export const LABEL_AGENT_MSG_SELECTION_STYLE_TOKEN = 'Style token';
+/** Floating selection menu — remove token (semantic or style). */
+export const LABEL_AGENT_MSG_SELECTION_UNTOKEN = 'Untokenize';
 /** Strips all [...] wrappers from the assistant message (plain text again). */
 export const LABEL_AGENT_MSG_STRIP_TOKENS = 'Senza quadre';
 /** Calls LLM to wrap runtime fragments in [slot] and refresh motor JSON preview. */

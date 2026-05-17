@@ -255,6 +255,8 @@ export interface FlowMappingTreeProps {
    * Mirrors the toolbar «Signature» sub-row so panels do not stay open when that strip is collapsed.
    */
   embeddedSignatureSubToolbarOpen?: boolean;
+  /** Scroll verticale sul contenitore padre (workspace inspector). */
+  scrollMappingInParent?: boolean;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -1399,10 +1401,15 @@ function BackendMappingTreeView({
   backendSendAdvancement,
   embeddedSignatureSubToolbarOpen,
   agentParamDragSource,
+  scrollMappingInParent = false,
 }: FlowMappingTreeProps) {
   return (
     <div
-      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
+      className={
+        scrollMappingInParent
+          ? 'flex min-w-0 flex-col'
+          : 'flex h-full min-h-0 flex-1 flex-col overflow-hidden'
+      }
     >
       <datalist id={`${listIdPrefix}-api`}>
         {apiOptions.map((o) => (
@@ -1433,6 +1440,7 @@ function BackendMappingTreeView({
         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
         variableOptions={variableOptions}
         agentParamDragSource={agentParamDragSource}
+        scrollMappingInParent={scrollMappingInParent}
       />
     </div>
   );
@@ -1788,6 +1796,7 @@ function InterfaceMappingTree({
         backendCleanTree={useBackendRootAccordion}
         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
         agentParamDragSource={agentParamDragSource}
+        scrollMappingInParent={scrollMappingInParent}
       />
     );
   }

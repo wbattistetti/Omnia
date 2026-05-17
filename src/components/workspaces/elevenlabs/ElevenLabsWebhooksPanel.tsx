@@ -4,10 +4,16 @@
 
 import React from 'react';
 import type { WorkspaceAgentToolInventory, WorkspaceResolvedTool } from '@workspaces/core/types';
+import type { ProjectData } from '@types/project';
 import { ElevenLabsToolListRow } from './ElevenLabsToolListRow';
+import { ElevenLabsWorkspaceWebhookSection } from './ElevenLabsWorkspaceWebhookSection';
 
 export type ElevenLabsWebhooksPanelProps = {
   toolInventory: WorkspaceAgentToolInventory;
+  agentId: string;
+  projectData?: ProjectData | null;
+  projectId?: string;
+  updateProjectData?: (data: ProjectData) => void;
 };
 
 function isWebhookLike(t: WorkspaceResolvedTool): boolean {
@@ -28,11 +34,15 @@ function scopeLabel(t: WorkspaceResolvedTool): string {
 
 export function ElevenLabsWebhooksPanel({
   toolInventory,
+  agentId,
+  projectData,
+  projectId,
+  updateProjectData,
 }: ElevenLabsWebhooksPanelProps): React.ReactElement {
   const rows = toolInventory.allTools.filter(isWebhookLike);
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-4">
+    <div className="h-full overflow-y-auto overscroll-y-contain px-4 py-4 [scrollbar-gutter:stable]">
       <div className="mx-auto max-w-3xl space-y-4">
         <header>
           <h2 className="text-lg font-semibold text-violet-100">Webhook e tool client</h2>
@@ -41,6 +51,17 @@ export function ElevenLabsWebhooksPanel({
             disponibile dall&apos;API ConvAI.
           </p>
         </header>
+        <section className="rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Nuovo webhook (catalogo progetto)
+          </h3>
+          <ElevenLabsWorkspaceWebhookSection
+            projectData={projectData}
+            projectId={projectId}
+            updateDataDirectly={updateProjectData}
+            catalogScope={{ scope: 'agent', agentId }}
+          />
+        </section>
         {rows.length === 0 ? (
           <p className="text-sm text-slate-500">Nessun webhook o tool client risolto per questo agente.</p>
         ) : (

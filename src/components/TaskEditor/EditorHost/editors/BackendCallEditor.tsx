@@ -284,9 +284,12 @@ export default function BackendCallEditor({
   embeddedSignatureSubToolbarOpen,
   /** Incassato: chiudi il pannello Signature (toolbar esterna) quando si apre tabella/test. */
   embeddedCloseSignatureToolbar,
+  /** Workspace ElevenLabs: scroll sul pannello inspector, non su SEND/RECEIVE. */
+  workspaceInspectorEmbed = false,
 }: EditorProps & {
   embeddedSignatureSubToolbarOpen?: boolean;
   embeddedCloseSignatureToolbar?: () => void;
+  workspaceInspectorEmbed?: boolean;
 }) {
   // ✅ RINOMINATO: act → task
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
@@ -1795,7 +1798,13 @@ export default function BackendCallEditor({
             </div>
           </div>
         ) : (
-        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={
+            workspaceInspectorEmbed
+              ? 'flex min-w-0 flex-col'
+              : 'flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+          }
+        >
           <InterfaceMappingEditor
             variant="backend"
             showVariantToggle={false}
@@ -1815,7 +1824,12 @@ export default function BackendCallEditor({
             onOutputVariableCreated={handleOutputVariableCreated}
             showInterfacePalette={false}
             compactBackendPanels
-            className="h-full min-h-0 min-w-0 flex-1 bg-transparent"
+            scrollMappingInParent={workspaceInspectorEmbed}
+            className={
+              workspaceInspectorEmbed
+                ? 'min-w-0 bg-transparent'
+                : 'h-full min-h-0 min-w-0 flex-1 bg-transparent'
+            }
             flowDropTarget={
               getActiveFlowCanvasId() ? { flowCanvasId: getActiveFlowCanvasId()! } : undefined
             }
