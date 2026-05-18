@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { clearPositionCommitDedupe } from '../flowPositionCommitDedupe';
+import { registerFlowCanvasStoreSemanticHandler } from '../flowCanvasSemanticRegistry';
 import {
   FLOW_CANVAS_SEMANTIC_EVENT,
   emitNodePositionCommitted,
@@ -37,6 +38,22 @@ describe('flowCanvasSemanticEvents', () => {
     expect(handler).not.toHaveBeenCalled();
 
     window.removeEventListener(FLOW_CANVAS_SEMANTIC_EVENT, listener);
+  });
+
+  it('delivers position commit to the store handler once per emit', () => {
+    const storeHandler = vi.fn();
+    const cleanup = registerFlowCanvasStoreSemanticHandler('main', storeHandler);
+    const updates = [{ nodeId: 'a', position: { x: 5, y: 6 } }];
+
+    emitNodePositionCommitted('main', updates);
+
+    expect(storeHandler).toHaveBeenCalledTimes(1);
+    expect(storeHandler).toHaveBeenCalledWith({
+      type: 'NODE_POSITION_COMMITTED',
+      flowId: 'main',
+      updates,
+    });
+    cleanup();
   });
 
   it('dedupes identical position commits at emit time', () => {

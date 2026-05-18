@@ -3,6 +3,8 @@
  */
 
 import { shouldSkipDuplicatePositionCommit } from './flowPositionCommitDedupe';
+import { shouldSkipDuplicateLayoutEmit } from './flowLayoutEmitDedupe';
+import { dispatchFlowCanvasStoreSemantic } from './flowCanvasSemanticRegistry';
 
 export const FLOW_CANVAS_SEMANTIC_EVENT = 'omnia:flowCanvas:semantic';
 
@@ -51,7 +53,9 @@ export function emitNodePositionCommitted(
 ): void {
   if (updates.length === 0) return;
   if (shouldSkipDuplicatePositionCommit(flowId, updates)) return;
-  emitFlowCanvasSemantic({ type: 'NODE_POSITION_COMMITTED', flowId, updates });
+  const event = { type: 'NODE_POSITION_COMMITTED' as const, flowId, updates };
+  dispatchFlowCanvasStoreSemantic(event);
+  emitFlowCanvasSemantic(event);
 }
 
 export function emitNodeLayoutSettled(
@@ -60,7 +64,10 @@ export function emitNodeLayoutSettled(
   width: number,
   height: number
 ): void {
-  emitFlowCanvasSemantic({ type: 'NODE_LAYOUT_SETTLED', flowId, nodeId, width, height });
+  if (shouldSkipDuplicateLayoutEmit(flowId, nodeId, width, height)) return;
+  const event = { type: 'NODE_LAYOUT_SETTLED' as const, flowId, nodeId, width, height };
+  dispatchFlowCanvasStoreSemantic(event);
+  emitFlowCanvasSemantic(event);
 }
 
 export function emitGraphHydrated(flowId: string, fingerprint: string): void {

@@ -1,16 +1,19 @@
 /**
- * Ephemeral RF preview + semantic commits to FlowStore (position, layout, viewport).
+ * Ephemeral RF preview + semantic commits to FlowStore (position only; layout stays RF-local).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Node, NodeChange } from 'reactflow';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
-import { commitNodeMeasuredDimensions } from '../nodes/CustomNode/commitNodeMeasuredDimensions';
 import {
-  subscribeFlowCanvasSemantic,
+  applyNodeLayoutRuntime,
+  mergeNodesWithMeasuredLayout,
+  type NodeMeasuredSize,
+} from '../semantic/flowCanvasLayoutRuntime';
+import { registerFlowCanvasStoreSemanticHandler } from '../semantic/flowCanvasSemanticRegistry';
+import {
   type NodePositionUpdate,
 } from '../semantic/flowCanvasSemanticEvents';
-import { shouldSkipDuplicatePositionCommit } from '../semantic/flowPositionCommitDedupe';
 import {
   mergeNodesWithDragOverlay,
   overlayMatchesStorePositions,
@@ -56,10 +59,14 @@ export function useFlowCanvasSemanticBridge({
   const canvasId = String(flowId || 'main').trim();
   const nodesRef = useRef(nodes);
   const overlayRef = useRef<EphemeralDragSnapshot>(new Map());
+  /** Measured DOM sizes — RF display only, never FlowStore. */
+  const layoutByIdRef = useRef<Map<string, NodeMeasuredSize>>(new Map());
+  const pendingLayoutRef = useRef<Map<string, NodeMeasuredSize>>(new Map());
   /** Overlay pins held until props.nodes reflect the last NODE_POSITION_COMMITTED. */
   const pendingOverlaySyncRef = useRef<EphemeralDragSnapshot | null>(null);
   const overlaySyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [overlayTick, setOverlayTick] = useState(0);
+  const [layoutTick, setLayoutTick] = useState(0);
 
   const cancelOverlaySyncTimeout = useCallback(() => {
     if (overlaySyncTimeoutRef.current) {
@@ -70,6 +77,10 @@ export function useFlowCanvasSemanticBridge({
 
   const bumpOverlay = useCallback(() => {
     setOverlayTick((t) => t + 1);
+  }, []);
+
+  const bumpLayout = useCallback(() => {
+    setLayoutTick((t) => t + 1);
   }, []);
 
   const setNodesTraced = useCallback(
@@ -86,6 +97,72 @@ export function useFlowCanvasSemanticBridge({
       });
     },
     [setNodes]
+  );
+
+  const applyLayoutSettled = useCallback(
+    (nodeId: string, width: number, height: number, traceId: string) => {
+      const changed = applyNodeLayoutRuntime({
+        nodeId,
+        width,
+        height,
+        layoutById: layoutByIdRef.current,
+        updateNodeInternals,
+      });
+      if (!changed) return;
+      flowCanvasDiagSemantic('NODE_LAYOUT_SETTLED', canvasId, {
+        traceId,
+        nodeId,
+        width,
+        height,
+      });
+      flowCanvasDiag('layout.runtime.apply', {
+        flowId: canvasId,
+        traceId,
+        nodeId,
+        width,
+        height,
+      });
+      bumpLayout();
+    },
+    [bumpLayout, canvasId, updateNodeInternals]
+  );
+
+  const flushPendingLayout = useCallback(
+    (reason: string) => {
+      const pending = pendingLayoutRef.current;
+      if (pending.size === 0) return;
+      flowCanvasDiag('layout.runtime.flush', {
+        flowId: canvasId,
+        reason,
+        count: pending.size,
+      });
+      const traceId = nextFlowCanvasTraceId('layout');
+      for (const [nodeId, size] of pending) {
+        applyLayoutSettled(nodeId, size.width, size.height, traceId);
+      }
+      pendingLayoutRef.current = new Map();
+    },
+    [applyLayoutSettled, canvasId]
+  );
+
+  const handleLayoutSettled = useCallback(
+    (nodeId: string, width: number, height: number, traceId: string) => {
+      if (FlowStateBridge.getToolbarDragNodeId()) {
+        pendingLayoutRef.current.set(nodeId, {
+          width: Math.round(width),
+          height: Math.round(height),
+        });
+        flowCanvasDiag('layout.runtime.defer', {
+          flowId: canvasId,
+          traceId,
+          nodeId,
+          toolbarDrag: FlowStateBridge.getToolbarDragNodeId(),
+        });
+        return;
+      }
+      applyLayoutSettled(nodeId, width, height, traceId);
+    },
+    [applyLayoutSettled, canvasId]
   );
 
   const applyEphemeralDrag = useCallback(
@@ -141,6 +218,13 @@ export function useFlowCanvasSemanticBridge({
     const prev = nodesRef.current;
     nodesRef.current = nodes;
     tryReleaseOverlayAfterStoreSync(nodes as Node[], 'store_synced');
+    for (const n of nodes) {
+      const w = Number(n.width);
+      const h = Number(n.height);
+      if (w >= 1 && h >= 1 && !layoutByIdRef.current.has(n.id)) {
+        layoutByIdRef.current.set(n.id, { width: Math.round(w), height: Math.round(h) });
+      }
+    }
     const deltas = nodes
       .filter((n) => {
         const p = prev.find((x) => x.id === n.id)?.position;
@@ -166,12 +250,8 @@ export function useFlowCanvasSemanticBridge({
   useEffect(() => () => cancelOverlaySyncTimeout(), [cancelOverlaySyncTimeout]);
 
   const applyPositionCommit = useCallback(
-    (updates: NodePositionUpdate[], traceId: string) => {
-      if (updates.length === 0) return;
-      if (shouldSkipDuplicatePositionCommit(canvasId, updates)) {
-        flowCanvasDiag('commit.skip_duplicate', { flowId: canvasId, traceId });
-        return;
-      }
+    (updates: NodePositionUpdate[], traceId: string): boolean => {
+      if (updates.length === 0) return false;
       flowCanvasDiag('commit.applyPosition', {
         flowId: canvasId,
         traceId,
@@ -189,8 +269,10 @@ export function useFlowCanvasSemanticBridge({
         }),
         { traceId }
       );
+      flushPendingLayout('after_position_commit');
+      return true;
     },
-    [canvasId, setNodesTraced]
+    [canvasId, flushPendingLayout, setNodesTraced]
   );
 
   useEffect(() => {
@@ -205,22 +287,47 @@ export function useFlowCanvasSemanticBridge({
   }, [applyEphemeralDrag, clearEphemeralDrag, updateNodeInternals]);
 
   useEffect(() => {
-    return subscribeFlowCanvasSemantic((ev) => {
-      if (String(ev.flowId).trim() !== canvasId) return;
+    const onToolbarDragEnd = (e: Event) => {
+      const detail = (e as CustomEvent<{ flowCanvasId?: string }>).detail;
+      if (detail?.flowCanvasId && String(detail.flowCanvasId).trim() !== canvasId) return;
+      flushPendingLayout('toolbar_drag_end');
+    };
+    window.addEventListener('flowchart:toolbarDragEnd', onToolbarDragEnd);
+    return () => window.removeEventListener('flowchart:toolbarDragEnd', onToolbarDragEnd);
+  }, [canvasId, flushPendingLayout]);
+
+  useEffect(() => {
+    return registerFlowCanvasStoreSemanticHandler(canvasId, (ev) => {
       const traceId = nextFlowCanvasTraceId('sem');
       switch (ev.type) {
         case 'NODE_POSITION_COMMITTED': {
-          // Keep overlay pinned to committed coords until FlowStore props match.
-          // Clearing immediately caused a one-frame flash at the pre-drag store position.
           const pinned = pinOverlayToPositions(ev.updates);
           overlayRef.current = pinned;
           pendingOverlaySyncRef.current = pinned;
           bumpOverlay();
-          applyPositionCommit(ev.updates, traceId);
+          const committed = applyPositionCommit(ev.updates, traceId);
           cancelOverlaySyncTimeout();
           overlaySyncTimeoutRef.current = setTimeout(() => {
             overlaySyncTimeoutRef.current = null;
-            if (!pendingOverlaySyncRef.current) return;
+            const pending = pendingOverlaySyncRef.current;
+            if (!pending) return;
+            if (
+              !committed &&
+              !overlayMatchesStorePositions(nodesRef.current, pending)
+            ) {
+              flowCanvasDiag('ephemeral.clear_aborted', {
+                flowId: canvasId,
+                reason: 'store_not_synced',
+              });
+              return;
+            }
+            if (!overlayMatchesStorePositions(nodesRef.current, pending)) {
+              flowCanvasDiag('ephemeral.sync_pending', {
+                flowId: canvasId,
+                reason: 'commit_sync_timeout_waiting_store',
+              });
+              return;
+            }
             flowCanvasDiag('ephemeral.clear', {
               flowId: canvasId,
               reason: 'commit_sync_timeout',
@@ -235,51 +342,27 @@ export function useFlowCanvasSemanticBridge({
           break;
         }
         case 'NODE_LAYOUT_SETTLED':
-          flowCanvasDiagSemantic('NODE_LAYOUT_SETTLED', canvasId, {
-            traceId,
-            nodeId: ev.nodeId,
-            width: ev.width,
-            height: ev.height,
-          });
-          commitNodeMeasuredDimensions(
-            ev.nodeId,
-            ev.width,
-            ev.height,
-            (fn) => setNodesTraced('NODE_LAYOUT_SETTLED', fn, { traceId, nodeId: ev.nodeId }),
-            updateNodeInternals
-          );
-          break;
-        case 'CANVAS_LAYOUT_SETTLED':
-          flowCanvasDiagSemantic('CANVAS_LAYOUT_SETTLED', canvasId, {
-            traceId,
-            width: ev.width,
-            height: ev.height,
-          });
-          break;
-        case 'VIEWPORT_SETTLED':
-        case 'VIEWPORT_INITIAL_FIT':
-        case 'GRAPH_HYDRATED':
-          flowCanvasDiagSemantic(ev.type, canvasId, { traceId, ...ev });
+          handleLayoutSettled(ev.nodeId, ev.width, ev.height, traceId);
           break;
         default:
           break;
       }
     });
   }, [
-    canvasId,
     applyPositionCommit,
     bumpOverlay,
     cancelOverlaySyncTimeout,
-    clearEphemeralDrag,
-    setNodesTraced,
+    canvasId,
+    handleLayoutSettled,
     tryReleaseOverlayAfterStoreSync,
-    updateNodeInternals,
   ]);
 
   const displayNodes = useMemo(() => {
     void overlayTick;
-    return mergeNodesWithDragOverlay(nodes as Node[], overlayRef.current);
-  }, [nodes, overlayTick]);
+    void layoutTick;
+    const withOverlay = mergeNodesWithDragOverlay(nodes as Node[], overlayRef.current);
+    return mergeNodesWithMeasuredLayout(withOverlay, layoutByIdRef.current);
+  }, [nodes, overlayTick, layoutTick]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -322,8 +405,6 @@ export function useFlowCanvasSemanticBridge({
           (prev) => applyWorkspaceNodeChangesPreservingPositions(prev as Node[], workspaceChanges),
           { changeTypes: workspaceChanges.map((c) => c.type) }
         );
-        // Derive selection from the select-type changes; must NOT be inside the setNodes updater
-        // because setNodes dispatches to FlowStore reducer (sync) → calling setState there = React error.
         const selectChanges = workspaceChanges.filter(
           (ch): ch is NodeChange & { id: string; selected: boolean } =>
             ch.type === 'select' && 'id' in ch
@@ -341,8 +422,6 @@ export function useFlowCanvasSemanticBridge({
         }
       }
 
-      // Dragging position changes go to the ephemeral overlay — independent of workspace changes.
-      // Using `if` (not `else if`) so workspace mutations and drag preview can coexist.
       if (hasDraggingPosition) {
         const posChanges = changes.filter(
           (ch): ch is NodeChange & { id: string; position?: { x: number; y: number } } =>

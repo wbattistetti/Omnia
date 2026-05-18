@@ -15,7 +15,10 @@ function fingerprintUpdates(updates: readonly NodePositionUpdate[]): string {
     .join('|');
 }
 
-/** Returns true when an identical commit was applied moments ago for this flow. */
+/**
+ * Returns true when an identical commit was emitted moments ago for this flow.
+ * Call only from `emitNodePositionCommitted` — not from store handlers (double-call skips every apply).
+ */
 export function shouldSkipDuplicatePositionCommit(
   flowId: string,
   updates: readonly NodePositionUpdate[]

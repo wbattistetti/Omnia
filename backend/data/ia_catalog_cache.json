@@ -40,15 +40,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -359,15 +359,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -527,10 +527,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -538,16 +538,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -910,10 +910,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -921,16 +921,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -1097,15 +1097,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -1273,10 +1273,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -1284,9 +1284,9 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
@@ -1631,10 +1631,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -1642,16 +1642,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2027,15 +2027,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2243,15 +2243,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2445,15 +2445,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2620,11 +2620,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_flash_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
@@ -2634,11 +2634,11 @@
           "language": "en",
           "progress": {},
           "message": {
-            "eleven_multilingual_v2": "",
-            "eleven_flash_v2": "",
             "eleven_turbo_v2_5": "",
-            "eleven_v2_flash": "",
+            "eleven_flash_v2": "",
+            "eleven_multilingual_v2": "",
             "eleven_v2_5_flash": "",
+            "eleven_v2_flash": "",
             "eleven_turbo_v2": "",
             "eleven_flash_v2_5": ""
           },
@@ -2771,10 +2771,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -2782,16 +2782,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2958,10 +2958,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -2969,16 +2969,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3166,10 +3166,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -3177,16 +3177,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3340,10 +3340,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -3351,16 +3351,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3610,10 +3610,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -3621,16 +3621,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_5_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -9505,12 +9505,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-18T09:51:31.756Z",
-    "lastLanguagesSync": "2026-05-18T09:51:29.610Z",
-    "lastModelsSync": "2026-05-18T09:51:31.756Z",
+    "updatedAt": "2026-05-18T10:50:55.124Z",
+    "lastLanguagesSync": "2026-05-18T10:50:52.523Z",
+    "lastModelsSync": "2026-05-18T10:50:55.124Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-18T09:51:29.552Z",
+      "at": "2026-05-18T10:50:52.476Z",
       "apiVoiceCount": 25,
       "mappedCount": 25,
       "emptyApiList": false

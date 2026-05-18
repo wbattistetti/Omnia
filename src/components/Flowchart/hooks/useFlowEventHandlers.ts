@@ -254,6 +254,11 @@ export function useFlowEventHandlers(
     try {
       FlowStateBridge.setDragMode(null);
       FlowStateBridge.setToolbarDragNodeId(null);
+      window.dispatchEvent(
+        new CustomEvent('flowchart:toolbarDragEnd', {
+          detail: { nodeId: node.id, flowCanvasId },
+        })
+      );
     } catch {
       /* noop */
     }
@@ -267,7 +272,7 @@ export function useFlowEventHandlers(
       commitRigidDrag(ctx, snapshot);
     }
     rigidDragCtxRef.current = null;
-  }, [commitRigidDrag, nodes]);
+  }, [commitRigidDrag, nodes, flowCanvasId]);
 
   /**
    * Handles selection change - updates selected node IDs

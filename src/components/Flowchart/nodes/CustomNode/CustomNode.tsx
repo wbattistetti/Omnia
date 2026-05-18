@@ -306,6 +306,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
         }
         const w = Math.max(Math.ceil(container.getBoundingClientRect().width), 140);
         const h = Math.max(Math.ceil(container.offsetHeight), 40);
+        const prevW = nodeWidthRef.current;
+        const prevH = nodeHeightRef.current;
+        if (
+          prevW > 0 &&
+          prevH > 0 &&
+          Math.abs(prevW - w) <= 2 &&
+          Math.abs(prevH - h) <= 2
+        ) {
+          return;
+        }
         nodeWidthRef.current = w;
         nodeHeightRef.current = h;
         setNodeWidth(w);

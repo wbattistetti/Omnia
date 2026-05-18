@@ -17,6 +17,10 @@ import type { Flow, FlowId, WorkspaceState } from './FlowTypes';
 import type { ApplyFlowLoadPayload } from './ApplyFlowLoadPayload';
 import { stripLegacyVariablesFromFlowMeta } from './flowMetaSanitize';
 import { mergeUpsertNodesPreserveLocalRowText } from './mergeUpsertFlowNodesPreserveLocalRowText';
+import {
+  fingerprintFlowGraphCommit,
+  isSelectionOnlyNodeGraphChange,
+} from './flowGraphCommitFingerprint';
 import { getActiveDndOperationId, isDndOperationInstrumentEnabled } from '@utils/dndOperationInstrument';
 import { isStrictStoreUpsertMergeEnabled } from '@domain/flowStateMachine/flowMachineConfig';
 
@@ -190,12 +194,22 @@ export function reduceUpdateFlowGraph<NodeT = any, EdgeT = any>(
 ): WorkspaceState<NodeT, EdgeT> {
   const curr = state.flows[flowId];
   if (!curr) return state;
-  const next = updater(curr.nodes as any[], curr.edges as any[]);
+  const prevNodes = curr.nodes as any[];
+  const prevEdges = curr.edges as any[];
+  const next = updater(prevNodes, prevEdges);
+  const fpBefore = fingerprintFlowGraphCommit(prevNodes, prevEdges);
+  const fpAfter = fingerprintFlowGraphCommit(next.nodes, next.edges);
+  if (fpBefore === fpAfter) {
+    return state;
+  }
+  const selectionOnly =
+    isSelectionOnlyNodeGraphChange(prevNodes, next.nodes) &&
+    JSON.stringify(prevEdges) === JSON.stringify(next.edges);
   const flow = {
     ...curr,
     nodes: next.nodes as any,
     edges: next.edges as any,
-    hasLocalChanges: true,
+    hasLocalChanges: selectionOnly ? curr.hasLocalChanges === true : true,
   } as Flow<NodeT, EdgeT>;
   return { ...state, flows: { ...state.flows, [flowId]: flow } };
 }

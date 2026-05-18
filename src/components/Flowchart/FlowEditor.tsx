@@ -48,6 +48,7 @@ import { IntellisenseProvider, useIntellisense } from '../../context/Intellisens
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ReactFlowContainerResize } from './reactFlowContainerResize';
 import { useFlowCanvasShellReady } from './hooks/useFlowCanvasShellReady';
+import { useFlowCanvasGraphReady } from './hooks/useFlowCanvasGraphReady';
 import { FlowPanZoomOverview } from './panZoom/FlowPanZoomOverview';
 import {
   omniaFlowBackgroundPatternId,
@@ -94,6 +95,11 @@ interface FlowEditorProps {
   onOpenTaskFlow?: (flowId: string, title: string) => void;
   /** Opens a subflow tab for a Flow-type row (taskId, optional existingFlowId, optional title = row label, optional canvas node id) */
   onOpenSubflowForTask?: (taskId: string, existingFlowId?: string, title?: string, canvasNodeId?: string) => void;
+  /** Server/prefetch hydration in flight — defer React Flow graph mount. */
+  canvasHydrating?: boolean;
+  flowHydrated?: boolean;
+  flowServerHydrationApplied?: boolean;
+  flowHasLocalChanges?: boolean;
 }
 
 const FlowEditorContent: React.FC<FlowEditorProps> = ({
@@ -105,6 +111,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   onCreateTaskFlow,
   onOpenTaskFlow,
   onOpenSubflowForTask,
+  canvasHydrating = false,
+  flowHydrated,
+  flowServerHydrationApplied,
+  flowHasLocalChanges,
+  currentProject,
   executionState: propExecutionState,
   currentTask: propCurrentTask,
   isRunning: propIsRunning
@@ -467,6 +478,17 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const canvasRef = useRef<HTMLDivElement>(null);
   const flowShellRef = useRef<HTMLDivElement>(null);
   const shellReady = useFlowCanvasShellReady(flowCanvasId, flowShellRef, canvasRef);
+  const graphReady = useFlowCanvasGraphReady({
+    flowId: flowCanvasId,
+    projectId: currentProject?.id,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    hydrated: flowHydrated,
+    serverHydrationApplied: flowServerHydrationApplied,
+    hasLocalChanges: flowHasLocalChanges,
+    isHostLoading: canvasHydrating,
+  });
+  const canvasReady = shellReady && graphReady;
   const initialFitDoneRef = useRef(false);
   const flowRfId = omniaFlowReactFlowId(String(flowId ?? 'main').trim());
   const flowBgPatternId = omniaFlowBackgroundPatternId(String(flowId ?? 'main').trim());
@@ -868,7 +890,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             ) : null
           }
         >
-          {shellReady ? (
+          {canvasReady ? (
             <ReactFlow
               id={flowRfId}
               nodes={displayNodes}
@@ -953,10 +975,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             </ReactFlow>
           ) : (
             <div
-              className="h-full w-full min-h-0 min-w-0 flex-1 bg-white"
-              aria-hidden
+              className="flex h-full w-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center bg-white text-sm text-slate-500"
+              aria-hidden={!canvasHydrating}
+              role={canvasHydrating ? 'status' : undefined}
+              aria-live={canvasHydrating ? 'polite' : undefined}
               data-omnia-flow-shell-pending={flowCanvasId}
-            />
+            >
+              {canvasHydrating ? 'Loading flow…' : null}
+            </div>
           )}
         </FlowchartWrapper>
       </ExecutionStateProvider>

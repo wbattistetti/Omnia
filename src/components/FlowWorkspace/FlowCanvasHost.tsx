@@ -12,6 +12,7 @@ import {
   beginFlowLoad,
   endFlowLoad,
   fingerprintFlowLoadPayload,
+  isFlowLoadInFlight,
   shouldApplyFlowLoadResult,
   shouldEmitGraphHydrated,
   waitForFlowLoadIdleShared,
@@ -214,6 +215,10 @@ export const FlowCanvasHost: React.FC<Props> = ({
   const hasLocalChanges = flowSlice?.hasLocalChanges;
   const nodeCount = flowSlice?.nodes?.length ?? 0;
   const edgeCount = flowSlice?.edges?.length ?? 0;
+  const serverHydrationApplied = flowSlice?.serverHydrationApplied;
+  const pidForLoad = projectId?.trim() ?? '';
+  const canvasHydrating =
+    isLoadingFlow || (pidForLoad.length > 0 && isFlowLoadInFlight(pidForLoad, flowId));
 
   /** Re-hydrate utterance variables as soon as the workspace graph is available (ordering vs DockManager). */
   const utteranceHydrationFingerprint = useMemo(
@@ -400,6 +405,22 @@ export const FlowCanvasHost: React.FC<Props> = ({
       shouldLoad: explain.shouldLoad,
       slice: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
     });
+    if (pidForLoad.length > 0 && nodeCount === 0 && isFlowLoadInFlight(pidForLoad, flowId)) {
+      setIsLoadingFlow(true);
+      void (async () => {
+        try {
+          await waitForFlowLoadIdleShared(pidForLoad, flowId);
+        } catch {
+          return;
+        }
+        if (cancelled) return;
+        setIsLoadingFlow(false);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!explain.shouldLoad) {
       setIsLoadingFlow(false);
       logFlowHydrationTrace('FlowCanvasHost: skip server loadFlow (policy)', {
@@ -611,7 +632,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
       // when this effect re-ran on `flows` reference churn. endFlowLoad runs in async finally only.
     };
     // Omit hasLocalChanges — toggling it after toolbar commit must not re-run hydration / loadFlow.
-  }, [projectId, flowId, flowPresent, hydrated, upsertFlow, applyFlowLoadResult]);
+  }, [projectId, flowId, flowPresent, hydrated, nodeCount, upsertFlow, applyFlowLoadResult]);
 
   const flow = flows[flowId];
 
@@ -711,6 +732,10 @@ export const FlowCanvasHost: React.FC<Props> = ({
       setEdges={setEdges}
       currentProject={{ id: projectId, name: 'Project' } as any}
       setCurrentProject={() => { }}
+      canvasHydrating={canvasHydrating}
+      flowHydrated={hydrated}
+      flowServerHydrationApplied={serverHydrationApplied}
+      flowHasLocalChanges={hasLocalChanges}
       testPanelOpen={false}
       setTestPanelOpen={() => { }}
       testNodeId={null}
@@ -724,7 +749,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
   const canvasSlot = (
     <div className="relative flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="h-full w-full min-h-0 min-w-0">{flowEditor}</div>
-      {isLoadingFlow ? (
+      {canvasHydrating ? (
         <div
           className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px] text-sm font-medium text-slate-700"
           role="status"

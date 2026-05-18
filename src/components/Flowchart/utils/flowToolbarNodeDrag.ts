@@ -250,6 +250,13 @@ export function startToolbarNodeDrag(options: StartToolbarNodeDragOptions): void
 
     FlowStateBridge.setToolbarDragNodeId(null);
     FlowStateBridge.setDragMode(null);
+    try {
+      window.dispatchEvent(
+        new CustomEvent('flowchart:toolbarDragEnd', { detail: { nodeId, flowCanvasId } })
+      );
+    } catch {
+      /* noop */
+    }
     if (dragActivated) {
       onDraggingChange?.(false);
       document.body.style.cursor = 'default';
