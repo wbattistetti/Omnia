@@ -2,6 +2,8 @@
  * Semantic canvas events — only stable commits cross the FlowStore boundary.
  */
 
+import { shouldSkipDuplicatePositionCommit } from './flowPositionCommitDedupe';
+
 export const FLOW_CANVAS_SEMANTIC_EVENT = 'omnia:flowCanvas:semantic';
 
 export type ViewportPayload = { x: number; y: number; zoom: number };
@@ -48,6 +50,7 @@ export function emitNodePositionCommitted(
   updates: NodePositionUpdate[]
 ): void {
   if (updates.length === 0) return;
+  if (shouldSkipDuplicatePositionCommit(flowId, updates)) return;
   emitFlowCanvasSemantic({ type: 'NODE_POSITION_COMMITTED', flowId, updates });
 }
 

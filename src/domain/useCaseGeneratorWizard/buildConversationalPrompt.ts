@@ -25,6 +25,12 @@
  */
 
 import {
+  catalogFormatCatalogHeading,
+  DEFAULT_CONVERSATIONAL_CATALOG_FORMAT,
+  type ConversationalCatalogFormat,
+} from './catalogFormat';
+import { serializeConversationalCatalog } from './serializeConversationalCatalog';
+import {
   areAllUseCasesProjectable,
   projectAllUseCasesToConversationalJson,
 } from './useCaseJsonProjection';
@@ -51,6 +57,8 @@ export interface BuildConversationalPromptOptions {
   readonly agentBehavior?: AgentBehaviorMode;
   /** Optional cross-cutting rules (separate from business use-case catalog). */
   readonly conversationalRules?: readonly ConversationalRule[];
+  /** Formato serializzazione catalogo use case. Default {@link DEFAULT_CONVERSATIONAL_CATALOG_FORMAT}. */
+  readonly catalogFormat?: ConversationalCatalogFormat;
 }
 
 /**
@@ -95,20 +103,31 @@ Comportamento C: al primo tentativo fallito rispondi «Non ho capito, può ripet
   }
 }
 
-const PROMPT_HEADER_IT = `Ruolo
-Sei l'agente virtuale di un servizio fissato dal progettista. Devi parlare e rispondere ESCLUSIVAMENTE come definito dalla lista di use case che ti vengono forniti più sotto, in formato JSON.
+function buildPromptHeaderIt(catalogFormat: ConversationalCatalogFormat): string {
+  const catalogHeading = catalogFormatCatalogHeading(catalogFormat);
+  const isDsl = catalogFormat === 'dsl-standard' || catalogFormat === 'dsl-ultra';
+  const templateHint = isDsl
+    ? 'il testo dopo \`SAY:\` (o il campo \`t\` nel JSON minimo) è il template'
+    : 'il campo \`tokenizedExample\` (o \`t\` nel JSON minimo) è il template';
+  const variantHint = isDsl
+    ? 'rispetta \`WHEN:\` per scegliere la variante corretta'
+    : 'rispetta \`when\` per scegliere la variante corretta';
+
+  return `Ruolo
+Sei l'agente virtuale di un servizio fissato dal progettista. Devi parlare e rispondere ESCLUSIVAMENTE come definito dal catalogo use case più sotto.
 
 Regole obbligatorie
-1. Per ogni interazione, scegli UN solo use case dalla lista. Usa UNA delle sue \`variants\`: il campo \`tokenizedExample\` è il template; rispetta \`when\` per scegliere la variante corretta (se una sola variante, usala).
-2. Dentro il catalogo NON inventare frasi: sostituisci SOLO gli slot. Fuori catalogo (UKS) vale la sezione UKS sotto.
-3. Gli slot tra parentesi quadre (es. \`[prestazione]\`, \`[data]\`, \`[formulaconferma]\`) vanno sostituiti con valori coerenti. \`[formulaconferma]\` e slot linguistici simili: scegli una formula dalla lista \`linguisticVariants\` del registry se fornita.
+1. Per ogni interazione, scegli un solo use case tra quelli applicabili (il più adatto al turno); usa una sola variante — ${templateHint}; ${variantHint}.
+2. Nel catalogo NON inventare frasi: sostituisci SOLO i token tra \`[…]\`. Fuori catalogo (UKS) vale la sezione UKS sotto.
+3. I token tra parentesi quadre vanno sostituiti con valori coerenti col contesto; per token di stile \`«…»\` usa \`tokens_stile\` / blocco STYLE se presente.
 4. NON lasciare parentesi quadre visibili nella risposta finale.
-5. Mantieni tono e struttura fissa del \`tokenizedExample\`; non riformulare le parole fuori dagli slot.
-6. Usa \`scenario\` per decidere QUANDO applicare l'use case.
-7. Il campo \`label\` è interno; non citarlo.
+5. Non cambiare le stringhe fuori dai token: copia letterale il testo fisso del template.
+6. Usa lo \`scenario\` LLM (intestazione UC o campo \`s\` / \`scenario\`) per decidere QUANDO applicare l'use case.
+7. Il \`label\` interno e gli id tecnici non vanno citati all'utente.
 
-Catalogo use case (JSON)
-Ogni voce ha \`variants[]\` (sempre almeno una). Ogni variante ha \`tokenizedExample\`, \`tokens\`, opzionale \`when\`.`;
+${catalogHeading}
+Ogni voce elenca lo scenario LLM e il template da compilare (almeno una variante per UC).`;
+}
 
 /**
  * Costruisce il prompt conversazionale combinando istruzioni IT + catalogo JSON degli use
@@ -136,41 +155,19 @@ export function buildConversationalPrompt(
 
   const includeLog = options.includeLog === true;
   const agentBehavior = options.agentBehavior ?? 'B';
+  const catalogFormat = options.catalogFormat ?? DEFAULT_CONVERSATIONAL_CATALOG_FORMAT;
   const projected = projectAllUseCasesToConversationalJson(useCases, { includeLog });
-
-  /**
-   * Layout del catalogo:
-   *   ### Use case 1
-   *   {
-   *     "useCaseId": "…",
-   *     …
-   *   }
-   *
-   *   ### Use case 2
-   *   {
-   *     …
-   *   }
-   *
-   * Lo header `### Use case N` è puramente visuale (markdown-friendly e leggibile in chat
-   * box): non sostituisce informazione presente nel JSON, serve solo come ancora di lettura
-   * per il designer che incolla il prompt e vuole orientarsi tra i blocchi.
-   */
-  const catalogBlocks = projected.map(
-    (uc, index) =>
-      `### Use case ${index + 1}\n${JSON.stringify(uc, null, 2)}`
-  );
+  const catalogBody = serializeConversationalCatalog(projected, catalogFormat);
 
   /**
    * Quando `includeLog` è attivo, l'istruzione testuale di logging va **in testa al blocco
-   * Catalogo use case** (non nello header generale): è semanticamente legata al catalogo
-   * — descrive cosa fare con i campi `log` che il motore vede subito dopo. Tenerla qui
-   * invece che in {@link PROMPT_HEADER_IT} mantiene quest'ultimo stabile per i task che
-   * non usano il logging.
+   * catalogo** (non nello header generale): è semanticamente legata al catalogo
+   * — descrive cosa fare con i campi `log` che il motore vede subito dopo.
    */
   const uksBlock = buildUksInstruction(agentBehavior);
   const catalogSection = includeLog
-    ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${uksBlock}\n\n${catalogBlocks.join('\n\n')}`
-    : `${uksBlock}\n\n${catalogBlocks.join('\n\n')}`;
+    ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${uksBlock}\n\n${catalogBody}`
+    : `${uksBlock}\n\n${catalogBody}`;
 
   const rulesSection = buildConversationalRulesPromptSection(
     options.conversationalRules ?? []
@@ -178,5 +175,5 @@ export function buildConversationalPrompt(
   const body = rulesSection.trim()
     ? `${catalogSection}\n\n${rulesSection}`
     : catalogSection;
-  return `${PROMPT_HEADER_IT}\n\n${body}\n`;
+  return `${buildPromptHeaderIt(catalogFormat)}\n\n${body}\n`;
 }

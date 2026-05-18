@@ -1,9 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { clearPositionCommitDedupe } from '../flowPositionCommitDedupe';
 import {
   FLOW_CANVAS_SEMANTIC_EVENT,
   emitNodePositionCommitted,
   subscribeFlowCanvasSemantic,
 } from '../flowCanvasSemanticEvents';
+
+beforeEach(() => {
+  clearPositionCommitDedupe();
+});
 
 describe('flowCanvasSemanticEvents', () => {
   it('emitNodePositionCommitted dispatches NODE_POSITION_COMMITTED', () => {
@@ -32,5 +37,17 @@ describe('flowCanvasSemanticEvents', () => {
     expect(handler).not.toHaveBeenCalled();
 
     window.removeEventListener(FLOW_CANVAS_SEMANTIC_EVENT, listener);
+  });
+
+  it('dedupes identical position commits at emit time', () => {
+    const handler = vi.fn();
+    const unsub = subscribeFlowCanvasSemantic(handler);
+    const updates = [{ nodeId: 'a', position: { x: 1, y: 2 } }];
+
+    emitNodePositionCommitted('main', updates);
+    emitNodePositionCommitted('main', updates);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    unsub();
   });
 });

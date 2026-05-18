@@ -64,7 +64,6 @@ describe('buildConversationalPrompt', () => {
 
     expect(prompt).toContain('### Use case 1');
     expect(prompt).toContain('"useCaseId": "uc-a"');
-    expect(prompt).toContain('"label": "Accettazione"');
     expect(prompt).toContain('"scenario": "Conferma data."');
     expect(prompt).toContain('"variants"');
     expect(prompt).toContain('"tokenizedExample": "Ti vedo il [data]."');
@@ -115,7 +114,7 @@ describe('buildConversationalPrompt', () => {
     it("with includeLog=true: each JSON entry has 'log' with USECASE: \"<NOME>\" upper-cased", () => {
       const prompt = buildConversationalPrompt(
         [makeUseCase({ id: 'uc-a', label: 'Saluto cliente' })],
-        { includeLog: true }
+        { includeLog: true, catalogFormat: 'json-pretty' }
       );
       expect(prompt).toContain('"log": "USECASE: \\"SALUTO CLIENTE\\""');
     });
@@ -145,6 +144,35 @@ describe('buildConversationalPrompt', () => {
         buildConversationalPrompt(ucs, { includeLog: true })
       );
     });
+  });
+
+  it('dsl-standard uses DSL catalog heading and SAY blocks', () => {
+    const prompt = buildConversationalPrompt(
+      [
+        makeUseCase({
+          scenario: { descrittivo: 'x', llm: 'PRENOTAZIONE|data' },
+          dialogue: [
+            {
+              turn_id: 't',
+              role: 'assistant',
+              content: 'Ti vedo il [12 giugno].',
+              editable: true,
+            },
+          ],
+        }),
+      ],
+      { catalogFormat: 'dsl-standard' }
+    );
+    expect(prompt).toContain('Catalogo use case (DSL)');
+    expect(prompt).toContain('[1] PRENOTAZIONE|data');
+    expect(prompt).toContain('>');
+  });
+
+  it('json-compact is shorter than json-pretty for the same catalog', () => {
+    const ucs = [makeUseCase(), makeUseCase({ id: 'uc-2', sort_order: 1 })];
+    const pretty = buildConversationalPrompt(ucs, { catalogFormat: 'json-pretty' });
+    const compact = buildConversationalPrompt(ucs, { catalogFormat: 'json-compact' });
+    expect(compact.length).toBeLessThan(pretty.length);
   });
 
   it('appends conversational rules section when provided', () => {

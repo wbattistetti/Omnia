@@ -25,10 +25,16 @@ import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
 import type { editor as monacoEditorNs } from 'monaco-editor';
 import { Clipboard, ClipboardCheck, Sparkles, X } from 'lucide-react';
+import { buildConversationalPromptFormatSizes } from '@domain/useCaseGeneratorWizard/buildConversationalPromptFormatSizes';
+import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import {
   buildConversationalPrompt,
   type AgentBehaviorMode,
 } from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
+import {
+  ConversationalPromptFormatPills,
+  ConversationalPromptVerbositySummary,
+} from './ConversationalPromptFormatPills';
 import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
@@ -49,6 +55,8 @@ export interface ConversationalPromptDialogProps {
    */
   includeLog?: boolean;
   agentBehavior?: AgentBehaviorMode;
+  catalogFormat: ConversationalCatalogFormat;
+  onCatalogFormatChange: (format: ConversationalCatalogFormat) => void;
   onClose: () => void;
 }
 
@@ -83,8 +91,12 @@ export function ConversationalPromptDialog({
   conversationalRules = [],
   includeLog = false,
   agentBehavior = 'B',
+  catalogFormat,
+  onCatalogFormatChange,
   onClose,
 }: ConversationalPromptDialogProps): React.ReactElement | null {
+  const editorRef = React.useRef<monacoEditorNs.IStandaloneCodeEditor | null>(null);
+  const monacoRef = React.useRef<typeof import('monaco-editor') | null>(null);
   /**
    * Costruiamo il prompt solo quando `open === true` per evitare di pagare il `JSON.stringify`
    * di N use case ad ogni render della tree del wizard. La pre-condizione (tutti compilabili)
@@ -99,6 +111,7 @@ export function ConversationalPromptDialog({
           includeLog,
           agentBehavior,
           conversationalRules,
+          catalogFormat,
         }),
         error: null,
       };
@@ -107,6 +120,19 @@ export function ConversationalPromptDialog({
         value: '',
         error: err instanceof Error ? err.message : String(err),
       };
+    }
+  }, [open, useCases, conversationalRules, includeLog, agentBehavior, catalogFormat]);
+
+  const formatSizes = React.useMemo(() => {
+    if (!open) return null;
+    try {
+      return buildConversationalPromptFormatSizes(useCases, {
+        includeLog,
+        agentBehavior,
+        conversationalRules,
+      });
+    } catch {
+      return null;
     }
   }, [open, useCases, conversationalRules, includeLog, agentBehavior]);
 
@@ -179,14 +205,20 @@ export function ConversationalPromptDialog({
    */
   const handleEditorDidMount = React.useCallback(
     (
-      _editor: monacoEditorNs.IStandaloneCodeEditor,
+      editor: monacoEditorNs.IStandaloneCodeEditor,
       monacoInstance: typeof import('monaco-editor')
     ) => {
+      editorRef.current = editor;
+      monacoRef.current = monacoInstance;
       ensureConversationalPromptLanguage(monacoInstance);
-      monacoInstance.editor.setTheme(getConversationalPromptThemeId());
+      monacoInstance.editor.setTheme(getConversationalPromptThemeId(catalogFormat));
     },
-    []
+    [catalogFormat]
   );
+
+  React.useEffect(() => {
+    monacoRef.current?.editor.setTheme(getConversationalPromptThemeId(catalogFormat));
+  }, [catalogFormat]);
 
   if (!open) return null;
 
@@ -208,7 +240,12 @@ export function ConversationalPromptDialog({
               Prompt conversazionale (uso con motore esterno)
             </h2>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ConversationalPromptFormatPills
+              value={catalogFormat}
+              onChange={onCatalogFormatChange}
+              formatSizes={formatSizes}
+            />
             <button
               type="button"
               disabled={!promptResult.value}
@@ -234,11 +271,14 @@ export function ConversationalPromptDialog({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-4">
+          <ConversationalPromptVerbositySummary
+            formatSizes={formatSizes}
+            activeFormat={catalogFormat}
+          />
           <p className="shrink-0 text-xs leading-relaxed text-slate-400">
-            Copia tutto il testo e incollalo nella chat del tuo motore esterno (es. ChatGPT-5).
-            Il prompt include istruzioni operative e il catalogo JSON degli use case. Ogni
-            voce contiene il template tokenizzato (`tokenizedExample`) come unica fonte: il
-            motore lo userà 1:1 sostituendo solo gli slot tra parentesi quadre.
+            Seleziona uno schema con le pillole in alto, confronta token sul catalogo, poi
+            copia tutto e incollalo nel motore esterno. JSON completo = baseline storica con
+            tutti i campi; gli altri schemi riducono ridondanze nel catalogo.
           </p>
           {promptResult.error ? (
             <div className="shrink-0 rounded-md border border-rose-500/55 bg-rose-950/45 px-3 py-2 text-xs text-rose-100">
@@ -258,8 +298,8 @@ export function ConversationalPromptDialog({
             <MonacoEditor
               width="100%"
               height={editorHeightPx}
-              language={getConversationalPromptLanguageId()}
-              theme={getConversationalPromptThemeId()}
+              language={getConversationalPromptLanguageId(catalogFormat)}
+              theme={getConversationalPromptThemeId(catalogFormat)}
               value={promptResult.value}
               options={MONACO_PROMPT_OPTIONS}
               editorWillMount={handleEditorWillMount}

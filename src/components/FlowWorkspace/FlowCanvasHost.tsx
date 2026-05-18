@@ -3,8 +3,9 @@
  * is resolved inside FlowEditor via DOM hit-test (`crossNodeRowDropHitTest`) and orchestrators;
  * nothing here forwards `targetRowId` — the payload is carried on `crossNodeRowMove` from CustomNode DnD.
  */
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/FlowStore';
+import { WorkspaceSnapshotRefContext } from '@flows/flowWorkspaceReactContext';
 import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
 import {
@@ -13,7 +14,7 @@ import {
   fingerprintFlowLoadPayload,
   shouldApplyFlowLoadResult,
   shouldEmitGraphHydrated,
-  waitForFlowLoadIdle,
+  waitForFlowLoadIdleShared,
 } from '../../flows/flowLoadCoordinator';
 import { emitGraphHydrated } from '../Flowchart/semantic/flowCanvasSemanticEvents';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
@@ -97,6 +98,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
 }) => {
   const { data: projectData } = useProjectData();
   const { flows } = useFlowWorkspace();
+  const workspaceSnapshotRef = useContext(WorkspaceSnapshotRefContext);
   const { upsertFlow, updateFlowGraph, applyFlowLoadResult } = useFlowStoreActions();
   const [isLoadingFlow, setIsLoadingFlow] = React.useState(false);
   const [variablesPanelOpen, setVariablesPanelOpen] = React.useState(false);
@@ -106,6 +108,12 @@ export const FlowCanvasHost: React.FC<Props> = ({
   const hydrationEffectGenRef = React.useRef(0);
   const flowsRef = React.useRef(flows);
   flowsRef.current = flows;
+
+  const readFlowSlice = useCallback(() => {
+    const fromSnapshot = workspaceSnapshotRef?.current?.flows?.[flowId];
+    if (fromSnapshot !== undefined) return fromSnapshot;
+    return flowsRef.current[flowId];
+  }, [flowId, workspaceSnapshotRef]);
 
   const entityCreation = useEntityCreation();
 
@@ -359,12 +367,12 @@ export const FlowCanvasHost: React.FC<Props> = ({
         });
         void (async () => {
           try {
-            await waitForFlowLoadIdle(projectId, flowId);
+            await waitForFlowLoadIdleShared(projectId, flowId);
           } catch {
             return;
           }
           if (cancelled) return;
-          if (flowsRef.current[flowId]) return;
+          if (readFlowSlice()) return;
           if (!startMissingSliceLoad()) {
             flowCanvasDiag('hydrate.host.defer_failed', { flowId, path: 'missingSlice' });
           }
@@ -427,6 +435,20 @@ export const FlowCanvasHost: React.FC<Props> = ({
       ...explain,
     });
     const runServerHydrate = async (): Promise<void> => {
+      const preExplain = explainShouldLoadFlowFromServer(projectId, readFlowSlice());
+      if (!preExplain.shouldLoad) {
+        flowCanvasDiag('hydrate.host.skip_load', {
+          gen: effectGen,
+          flowId,
+          reason: preExplain.reason,
+          nodeCount: readFlowSlice()?.nodes?.length ?? 0,
+        });
+        setIsLoadingFlow(false);
+        endFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate');
+        getFlowFocusManager().resumeFocus('chat');
+        getFlowFocusManager().setFlowRemounting(false);
+        return;
+      }
       let data: Awaited<ReturnType<typeof loadFlow>>;
       try {
         data = await loadFlow(projectId, flowId);
@@ -460,7 +482,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
         variables: data.variables,
         bindings: data.bindings,
       };
-      const sliceNow = flowsRef.current[flowId];
+      const sliceNow = readFlowSlice();
       if (FlowStateBridge.getToolbarDragNodeId() || sliceNow?.hasLocalChanges === true) {
         logFlowSaveDebug('FlowCanvasHost: skip applyFlowLoadResult (local edits or toolbar drag)', {
           projectId,
@@ -535,6 +557,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
     };
 
     const startServerHydrate = (): boolean => {
+      const explainNow = explainShouldLoadFlowFromServer(projectId, readFlowSlice());
+      if (!explainNow.shouldLoad) {
+        flowCanvasDiag('hydrate.host.skip_start', {
+          gen: effectGen,
+          flowId,
+          reason: explainNow.reason,
+          nodeCount: readFlowSlice()?.nodes?.length ?? 0,
+        });
+        return true;
+      }
       if (!beginFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate')) return false;
       setIsLoadingFlow(true);
       getFlowFocusManager().suspendFocus('chat');
@@ -550,12 +582,13 @@ export const FlowCanvasHost: React.FC<Props> = ({
       });
       void (async () => {
         try {
-          await waitForFlowLoadIdle(projectId, flowId);
+          await waitForFlowLoadIdleShared(projectId, flowId);
+          await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
         } catch {
           return;
         }
         if (cancelled) return;
-        const sliceAfterWait = flowsRef.current[flowId];
+        const sliceAfterWait = readFlowSlice();
         const explainAfter = explainShouldLoadFlowFromServer(projectId, sliceAfterWait);
         if (!explainAfter.shouldLoad) {
           setIsLoadingFlow(false);

@@ -18,6 +18,7 @@ describe('flowLoadCoordinator', () => {
     const pending = waitForFlowLoadIdle('p1', 'main', 500);
     expect(isFlowLoadInFlight('p1', 'main')).toBe(true);
     endFlowLoad('p1', 'main', 'a');
+    await new Promise<void>((r) => queueMicrotask(r));
     await pending;
     expect(isFlowLoadInFlight('p1', 'main')).toBe(false);
   });

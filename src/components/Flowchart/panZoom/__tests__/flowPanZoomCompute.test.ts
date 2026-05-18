@@ -27,4 +27,20 @@ describe('flowPanZoomCompute', () => {
     ];
     expect(computeFlowPanZoomNeeded(nodes, store, null)).toBe(true);
   });
+
+  it('returns true when only a small portion of one node is outside', () => {
+    const nodes = [
+      { id: 'a', position: { x: 50, y: 50 }, data: {}, width: 120, height: 80 },
+      { id: 'b', position: { x: 785, y: 50 }, data: {}, width: 120, height: 80 },
+    ];
+    expect(computeFlowPanZoomNeeded(nodes, store, null)).toBe(true);
+  });
+
+  it('returns false when every node is fully inside', () => {
+    const nodes = [
+      { id: 'a', position: { x: 10, y: 10 }, data: {}, width: 100, height: 60 },
+      { id: 'b', position: { x: 200, y: 100 }, data: {}, width: 100, height: 60 },
+    ];
+    expect(computeFlowPanZoomNeeded(nodes, store, null)).toBe(false);
+  });
 });

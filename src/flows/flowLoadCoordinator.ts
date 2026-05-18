@@ -77,7 +77,22 @@ export function endFlowLoad(projectId: string, flowId: string, caller?: string):
   inFlightKeys.delete(key);
   inFlightCallerByKey.delete(key);
   traceFlowLoadLock('end', key, caller);
-  notifyFlowLoadEnded(key);
+  // Defer so FlowStore reducer + provider snapshot ref update before waiters re-check the slice.
+  queueMicrotask(() => notifyFlowLoadEnded(key));
+}
+
+const sharedWaitByKey = new Map<string, Promise<void>>();
+
+/** One awaited load lock per flow — multiple FlowCanvasHost effects share the same wait. */
+export function waitForFlowLoadIdleShared(projectId: string, flowId: string): Promise<void> {
+  const key = flowLoadKey(projectId, flowId);
+  const existing = sharedWaitByKey.get(key);
+  if (existing) return existing;
+  const p = waitForFlowLoadIdle(projectId, flowId).finally(() => {
+    sharedWaitByKey.delete(key);
+  });
+  sharedWaitByKey.set(key, p);
+  return p;
 }
 
 /**

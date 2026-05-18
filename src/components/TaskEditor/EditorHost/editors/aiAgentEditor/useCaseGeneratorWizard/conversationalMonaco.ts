@@ -15,6 +15,7 @@
  * Le classi CSS riferite dalle decorations vivono in `conversationalMonaco.css`.
  */
 
+import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type * as Monaco from 'monaco-editor';
 
 const JSON_THEME_ID = 'omnia-conversational-json';
@@ -166,30 +167,54 @@ export function ensureConversationalPromptLanguage(monaco: typeof Monaco): void 
     tokenizer: {
       root: [
         [/^### Use case \d+\s*$/, 'omnia-section'],
+        [/^###\d+\s*$/, 'omnia-section'],
+        [/^### UC \d+\s*$/, 'omnia-section'],
         [
-          /^(Ruolo|Regole obbligatorie|Catalogo use case \(JSON\))\s*$/,
+          /^(Ruolo|Regole obbligatorie|Catalogo use case \(JSON\)|Catalogo use case \(DSL\)|Indice use case \(scenario LLM\))\s*$/,
           'omnia-heading',
         ],
+        [/^--- UC \d+:/, 'omnia-dsl-uc-header'],
+        [/^\[\d+\.\d+\]/, 'omnia-dsl-ultra-id'],
+        [/^VARIANT \d+:/, 'omnia-dsl-variant'],
+        [/^\s*WHEN:/, 'omnia-dsl-when'],
+        [/^\s*SAY:/, 'omnia-dsl-say'],
+        [/^\s*TOKENS:/, 'omnia-dsl-tokens'],
+        [/^LOG:/, 'omnia-dsl-log'],
+        [/^STYLE:/, 'omnia-dsl-style'],
+        [/^\d+\.\s+.+$/, 'omnia-scenario-index'],
         [/^\s*\d+\.\s/, 'omnia-rulenumber'],
         [/`[^`]+`/, 'omnia-inlinecode'],
-        [/^\s*\{\s*$/, { token: 'omnia-json-bracket', next: '@json' }],
+        [/^\s*\{/, { token: 'omnia-json-bracket', next: '@json' }],
         [/^\s*\[\s*$/, { token: 'omnia-json-bracket', next: '@json' }],
+        [/\[[a-z][a-z0-9]*\d*\]/, 'omnia-token-bracket'],
+        [/«[^»]+»/, 'omnia-style-token'],
         [/[^`]+/, 'omnia-text'],
       ],
       json: [
         [/^\s*\}\s*,?\s*$/, { token: 'omnia-json-bracket', next: '@pop' }],
         [/^\s*\]\s*,?\s*$/, { token: 'omnia-json-bracket', next: '@pop' }],
+        [/\}\s*,?\s*$/, { token: 'omnia-json-bracket', next: '@pop' }],
         [/"useCaseId"(?=\s*:)/, 'omnia-jsonkey-useCaseId'],
         [/"label"(?=\s*:)/, 'omnia-jsonkey-label'],
         [/"scenario"(?=\s*:)/, 'omnia-jsonkey-scenario'],
         [/"tokenizedExample"(?=\s*:)/, 'omnia-jsonkey-tokenizedExample'],
         [/"tokens"(?=\s*:)/, 'omnia-jsonkey-tokens'],
+        [/"s"(?=\s*:)/, 'omnia-jsonkey-scenario'],
+        [/"t"(?=\s*:)/, 'omnia-jsonkey-tokenizedExample'],
+        [/"w"(?=\s*:)/, 'omnia-jsonkey-when'],
+        [/"k"(?=\s*:)/, 'omnia-jsonkey-tokens'],
+        [/"v"(?=\s*:)/, 'omnia-jsonkey-variants'],
+        [/"l"(?=\s*:)/, 'omnia-jsonkey-log'],
+        [/"ts"(?=\s*:)/, 'omnia-jsonkey-style'],
+        [/"when"(?=\s*:)/, 'omnia-jsonkey-when'],
+        [/"log"(?=\s*:)/, 'omnia-jsonkey-log'],
         [/"[^"]*"(?=\s*:)/, 'omnia-jsonkey'],
         [/"[^"]*"/, 'omnia-jsonstring'],
         [/-?\d+(?:\.\d+)?/, 'omnia-jsonnumber'],
         [/true|false|null/, 'omnia-jsonkeyword'],
         [/[{}[\]]/, 'omnia-json-bracket'],
         [/[,:]/, 'omnia-json-punct'],
+        [/\[[a-z][a-z0-9]*\d*\]/, 'omnia-token-bracket'],
         [/\s+/, 'white'],
         [/./, 'omnia-text'],
       ],
@@ -216,6 +241,21 @@ export function ensureConversationalPromptLanguage(monaco: typeof Monaco): void 
       { token: 'omnia-jsonkey-scenario', foreground: '6ee7b7', fontStyle: 'bold' },
       { token: 'omnia-jsonkey-tokenizedExample', foreground: 'fcd34d', fontStyle: 'bold' },
       { token: 'omnia-jsonkey-tokens', foreground: 'f9a8d4', fontStyle: 'bold' },
+      { token: 'omnia-jsonkey-when', foreground: 'fb923c', fontStyle: 'bold' },
+      { token: 'omnia-jsonkey-variants', foreground: 'a78bfa', fontStyle: 'bold' },
+      { token: 'omnia-jsonkey-log', foreground: '94a3b8', fontStyle: 'bold' },
+      { token: 'omnia-jsonkey-style', foreground: 'e879f9', fontStyle: 'bold' },
+      { token: 'omnia-dsl-uc-header', foreground: '6ee7b7', fontStyle: 'bold' },
+      { token: 'omnia-dsl-variant', foreground: 'a78bfa', fontStyle: 'bold' },
+      { token: 'omnia-dsl-when', foreground: 'fb923c' },
+      { token: 'omnia-dsl-say', foreground: 'fcd34d', fontStyle: 'bold' },
+      { token: 'omnia-dsl-tokens', foreground: 'f9a8d4' },
+      { token: 'omnia-dsl-log', foreground: '94a3b8' },
+      { token: 'omnia-dsl-style', foreground: 'e879f9', fontStyle: 'bold' },
+      { token: 'omnia-dsl-ultra-id', foreground: '67e8f9', fontStyle: 'bold' },
+      { token: 'omnia-scenario-index', foreground: '6ee7b7' },
+      { token: 'omnia-token-bracket', foreground: 'fbbf24' },
+      { token: 'omnia-style-token', foreground: 'e879f9', fontStyle: 'italic' },
     ],
     colors: {
       'editor.background': '#0c0c0f',
@@ -229,10 +269,15 @@ export function ensureConversationalPromptLanguage(monaco: typeof Monaco): void 
   promptLanguageRegistered = true;
 }
 
-export function getConversationalPromptLanguageId(): string {
+/** Linguaggio Monarch unico: supporta header + JSON (pretty/compact/minimal) + DSL. */
+export function getConversationalPromptLanguageId(
+  _format?: ConversationalCatalogFormat
+): string {
   return PROMPT_LANGUAGE_ID;
 }
 
-export function getConversationalPromptThemeId(): string {
+export function getConversationalPromptThemeId(
+  _format?: ConversationalCatalogFormat
+): string {
   return PROMPT_THEME_ID;
 }

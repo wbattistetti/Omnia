@@ -36,6 +36,8 @@ import { getAssistantExample } from '@types/aiAgentUseCases';
 import { useFullscreenEditorPref } from './aiAgentEditor/useFullscreenEditorPref';
 import { useAppToolbarBottom } from './aiAgentEditor/useAppToolbarBottom';
 import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
+import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
+import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
 import { createPortal } from 'react-dom';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
@@ -827,6 +829,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * compilabili dal builder deterministico (`areAllUseCasesProjectable`).
    */
   const [conversationalPromptDialogOpen, setConversationalPromptDialogOpen] = React.useState(false);
+  const [conversationalCatalogFormat, setConversationalCatalogFormat] =
+    React.useState<ConversationalCatalogFormat>(DEFAULT_CONVERSATIONAL_CATALOG_FORMAT);
   const canCreateConversationalPrompt = React.useMemo(
     () => Array.isArray(c.useCases) && c.useCases.length > 0 && areAllUseCasesProjectable(c.useCases),
     [c.useCases]
@@ -1472,6 +1476,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           conversationalRules={c.conversationalRules}
           includeLog={c.agentLogUseCase}
           agentBehavior={c.agentBehavior}
+          catalogFormat={conversationalCatalogFormat}
+          onCatalogFormatChange={setConversationalCatalogFormat}
           onClose={onCloseConversationalPromptDialog}
         />
       </div>

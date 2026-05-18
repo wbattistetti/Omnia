@@ -123,9 +123,12 @@ export function FlowWorkspaceProvider({
     []
   );
 
-  const [state, dispatch] = useReducer(reducer as any, initial);
   const workspaceSnapshotRef = useRef<WorkspaceState>(initial);
-  workspaceSnapshotRef.current = state;
+  const [state, dispatch] = useReducer((current: WorkspaceState, action: Action) => {
+    const next = reducer(current, action as Action) as WorkspaceState;
+    workspaceSnapshotRef.current = next;
+    return next;
+  }, initial);
 
   useEffect(() => {
     const onHydrated = (ev: Event) => {

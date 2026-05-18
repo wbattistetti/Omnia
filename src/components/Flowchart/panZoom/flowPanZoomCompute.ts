@@ -1,13 +1,14 @@
 /**
- * PanZoom visibility via React Flow getNodesBounds + store viewport.
+ * PanZoom visibility — show when any node extends outside the viewport (even slightly).
  */
 
-import { getNodesBounds, type Node } from 'reactflow';
+import type { Node } from 'reactflow';
 import { resolveFlowPaneElement } from '../utils/flowCanvasDom';
 import { paneRectFromElement, screenPointToFlow } from '../utils/flowScreenProjection';
 import { nodesHaveFinitePositions } from '../utils/flowPositionGuards';
+import { hasAnyNodeDomPartiallyOutsidePane } from './flowNodeScreenBounds';
 import {
-  isFlowRectFullyInside,
+  hasAnyNodeOutsideFlowRect,
   visibleFlowRectFromViewportStore,
   type FlowRect,
 } from './flowGraphBounds';
@@ -18,7 +19,8 @@ export type FlowPanZoomStoreSlice = {
   height: number;
 };
 
-const VISIBILITY_MARGIN_FLOW_PX = 8;
+/** Show panzoom as soon as any pixel of a node footprint is outside the viewport (no slack). */
+const SHOW_OUTSIDE_EPSILON_FLOW_PX = 0;
 
 function viewportFromTransform(t: [number, number, number]): {
   x: number;
@@ -45,25 +47,8 @@ function visibleFlowRectFromDom(
   };
 }
 
-function graphBoundsFromNodes(nodes: readonly Node[]): FlowRect | null {
-  if (nodes.length === 0) return null;
-  try {
-    const b = getNodesBounds(nodes as Node[]);
-    if (!b || !Number.isFinite(b.width) || !Number.isFinite(b.height)) return null;
-    if (b.width < 1 && b.height < 1) return null;
-    return {
-      minX: b.x,
-      minY: b.y,
-      maxX: b.x + b.width,
-      maxY: b.y + b.height,
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
- * True when the graph bounding box is not fully inside the visible viewport.
+ * True when any node (or its measured DOM box) is not fully inside the visible viewport.
  */
 export function computeFlowPanZoomNeeded(
   nodes: readonly Node[],
@@ -80,11 +65,13 @@ export function computeFlowPanZoomNeeded(
     visibleFlowRectFromDom(host, vp);
   if (!visible) return false;
 
-  const graph = graphBoundsFromNodes(nodes);
-  if (!graph) return false;
+  if (hasAnyNodeOutsideFlowRect(nodes, visible, SHOW_OUTSIDE_EPSILON_FLOW_PX)) {
+    return true;
+  }
 
-  return !isFlowRectFullyInside(graph, visible, VISIBILITY_MARGIN_FLOW_PX);
+  if (host && hasAnyNodeDomPartiallyOutsidePane(host, 0)) {
+    return true;
+  }
+
+  return false;
 }
-
-/** @deprecated use graphBoundsFromNodes — kept for tests importing graphFlowBounds */
-export { graphBoundsFromNodes as graphFlowBounds };
