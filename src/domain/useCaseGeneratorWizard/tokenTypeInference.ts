@@ -16,7 +16,7 @@
  *
  * Limiti dichiarati: l'inferenza è basata su pattern del dominio appuntamenti/dati anagrafici
  * IT. Contenuti semantici di dominio (nomi propri, ruoli, tipi di esame, motivazioni) cadono
- * nel fallback `slot` e devono essere classificati a monte dall'LLM o rinominati a mano dal
+ * nel fallback `undefined` e devono essere classificati a monte dall'LLM o rinominati a mano dal
  * designer.
  *
  * Vincoli del nome prodotto: lowercase, prima lettera, poi alfanumerico — coerenti con
@@ -34,14 +34,14 @@ export type InferredTokenBaseName =
   | 'importo'
   | 'url'
   | 'numero'
-  | 'slot';
+  | 'undefined';
 
 /**
  * Confidenza della classificazione:
  * - `high`: pattern fortemente specifico (orario, email, CF, URL, ISO date…);
  * - `medium`: pattern italiano testuale (data con mese in lettere, weekday);
  * - `low`: pattern numerico generico (`numero` quando nessun pattern più specifico matcha);
- * - `fallback`: nessun pattern ha matchato → assegnato `slot`.
+ * - `fallback`: nessun pattern ha matchato → assegnato `undefined`.
  */
 export type InferenceConfidence = 'high' | 'medium' | 'low' | 'fallback';
 
@@ -180,9 +180,9 @@ const CLASSIFIERS: ReadonlyArray<{
  * @returns nome base inferito + livello di confidenza.
  */
 export function inferTokenType(raw: string): InferredToken {
-  if (typeof raw !== 'string') return { name: 'slot', confidence: 'fallback' };
+  if (typeof raw !== 'string') return { name: 'undefined', confidence: 'fallback' };
   const trimmed = raw.trim();
-  if (trimmed.length === 0) return { name: 'slot', confidence: 'fallback' };
+  if (trimmed.length === 0) return { name: 'undefined', confidence: 'fallback' };
 
   /**
    * Caso «già tokenizzato»: il bracket contiene un token name valido (lowercase alfanumerico)
@@ -194,20 +194,23 @@ export function inferTokenType(raw: string): InferredToken {
    */
   if (/^[a-z][a-z0-9]*$/.test(trimmed)) {
     const baseFromName = stripTrailingIndex(trimmed);
+    if (baseFromName === 'slot') {
+      return { name: 'undefined', confidence: 'high' };
+    }
     if (isKnownBaseName(baseFromName)) {
       return { name: baseFromName, confidence: 'high' };
     }
-    /** fall-through ai classifier — `paziente` resta `slot`, `domenica` diventa `data`. */
+    /** fall-through ai classifier — `paziente` resta `undefined`, `domenica` diventa `data`. */
   }
 
   for (const cls of CLASSIFIERS) {
     if (cls.re.test(trimmed)) return { name: cls.name, confidence: cls.confidence };
   }
-  return { name: 'slot', confidence: 'fallback' };
+  return { name: 'undefined', confidence: 'fallback' };
 }
 
 /**
- * Rimuove un eventuale suffisso numerico finale (`data1` → `data`, `slot12` → `slot`).
+ * Rimuove un eventuale suffisso numerico finale (`data1` → `data`, `undefined12` → `undefined`).
  * Lascia invariato il nome se non c'è suffisso numerico.
  */
 function stripTrailingIndex(name: string): string {
@@ -225,7 +228,7 @@ const KNOWN_BASES: ReadonlySet<string> = new Set<InferredTokenBaseName>([
   'importo',
   'url',
   'numero',
-  'slot',
+  'undefined',
 ]);
 
 function isKnownBaseName(name: string): name is InferredTokenBaseName {

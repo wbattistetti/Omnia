@@ -13,7 +13,7 @@
  * - Logging/debugging in one place
  */
 
-import type { Node, Edge } from 'reactflow';
+import type { Node, Edge, NodeChange } from 'reactflow';
 import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
 import type { DebuggerFlowHighlightPayload } from '../features/debugger/highlight/debuggerHighlightPayload';
 
@@ -24,6 +24,12 @@ type CreateOnUpdateFunction = (edgeId: string) => (updates: any) => void;
 type ScheduleApplyLabelFunction = (edgeId: string, label: string) => void;
 type CleanupFunction = () => void;
 type PendingEdgeConnectClearHandler = () => void;
+type ApplyNodeChangesHandler = (changes: NodeChange[]) => void;
+type EphemeralDragSnapshotHandler = (
+  updates: Array<{ nodeId: string; position: { x: number; y: number } }>
+) => void;
+type ClearEphemeralDragHandler = () => void;
+type UpdateNodeInternalsHandler = (nodeId: string) => void;
 
 // Type for the window globals (for documentation and type safety)
 interface FlowWindowGlobals {
@@ -42,6 +48,7 @@ interface FlowWindowGlobals {
   __scheduleApplyLabel?: ScheduleApplyLabelFunction;
   __setEdges?: SetEdgesFunction;
   __setNodes?: SetNodesFunction;
+  __applyNodeChanges?: ApplyNodeChangesHandler;
   __cleanupAllTempNodesAndEdges?: CleanupFunction;
   __flowOnMessage?: ((msg: any) => void) | null;
 
@@ -361,6 +368,48 @@ class FlowStateBridgeClass {
   setSetNodes(fn: SetNodesFunction | undefined): void {
     if (typeof window === 'undefined') return;
     (window as any).__setNodes = fn;
+  }
+
+  /** Controlled-flow position updates via FlowEditor `onNodesChange`. */
+  getApplyNodeChanges(): ApplyNodeChangesHandler | undefined {
+    if (typeof window === 'undefined') return undefined;
+    return (window as any).__applyNodeChanges;
+  }
+
+  setApplyNodeChanges(fn: ApplyNodeChangesHandler | undefined): void {
+    if (typeof window === 'undefined') return;
+    (window as any).__applyNodeChanges = fn;
+  }
+
+  /** RF preview during toolbar drag — does not touch FlowStore. */
+  getApplyEphemeralDrag(): EphemeralDragSnapshotHandler | undefined {
+    if (typeof window === 'undefined') return undefined;
+    return (window as any).__applyEphemeralDrag;
+  }
+
+  setApplyEphemeralDrag(fn: EphemeralDragSnapshotHandler | undefined): void {
+    if (typeof window === 'undefined') return;
+    (window as any).__applyEphemeralDrag = fn;
+  }
+
+  getClearEphemeralDrag(): ClearEphemeralDragHandler | undefined {
+    if (typeof window === 'undefined') return undefined;
+    return (window as any).__clearEphemeralDrag;
+  }
+
+  setClearEphemeralDrag(fn: ClearEphemeralDragHandler | undefined): void {
+    if (typeof window === 'undefined') return;
+    (window as any).__clearEphemeralDrag = fn;
+  }
+
+  setUpdateNodeInternals(fn: UpdateNodeInternalsHandler | undefined): void {
+    if (typeof window === 'undefined') return;
+    (window as any).__updateNodeInternals = fn;
+  }
+
+  getUpdateNodeInternals(): UpdateNodeInternalsHandler | undefined {
+    if (typeof window === 'undefined') return undefined;
+    return (window as any).__updateNodeInternals;
   }
 
   /**

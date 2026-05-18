@@ -5,9 +5,15 @@
 import React from 'react';
 import { ScanSearch } from 'lucide-react';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
-import { isValidSlotId, normalizeSurface } from '@domain/useCaseBundle/projectSlotLexicon';
+import {
+  CORE_SLOT_IDS,
+  isUnclassifiedSlotId,
+  normalizeSlotId,
+  normalizeSurface,
+} from '@domain/useCaseBundle/projectSlotLexicon';
 import { VoteThumbPair } from '../VoteThumbPair';
 import { useUseCaseWizardListToolbarOptional } from '../useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
+import { SlotCategoryCombobox } from './SlotCategoryCombobox';
 
 export interface SlotMappingRightPanelProps {
   lexicon: ProjectSlotLexicon;
@@ -70,13 +76,24 @@ export function SlotMappingRightPanel({
   onUpdateSlotId,
 }: SlotMappingRightPanelProps): React.ReactElement {
   const ctx = useUseCaseWizardListToolbarOptional();
-  const [editingSurface, setEditingSurface] = React.useState<string | null>(null);
-  const [draftSlotId, setDraftSlotId] = React.useState('');
 
   const entries = React.useMemo(
     () => [...lexicon.entries].sort((a, b) => a.surface.localeCompare(b.surface)),
     [lexicon.entries]
   );
+
+  const { mappedCategoryOptions, otherCategoryOptions } = React.useMemo(() => {
+    const mapped = new Set<string>();
+    for (const e of lexicon.entries) {
+      const id = normalizeSlotId(e.slot_id);
+      if (!isUnclassifiedSlotId(id)) mapped.add(id);
+    }
+    const mappedSorted = [...mapped].sort((a, b) => a.localeCompare(b));
+    const otherSorted = [...CORE_SLOT_IDS]
+      .filter((id) => !mapped.has(id))
+      .sort((a, b) => a.localeCompare(b));
+    return { mappedCategoryOptions: mappedSorted, otherCategoryOptions: otherSorted };
+  }, [lexicon.entries]);
 
   const lensActiveSurface = ctx?.lensActiveSurface ?? null;
 
@@ -93,17 +110,6 @@ export function SlotMappingRightPanel({
       ctx.setSearchSeed(normalized);
     },
     [ctx]
-  );
-
-  const commitSlotIdEdit = React.useCallback(
-    (surface: string) => {
-      const next = draftSlotId.trim().toLowerCase();
-      if (!isValidSlotId(next)) return;
-      onUpdateSlotId(surface, next);
-      setEditingSurface(null);
-      setDraftSlotId('');
-    },
-    [draftSlotId, onUpdateSlotId]
   );
 
   return (
@@ -133,7 +139,7 @@ export function SlotMappingRightPanel({
             ) : (
               entries.map((e) => {
                 const isLensActive = lensActiveSurface === e.surface;
-                const isEditing = editingSurface === e.surface;
+                const unclassified = isUnclassifiedSlotId(e.slot_id);
                 return (
                   <tr
                     key={e.surface}
@@ -154,30 +160,20 @@ export function SlotMappingRightPanel({
                         ) : null}
                       </div>
                     </td>
-                    <td className="py-1.5 pr-2 font-mono">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={draftSlotId}
-                          onChange={(ev) => setDraftSlotId(ev.target.value)}
-                          onKeyDown={(ev) => {
-                            if (ev.key === 'Enter') {
-                              ev.preventDefault();
-                              commitSlotIdEdit(e.surface);
-                            }
-                            if (ev.key === 'Escape') {
-                              setEditingSurface(null);
-                            }
-                          }}
-                          onBlur={() => commitSlotIdEdit(e.surface)}
-                          className="w-full min-w-[80px] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-emerald-200 focus:border-violet-500/60 focus:outline-none"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className={e.slot_id === 'slot' ? 'text-red-400' : undefined}>
-                          {e.slot_id}
-                        </span>
-                      )}
+                    <td className="py-1.5 pr-2">
+                      <SlotCategoryCombobox
+                        value={e.slot_id}
+                        mappedOptions={mappedCategoryOptions}
+                        otherOptions={otherCategoryOptions}
+                        onCommit={(slotId) => onUpdateSlotId(e.surface, slotId)}
+                        className={
+                          e.approved && !unclassified
+                            ? '[&>button]:text-emerald-300 [&>button]:border-emerald-600/50'
+                            : unclassified
+                              ? '[&>button]:text-red-400 [&>button]:border-red-600/40'
+                              : '[&>button]:text-orange-300'
+                        }
+                      />
                       {e.conflictWith ? (
                         <span className="mt-0.5 block text-[10px] text-red-400">
                           conflitto → {e.conflictWith}
@@ -192,12 +188,9 @@ export function SlotMappingRightPanel({
                         onVote={(choice) => {
                           if (choice === 'up') {
                             onApproveEntry(e.surface);
-                            setEditingSurface(null);
                             return;
                           }
                           onRevokeEntryApproval(e.surface);
-                          setEditingSurface(e.surface);
-                          setDraftSlotId(e.slot_id);
                         }}
                       />
                     </td>

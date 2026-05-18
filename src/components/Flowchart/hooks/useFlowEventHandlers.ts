@@ -6,6 +6,9 @@ import { dlog } from '@utils/debug';
 import { FlowStateBridge } from '../../../services/FlowStateBridge';
 import { getFlowFocusManager } from '@features/focus';
 import { getDescendantNodeIds, translateNodes } from '../../../flow/utils/graphTransforms';
+import { queryWithinFlowCanvasHost } from '../utils/flowCanvasDom';
+import { flowCanvasDiag } from '../utils/flowCanvasDiagnostics';
+import { emitNodePositionCommitted } from '../semantic/flowCanvasSemanticEvents';
 
 /**
  * Hook for managing Flow Editor event handlers
@@ -15,6 +18,7 @@ import { getDescendantNodeIds, translateNodes } from '../../../flow/utils/graphT
  */
 export function useFlowEventHandlers(
   reactFlowInstance: any,
+  flowCanvasId: string,
   nodes: Node<FlowNode>[],
   edges: Edge<EdgeData>[],
   setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
@@ -36,7 +40,7 @@ export function useFlowEventHandlers(
     rootLast: { x: number; y: number };
   }>(null);
 
-  const applyRigidDragMovement = useCallback((ctx: any, draggedNode: Node, setNodes: any) => {
+  const applyRigidDragMovement = useCallback((ctx: any, draggedNode: Node) => {
     if (draggedNode.id !== ctx.rootId) return;
     const curX = (draggedNode.position as any).x;
     const curY = (draggedNode.position as any).y;
@@ -44,26 +48,45 @@ export function useFlowEventHandlers(
     const incDy = curY - ctx.rootLast.y;
     if (incDx === 0 && incDy === 0) return;
 
-    setNodes((nds: Node<FlowNode>[]) => {
+    const applyEphemeral = FlowStateBridge.getApplyEphemeralDrag();
+    if (applyEphemeral) {
+      const snapshot = FlowStateBridge.getNodes() as Node<FlowNode>[] | undefined;
+      const nds = snapshot?.length ? snapshot : nodes;
       const moved = translateNodes(nds, ctx.translateIds, incDx, incDy);
-      return moved.map((n) => (n.id === draggedNode.id ? (draggedNode as any) : n)) as Node<FlowNode>[];
-    });
+      const updates = moved
+        .filter((n) => n.id === draggedNode.id || ctx.translateIds.has(n.id))
+        .map((n) => ({
+          nodeId: n.id,
+          position:
+            n.id === draggedNode.id
+              ? { x: curX, y: curY }
+              : { x: n.position.x, y: n.position.y },
+        }));
+      applyEphemeral(updates);
+    }
 
     ctx.rootLast = { x: curX, y: curY };
-  }, []);
+  }, [nodes]);
 
-  const applyFinalRigidDragOffset = useCallback((ctx: any, nodesRef: any, setNodes: any) => {
-    const rootNow = nodesRef.current.find((n: Node) => n.id === ctx.rootId);
-    if (rootNow) {
-      const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
-      const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
-      if (finalDx !== 0 || finalDy !== 0) {
-        setNodes((nds: Node<FlowNode>[]) =>
-          translateNodes(nds, ctx.translateIds, finalDx, finalDy) as Node<FlowNode>[]
-        );
-      }
+  const commitRigidDrag = useCallback((ctx: any, nodesSnapshot: Node<FlowNode>[]) => {
+    const rootNow = nodesSnapshot.find((n) => n.id === ctx.rootId);
+    if (!rootNow) return;
+    const finalDx = (rootNow.position as any).x - ctx.rootLast.x;
+    const finalDy = (rootNow.position as any).y - ctx.rootLast.y;
+    let moved = nodesSnapshot;
+    if (finalDx !== 0 || finalDy !== 0) {
+      moved = translateNodes(nodesSnapshot, ctx.translateIds, finalDx, finalDy) as Node<FlowNode>[];
     }
-  }, []);
+    const updates = moved
+      .filter((n) => n.id === ctx.rootId || ctx.translateIds.has(n.id))
+      .map((n) => ({
+        nodeId: n.id,
+        position: { x: n.position.x, y: n.position.y },
+      }));
+    if (updates.length > 0) {
+      emitNodePositionCommitted(String(flowCanvasId || 'main').trim(), updates);
+    }
+  }, [flowCanvasId]);
 
   /**
    * Handles pane click - deselects edges and dispatches custom event
@@ -122,18 +145,21 @@ export function useFlowEventHandlers(
    * Handles node drag start - sets up rigid drag context if needed
    */
   const onNodeDragStart = useCallback((event: any, node: Node) => {
-    // ✅ Con nodesDraggable={false}, questo non dovrebbe essere chiamato per drag normale
-    // Solo quando attiviamo manualmente il drag dalla toolbar
     const target = event.target as Element;
+    flowCanvasDiag('rf.onNodeDragStart', { nodeId: node.id, target: (target as HTMLElement)?.className });
     const isAnchor = target && (target.classList.contains('rigid-anchor') || target.closest('.rigid-anchor'));
     const isHandle = target && (
       target.classList.contains('react-flow__handle') ||
       target.closest('.react-flow__handle')
     );
     const hasNodrag = target && (target.classList.contains('nodrag') || target.closest('.nodrag'));
-    const isToolbarDrag = FlowStateBridge.isToolbarDragForNode(node.id);
+    const isToolbarHandle =
+      target &&
+      (target.classList.contains('toolbar-drag-handle') ||
+        target.closest('.toolbar-drag-handle') ||
+        target.classList.contains('rigid-anchor') ||
+        target.closest('.rigid-anchor'));
 
-    // If called with a handle, block
     if (isHandle) {
       FlowStateBridge.setDragStartedFromHandle(true);
       event.preventDefault();
@@ -143,8 +169,7 @@ export function useFlowEventHandlers(
 
     FlowStateBridge.setDragStartedFromHandle(false);
 
-    // Block if has nodrag AND not a toolbar drag
-    if (hasNodrag && !isToolbarDrag) {
+    if (hasNodrag && !isToolbarHandle) {
       FlowStateBridge.setBlockNodeDrag(true);
       event.preventDefault();
       event.stopPropagation();
@@ -154,17 +179,17 @@ export function useFlowEventHandlers(
     const selectedSet = new Set(selectedNodeIds);
     const canDragSelectedGroup = selectedSet.size > 1 && selectedSet.has(node.id);
 
-    // Allow toolbar drag OR selected-group drag
-    if (isToolbarDrag || canDragSelectedGroup) {
-      FlowStateBridge.setBlockNodeDrag(false);
-    } else {
-      // If not toolbar drag, block
+    if (!isToolbarHandle && !canDragSelectedGroup) {
+      FlowStateBridge.setBlockNodeDrag(true);
       event.preventDefault();
       event.stopPropagation();
       return false;
     }
 
     FlowStateBridge.setBlockNodeDrag(false);
+    if (isToolbarHandle) {
+      FlowStateBridge.setToolbarDragNodeId(node.id);
+    }
 
     // If dragging a node inside a multi-selection, move the whole selection rigidly.
     // This is the primary behavior for group manipulation.
@@ -219,24 +244,30 @@ export function useFlowEventHandlers(
       return;
     }
     const ctx = rigidDragCtxRef.current;
-    applyRigidDragMovement(ctx, draggedNode, setNodes);
-  }, [setNodes, applyRigidDragMovement, nodes]);
+    applyRigidDragMovement(ctx, draggedNode);
+  }, [applyRigidDragMovement, nodes]);
 
   /**
    * Handles node drag stop - applies final rigid drag offset
    */
   const onNodeDragStop = useCallback((event: any, node: Node) => {
-    // NOTE: onNodeDragStop is NOT called when starting from a handle
-    // thanks to noDragClassName="react-flow__handle"
-    try { FlowStateBridge.setDragMode(null); } catch { }
+    try {
+      FlowStateBridge.setDragMode(null);
+      FlowStateBridge.setToolbarDragNodeId(null);
+    } catch {
+      /* noop */
+    }
 
     const ctx = rigidDragCtxRef.current;
     if (ctx) {
-      const nodesRef = { current: nodes };
-      applyFinalRigidDragOffset(ctx, nodesRef, setNodes);
+      // Commit BEFORE clearing overlay — mirrors the toolbar drag path (bridge handles clear after
+      // the NODE_POSITION_COMMITTED event). Clearing first creates a frame where overlay is gone
+      // but the FlowStore hasn't updated yet, causing a one-frame snap to the old position.
+      const snapshot = (FlowStateBridge.getNodes() as Node<FlowNode>[] | undefined) ?? nodes;
+      commitRigidDrag(ctx, snapshot);
     }
     rigidDragCtxRef.current = null;
-  }, [setNodes, applyFinalRigidDragOffset, nodes]);
+  }, [commitRigidDrag, nodes]);
 
   /**
    * Handles selection change - updates selected node IDs
@@ -250,7 +281,10 @@ export function useFlowEventHandlers(
       // verifica presenza del rettangolo di selezione e stili calcolati
       setTimeout(() => {
         try {
-          const el = document.querySelector('.react-flow__selection') as HTMLElement | null;
+          const el = queryWithinFlowCanvasHost(
+            canvasRef.current,
+            '.react-flow__selection'
+          );
           if (el) {
             const cs = getComputedStyle(el);
             dlog('flow', '[selectionRect]', { bg: cs.backgroundColor });
@@ -258,7 +292,7 @@ export function useFlowEventHandlers(
         } catch { }
       }, 0);
     } catch { }
-  }, [setSelectedNodeIds]);
+  }, [setSelectedNodeIds, canvasRef]);
 
   /**
    * Handles mouse up on ReactFlow - opens selection menu if 2+ nodes selected
@@ -276,11 +310,9 @@ export function useFlowEventHandlers(
       try { if (liveSelectedIds.length) setSelectedNodeIds(liveSelectedIds); } catch { }
       // Use mouse release point relative to the FlowEditor container (account for scroll)
       const host = canvasRef.current;
-      const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 } as any;
-      const scrollX = host ? host.scrollLeft : 0;
-      const scrollY = host ? host.scrollTop : 0;
-      const x = (e.clientX - rect.left) + scrollX;
-      const y = (e.clientY - rect.top) + scrollY;
+      const rect = host ? host.getBoundingClientRect() : { left: 0, top: 0 };
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
       setSelectionMenu({ show: true, x, y });
     } catch { }
     // Persist the selection rectangle exactly as drawn
@@ -290,8 +322,8 @@ export function useFlowEventHandlers(
       const host = canvasRef.current;
       if (start && host) {
         const rect = host.getBoundingClientRect();
-        const ex = (e.clientX - rect.left) + host.scrollLeft;
-        const ey = (e.clientY - rect.top) + host.scrollTop;
+        const ex = e.clientX - rect.left;
+        const ey = e.clientY - rect.top;
         const x = Math.min(start.x, ex);
         const y = Math.min(start.y, ey);
         const w = Math.abs(ex - start.x);
@@ -326,8 +358,8 @@ export function useFlowEventHandlers(
     const host = canvasRef.current;
     if (!host) return;
     const rect = host.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) + host.scrollLeft;
-    const sy = (e.clientY - rect.top) + host.scrollTop;
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
     dragStartRef.current = { x: sx, y: sy };
   }, [canvasRef, dragStartRef, setPersistedSel]);
 

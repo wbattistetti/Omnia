@@ -46,6 +46,13 @@ import { useTaskCreationFromSelection } from './hooks/useTaskCreationFromSelecti
 import { CustomEdge } from './edges/CustomEdge';
 import { IntellisenseProvider, useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
+import { ReactFlowContainerResize } from './reactFlowContainerResize';
+import { useFlowCanvasShellReady } from './hooks/useFlowCanvasShellReady';
+import { FlowPanZoomOverview } from './panZoom/FlowPanZoomOverview';
+import {
+  omniaFlowBackgroundPatternId,
+  omniaFlowReactFlowId,
+} from './flowReactFlowInstanceIds';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
 import { FlowStateBridge } from '../../services/FlowStateBridge';
 import { useCompilationErrors } from '../../context/CompilationErrorsContext';
@@ -63,6 +70,13 @@ import {
   useElevenLabsFlowDrop,
   type ElevenLabsFlowDropMessage,
 } from './hooks/useElevenLabsFlowDrop';
+import { useFlowCanvasSemanticBridge } from './hooks/useFlowCanvasSemanticBridge';
+import {
+  emitViewportInitialFit,
+  emitViewportSettled,
+  subscribeFlowCanvasSemantic,
+} from './semantic/flowCanvasSemanticEvents';
+import { keepFlowGraphInView } from './utils/flowViewportKeepGraphVisible';
 
 // Edge types stabile per evitare warning React Flow
 const edgeTypes = { custom: CustomEdge };
@@ -111,7 +125,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     connectionMenuRef
   } = useConnectionMenu();
   const reactFlowInstance = useReactFlow();
+  const { updateNodeInternals } = reactFlowInstance;
   const storeApi = useStoreApi();
+  const flowCanvasId = String(flowId ?? 'main').trim();
   const selection = useSelectionManager();
 
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
@@ -201,6 +217,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
       FlowStateBridge.setSetNodes(undefined);
     };
   }, [scheduleApplyLabel, setEdges, setNodes]);
+
+  const onNodesChangeRef = useRef<(changes: any) => void>(() => {});
 
   // Log execution state changes (only when values change)
   const prevStateRef = useRef<{ currentNodeId?: string | null; executedCount?: number; isRunning?: boolean }>({});
@@ -446,10 +464,61 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     );
   }, [setEdges]);
 
-  const NODE_WIDTH = 280; // px (tailwind w-70)
-  const NODE_HEIGHT = 40; // px (min-h-[40px])
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [contentSize, setContentSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const flowShellRef = useRef<HTMLDivElement>(null);
+  const shellReady = useFlowCanvasShellReady(flowCanvasId, flowShellRef, canvasRef);
+  const initialFitDoneRef = useRef(false);
+  const flowRfId = omniaFlowReactFlowId(String(flowId ?? 'main').trim());
+  const flowBgPatternId = omniaFlowBackgroundPatternId(String(flowId ?? 'main').trim());
+
+  useEffect(() => {
+    initialFitDoneRef.current = false;
+  }, [flowId]);
+
+  /** One-time fit when the flow first gets nodes (VIEWPORT_INITIAL_FIT — no repeat on upsert). */
+  useEffect(() => {
+    if (!reactFlowInstance || nodes.length === 0 || initialFitDoneRef.current) return;
+    initialFitDoneRef.current = true;
+    const id = requestAnimationFrame(() => {
+      try {
+        reactFlowInstance.fitView({ padding: 0.18, duration: 0 });
+        const vp = reactFlowInstance.getViewport();
+        if (Number.isFinite(vp.x) && Number.isFinite(vp.y) && Number.isFinite(vp.zoom)) {
+          emitViewportInitialFit(flowCanvasId, { x: vp.x, y: vp.y, zoom: vp.zoom });
+          emitViewportSettled(flowCanvasId, { x: vp.x, y: vp.y, zoom: vp.zoom });
+        }
+      } catch {
+        /* noop */
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [reactFlowInstance, nodes.length, flowCanvasId]);
+
+  /** Keep graph in view when canvas shrinks (e.g. Response Editor opens). */
+  useEffect(() => {
+    return subscribeFlowCanvasSemantic((ev) => {
+      if (String(ev.flowId).trim() !== flowCanvasId || ev.type !== 'CANVAS_LAYOUT_SETTLED') return;
+      const apply = () => {
+        try {
+          const panned = keepFlowGraphInView(
+            reactFlowInstance,
+            nodes,
+            ev.width,
+            ev.height
+          );
+          if (panned) {
+            const vp = reactFlowInstance.getViewport();
+            if (Number.isFinite(vp.x) && Number.isFinite(vp.y) && Number.isFinite(vp.zoom)) {
+              emitViewportSettled(flowCanvasId, { x: vp.x, y: vp.y, zoom: vp.zoom });
+            }
+          }
+        } catch {
+          /* RF not ready */
+        }
+      };
+      requestAnimationFrame(() => requestAnimationFrame(apply));
+    });
+  }, [flowCanvasId, reactFlowInstance, nodes]);
 
   // After dock split: instant horizontal pan only (split is lateral; keep Y + zoom — no vertical jump).
   useEffect(() => {
@@ -493,26 +562,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     document.addEventListener('flowchart:centerViewportOnNode', handler as EventListener);
     return () => document.removeEventListener('flowchart:centerViewportOnNode', handler as EventListener);
   }, [flowId, reactFlowInstance]);
-
-  // Calcola estensione contenuto per eventuali scrollbar
-  useEffect(() => {
-    const pad = 200; // padding intorno al contenuto
-    let minX = 0, minY = 0, maxX = 0, maxY = 0;
-    if (nodes.length > 0) {
-      minX = Math.min(...nodes.map(n => (n.position as any).x));
-      minY = Math.min(...nodes.map(n => (n.position as any).y));
-      maxX = Math.max(...nodes.map(n => (n.position as any).x + NODE_WIDTH));
-      const approxHeights = nodes.map(n => {
-        const rows = (n.data as any)?.rows;
-        const count = Array.isArray(rows) ? rows.length : 0;
-        return NODE_HEIGHT + (count * 24) + 40;
-      });
-      maxY = Math.max(...nodes.map((n, i) => (n.position as any).y + approxHeights[i]));
-    }
-    const w = Math.max(0, maxX - minX) + pad * 2;
-    const h = Math.max(0, maxY - minY) + pad * 2;
-    setContentSize({ w, h });
-  }, [nodes]);
 
   const { createNodeAt } = nodeActions;
 
@@ -701,7 +750,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Event handlers moved to useFlowEventHandlers hook
 
   // ✅ Use Flow Viewport hook for zoom, pan, and scroll-to-node
-  const { handleWheel } = useFlowViewport(reactFlowInstance);
+  const { handleWheel } = useFlowViewport(reactFlowInstance, canvasRef);
 
   // ✅ Use Cursor Tooltip hook
   const { setCursorTooltip } = useCursorTooltip(nodes.length);
@@ -713,6 +762,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ Use Flow Event Handlers hook
   const eventHandlers = useFlowEventHandlers(
     reactFlowInstance,
+    flowCanvasId,
     nodes,
     edges,
     setNodes,
@@ -748,16 +798,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     () => edges.map((e) => ({ ...e, selected: e.id === selectedEdgeId })),
     [edges, selectedEdgeId]
   );
-  const onNodesChange = useCallback((changes: any) => {
-    const nextNodes = applyNodeChanges(changes, nodesRef.current);
-    setNodes(nextNodes);
-    try {
-      const selected = nextNodes.filter((n: any) => !!n?.selected).map((n: any) => n.id);
-      setSelectedNodeIds(selected);
-    } catch {
-      /* noop */
-    }
-  }, [setNodes, setSelectedNodeIds]);
+  const { displayNodes, onNodesChange: onNodesChangeSemantic } = useFlowCanvasSemanticBridge({
+    flowId: flowCanvasId,
+    nodes,
+    setNodes,
+    setSelectedNodeIds,
+    updateNodeInternals,
+  });
+
+  onNodesChangeRef.current = onNodesChangeSemantic;
+
+  useEffect(() => {
+    FlowStateBridge.setApplyNodeChanges((changes) => onNodesChangeRef.current(changes));
+    return () => FlowStateBridge.setApplyNodeChanges(undefined);
+  }, []);
 
   return (
     <FlowSubflowProvider value={subflowContextValue}>
@@ -794,88 +848,118 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         isRunning={propIsRunning ?? FlowStateBridge.isRunning()}
       >
         <FlowchartWrapper
+          ref={flowShellRef}
           className="flex min-h-0 w-full flex-1 flex-col"
-          nodes={nodes}
-          edges={edges}
-          padding={400}
-          minWidth={1200}
-          minHeight={800}
+          overlay={
+            persistedSel ? (
+              <div
+                className="pointer-events-none absolute"
+                style={{
+                  left: persistedSel.x,
+                  top: persistedSel.y,
+                  width: persistedSel.w,
+                  height: persistedSel.h,
+                  backgroundColor: 'rgba(125, 211, 252, 0.18)',
+                  border: '1px solid rgba(56, 189, 248, 0.9)',
+                  boxShadow: '0 0 0 1px rgba(56,189,248,0.25) inset',
+                  zIndex: 5,
+                }}
+              />
+            ) : null
+          }
         >
-          <ReactFlow
-            nodes={nodes}
-            edges={edgesWithSelection}
-            onNodesChange={onNodesChange}
-            onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onPaneClick={eventHandlers.onPaneClick}
-            onMouseMove={eventHandlers.handlePaneMouseMove}
-            onEdgeClick={handleEdgeClick}
-            onConnectStart={onConnectStart}
-            onConnectEnd={onConnectEnd}
-            noDragClassName="react-flow__handle nodrag"
-            nodesDraggable={false}
-            onNodeDragStart={eventHandlers.onNodeDragStart}
-            onNodeDrag={eventHandlers.onNodeDrag}
-            onNodeDragStop={eventHandlers.onNodeDragStop}
-            onNodeDoubleClick={eventHandlers.onNodeDoubleClick}
-            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-            maxZoom={4}
-            className="min-h-0 flex-1 bg-white"
-            style={{ backgroundColor: '#ffffff', width: '100%', height: '100%', minHeight: 0 }}
-            selectionOnDrag={true}
-            onSelectionChange={eventHandlers.onSelectionChange}
-            panOnDrag={[2]}
-            zoomOnScroll={false}
-            zoomOnPinch={false}
-            panOnScroll={false}
-            onWheel={handleWheel}
-            zoomOnDoubleClick={false}
-            onMouseUp={eventHandlers.onMouseUp}
-          >
-            <Controls className="bg-white shadow-lg border border-slate-200" />
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={22}
-              size={1.5}
-              color="#eef2f7" // puntini molto più sbiaditi
-              style={{ backgroundColor: '#ffffff', opacity: 0.6 }}
+          {shellReady ? (
+            <ReactFlow
+              id={flowRfId}
+              nodes={displayNodes}
+              edges={edgesWithSelection}
+              onNodesChange={onNodesChangeSemantic}
+              onEdgesChange={changes => setEdges(eds => applyEdgeChanges(changes, eds))}
+              onConnect={onConnect}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onPaneClick={eventHandlers.onPaneClick}
+              onMouseMove={eventHandlers.handlePaneMouseMove}
+              onEdgeClick={handleEdgeClick}
+              onConnectStart={onConnectStart}
+              onConnectEnd={onConnectEnd}
+              noDragClassName="react-flow__handle nodrag"
+              nodesDraggable={false}
+              selectNodesOnDrag={false}
+              onNodeDragStart={eventHandlers.onNodeDragStart}
+              onNodeDrag={eventHandlers.onNodeDrag}
+              onNodeDragStop={eventHandlers.onNodeDragStop}
+              onNodeDoubleClick={eventHandlers.onNodeDoubleClick}
+              defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+              minZoom={0.15}
+              maxZoom={4}
+              className="bg-white"
+              style={{ width: '100%', height: '100%', backgroundColor: '#ffffff' }}
+              selectionOnDrag={true}
+              onSelectionChange={eventHandlers.onSelectionChange}
+              panOnDrag={[2]}
+              zoomOnScroll={false}
+              zoomOnPinch={false}
+              panOnScroll={false}
+              onWheel={handleWheel}
+              zoomOnDoubleClick={false}
+              onMouseUp={eventHandlers.onMouseUp}
+              onMoveEnd={() => {
+                try {
+                  const vp = reactFlowInstance.getViewport();
+                  if (Number.isFinite(vp.x) && Number.isFinite(vp.y) && Number.isFinite(vp.zoom)) {
+                    emitViewportSettled(flowCanvasId, { x: vp.x, y: vp.y, zoom: vp.zoom });
+                  }
+                } catch {
+                  /* noop */
+                }
+              }}
+            >
+              <ReactFlowContainerResize
+                flowCanvasId={flowCanvasId}
+                containerRef={flowShellRef}
+                fallbackRef={canvasRef}
+              />
+              <Controls className="bg-white shadow-lg border border-slate-200" />
+              <Background
+                id={flowBgPatternId}
+                variant={BackgroundVariant.Dots}
+                gap={22}
+                size={1.5}
+                color="#eef2f7"
+              />
+              <FlowPanZoomOverview
+                flowCanvasId={flowCanvasId}
+                nodes={nodes}
+                viewportHostRef={canvasRef}
+                theme="light"
+                reactFlowInstanceId={flowRfId}
+              />
+              <svg style={{ height: 0 }}>
+                <defs>
+                  <marker
+                    id="arrowhead"
+                    markerWidth="6"
+                    markerHeight="6"
+                    refX="6"
+                    refY="3"
+                    orient="auto"
+                    markerUnits="strokeWidth"
+                  >
+                    <path d="M0,0 L6,3 L0,6 Z" fill="#8b5cf6" />
+                  </marker>
+                </defs>
+              </svg>
+            </ReactFlow>
+          ) : (
+            <div
+              className="h-full w-full min-h-0 min-w-0 flex-1 bg-white"
+              aria-hidden
+              data-omnia-flow-shell-pending={flowCanvasId}
             />
-            <svg style={{ height: 0 }}>
-              <defs>
-                <marker
-                  id="arrowhead"
-                  markerWidth="6"
-                  markerHeight="6"
-                  refX="6"
-                  refY="3"
-                  orient="auto"
-                  markerUnits="strokeWidth"
-                >
-                  <path d="M0,0 L6,3 L0,6 Z" fill="#8b5cf6" />
-                </marker>
-              </defs>
-            </svg>
-          </ReactFlow>
+          )}
         </FlowchartWrapper>
       </ExecutionStateProvider>
-
-      {persistedSel && (
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            left: persistedSel.x,
-            top: persistedSel.y,
-            width: persistedSel.w,
-            height: persistedSel.h,
-            backgroundColor: 'rgba(125, 211, 252, 0.18)',
-            border: '1px solid rgba(56, 189, 248, 0.9)',
-            boxShadow: '0 0 0 1px rgba(56,189,248,0.25) inset',
-            zIndex: 5
-          }}
-        />
-      )}
 
       {/* Selection context mini menu at bottom-right of selection */}
       {selectionMenu.show && selectedNodeIds.length >= 2 && (
@@ -883,6 +967,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           selectedNodeIds={selectedNodeIds}
           selectionMenu={selectionMenu}
           nodes={nodes}
+          canvasHostRef={canvasRef}
           onCreateTask={() => handleCreateTask(selectedNodeIds)}
           onAlign={(type) => handleAlign(type, selectedNodeIds)}
           onDistribute={(type) => handleDistribute(type, selectedNodeIds)}

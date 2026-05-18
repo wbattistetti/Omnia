@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { CustomNodeData } from '../CustomNode';
 import { FlowStateBridge } from '../../../../../services/FlowStateBridge';
+import { flowCanvasDiag } from '../../../utils/flowCanvasDiagnostics';
 
 interface UseNodeStateProps {
   data: CustomNodeData;
@@ -53,33 +54,13 @@ export function useNodeState({ data }: UseNodeStateProps) {
     setNodeTitle(data.label || '');
   }, [data.label]);
 
-  // Se il drag globale termina, resetta la modalità toolbar
+  // Reset toolbar drag mode when document-level drag ends (onDraggingChange(false) in CustomNode).
   useEffect(() => {
     if (!isDragging && isToolbarDrag) {
-      console.log('🎯 [useNodeState] Auto-resetting isToolbarDrag because isDragging became false');
+      flowCanvasDiag('nodeState.toolbarDrag.reset', { reason: 'isDragging_false' });
       setIsToolbarDrag(false);
     }
   }, [isDragging, isToolbarDrag]);
-
-  // Fallback: reset isToolbarDrag on any mouse/pointer up (in case onDragEnd doesn't fire)
-  useEffect(() => {
-    if (!isToolbarDrag) return;
-
-    const resetToolbarDrag = () => {
-      console.log('🎯 [useNodeState] Fallback reset: mouse/pointer up detected, resetting isToolbarDrag');
-      setIsToolbarDrag(false);
-    };
-
-    window.addEventListener('mouseup', resetToolbarDrag, true);
-    window.addEventListener('pointerup', resetToolbarDrag, true);
-    window.addEventListener('mouseleave', resetToolbarDrag, true);
-
-    return () => {
-      window.removeEventListener('mouseup', resetToolbarDrag, true);
-      window.removeEventListener('pointerup', resetToolbarDrag, true);
-      window.removeEventListener('mouseleave', resetToolbarDrag, true);
-    };
-  }, [isToolbarDrag]);
 
   return {
     // Title editing

@@ -133,10 +133,15 @@ export function WorkspaceDockLifecycle({
     const gen = ++prefetchGenRef.current;
     let cancelled = false;
 
-    void prefetchHydratedFlowSlicesFromServer(pid, flowIds, {
-      getFlows: () => flowsRef.current as any,
-      upsertFlow: upsertFlow as any,
-    }).then(() => {
+    void prefetchHydratedFlowSlicesFromServer(
+      pid,
+      flowIds,
+      {
+        getFlows: () => flowsRef.current as any,
+        upsertFlow: upsertFlow as any,
+      },
+      { isSuperseded: () => gen !== prefetchGenRef.current }
+    ).then(() => {
       if (cancelled || gen !== prefetchGenRef.current) return;
       try {
         document.dispatchEvent(new CustomEvent('variableStore:updated', { bubbles: true }));

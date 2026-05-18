@@ -23,7 +23,7 @@ describe('computeSlotMappingValidation', () => {
   it('flags generic slot_id', () => {
     const lexicon = {
       ...emptyProjectSlotLexicon(),
-      entries: [{ surface: 'foo', slot_id: 'slot', approved: true }],
+      entries: [{ surface: 'foo', slot_id: 'undefined', approved: true }],
     };
     const r = computeSlotMappingValidation(lexicon, [baseUseCase]);
     expect(r.status).toBe('invalid');

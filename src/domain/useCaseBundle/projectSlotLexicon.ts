@@ -6,6 +6,9 @@ import type { SlotSurfaceMapping } from './schema';
 
 export const LEXICON_SCHEMA_VERSION = 1 as const;
 
+/** Placeholder quando la surface non ha ancora una categoria (ex `slot`). */
+export const UNCLASSIFIED_SLOT_ID = 'undefined' as const;
+
 /** Vocabolario chiuso iniziale (estendibile con approvazione designer). */
 export const CORE_SLOT_IDS = [
   'prestazione',
@@ -20,8 +23,19 @@ export const CORE_SLOT_IDS = [
   'email',
   'telefono',
   'importo',
-  'slot',
 ] as const;
+
+/** True se la categoria non è stata assegnata (include legacy `slot`). */
+export function isUnclassifiedSlotId(slotId: string): boolean {
+  const s = slotId.trim().toLowerCase();
+  return s === UNCLASSIFIED_SLOT_ID || s === 'slot';
+}
+
+/** Normalizza `slot_id` persistito (migra legacy `slot` → `undefined`). */
+export function normalizeSlotId(slotId: string): string {
+  const s = slotId.trim().toLowerCase();
+  return s === 'slot' ? UNCLASSIFIED_SLOT_ID : s;
+}
 
 export type CoreSlotId = (typeof CORE_SLOT_IDS)[number];
 
@@ -83,7 +97,7 @@ export function parseProjectSlotLexiconJson(raw: string | undefined | null): Pro
         if (!e || typeof e !== 'object') continue;
         const eo = e as Record<string, unknown>;
         const surface = normalizeSurface(String(eo.surface ?? ''));
-        const slot_id = String(eo.slot_id ?? '').trim().toLowerCase();
+        const slot_id = normalizeSlotId(String(eo.slot_id ?? ''));
         if (!surface || !isValidSlotId(slot_id)) continue;
         entries.push({
           surface,
@@ -142,7 +156,7 @@ export function mergeMappingsIntoLexicon(
   for (const m of mappings) {
     if (m.localOnly) continue;
     const surface = normalizeSurface(m.surface);
-    const slot_id = m.slot_id.trim().toLowerCase();
+    const slot_id = normalizeSlotId(m.slot_id);
     if (!surface || !isValidSlotId(slot_id)) continue;
 
     const existing = bySurface.get(surface);

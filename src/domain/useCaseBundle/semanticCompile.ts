@@ -17,6 +17,8 @@ import {
   type ProjectSlotLexicon,
   isValidSlotId,
   CORE_SLOT_IDS,
+  UNCLASSIFIED_SLOT_ID,
+  normalizeSlotId,
 } from './projectSlotLexicon';
 
 const DOMAIN_SLOT_HINTS: ReadonlyArray<{ pattern: RegExp; slot_id: string }> = [
@@ -47,9 +49,9 @@ function inferSlotIdForSurface(surface: string, lexicon: ProjectSlotLexicon): st
   }
 
   const inferred = autoTokenizeAnnotated(`[${trimmed}]`);
-  const base = inferred.brackets[0]?.finalName ?? 'slot';
+  const base = normalizeSlotId(inferred.brackets[0]?.finalName ?? UNCLASSIFIED_SLOT_ID);
   if ((CORE_SLOT_IDS as readonly string[]).includes(base)) return base;
-  return 'slot';
+  return UNCLASSIFIED_SLOT_ID;
 }
 
 function compileNaturalText(
@@ -84,7 +86,7 @@ function compileNaturalText(
     if (!slot_id) {
       slot_id = inferSlotIdForSurface(surface, lexicon);
     }
-    if (!isValidSlotId(slot_id)) slot_id = 'slot';
+    if (!isValidSlotId(slot_id)) slot_id = UNCLASSIFIED_SLOT_ID;
 
     mappings.push({ surface, slot_id });
     bracketSlots.push(slot_id);

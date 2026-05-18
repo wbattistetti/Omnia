@@ -54,9 +54,11 @@ describe('shouldSkipDockInboundBareEmptySlice', () => {
 });
 
 describe('mergeDockInboundLayoutOnly', () => {
-  it('keeps node data and meta from current; position from incoming', () => {
+  it('keeps node data, meta, and position from current (store-authoritative layout)', () => {
     const current = {
       meta: { translations: { 'var:x': 'L' } },
+      hydrated: true,
+      hasLocalChanges: false,
       nodes: [
         {
           id: 'a',
@@ -78,9 +80,11 @@ describe('mergeDockInboundLayoutOnly', () => {
     };
     const out = mergeDockInboundLayoutOnly(incoming, current as any);
     expect(out.meta).toEqual(current.meta);
-    expect((out.nodes[0] as any).position).toEqual({ x: 99, y: 50 });
+    expect((out.nodes[0] as any).position).toEqual({ x: 0, y: 0 });
     expect((out.nodes[0] as any).data.rows[0].text).toBe('Keep');
     expect(out.edges).toEqual(current.edges);
+    expect(out.hydrated).toBe(true);
+    expect(out.hasLocalChanges).toBe(false);
   });
 
   it('merges incoming meta.translations into current (flow label write / writeTranslationToFlowSlice)', () => {

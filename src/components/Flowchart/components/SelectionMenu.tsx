@@ -1,12 +1,15 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, type RefObject } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { Node } from 'reactflow';
 import type { FlowNode } from '../types/flowTypes';
+import { queryWithinFlowCanvasHost } from '../utils/flowCanvasDom';
 
 export interface SelectionMenuProps {
   selectedNodeIds: string[];
   selectionMenu: { show: boolean; x: number; y: number };
   nodes: Node<FlowNode>[];
+  /** FlowEditor canvas host — scopes DOM queries when multiple React Flow instances are open. */
+  canvasHostRef?: RefObject<HTMLElement | null>;
   onCreateTask: () => void;
   onAlign: (type: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
   onDistribute: (type: 'horizontal' | 'vertical') => void;
@@ -24,7 +27,8 @@ export const SelectionMenu: React.FC<SelectionMenuProps> = ({
   onDistribute,
   checkAlignmentOverlap,
   checkDistributionOverlap,
-  onCancel
+  onCancel,
+  canvasHostRef,
 }) => {
   const [viewportPosition, setViewportPosition] = useState({ x: 0, y: 0 });
 
@@ -51,20 +55,21 @@ export const SelectionMenu: React.FC<SelectionMenuProps> = ({
   useEffect(() => {
     if (!selectionMenu.show) return;
 
-    const canvasContainer = document.querySelector('.react-flow') as HTMLElement;
+    const canvasContainer =
+      queryWithinFlowCanvasHost(canvasHostRef?.current ?? null, '.react-flow') ??
+      canvasHostRef?.current ??
+      null;
     if (!canvasContainer) {
       setViewportPosition({ x: selectionMenu.x, y: selectionMenu.y });
       return;
     }
 
     const rect = canvasContainer.getBoundingClientRect();
-    const scrollX = canvasContainer.scrollLeft || 0;
-    const scrollY = canvasContainer.scrollTop || 0;
-    const viewportX = rect.left + selectionMenu.x - scrollX + 8;
-    const viewportY = rect.top + selectionMenu.y - scrollY + 8;
+    const viewportX = rect.left + selectionMenu.x + 8;
+    const viewportY = rect.top + selectionMenu.y + 8;
 
     setViewportPosition({ x: viewportX, y: viewportY });
-  }, [selectionMenu.show, selectionMenu.x, selectionMenu.y]);
+  }, [selectionMenu.show, selectionMenu.x, selectionMenu.y, canvasHostRef]);
 
   if (!selectionMenu.show || selectedNodeIds.length < 2) return null;
 

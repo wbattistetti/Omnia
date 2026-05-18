@@ -4,11 +4,9 @@ import { FlowActionsProvider } from '../../context/FlowActionsContext';
 import { useEntityCreation } from '../../hooks/useEntityCreation';
 import { setActiveFlowCanvasId } from '../../flows/activeFlowCanvas';
 import { FlowTabBar } from './FlowTabBar';
-import { loadFlow, saveFlow } from '../../flows/FlowPersistence';
+import { saveFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
-import { dlog } from '../../utils/debug';
 import { logFlowHydrationTrace } from '../../utils/flowHydrationTrace';
-import { formatUnknownError } from '../../utils/httpErrorFormatting';
 import { logSubflowCanvasDebug, summarizeFlowSlice } from '../../utils/subflowCanvasDebug';
 import { logUpsertSubflowEmptyNodesCaller } from '../../utils/flowStructuralCommitDiagnostic';
 import { FlowEditor } from '../Flowchart/FlowEditor';
@@ -19,7 +17,7 @@ import { isFlowInterfacePanelEnabled } from '@flows/flowInterfaceUiPolicy';
 const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
   const { activeFlowId, flows } = useFlowWorkspace();
   const flowsForSave = flows;
-  const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, applyFlowLoadResult, markFlowsPersisted } =
+  const { upsertFlow, updateFlowGraph, openFlow, openFlowBackground, markFlowsPersisted } =
     useFlowActions();
   const entityCreation = useEntityCreation();
 
@@ -101,46 +99,16 @@ const FlowHost: React.FC<{ projectId?: string }> = ({ projectId }) => {
       }
       return;
     }
-    (async () => {
-      let data: Awaited<ReturnType<typeof loadFlow>>;
-      try {
-        data = await loadFlow(projectId, activeFlowId);
-      } catch (e) {
-        const errText = formatUnknownError(e);
-        logFlowHydrationTrace('FlowWorkspace: loadFlow threw', {
-          projectId,
-          activeFlowId,
-          error: errText,
-        });
-        console.error(`[FlowWorkspace] loadFlow failed: ${errText}`, { projectId, activeFlowId, cause: e });
-        return;
-      }
-      if (cancelled) return;
-      logFlowHydrationTrace('FlowWorkspace: applyFlowLoadResult (active tab)', {
-        activeFlowId,
-        projectId,
-        payloadNodeCount: data.nodes.length,
-        payloadEdgeCount: data.edges.length,
-      });
-      logSubflowCanvasDebug('FlowWorkspace: applyFlowLoadResult (active tab)', {
-        activeFlowId,
-        serverNodeCount: data.nodes.length,
-        serverEdgeCount: data.edges.length,
-      });
-      applyFlowLoadResult(activeFlowId, {
-        nodes: data.nodes,
-        edges: data.edges,
-        ...(data.meta !== undefined ? { meta: data.meta } : {}),
-        tasks: data.tasks,
-        variables: data.variables,
-        bindings: data.bindings,
-      });
-      dlog('flow', '[workspace.loaded]', { projectId, activeFlowId, nodes: data.nodes.length, edges: data.edges.length });
-    })();
+    // Server hydrate is owned by FlowCanvasHost (dock canvas). Avoid duplicate loadFlow → flicker.
+    logFlowHydrationTrace('FlowWorkspace: skip server load (FlowCanvasHost hydrates)', {
+      activeFlowId,
+      projectId,
+      reason: explain.reason,
+    });
     return () => {
       cancelled = true;
     };
-  }, [activeFlowId, projectId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
+  }, [activeFlowId, projectId, flowPresent, hydrated, hasLocalChanges, upsertFlow]);
 
   const flow = flows[activeFlowId];
 

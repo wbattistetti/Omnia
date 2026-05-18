@@ -460,7 +460,7 @@
       "providerId": "openai",
       "modelId": "gpt-oss-120b",
       "inputUsdPer1M": 0.039,
-      "outputUsdPer1M": 0.19,
+      "outputUsdPer1M": 0.18,
       "contextLength": 131072,
       "rawId": "openai/gpt-oss-120b"
     },
@@ -1302,7 +1302,7 @@
       "providerId": "openai",
       "modelId": "gpt-oss-120b",
       "inputUsdPer1M": 0.039,
-      "outputUsdPer1M": 0.19,
+      "outputUsdPer1M": 0.18,
       "contextLength": 131072,
       "rawId": "openai/gpt-oss-120b"
     },
@@ -1686,6 +1686,6 @@
   "meta": {
     "source": "openrouter",
     "count": 105,
-    "updatedAt": "2026-05-17T18:23:41.610Z"
+    "updatedAt": "2026-05-18T08:35:54.276Z"
   }
 }

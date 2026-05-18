@@ -186,8 +186,10 @@ export function compileUseCaseConversationalText(
   const tokenizedText = snap.tokenizedText.trim();
   if (!tokenizedText) return null;
   const warnings = buildCompilationWarnings(naturalText, []);
-  if (snap.mappings.some((m) => m.slot_id === 'slot')) {
-    warnings.push('Un valore è stato compilato come [slot]: verifica il lessico progetto.');
+  if (snap.mappings.some((m) => m.slot_id === 'undefined' || m.slot_id === 'slot')) {
+    warnings.push(
+      'Un valore è stato compilato come [undefined]: verifica il lessico progetto.'
+    );
   }
   return {
     naturalText,

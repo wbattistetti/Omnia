@@ -19,12 +19,28 @@ export type ElWorkflowNodeData = {
   label: string;
   kind: string;
   promptPreview: string;
+  /** Full text for IA tooltip (not shown in card body). */
+  promptTooltip?: string;
   inheritsGlobalPrompt: boolean;
   /** HTML5 drag source (handle ⋮⋮) → Omnia flow canvas. */
   onDragToOmniaFlow?: (nodeId: string, dataTransfer: DataTransfer) => void;
+  onCopyNode?: (nodeId: string) => void;
+  onDeleteNode?: (nodeId: string) => void;
   targetHandlePosition?: Position;
   sourceHandlePosition?: Position;
 };
+
+/** Tooltip body for IA icon (full prompt, not card preview). */
+export function workflowNodePromptTooltip(
+  node: WorkspaceWorkflowNode,
+  globalPrompt: string
+): string {
+  if (node.inheritsGlobalPrompt) {
+    const g = globalPrompt.trim();
+    return g || 'SYSTEM PROMPT (ereditato dall’agente ConvAI)';
+  }
+  return node.promptText.trim();
+}
 
 function nodePromptPreview(node: WorkspaceWorkflowNode): string {
   if (node.inheritsGlobalPrompt) return 'SYSTEM PROMPT';

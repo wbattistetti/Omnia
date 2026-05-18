@@ -61,7 +61,7 @@ describe('compileUseCaseConversationalText', () => {
     expect(out?.tokens).toEqual(['data', 'orario']);
   });
 
-  it('uses [slot] when a bracket cannot be inferred deterministically', () => {
+  it('uses [undefined] when a bracket cannot be inferred deterministically', () => {
     const out = compileUseCaseConversationalText(
       makeUseCase({
         dialogue: [
@@ -74,8 +74,8 @@ describe('compileUseCaseConversationalText', () => {
         ],
       })
     );
-    expect(out?.tokenizedText).toBe('Saluto [slot].');
-    expect(out?.warnings.some((w) => w.includes('[slot]'))).toBe(true);
+    expect(out?.tokenizedText).toBe('Saluto [undefined].');
+    expect(out?.warnings.some((w) => w.includes('[undefined]'))).toBe(true);
   });
 });
 
@@ -103,9 +103,9 @@ describe('projectUseCaseToConversationalJson', () => {
     expect(out?.useCaseId).toBe('uc-x');
     expect(out?.variants).toHaveLength(1);
     expect(out?.variants[0].tokenizedExample).toBe(
-      'Ciao [slot], ti vedo il [data1] alle [orario] al [data2].'
+      'Ciao [undefined], ti vedo il [data1] alle [orario] al [data2].'
     );
-    expect(out?.variants[0].tokens).toEqual(['slot', 'data1', 'orario', 'data2']);
+    expect(out?.variants[0].tokens).toEqual(['undefined', 'data1', 'orario', 'data2']);
   });
 
   it('keeps numeric suffixes verbatim when the same base appears with different indices', () => {

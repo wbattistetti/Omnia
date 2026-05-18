@@ -140,9 +140,6 @@ export function useNodeRendering({
         showDragHandle: false,
         fullWidth: true,
         isToolbarDrag,
-        onDragStart: () => {
-            /* drag wiring lives on parent */
-        }
     }), [setIsEditingNode, handleDeleteNode, isToolbarDrag]);
 
     // Props per NodeDragHeader (header drag)
@@ -153,9 +150,6 @@ export function useNodeRendering({
         showDragHandle: false,
         fullWidth: true,
         isToolbarDrag,
-        onDragStart: () => {
-            /* drag wiring lives on parent */
-        }
     }), [setIsEditingNode, handleDeleteNode, isToolbarDrag]);
 
     // Props per IntellisenseMenu

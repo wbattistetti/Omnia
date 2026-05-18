@@ -92,7 +92,8 @@ export function mergeDockInboundLayoutOnly(incoming: any, current: any | undefin
     if (!cur) return inc;
     return {
       ...cur,
-      position: inc?.position ?? cur.position,
+      // FlowStore / semantic commit owns positions; Dock layout snapshots are often stale vs RF.
+      position: cur.position ?? inc?.position,
       ...(inc?.positionAbsolute !== undefined ? { positionAbsolute: inc.positionAbsolute } : {}),
       selected: inc?.selected ?? cur.selected,
       dragging: inc?.dragging ?? cur.dragging,
@@ -113,5 +114,11 @@ export function mergeDockInboundLayoutOnly(incoming: any, current: any | undefin
     variables: current.variables ?? incoming?.variables,
     bindings: current.bindings ?? incoming?.bindings,
     title: current.title ?? incoming?.title,
+    // Preserve hydration / local-change status flags so the FlowCanvasHost effect does not
+    // re-trigger loadFlow when Dock sync overwrites the slice without these fields.
+    hydrated: current.hydrated ?? incoming?.hydrated,
+    variablesReady: current.variablesReady ?? incoming?.variablesReady,
+    hasLocalChanges: current.hasLocalChanges ?? incoming?.hasLocalChanges,
+    serverHydrationApplied: current.serverHydrationApplied ?? incoming?.serverHydrationApplied,
   };
 }

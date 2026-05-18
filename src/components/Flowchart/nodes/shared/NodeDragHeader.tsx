@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Move, Edit3, Trash2, Anchor, Eye, EyeOff, Play } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
 import { useFlowTest } from '../../../../context/FlowTestContext';
+import { FlowStateBridge } from '../../../../services/FlowStateBridge';
+import type { ToolbarDragPointer } from '../../utils/flowToolbarNodeDrag';
 
 interface NodeDragHeaderProps {
   onEditTitle: () => void;
@@ -11,7 +13,8 @@ interface NodeDragHeaderProps {
   showDragHandle?: boolean; // Se true, mostra icona grip e testo "Drag"
   fullWidth?: boolean; // Se true, toolbar larga quanto il nodo
   isToolbarDrag?: boolean; // Se true, nasconde Anchor e destra
-  onDragStart?: () => void; // Callback per attivare isDragging
+  /** Toolbar lives in NodeToolbar portal — custom document drag required. */
+  onToolbarDragStart?: (mode: 'move' | 'rigid', pointer: ToolbarDragPointer) => void;
   // Eye icon props
   showUnchecked?: boolean; // Se true, mostra righe unchecked
   onToggleUnchecked?: () => void; // Callback per toggle visibilità righe unchecked
@@ -27,7 +30,7 @@ interface NodeDragHeaderProps {
  * Serve come area drag per spostare il nodo intero.
  * NON ha classe 'nodrag' quindi è draggable.
  */
-export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onDragStart, showUnchecked = true, onToggleUnchecked, hasUncheckedRows = false, nodeRef, nodeId, nodeRows }) => {
+export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onDelete, compact, showDragHandle = true, fullWidth = false, isToolbarDrag = false, onToolbarDragStart, showUnchecked = true, onToggleUnchecked, hasUncheckedRows = false, nodeRef, nodeId, nodeRows }) => {
   // ✅ Use FlowTestContext instead of prop drilling
   const { testSingleNode } = useFlowTest();
   // Quando compact=true, è usato come toolbar sopra il nodo (no border radius, più piccolo)
@@ -163,12 +166,11 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               opacity: 0.85,
               transition: 'opacity 120ms linear, transform 120ms ease'
             }}
-            className="hover:opacity-100 hover:scale-110 nodrag"
+            className="toolbar-drag-handle hover:opacity-100 hover:scale-110"
             onMouseDown={(e) => {
-              // ✅ Previeni comportamento di default e avvia drag personalizzato
               e.preventDefault();
               e.stopPropagation();
-              onDragStart?.();
+              onToolbarDragStart?.('move', { clientX: e.clientX, clientY: e.clientY });
             }}
           >
             <Move style={{ width: iconSize, height: iconSize }} className="text-amber-300 drop-shadow" />
@@ -178,7 +180,7 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
         {/* Anchor icon - RIGID DRAG AREA (not a button) */}
         <SmartTooltip text="Drag to move with descendants" tutorId="drag_descendants_help" placement="bottom">
           <div
-            className="rigid-anchor hover:opacity-100 hover:scale-110"
+            className="rigid-anchor toolbar-drag-handle hover:opacity-100 hover:scale-110"
             style={{
               cursor: 'move',
               opacity: isToolbarDrag ? 0 : 0.85,
@@ -186,14 +188,11 @@ export const NodeDragHeader: React.FC<NodeDragHeaderProps> = ({ onEditTitle, onD
               display: 'flex',
               alignItems: 'center'
             }}
-                  onPointerDownCapture={() => {
-                    try {
-                      (window as any).__flowDragMode = 'rigid';
-                    } catch (e) {
-                      // Silent fail
-                    }
-                    onDragStart?.();
-                  }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToolbarDragStart?.('rigid', { clientX: e.clientX, clientY: e.clientY });
+            }}
           >
             <Anchor style={{ width: iconSize, height: iconSize }} className="text-slate-200 hover:text-amber-300 drop-shadow" />
           </div>

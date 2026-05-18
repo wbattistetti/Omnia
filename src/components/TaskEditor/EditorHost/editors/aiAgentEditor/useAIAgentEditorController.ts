@@ -41,7 +41,11 @@ import {
   collectMappingsFromUseCases,
   compileAllUseCases,
 } from '@domain/useCaseBundle/semanticCompile';
-import { mergeMappingsIntoLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import {
+  isUnclassifiedSlotId,
+  mergeMappingsIntoLexicon,
+  normalizeSlotId,
+} from '@domain/useCaseBundle/projectSlotLexicon';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
@@ -794,11 +798,17 @@ export function useAIAgentEditorController({
   const updateLexiconSlotId = React.useCallback(
     (surface: string, slotId: string) => {
       const key = surface.trim().toLowerCase();
-      const nextSlot = slotId.trim().toLowerCase();
+      const nextSlot = normalizeSlotId(slotId);
+      const classified = !isUnclassifiedSlotId(nextSlot);
       patchLexiconEntries((entries) =>
         entries.map((e) =>
           e.surface === key
-            ? { ...e, slot_id: nextSlot, approved: false, conflictWith: undefined }
+            ? {
+                ...e,
+                slot_id: nextSlot,
+                approved: classified,
+                conflictWith: undefined,
+              }
             : e
         )
       );

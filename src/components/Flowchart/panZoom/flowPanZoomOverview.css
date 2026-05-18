@@ -1,0 +1,27 @@
+/**
+ * PanZoom overview (React Flow MiniMap) — bottom-right navigator panel.
+ */
+
+.flow-panzoom.react-flow__minimap {
+  z-index: 12;
+  margin: 0 12px 12px 0;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.flow-panzoom--light.react-flow__minimap {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.flow-panzoom--dark.react-flow__minimap {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(71, 85, 105, 0.8);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.flow-panzoom.react-flow__minimap svg {
+  display: block;
+}
+

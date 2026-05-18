@@ -4,6 +4,11 @@
  */
 
 import { mergeFlowMetaOnServerLoad, shouldKeepLocalGraphOnEmptyServerResponse } from './flowLoadMergePolicy';
+import {
+  fingerprintFlowLoadPayload,
+  markFlowLoadResultApplied,
+  shouldApplyFlowLoadResult,
+} from './flowLoadCoordinator';
 import { logFlowSaveDebug } from '../utils/flowSaveDebug';
 import { logFlowHydrationTrace } from '../utils/flowHydrationTrace';
 import { logTaskSubflowMove } from '../utils/taskSubflowMoveDebug';
@@ -148,6 +153,32 @@ export function reduceUpsertFlow<NodeT = any, EdgeT = any>(
       merged: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
     });
   }
+  // Early bailout: if the computed slice is functionally identical to what is already in the store,
+  // return the same state reference so React does not schedule any re-renders.
+  if (prev) {
+    const prevFp = fingerprintFlowLoadPayload({
+      nodes: (prev.nodes ?? []) as any[],
+      edges: (prev.edges ?? []) as any[],
+    });
+    const newFp = fingerprintFlowLoadPayload({
+      nodes: (flow.nodes ?? []) as any[],
+      edges: (flow.edges ?? []) as any[],
+    });
+    if (
+      prevFp === newFp &&
+      flow.hydrated === prev.hydrated &&
+      flow.hasLocalChanges === prev.hasLocalChanges &&
+      flow.serverHydrationApplied === prev.serverHydrationApplied &&
+      flow.variablesReady === prev.variablesReady &&
+      flow.tasks === prev.tasks &&
+      flow.variables === prev.variables &&
+      flow.bindings === prev.bindings &&
+      flow.meta === prev.meta
+    ) {
+      return state;
+    }
+  }
+
   const flows = { ...state.flows, [inc.id]: flow };
   return { ...state, flows };
 }
@@ -207,6 +238,18 @@ export function reduceApplyFlowLoadResult<NodeT = any, EdgeT = any>(
   const localNodeCountBefore = curr.nodes?.length ?? 0;
   const localEdgeCountBefore = curr.edges?.length ?? 0;
   const localGraphNonEmpty = localNodeCountBefore > 0 || localEdgeCountBefore > 0;
+  if (!shouldApplyFlowLoadResult(flowId, payload, curr)) {
+    logFlowHydrationTrace('FlowStore APPLY_FLOW_LOAD_RESULT noop (identical payload fingerprint)', {
+      flowId,
+      fingerprint: fingerprintFlowLoadPayload(payload),
+      localNodeCountBefore,
+      localEdgeCountBefore,
+    });
+    logFlowSaveDebug('FlowStore: APPLY_FLOW_LOAD_RESULT skip (identical fingerprint)', {
+      flowId,
+    });
+    return state;
+  }
   if (curr.hydrated === true && localGraphNonEmpty) {
     logFlowHydrationTrace('FlowStore APPLY_FLOW_LOAD_RESULT noop (hydrated + local graph non-empty)', {
       flowId,
@@ -309,6 +352,7 @@ export function reduceApplyFlowLoadResult<NodeT = any, EdgeT = any>(
       after: summarizeFlowSlice(flow as any, { rowIdsSample: true }),
     });
   }
+  markFlowLoadResultApplied(flowId, payload);
   return { ...state, flows: { ...state.flows, [flowId]: flow } };
 }
 

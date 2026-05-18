@@ -37,6 +37,7 @@ import {
     buildDragPayloadCanvasExtract,
 } from '@domain/flowGraph';
 import { isDndOperationInstrumentEnabled, setActiveDndOperationId, clearActiveDndOperationId } from '@utils/dndOperationInstrument';
+import { queryAllFlowNodesInCanvas } from '../../../utils/flowCanvasDom';
 
 /**
  * Walks the hit-test stack at (x,y) to find which React Flow canvas root received the drop.
@@ -388,8 +389,7 @@ export function useNodeDragDrop({
         }
 
         // Prima rimuovi evidenziazione da tutti i nodi e ripristina classi Tailwind
-        document.querySelectorAll('.react-flow__node').forEach(node => {
-            const el = node as HTMLElement;
+        queryAllFlowNodesInCanvas(String(flowCanvasId ?? 'main')).forEach((el) => {
             // Rimuovi stili inline
             el.style.removeProperty('border');
             el.style.removeProperty('border-width');
@@ -533,8 +533,7 @@ export function useNodeDragDrop({
         // Rimuovi evidenziazione da tutti i nodi tranne quello di destinazione
         const targetNodeToKeep = targetNodeId; // Nodo da mantenere evidenziato
 
-        document.querySelectorAll('.react-flow__node').forEach(node => {
-            const el = node as HTMLElement;
+        queryAllFlowNodesInCanvas(String(flowCanvasId ?? 'main')).forEach((el) => {
             const nodeIdAttr = el.getAttribute('data-id');
 
             // ✅ Mantieni evidenziazione solo per il nodo target (sia cross-node che same-node)

@@ -1,9 +1,13 @@
-/* FlowchartWrapper: contenitore che segue il flex parent (nessun absolute sul pannello interno). */
-.flowchart-wrapper {
-    position: relative;
-    overflow: hidden;
+/* React Flow fills the shell; navigation is pan/zoom only (no native scroll). */
+.flow-canvas-shell {
+  position: relative;
+  isolation: isolate;
+  contain: layout style paint;
 }
 
-.flowchart-panel {
-    position: relative;
+.flow-canvas-shell .react-flow {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  min-width: 0;
 }

@@ -7,6 +7,21 @@ import React, { useEffect, useCallback, useMemo } from 'react';
 import { useFlowWorkspace, useFlowActions as useFlowStoreActions } from '@flows/FlowStore';
 import { loadFlow } from '../../flows/FlowPersistence';
 import { explainShouldLoadFlowFromServer } from '../../flows/flowHydrationPolicy';
+import {
+  beginFlowLoad,
+  endFlowLoad,
+  fingerprintFlowLoadPayload,
+  shouldApplyFlowLoadResult,
+  shouldEmitGraphHydrated,
+  waitForFlowLoadIdle,
+} from '../../flows/flowLoadCoordinator';
+import { emitGraphHydrated } from '../Flowchart/semantic/flowCanvasSemanticEvents';
+import { FlowStateBridge } from '../../services/FlowStateBridge';
+import {
+  flowCanvasDiag,
+  flowCanvasDiagPositions,
+  isFlowCanvasDebugEnabled,
+} from '../Flowchart/utils/flowCanvasDiagnostics';
 import { logFlowSaveDebug } from '../../utils/flowSaveDebug';
 import { logFlowHydrationTrace } from '../../utils/flowHydrationTrace';
 import { formatUnknownError } from '../../utils/httpErrorFormatting';
@@ -88,7 +103,9 @@ export const FlowCanvasHost: React.FC<Props> = ({
   const [dataSectionOn, setDataSectionOn] = React.useState(true);
   const [subdialogsSectionOn, setSubdialogsSectionOn] = React.useState(true);
   const lastHydrationKeyRef = React.useRef<string>('');
-  const inFlightLoadKeysRef = React.useRef<Set<string>>(new Set());
+  const hydrationEffectGenRef = React.useRef(0);
+  const flowsRef = React.useRef(flows);
+  flowsRef.current = flows;
 
   const entityCreation = useEntityCreation();
 
@@ -216,6 +233,16 @@ export const FlowCanvasHost: React.FC<Props> = ({
 
   useEffect(() => {
     let cancelled = false;
+    const effectGen = ++hydrationEffectGenRef.current;
+    flowCanvasDiag('hydrate.effect.tick', {
+      gen: effectGen,
+      flowId,
+      projectId: projectId ?? null,
+      flowPresent,
+      hydrated: hydrated ?? null,
+      nodeCount,
+      edgeCount,
+    });
     if (!projectId || String(projectId).trim() === '') {
       setIsLoadingFlow(false);
       logFlowSaveDebug('FlowCanvasHost: skip load (no projectId)', { flowId });
@@ -236,7 +263,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
       return;
     }
 
-    const flow = flows[flowId];
+    const flow = flowsRef.current[flowId];
     if (!flow) {
       logFlowHydrationTrace('FlowCanvasHost: no flow slice — direct loadFlow + upsertFlow', {
         flowId,
@@ -247,20 +274,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
         flowId,
         projectId,
       });
-      const loadKey = `${String(projectId || '').trim()}|${String(flowId || '').trim()}`;
-      if (inFlightLoadKeysRef.current.has(loadKey)) {
-        logFlowSaveDebug('FlowCanvasHost: skip duplicate loadFlow (in-flight)', {
-          projectId,
-          flowId,
-          loadKey,
-        });
-        return;
-      }
-      inFlightLoadKeysRef.current.add(loadKey);
-      setIsLoadingFlow(true);
-      getFlowFocusManager().suspendFocus('chat');
-      getFlowFocusManager().setFlowRemounting(true);
-      (async () => {
+      const runMissingSliceLoad = async (): Promise<void> => {
         try {
           const data = await loadFlow(projectId, flowId);
           if (cancelled) return;
@@ -277,7 +291,11 @@ export const FlowCanvasHost: React.FC<Props> = ({
           });
           upsertFlow({
             id: flowId,
-            title: flowSliceTitle(flowId, flow?.title, flows as Record<string, { title?: string } | undefined>),
+            title: flowSliceTitle(
+              flowId,
+              flow?.title,
+              flowsRef.current as Record<string, { title?: string } | undefined>
+            ),
             nodes: data.nodes,
             edges: data.edges,
             ...(data.meta !== undefined ? { meta: data.meta } : {}),
@@ -301,7 +319,11 @@ export const FlowCanvasHost: React.FC<Props> = ({
           });
           const failedLoad = {
             id: flowId,
-            title: flowSliceTitle(flowId, flow?.title, flows as Record<string, { title?: string } | undefined>),
+            title: flowSliceTitle(
+              flowId,
+              flow?.title,
+              flowsRef.current as Record<string, { title?: string } | undefined>
+            ),
             nodes: [],
             edges: [],
             hydrated: false,
@@ -315,11 +337,39 @@ export const FlowCanvasHost: React.FC<Props> = ({
           if (!cancelled) {
             setIsLoadingFlow(false);
           }
-          inFlightLoadKeysRef.current.delete(loadKey);
+          endFlowLoad(projectId, flowId, 'FlowCanvasHost:missingSlice');
           getFlowFocusManager().resumeFocus('chat');
           getFlowFocusManager().setFlowRemounting(false);
         }
-      })();
+      };
+
+      const startMissingSliceLoad = () => {
+        if (!beginFlowLoad(projectId, flowId, 'FlowCanvasHost:missingSlice')) return false;
+        setIsLoadingFlow(true);
+        getFlowFocusManager().suspendFocus('chat');
+        getFlowFocusManager().setFlowRemounting(true);
+        void runMissingSliceLoad();
+        return true;
+      };
+
+      if (!startMissingSliceLoad()) {
+        logFlowSaveDebug('FlowCanvasHost: wait for in-flight load (missing slice)', {
+          projectId,
+          flowId,
+        });
+        void (async () => {
+          try {
+            await waitForFlowLoadIdle(projectId, flowId);
+          } catch {
+            return;
+          }
+          if (cancelled) return;
+          if (flowsRef.current[flowId]) return;
+          if (!startMissingSliceLoad()) {
+            flowCanvasDiag('hydrate.host.defer_failed', { flowId, path: 'missingSlice' });
+          }
+        })();
+      }
       return;
     }
 
@@ -376,21 +426,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
       flowId,
       ...explain,
     });
-    const loadKey = `${String(projectId || '').trim()}|${String(flowId || '').trim()}`;
-    if (inFlightLoadKeysRef.current.has(loadKey)) {
-      logFlowSaveDebug('FlowCanvasHost: skip duplicate loadFlow (in-flight)', {
-        projectId,
-        flowId,
-        loadKey,
-      });
-      return;
-    }
-    inFlightLoadKeysRef.current.add(loadKey);
-    setIsLoadingFlow(true);
-    getFlowFocusManager().suspendFocus('chat');
-    getFlowFocusManager().setFlowRemounting(true);
-
-    (async () => {
+    const runServerHydrate = async (): Promise<void> => {
       let data: Awaited<ReturnType<typeof loadFlow>>;
       try {
         data = await loadFlow(projectId, flowId);
@@ -398,7 +434,7 @@ export const FlowCanvasHost: React.FC<Props> = ({
         if (!cancelled) {
           setIsLoadingFlow(false);
         }
-        inFlightLoadKeysRef.current.delete(loadKey);
+        endFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate');
         getFlowFocusManager().resumeFocus('chat');
         getFlowFocusManager().setFlowRemounting(false);
         const errText = formatUnknownError(e);
@@ -411,7 +447,51 @@ export const FlowCanvasHost: React.FC<Props> = ({
         return;
       }
       if (cancelled) {
-        inFlightLoadKeysRef.current.delete(loadKey);
+        endFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate');
+        getFlowFocusManager().resumeFocus('chat');
+        getFlowFocusManager().setFlowRemounting(false);
+        return;
+      }
+      const loadPayload = {
+        nodes: data.nodes,
+        edges: data.edges,
+        ...(data.meta !== undefined ? { meta: data.meta } : {}),
+        tasks: data.tasks,
+        variables: data.variables,
+        bindings: data.bindings,
+      };
+      const sliceNow = flowsRef.current[flowId];
+      if (FlowStateBridge.getToolbarDragNodeId() || sliceNow?.hasLocalChanges === true) {
+        logFlowSaveDebug('FlowCanvasHost: skip applyFlowLoadResult (local edits or toolbar drag)', {
+          projectId,
+          flowId,
+          toolbarDrag: FlowStateBridge.getToolbarDragNodeId(),
+          hasLocalChanges: sliceNow?.hasLocalChanges === true,
+        });
+        setIsLoadingFlow(false);
+        endFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate');
+        getFlowFocusManager().resumeFocus('chat');
+        getFlowFocusManager().setFlowRemounting(false);
+        return;
+      }
+      const loadFingerprint = fingerprintFlowLoadPayload(loadPayload);
+      if (!shouldApplyFlowLoadResult(flowId, loadPayload, sliceNow)) {
+        flowCanvasDiag('hydrate.skip_apply', {
+          gen: effectGen,
+          flowId,
+          reason: 'identical_fingerprint',
+          sliceNodeCount: sliceNow?.nodes?.length ?? 0,
+          hydrated: sliceNow?.hydrated,
+        });
+        logFlowSaveDebug('FlowCanvasHost: skip applyFlowLoadResult (identical fingerprint)', {
+          projectId,
+          flowId,
+        });
+        if (shouldEmitGraphHydrated(flowId, loadPayload)) {
+          emitGraphHydrated(flowId, loadFingerprint);
+        }
+        setIsLoadingFlow(false);
+        endFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate');
         getFlowFocusManager().resumeFocus('chat');
         getFlowFocusManager().setFlowRemounting(false);
         return;
@@ -437,35 +517,81 @@ export const FlowCanvasHost: React.FC<Props> = ({
         note:
           'Slice snapshot omitted here (async closure may be stale vs store if portal updated graph meanwhile). See FlowStore:APPLY_FLOW_LOAD_RESULT for before/after.',
       });
-      applyFlowLoadResult(flowId, {
-        nodes: data.nodes,
-        edges: data.edges,
-        ...(data.meta !== undefined ? { meta: data.meta } : {}),
-        tasks: data.tasks,
-        variables: data.variables,
-        bindings: data.bindings,
-      });
+      applyFlowLoadResult(flowId, loadPayload);
+      if (shouldEmitGraphHydrated(flowId, loadPayload)) {
+        emitGraphHydrated(flowId, loadFingerprint);
+      }
       incrementEditorOpenMetric('flowCanvasHost.applyFlowLoadResult');
+      flowCanvasDiag('hydrate.apply', {
+        gen: effectGen,
+        flowId,
+        nodes: data.nodes.length,
+        edges: data.edges.length,
+      });
       setIsLoadingFlow(false);
       getFlowFocusManager().resumeFocus('chat');
       getFlowFocusManager().setFlowRemounting(false);
-      inFlightLoadKeysRef.current.delete(loadKey);
-    })();
+      endFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate');
+    };
+
+    const startServerHydrate = (): boolean => {
+      if (!beginFlowLoad(projectId, flowId, 'FlowCanvasHost:hydrate')) return false;
+      setIsLoadingFlow(true);
+      getFlowFocusManager().suspendFocus('chat');
+      getFlowFocusManager().setFlowRemounting(true);
+      void runServerHydrate();
+      return true;
+    };
+
+    if (!startServerHydrate()) {
+      logFlowSaveDebug('FlowCanvasHost: wait for in-flight load before hydrate', {
+        projectId,
+        flowId,
+      });
+      void (async () => {
+        try {
+          await waitForFlowLoadIdle(projectId, flowId);
+        } catch {
+          return;
+        }
+        if (cancelled) return;
+        const sliceAfterWait = flowsRef.current[flowId];
+        const explainAfter = explainShouldLoadFlowFromServer(projectId, sliceAfterWait);
+        if (!explainAfter.shouldLoad) {
+          setIsLoadingFlow(false);
+          flowCanvasDiag('hydrate.host.after_wait', {
+            flowId,
+            reason: explainAfter.reason,
+            nodeCount: sliceAfterWait?.nodes?.length ?? 0,
+          });
+          return;
+        }
+        if (!startServerHydrate()) {
+          flowCanvasDiag('hydrate.host.defer_failed', { flowId, path: 'hydrate' });
+        }
+      })();
+    }
 
     return () => {
       cancelled = true;
-      inFlightLoadKeysRef.current.delete(loadKey);
+      // Do not endFlowLoad here — releasing the in-flight lock caused duplicate loadFlow fetches
+      // when this effect re-ran on `flows` reference churn. endFlowLoad runs in async finally only.
     };
-  }, [projectId, flowId, flowPresent, hydrated, hasLocalChanges, nodeCount, edgeCount, upsertFlow, applyFlowLoadResult]);
+    // Omit hasLocalChanges — toggling it after toolbar commit must not re-run hydration / loadFlow.
+  }, [projectId, flowId, flowPresent, hydrated, upsertFlow, applyFlowLoadResult]);
 
   const flow = flows[flowId];
 
   // Stable setNodes function for FlowActionsProvider
   const setNodes = useCallback(
-    (updater: any) => updateFlowGraph(flowId, (ns, es) => ({
-      nodes: typeof updater === 'function' ? updater(ns) : updater,
-      edges: es
-    })),
+    (updater: any) =>
+      updateFlowGraph(flowId, (ns, es) => {
+        const nextNodes = typeof updater === 'function' ? updater(ns) : updater;
+        if (isFlowCanvasDebugEnabled()) {
+          flowCanvasDiagPositions('FlowCanvasHost.updateFlowGraph', ns, nextNodes, { flowId });
+        }
+        return { nodes: nextNodes, edges: es };
+      }),
     [flowId, updateFlowGraph]
   );
 

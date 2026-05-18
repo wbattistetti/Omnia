@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
-import { flushSync } from 'react-dom';
 import { NodeProps, useReactFlow, NodeToolbar, Position } from 'reactflow';
 import { NodeHeader } from './NodeHeader';
 import { NodeDragHeader } from '../shared/NodeDragHeader';
@@ -31,6 +30,7 @@ import { generateId } from '../../../../utils/idGenerator';
 import { TaskType, type SemanticValue } from '../../../../types/taskTypes';
 import { LinkStyle, type EdgeData } from '../../types/flowTypes';
 import { getDescendantNodeIds, translateNodes } from '../../../../flow/utils/graphTransforms';
+import { startToolbarNodeDrag } from '../../utils/flowToolbarNodeDrag';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { useFlowCanvasId } from '../../context/FlowCanvasContext';
 import { FLOW_GRAPH_MIGRATION, warnLocalGraphMutation, logDndRouting } from '@domain/flowGraph';
@@ -39,6 +39,7 @@ import { dropTargetsSubflowPortalRow } from '@components/Flowchart/utils/crossNo
 import { newCommandId } from '@domain/structural/commands';
 import { generateSafeGuid } from '@utils/idGenerator';
 import { resolveVariableStoreProjectId } from '@utils/safeProjectId';
+import { scheduleNodeLayoutSettled } from '../../semantic/scheduleNodeLayoutSettled';
 
 /**
  * Dati custom per un nodo del flowchart
@@ -209,17 +210,19 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   getEdgesForDescendantShiftRef.current = getEdges;
 
   /**
-   * When this node's DOM size changes, translate descendants by (Δw/2, Δh) so edges stay aligned
-   * under the parent's horizontal center and bottom growth. Root position is unchanged.
-   * Uses flushSync so child positions commit before the next paint (reduces flicker).
+   * When this node's layout size changes, translate descendants by (Δw/2, Δh).
+   * Uses offsetWidth/Height (zoom-invariant) — not getBoundingClientRect (breaks on pan/zoom).
    */
   const applyDescendantShiftIfSizeChanged = useCallback(() => {
+    if (FlowStateBridge.getToolbarDragNodeId()) return;
+
     const el = nodeContainerRef.current;
     if (!el) return;
 
-    const rect = el.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    if (w < 1 || h < 1) return;
+
     const baseline = descendantShiftBaselineRef.current;
 
     if (baseline === null) {
@@ -247,28 +250,16 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
     const dx = widthDelta / 2;
     const dy = heightDelta;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
 
-    flushSync(() => {
-      setNodes((nds) => translateNodes(nds, ids, dx, dy));
-    });
+    const commitSetNodes = FlowStateBridge.getSetNodes() ?? setNodes;
+    commitSetNodes((nds) => translateNodes(nds, ids, dx, dy));
 
     descendantShiftBaselineRef.current = { width: w, height: h };
   }, [setNodes]);
 
-  // ✅ ResizeObserver: sync callback (no rAF) + layout effect so updates align with paint
-  useLayoutEffect(() => {
-    const el = nodeContainerRef.current;
-    if (!el) return;
-
-    const ro = new ResizeObserver(() => {
-      applyDescendantShiftIfSizeChanged();
-    });
-    ro.observe(el, { box: 'border-box' });
-    applyDescendantShiftIfSizeChanged();
-    return () => {
-      ro.disconnect();
-    };
-  }, [applyDescendantShiftIfSizeChanged]);
+  // ResizeObserver disabled during graph pan/zoom — descendant shift only on row content changes.
+  // (Re-enable via row add/remove hooks if edge alignment drifts after edit.)
 
   // ✅ Handler per aggiornare la larghezza del nodo (Regola 2: SOLO quando aumenta)
   const handleRowWidthChange = useCallback((width: number) => {
@@ -314,19 +305,17 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           return;
         }
         const w = Math.max(Math.ceil(container.getBoundingClientRect().width), 140);
+        const h = Math.max(Math.ceil(container.offsetHeight), 40);
         nodeWidthRef.current = w;
+        nodeHeightRef.current = h;
         setNodeWidth(w);
         container.style.setProperty('min-width', `${w}px`, 'important');
         container.style.setProperty('width', `${w}px`, 'important');
         container.style.setProperty('flex-shrink', '0', 'important');
-        try {
-          updateNodeInternals(id);
-        } catch {
-          /* RF may not be ready */
-        }
+        scheduleNodeLayoutSettled(flowCanvasId, id, w, h);
       });
     });
-  }, [id, updateNodeInternals]);
+  }, [id, flowCanvasId]);
   measureNodeWidthFromContentRef.current = measureNodeWidthFromContent;
 
   // Measure node width ONLY when entering editing (not when exiting)
@@ -414,24 +403,29 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   const toolbarElementRef = useRef<HTMLDivElement>(null);
 
   // ✅ NODE DRAG: Ref per gestire il drag personalizzato del nodo
-  const nodeDragStateRef = useRef<{
-    startX: number;
-    startY: number;
-    nodeStartX: number;
-    nodeStartY: number;
-    isActive: boolean;
-  } | null>(null);
+  const nodeDragStateRef = useRef<{ isActive: boolean } | null>(null);
 
   // ✅ NODE DRAG: Cleanup listener quando il componente viene smontato
   React.useEffect(() => {
     return () => {
       if (nodeDragStateRef.current?.isActive) {
-        // Cleanup se il componente viene smontato durante un drag
         document.body.style.cursor = 'default';
         nodeDragStateRef.current = null;
       }
     };
   }, []);
+
+  React.useEffect(() => {
+    const onToolbarDragEnd = (e: Event) => {
+      const ce = e as CustomEvent<{ nodeId?: string }>;
+      if (ce.detail?.nodeId !== id) return;
+      nodeDragStateRef.current = null;
+      setIsDragging(false);
+      setIsToolbarDrag(false);
+    };
+    window.addEventListener('flowchart:toolbarDragEnd', onToolbarDragEnd);
+    return () => window.removeEventListener('flowchart:toolbarDragEnd', onToolbarDragEnd);
+  }, [id]);
 
   // ✅ DRAG & DROP: Manage row drag and drop functionality
   const dragDrop = useNodeDragDrop({
@@ -958,54 +952,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   // Ref per il wrapper esterno (per calcolare posizione toolbar)
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // ✅ LISTENER GLOBALE: Nascondi toolbar quando il mouse è sul canvas (con debouncing)
-  useEffect(() => {
-    let rafId: number | null = null;
-
-    const handleCanvasMouseMove = (e: MouseEvent) => {
-      // Debounce con requestAnimationFrame per ridurre il carico
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-
-      rafId = requestAnimationFrame(() => {
-        // Usa elementFromPoint per verificare la posizione effettiva del mouse
-        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-        if (!el) return;
-
-        // ✅ Verifica se il mouse è sopra il Response Editor o altri pannelli docked
-        const isOverResponseEditor = el?.closest?.('[data-response-editor]') ||
-          el?.closest?.('.response-editor-container') ||
-          el?.closest?.('[data-dockable-panel]');
-        if (isOverResponseEditor) {
-          // Se il mouse è sopra il Response Editor, nascondi immediatamente la toolbar
-          if (!selected) {
-            setIsHoveredNode(false);
-          }
-          return;
-        }
-
-        // Verifica se il mouse è sul canvas (react-flow__pane ma non sui nodi)
-        const isCanvas = el?.closest?.('.react-flow__pane') && !el?.closest?.('.react-flow__node');
-        const isOverToolbar = el && toolbarElementRef.current && toolbarElementRef.current.contains(el as Node);
-        const isOverNode = el && ((nodeContainerRef.current && nodeContainerRef.current.contains(el as Node)) || (wrapperRef.current && wrapperRef.current.contains(el as Node)));
-
-        if (isCanvas && !selected && !isOverToolbar && !isOverNode) {
-          setIsHoveredNode(false);
-        }
-      });
-    };
-
-    document.addEventListener('mousemove', handleCanvasMouseMove, true);
-
-    return () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-      document.removeEventListener('mousemove', handleCanvasMouseMove, true);
-    };
-  }, [selected, setIsHoveredNode]);
-
   // ✅ NEW: Verifica se il mouse è sopra ResponseEditor durante il movimento
   // Questo previene che la toolbar del nodo appaia quando il mouse è sopra il ResponseEditor
   useEffect(() => {
@@ -1031,7 +977,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     <>
       {/* Toolbar sopra il nodo - Usa NodeToolbar nativo di React Flow */}
       <NodeToolbar
-        isVisible={(isHoveredNode || selected) && !isEditingNode && !normalizedData.hidden}
+        isVisible={(isHoveredNode || selected || isDragging || isToolbarDrag) && !isEditingNode && !normalizedData.hidden}
         position={Position.Top}
         offset={0}
         align="start"
@@ -1105,111 +1051,24 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             nodeRef={nodeContainerRef}
             nodeId={id}
             nodeRows={data.rows}
-            onDragStart={() => {
-              // ✅ Verifica che NON ci sia una riga in drag (PROTEZIONE CRITICA)
-              const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
-              if (isDraggingRow) {
-                return;
-              }
-
-              // ✅ Ottieni la posizione corrente del nodo
-              const currentNode = getNode(id);
-              if (!currentNode) {
-                return;
-              }
-
-              // ✅ Prepara stato per drag personalizzato
-              const nodeEl = nodeContainerRef.current;
-              if (!nodeEl) return;
-
-              const nodeRect = nodeEl.getBoundingClientRect();
-              const viewport = getViewport();
-
-              const isRigidDrag = FlowStateBridge.isRigidDrag();
-              const rigidDescendantIds = isRigidDrag ? getDescendantNodeIds(id, getEdges()) : null;
-              let lastRootPos = { x: currentNode.position.x, y: currentNode.position.y };
-
-              nodeDragStateRef.current = {
-                startX: nodeRect.left,
-                startY: nodeRect.top,
-                nodeStartX: currentNode.position.x,
-                nodeStartY: currentNode.position.y,
-                isActive: true,
-              };
-
-              // Set flag and state
-              FlowStateBridge.setToolbarDragNodeId(id);
-              FlowStateBridge.setBlockNodeDrag(false);
-              setIsDragging(true);
-              setIsToolbarDrag(true);
-              document.body.style.cursor = 'move';
-
-              // ✅ Handler per mouse move - aggiorna posizione del nodo
-              const handleMouseMove = (e: MouseEvent) => {
-                // ✅ VERIFICA CRITICA: se inizia un drag di riga, annulla il drag del nodo
-                const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
-                if (isDraggingRow) {
-                  handleMouseUp();
-                  return;
-                }
-
-                if (!nodeDragStateRef.current?.isActive) return;
-
-                // Calcola offset del mouse
-                const deltaX = e.clientX - nodeDragStateRef.current.startX;
-                const deltaY = e.clientY - nodeDragStateRef.current.startY;
-
-                // Converti in coordinate React Flow (considera zoom)
-                const flowDeltaX = deltaX / viewport.zoom;
-                const flowDeltaY = deltaY / viewport.zoom;
-
-                const newPosition = {
-                  x: nodeDragStateRef.current.nodeStartX + flowDeltaX,
-                  y: nodeDragStateRef.current.nodeStartY + flowDeltaY
-                };
-
-                const isRigidMove = FlowStateBridge.isRigidDrag();
-                const incDx = newPosition.x - lastRootPos.x;
-                const incDy = newPosition.y - lastRootPos.y;
-                lastRootPos = { x: newPosition.x, y: newPosition.y };
-
-                if (isRigidMove && rigidDescendantIds && rigidDescendantIds.size > 0 && (incDx !== 0 || incDy !== 0)) {
-                  setNodes((nds) => {
-                    const moved = translateNodes(nds, rigidDescendantIds, incDx, incDy);
-                    return moved.map((n) => (n.id === id ? { ...n, position: newPosition } : n));
-                  });
-                } else {
-                  setNodes((nds) =>
-                    nds.map((n) => (n.id === id ? { ...n, position: newPosition } : n))
-                  );
-                }
-
-                // ✅ NodeToolbar si aggiorna automaticamente durante il drag
-              };
-
-              // ✅ Handler per mouse up - termina il drag
-              const handleMouseUp = () => {
-                if (!nodeDragStateRef.current?.isActive) return;
-
-                // Reset stato
-                nodeDragStateRef.current.isActive = false;
-                nodeDragStateRef.current = null;
-
-                // Rimuovi listener
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-
-                // Reset flag and state
-                FlowStateBridge.setToolbarDragNodeId(null);
-                FlowStateBridge.setDragMode(null);
-                setIsDragging(false);
-                setIsToolbarDrag(false);
-                document.body.style.cursor = 'default';
-              };
-
-              // ✅ Aggiungi listener globali (capture per intercettare anche eventi sopra altri elementi)
-              document.addEventListener('mousemove', handleMouseMove, { capture: true });
-              document.addEventListener('mouseup', handleMouseUp, { capture: true });
+            onToolbarDragStart={(mode, pointer) => {
+              startToolbarNodeDrag({
+                nodeId: id,
+                flowCanvasId,
+                pointer,
+                mode,
+                screenToFlowPosition,
+                getViewport,
+                getNode,
+                getEdges,
+                getDescendantNodeIds,
+                translateNodes,
+                onDraggingChange: (dragging) => {
+                  nodeDragStateRef.current = dragging ? { isActive: true } : null;
+                  setIsDragging(dragging);
+                  setIsToolbarDrag(dragging);
+                },
+              });
             }}
           />
         </div>

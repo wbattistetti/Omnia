@@ -109,13 +109,13 @@ describe('inferTokenType — pattern numerici/altri', () => {
     expect(inferTokenType('-3.14')).toEqual({ name: 'numero', confidence: 'low' });
   });
 
-  it('falls back to slot for unclassifiable text', () => {
-    expect(inferTokenType('Mario Rossi')).toEqual({ name: 'slot', confidence: 'fallback' });
+  it('falls back to undefined for unclassifiable text', () => {
+    expect(inferTokenType('Mario Rossi')).toEqual({ name: 'undefined', confidence: 'fallback' });
     expect(inferTokenType('il consenso informato')).toEqual({
-      name: 'slot',
+      name: 'undefined',
       confidence: 'fallback',
     });
-    expect(inferTokenType('')).toEqual({ name: 'slot', confidence: 'fallback' });
+    expect(inferTokenType('')).toEqual({ name: 'undefined', confidence: 'fallback' });
   });
 });
 
@@ -127,12 +127,13 @@ describe('inferTokenType — idempotenza su token già validi', () => {
 
   it('maps an indexed token name back to its base (`data1` → `data`)', () => {
     expect(inferTokenType('data1')).toEqual({ name: 'data', confidence: 'high' });
-    expect(inferTokenType('slot12')).toEqual({ name: 'slot', confidence: 'high' });
+    expect(inferTokenType('undefined12')).toEqual({ name: 'undefined', confidence: 'high' });
+    expect(inferTokenType('slot12')).toEqual({ name: 'undefined', confidence: 'high' });
   });
 
-  it('falls back to slot when the token name is unknown', () => {
+  it('falls back to undefined when the token name is unknown', () => {
     /** Es. l'utente ha digitato a mano un nome non standard tipo `[paziente]`. */
-    expect(inferTokenType('paziente')).toEqual({ name: 'slot', confidence: 'fallback' });
+    expect(inferTokenType('paziente')).toEqual({ name: 'undefined', confidence: 'fallback' });
   });
 });
 
@@ -166,9 +167,9 @@ describe('autoTokenizeAnnotated', () => {
     expect(r.brackets.map((b) => b.finalName)).toEqual(['data1', 'data2']);
   });
 
-  it('numbers also when one duplicate is unclassified (slot1, slot2)', () => {
+  it('numbers also when one duplicate is unclassified (undefined1, undefined2)', () => {
     const r = autoTokenizeAnnotated('Chiamo [Mario Rossi] e [Luigi Bianchi].');
-    expect(r.tokenized).toBe('Chiamo [slot1] e [slot2].');
+    expect(r.tokenized).toBe('Chiamo [undefined1] e [undefined2].');
   });
 
   it('keeps already-valid tokens stable when no reclassification is needed', () => {

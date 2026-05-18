@@ -14,7 +14,15 @@ import {
   getElevenLabsWorkspaceSession,
   setElevenLabsWorkspaceSession,
 } from '@workspaces/elevenlabs/elevenLabsWorkspaceSessionCache';
-import type { WorkflowPositionOverrides } from '@workspaces/elevenlabs/workflowLayoutPositions';
+import {
+  applyWorkflowCanvasLocalPatch,
+  EMPTY_WORKFLOW_CANVAS_PATCH,
+  type WorkflowCanvasLocalPatch,
+} from '@workspaces/elevenlabs/workflowCanvasLocalPatch';
+import {
+  mergeWorkflowPositionOverrides,
+  type WorkflowPositionOverrides,
+} from '@workspaces/elevenlabs/workflowLayoutPositions';
 import { appendAuditEntry } from '../../../application/backendCatalog/appendOnlyAuditLog';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import { setConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
@@ -65,6 +73,8 @@ export function ElevenLabsWorkspacePanel({
   const [importMessage, setImportMessage] = React.useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = React.useState<ElevenLabsWorkspaceTab>('workflow');
   const [nodePositionOverrides, setNodePositionOverrides] = React.useState<WorkflowPositionOverrides>({});
+  const [workflowCanvasPatch, setWorkflowCanvasPatch] =
+    React.useState<WorkflowCanvasLocalPatch>(EMPTY_WORKFLOW_CANVAS_PATCH);
   const resolvedAgentId = (showAgentPicker ? pickerAgentId : lockedAgentId).trim();
   const {
     getStaged,
@@ -98,7 +108,11 @@ export function ElevenLabsWorkspacePanel({
   }, [provider, showAgentPicker]);
 
   const applySnapshot = React.useCallback(
-    (snap: WorkspaceAgentSnapshot, preferNodeId: string | null) => {
+    (
+      snap: WorkspaceAgentSnapshot,
+      preferNodeId: string | null,
+      opts?: { resetCanvasPatch?: boolean }
+    ) => {
       setSnapshot(snap);
       const first =
         preferNodeId ??
@@ -106,14 +120,20 @@ export function ElevenLabsWorkspacePanel({
         snap.workflow.nodes[0]?.id ??
         null;
       setSelectedNodeId(first);
+      const patchForSession =
+        opts?.resetCanvasPatch === false ? workflowCanvasPatch : EMPTY_WORKFLOW_CANVAS_PATCH;
+      if (opts?.resetCanvasPatch !== false) {
+        setWorkflowCanvasPatch(EMPTY_WORKFLOW_CANVAS_PATCH);
+      }
       setElevenLabsWorkspaceSession(projectData?.id, snap.ref.agentId, {
         snapshot: snap,
         selectedNodeId: first,
         workspaceTab,
         nodePositionOverrides,
+        workflowCanvasPatch: patchForSession,
       });
     },
-    [projectData?.id, workspaceTab, nodePositionOverrides]
+    [projectData?.id, workspaceTab, nodePositionOverrides, workflowCanvasPatch]
   );
 
   const loadAgentDetail = React.useCallback(
@@ -124,7 +144,8 @@ export function ElevenLabsWorkspacePanel({
         const cached = getElevenLabsWorkspaceSession(pid, id);
         if (cached?.snapshot?.ref.agentId === id) {
           setNodePositionOverrides(cached.nodePositionOverrides ?? {});
-          applySnapshot(cached.snapshot, cached.selectedNodeId);
+          setWorkflowCanvasPatch(cached.workflowCanvasPatch ?? EMPTY_WORKFLOW_CANVAS_PATCH);
+          applySnapshot(cached.snapshot, cached.selectedNodeId, { resetCanvasPatch: false });
           setWorkspaceTab(cached.workspaceTab);
           return;
         }
@@ -134,6 +155,7 @@ export function ElevenLabsWorkspacePanel({
       setImportMessage(null);
       if (opts?.forceNetwork) {
         setNodePositionOverrides({});
+        setWorkflowCanvasPatch(EMPTY_WORKFLOW_CANVAS_PATCH);
       }
       try {
         const snap = await provider.getAgent(remoteAgentRef(ELEVENLABS_WORKSPACE_PROVIDER_ID, id));
@@ -173,8 +195,9 @@ export function ElevenLabsWorkspacePanel({
       selectedNodeId,
       workspaceTab,
       nodePositionOverrides,
+      workflowCanvasPatch,
     });
-  }, [snapshot, selectedNodeId, workspaceTab, projectData?.id, nodePositionOverrides]);
+  }, [snapshot, selectedNodeId, workspaceTab, projectData?.id, nodePositionOverrides, workflowCanvasPatch]);
 
   React.useEffect(() => {
     if (showAgentPicker) void loadAgentList();
@@ -203,8 +226,14 @@ export function ElevenLabsWorkspacePanel({
     return collectAllKbSnippets(nodeLabelsById);
   }, [snapshot, collectAllKbSnippets]);
 
+  const displayWorkflow = React.useMemo(() => {
+    if (!snapshot) return null;
+    const withPositions = mergeWorkflowPositionOverrides(snapshot.workflow, nodePositionOverrides);
+    return applyWorkflowCanvasLocalPatch(withPositions, workflowCanvasPatch);
+  }, [snapshot, nodePositionOverrides, workflowCanvasPatch]);
+
   const selectedNode =
-    snapshot?.workflow.nodes.find((n) => n.id === selectedNodeId) ?? null;
+    displayWorkflow?.nodes.find((n) => n.id === selectedNodeId) ?? null;
 
   const formatImportResult = React.useCallback(
     (result: {
@@ -481,6 +510,9 @@ export function ElevenLabsWorkspacePanel({
                 onDragToOmniaFlow={handleDragToOmniaFlow}
                 positionOverrides={nodePositionOverrides}
                 onPositionOverridesChange={setNodePositionOverrides}
+                workflowCanvasPatch={workflowCanvasPatch}
+                onWorkflowCanvasPatchChange={setWorkflowCanvasPatch}
+                globalPrompt={snapshot.settings.globalPrompt}
               />
             ) : (
               <p className="p-4 text-xs text-slate-500">

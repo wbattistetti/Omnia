@@ -3,7 +3,10 @@
  */
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
-import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import {
+  isUnclassifiedSlotId,
+  type ProjectSlotLexicon,
+} from '@domain/useCaseBundle/projectSlotLexicon';
 import { countLexiconConflicts } from './useCaseBundleUiHelpers';
 import { countStaleCompiledPhrases } from './useCaseBundleUiHelpers';
 
@@ -16,7 +19,7 @@ export interface SlotMappingValidationResult {
 }
 
 /**
- * Validazione totale: tutte le voci approvate, nessun `slot` generico, zero conflitti,
+ * Validazione totale: tutte le voci approvate, nessun `undefined` generico, zero conflitti,
  * nessuna frase compilata stale nel catalogo.
  */
 export function computeSlotMappingValidation(
@@ -35,7 +38,7 @@ export function computeSlotMappingValidation(
     reasons.push(`${unapproved.length} slot non confermati`);
   }
 
-  const genericSlot = entries.filter((e) => e.slot_id === 'slot');
+  const genericSlot = entries.filter((e) => isUnclassifiedSlotId(e.slot_id));
   if (genericSlot.length > 0) {
     reasons.push(`${genericSlot.length} categoria non classificata`);
   }

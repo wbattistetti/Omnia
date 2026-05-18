@@ -33,9 +33,9 @@ export interface TokenizedHighlightedTextProps {
   inlineFlow?: boolean;
 }
 
-/** True per i nomi token generici del fallback compilatore: `slot`, `slot1`, `slot2`, ... */
+/** True per i nomi token generici del fallback compilatore: `undefined`, `undefined1`, … (e legacy `slot`). */
 function isGenericSlotName(name: string): boolean {
-  return /^slot\d*$/.test(name);
+  return /^(undefined|slot)\d*$/u.test(name);
 }
 
 export function TokenizedHighlightedText({
