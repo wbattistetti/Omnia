@@ -14,6 +14,31 @@ function compareLabelsAsc(a: string, b: string): number {
 /** Ordine tra fratelli: flusso dialogo (come da lista/API) vs alfabetico su etichetta. */
 export type UseCaseSiblingSortMode = 'logical' | 'alphabetical';
 
+function withSiblingOrderIfChanged(
+  item: AIAgentUseCase,
+  parentId: string | null,
+  sortOrder: number
+): AIAgentUseCase {
+  const pid = parentId ?? null;
+  if (item.parent_id === pid && item.sort_order === sortOrder) {
+    return item;
+  }
+  return { ...item, parent_id: pid, sort_order: sortOrder };
+}
+
+function finalizeSiblingOrderList(
+  useCases: readonly AIAgentUseCase[],
+  nextById: Map<string, AIAgentUseCase>
+): AIAgentUseCase[] {
+  let changed = false;
+  const next = useCases.map((item) => {
+    const n = nextById.get(item.id) ?? item;
+    if (n !== item) changed = true;
+    return n;
+  });
+  return changed ? next : [...useCases];
+}
+
 /**
  * Reassigns sibling `sort_order` using **first occurrence** of each id in the input array.
  * Preserves designer/API narrative order (merge extend = esistenti poi nuovi; generazione = ordine array modello).
@@ -40,15 +65,11 @@ export function normalizeUseCaseSortOrderLogical(useCases: readonly AIAgentUseCa
       return a.id.localeCompare(b.id);
     });
     sorted.forEach((item, index) => {
-      nextById.set(item.id, {
-        ...item,
-        parent_id: parentId,
-        sort_order: index,
-      });
+      nextById.set(item.id, withSiblingOrderIfChanged(item, parentId, index));
     });
   }
 
-  return useCases.map((item) => nextById.get(item.id) ?? item);
+  return finalizeSiblingOrderList(useCases, nextById);
 }
 
 /**
@@ -82,15 +103,11 @@ export function normalizeUseCaseSortOrderAlphabetically(
       (a, b) => compareLabelsAsc(String(a.label || ''), String(b.label || '')) || a.id.localeCompare(b.id)
     );
     sorted.forEach((item, index) => {
-      nextById.set(item.id, {
-        ...item,
-        parent_id: parentId,
-        sort_order: index,
-      });
+      nextById.set(item.id, withSiblingOrderIfChanged(item, parentId, index));
     });
   }
 
-  return useCases.map((item) => nextById.get(item.id) ?? item);
+  return finalizeSiblingOrderList(useCases, nextById);
 }
 
 /**

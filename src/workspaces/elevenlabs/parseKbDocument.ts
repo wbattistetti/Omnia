@@ -7,7 +7,11 @@ import {
   normalizeKbHeaderKey,
   toKbPlaceholder,
 } from './kbDocumentColumnMap';
-import { detectExcelHeaderRow } from './detectExcelHeaderRow';
+import { detectExcelHeaderRow } from '@domain/knowledgeBase/detectExcelHeaderRow';
+import {
+  KB_XLSX_HEADER_SCAN_ROWS,
+  readXlsxWorkbookLimited,
+} from '@domain/knowledgeBase/xlsxLimitedRead';
 
 export type KbExtractedVariable = {
   sourceColumn: string;
@@ -114,8 +118,7 @@ export function parseKbTextContent(text: string): KbParseResult {
 
 async function readXlsxColumnHeaders(file: File): Promise<string[]> {
   const XLSX = await import('xlsx');
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array' });
+  const workbook = await readXlsxWorkbookLimited(file, KB_XLSX_HEADER_SCAN_ROWS);
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) {
     throw new Error('Il file Excel non contiene fogli.');

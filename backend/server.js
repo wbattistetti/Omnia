@@ -16,7 +16,9 @@ const { generateAIAgentDesign, induceStyleRuleFromCorrection } = require('./serv
 const { extractStructure, generatePlatformPrompt } = require('./services/StructuredDesignPipelineService');
 const {
   generateUseCaseBundle,
+  generateUseCaseBundleInitialChunk,
   generateUseCaseBundleExtend,
+  reorderUseCasesNarratively,
   createUseCase,
   regenerateUseCase,
   generalizeUseCaseMeta,
@@ -45,6 +47,13 @@ const {
   refineSystemPromptMarkdown,
   sendKbMarkdownHttpResponse,
 } = require('./services/ElevenLabsKbPromptService');
+const kbDocumentRepository = require('./services/kbDocumentRepository');
+const {
+  analyzeSemantic,
+  reanalyzeRules,
+  startChatSession,
+  chatAboutDocument,
+} = require('./services/KbSemanticAnalysisService');
 const {
   assertAiCallContract,
   aiCallContractErrorResponse,
@@ -1941,6 +1950,73 @@ app.get('/api/projects/:pid/flow-document', async (req, res) => {
     const duration = Date.now() - startTime;
     logError('FlowDocument.get', e, { projectId: pid, flowId, duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+/** Project KB documents — local repository (see kbDocumentRepository.js). */
+app.post('/api/projects/:pid/kb-documents', (req, res) => {
+  try {
+    const pid = req.params.pid;
+    const body = req.body || {};
+    const meta = kbDocumentRepository.saveDocument(pid, {
+      name: body.name,
+      mimeType: body.mimeType,
+      contentBase64: body.contentBase64,
+      textPreview: body.textPreview,
+      documentId: body.documentId,
+    });
+    res.status(201).json({ success: true, document: meta });
+  } catch (e) {
+    res.status(400).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+app.get('/api/projects/:pid/kb-documents/:documentId/file', (req, res) => {
+  try {
+    const hit = kbDocumentRepository.readDocumentFile(
+      req.params.pid,
+      req.params.documentId
+    );
+    if (!hit) {
+      return res.status(404).json({ success: false, error: 'document_not_found' });
+    }
+    const mime = hit.mimeType || 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(hit.meta.name || 'document')}"`);
+    res.send(hit.buffer);
+  } catch (e) {
+    res.status(400).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+app.get('/api/projects/:pid/kb-documents/:documentId/content', (req, res) => {
+  try {
+    const maxChars = Number(req.query.maxChars) || 120_000;
+    const hit = kbDocumentRepository.readDocumentText(req.params.pid, req.params.documentId, {
+      maxChars,
+    });
+    if (!hit) {
+      return res.status(404).json({ success: false, error: 'document_not_found' });
+    }
+    res.json({
+      success: true,
+      meta: hit.meta,
+      text: hit.text,
+      truncated: hit.truncated,
+      totalChars: hit.totalChars,
+      message: hit.message || null,
+    });
+  } catch (e) {
+    res.status(400).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+app.delete('/api/projects/:pid/kb-documents/:documentId', (req, res) => {
+  try {
+    const ok = kbDocumentRepository.deleteDocument(req.params.pid, req.params.documentId);
+    res.json({ success: ok });
+  } catch (e) {
+    res.status(400).json({ success: false, error: String(e?.message || e) });
   }
 });
 
@@ -6588,6 +6664,122 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     const globalStyleIdNorm =
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
 
+    if (action === 'kb_analyze_semantic') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        variables,
+        sampleText,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_ANALYZE_SEMANTIC' });
+      const result = await analyzeSemantic({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        variables: Array.isArray(variables) ? variables : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        sampleTextOverride: typeof sampleText === 'string' ? sampleText : undefined,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_reanalyze_rules') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        variables,
+        structureJson,
+        rules,
+        dataTypes,
+        analysisIntent,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_REANALYZE_RULES' });
+      const result = await reanalyzeRules({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        variables: Array.isArray(variables) ? variables : [],
+        structureJson: typeof structureJson === 'string' ? structureJson : '',
+        rules: Array.isArray(rules) ? rules : [],
+        dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
+        analysisIntent: typeof analysisIntent === 'string' ? analysisIntent : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_chat_start') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        variables,
+        structureJson,
+        dataTypes,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_CHAT_START' });
+      const result = await startChatSession({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        variables: Array.isArray(variables) ? variables : [],
+        structureJson: typeof structureJson === 'string' ? structureJson : '',
+        dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_chat') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        variables,
+        structureJson,
+        rules,
+        dataTypes,
+        messages,
+        userMessage,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_CHAT' });
+      const result = await chatAboutDocument({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        variables: Array.isArray(variables) ? variables : [],
+        structureJson: typeof structureJson === 'string' ? structureJson : '',
+        rules: Array.isArray(rules) ? rules : [],
+        dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
+        messages: Array.isArray(messages) ? messages : [],
+        userMessage: typeof userMessage === 'string' ? userMessage : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
     if (action === 'kb_snippet') {
       const {
         documentName,
@@ -6662,14 +6854,46 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       return sendKbMarkdownHttpResponse(res, markdown);
     }
 
+    if (action === 'reorder_use_cases_narratively') {
+      const reorderUseCases = Array.isArray(body.useCases) ? body.useCases : [];
+      const reorderLogicalSteps = Array.isArray(body.logicalSteps) ? body.logicalSteps : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] reorder_use_cases_narratively`, {
+        provider,
+        model,
+        count: reorderUseCases.length,
+      });
+      const reordered = await reorderUseCasesNarratively({
+        useCases: reorderUseCases,
+        logicalSteps: reorderLogicalSteps,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_BUNDLE_NARRATIVE_ORDER',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({
+        success: true,
+        use_cases: reordered.use_cases,
+        ...(typeof reordered.ordering_note_it === 'string' && reordered.ordering_note_it.trim()
+          ? { use_case_ordering_note: reordered.ordering_note_it.trim() }
+          : {}),
+      });
+    }
+
     if (action === 'generate_use_cases') {
       const extendExisting = body.extendExisting === true;
+      const chunkInitial = body.chunkInitial === true;
+      const chunkedExtend = body.chunkedExtend === true;
       const existingUseCases = Array.isArray(body.existingUseCases) ? body.existingUseCases : [];
       const existingLogicalSteps = Array.isArray(body.existingLogicalSteps) ? body.existingLogicalSteps : [];
       console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_use_cases`, {
         provider,
         model,
         extendExisting,
+        chunkInitial,
+        chunkedExtend,
         existingCount: existingUseCases.length,
       });
       if (extendExisting && existingUseCases.length > 0) {
@@ -6687,11 +6911,34 @@ app.post('/design/ai-agent-generate', async (req, res) => {
           taskId: callMeta.taskId,
           taskLabel: callMeta.taskLabel,
           aiProviderService,
+          chunked: chunkedExtend,
         });
         return res.json({
           success: true,
           extend_mode: true,
           use_cases: extended.use_cases,
+          coverage_complete: extended.coverage_complete === true,
+        });
+      }
+      if (chunkInitial) {
+        const chunk = await generateUseCaseBundleInitialChunk({
+          userDesc,
+          runtimeContext,
+          outputLanguage,
+          globalStyleContract,
+          globalStyleId: globalStyleIdNorm,
+          provider,
+          model,
+          purpose: callMeta.purpose || 'USE_CASE_BUNDLE_INITIAL',
+          taskId: callMeta.taskId,
+          taskLabel: callMeta.taskLabel,
+          aiProviderService,
+        });
+        return res.json({
+          success: true,
+          chunk_initial: true,
+          logical_steps: chunk.logical_steps,
+          use_cases: chunk.use_cases,
         });
       }
       const bundle = await generateUseCaseBundle({

@@ -23,6 +23,8 @@ export interface UseCaseListStepReviewCardProps {
   bundleFeedback: string | null;
   onDismissBundleFeedback?: () => void;
   generateBusy: boolean;
+  /** Etichetta pulsante durante generazione (es. «Generando use case… (12)»). */
+  generateBusyLabel?: string;
   onGenerateMore?: () => void;
   canGenerateMore: boolean;
   onAdvanceStep?: () => void;
@@ -47,6 +49,7 @@ export function UseCaseListStepReviewCard({
   bundleFeedback,
   onDismissBundleFeedback,
   generateBusy,
+  generateBusyLabel,
   onGenerateMore,
   canGenerateMore,
   onAdvanceStep,
@@ -123,6 +126,7 @@ export function UseCaseListStepReviewCard({
           {canGenerateMore ? (
             <UseCaseListGenerateButton
               generateBusy={generateBusy}
+              generateBusyLabel={generateBusyLabel}
               onGenerateMore={onGenerateMore}
             />
           ) : null}
@@ -171,12 +175,14 @@ export function UseCaseListStepReviewCard({
  */
 function UseCaseListGenerateButton({
   generateBusy,
+  generateBusyLabel,
   onGenerateMore,
 }: {
   generateBusy: boolean;
+  generateBusyLabel?: string;
   onGenerateMore?: () => void | Promise<void>;
 }): React.ReactElement {
-  const { busyLabel, hasModel } = useAiBusyLabel();
+  const { hasModel } = useAiBusyLabel();
   const [showNoModelToast, setShowNoModelToast] = React.useState(false);
 
   React.useEffect(() => {
@@ -207,7 +213,11 @@ function UseCaseListGenerateButton({
             {generateBusy ? (
               <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
             ) : null}
-            <span>{generateBusy ? busyLabel('Creando use case') : 'Crea altri use case'}</span>
+            <span>
+              {generateBusy
+                ? (generateBusyLabel ?? 'Generando use case…')
+                : 'Crea altri use case'}
+            </span>
             {!generateBusy ? (
               <LastAiCostBadge purpose={AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE} />
             ) : null}

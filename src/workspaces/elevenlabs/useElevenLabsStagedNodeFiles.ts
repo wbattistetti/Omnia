@@ -4,7 +4,10 @@
 
 import React from 'react';
 import {
+  emptyKbDoc,
   filesToStaged,
+  persistedToStaged,
+  stagedToPersisted,
   stagedNodeFilesKey,
   type PersistedKbDocument,
   type StagedKbDocument,
@@ -12,37 +15,19 @@ import {
   type StagedNodeFileKind,
 } from './elevenLabsStagedNodeFiles';
 import { getKbWorkspacePersist, setKbWorkspacePersist } from './kbWorkspacePersist';
-import { isKbTxtFile, isKbXlsxFile, parseKbFile } from './parseKbDocument';
-
-function emptyKbDoc(base: StagedNodeFile, parseStatus: StagedKbDocument['parseStatus']): StagedKbDocument {
-  return {
-    ...base,
-    parseStatus,
-    variables: [],
-    variableDictionary: {},
-    howToUseText: '',
-    markdownSnippet: '',
-  };
-}
-
-function persistedToStaged(p: PersistedKbDocument): StagedKbDocument {
-  return {
-    ...p,
-    file: new File([], p.name, { type: p.mimeType }),
-  };
-}
-
-function stagedToPersisted(d: StagedKbDocument): PersistedKbDocument {
-  const { file: _file, ...rest } = d;
-  return rest;
-}
+import {
+  deleteKbRepositoryBlob,
+  runKbDocumentIngest,
+  stageKbFilesFromUpload,
+} from '@domain/knowledgeBase/kbDocumentIngest';
+import type { KbDocumentPatch } from '@domain/knowledgeBase/kbDocumentTypes';
 
 export function useElevenLabsKbWorkspace(projectId: string | undefined, agentId: string): {
   getStaged: (nodeId: string, kind: StagedNodeFileKind) => StagedNodeFile[];
   getStagedKb: (nodeId: string) => StagedKbDocument[];
   addKbFiles: (nodeId: string, files: readonly File[]) => void;
   removeStaged: (nodeId: string, kind: StagedNodeFileKind, fileId: string) => void;
-  updateKbDoc: (nodeId: string, docId: string, patch: Partial<Pick<StagedKbDocument, 'howToUseText' | 'markdownSnippet'>>) => void;
+  updateKbDoc: (nodeId: string, docId: string, patch: KbDocumentPatch) => void;
   agentSystemPromptMarkdown: string;
   setAgentSystemPromptMarkdown: (markdown: string) => void;
   collectAllKbSnippets: (nodeLabelsById: Record<string, string>) => import('./api/kbPromptApi').KbLocalSnippetInput[];
@@ -114,71 +99,31 @@ export function useElevenLabsKbWorkspace(projectId: string | undefined, agentId:
     [agentId]
   );
 
-  const parseKbEntry = React.useCallback(
-    async (nodeId: string, docId: string, file: File) => {
-      const key = stagedNodeFilesKey(agentId, nodeId, 'kb');
-      try {
-        const result = await parseKbFile(file);
-        setKbByKey((prev) => ({
-          ...prev,
-          [key]: (prev[key] ?? []).map((d) =>
-            d.id === docId
-              ? {
-                  ...d,
-                  parseStatus: 'ready' as const,
-                  format: result.format,
-                  variables: result.variables,
-                  variableDictionary: result.variableDictionary,
-                  parseError: undefined,
-                }
-              : d
-          ),
-        }));
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setKbByKey((prev) => ({
-          ...prev,
-          [key]: (prev[key] ?? []).map((d) =>
-            d.id === docId
-              ? {
-                  ...d,
-                  parseStatus: 'error' as const,
-                  parseError: message,
-                  variables: [],
-                  variableDictionary: {},
-                }
-              : d
-          ),
-        }));
-      }
-    },
-    [agentId]
-  );
-
   const addKbFiles = React.useCallback(
     (nodeId: string, files: readonly File[]) => {
       if (!agentId.trim() || !nodeId.trim() || files.length === 0) return;
       const key = stagedNodeFilesKey(agentId, nodeId, 'kb');
-      const bases = filesToStaged(files);
-      const pending: StagedKbDocument[] = bases.map((base) => {
-        const parsable = isKbTxtFile(base.file) || isKbXlsxFile(base.file);
-        return emptyKbDoc(base, parsable ? 'parsing' : 'unsupported');
-      });
+      const pending = stageKbFilesFromUpload(files);
       setKbByKey((prev) => ({
         ...prev,
         [key]: [...(prev[key] ?? []), ...pending],
       }));
+      const setNodeDocs: import('@domain/knowledgeBase/kbDocumentIngest').KbDocumentListUpdater =
+        (updater) => {
+          setKbByKey((prev) => ({
+            ...prev,
+            [key]: updater(prev[key] ?? []),
+          }));
+        };
       for (const doc of pending) {
-        if (doc.parseStatus === 'parsing') {
-          void parseKbEntry(nodeId, doc.id, doc.file);
-        }
+        runKbDocumentIngest(projectId, doc, setNodeDocs);
       }
     },
-    [agentId, parseKbEntry]
+    [agentId, projectId]
   );
 
   const updateKbDoc = React.useCallback(
-    (nodeId: string, docId: string, patch: Partial<Pick<StagedKbDocument, 'howToUseText' | 'markdownSnippet'>>) => {
+    (nodeId: string, docId: string, patch: KbDocumentPatch) => {
       const key = stagedNodeFilesKey(agentId, nodeId, 'kb');
       setKbByKey((prev) => ({
         ...prev,
@@ -192,10 +137,15 @@ export function useElevenLabsKbWorkspace(projectId: string | undefined, agentId:
     (nodeId: string, kind: StagedNodeFileKind, fileId: string) => {
       const key = stagedNodeFilesKey(agentId, nodeId, kind);
       if (kind === 'kb') {
-        setKbByKey((prev) => ({
-          ...prev,
-          [key]: (prev[key] ?? []).filter((f) => f.id !== fileId),
-        }));
+        setKbByKey((prev) => {
+          const list = prev[key] ?? [];
+          const doc = list.find((d) => d.id === fileId);
+          deleteKbRepositoryBlob(projectId, doc?.repositoryDocumentId);
+          return {
+            ...prev,
+            [key]: list.filter((f) => f.id !== fileId),
+          };
+        });
         return;
       }
       setByKey((prev) => ({
@@ -203,7 +153,7 @@ export function useElevenLabsKbWorkspace(projectId: string | undefined, agentId:
         [key]: (prev[key] ?? []).filter((f) => f.id !== fileId),
       }));
     },
-    [agentId]
+    [agentId, projectId]
   );
 
   const collectAllKbSnippets = React.useCallback(

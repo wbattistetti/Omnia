@@ -1,12 +1,31 @@
 // Use case composer: LLM helpers for generate / regenerate (design-time only).
 
 const { extractJsonString } = require('./AIAgentDesignService');
+const {
+  extractAndParseModelJson,
+  buildCompactJsonRetryDirective,
+  buildStrictJsonRetryDirective,
+  shouldRetryModelJsonParse,
+  throwModelJsonParseFailure,
+} = require('./modelJsonResponse');
+
+const USE_CASE_JSON_PARSE_MAX_ATTEMPTS = 3;
+const {
+  USE_CASE_BUNDLE_CHUNK_SIZE,
+  USE_CASE_BUNDLE_MAX_TOTAL,
+} = require('./useCaseBundleChunkConfig');
 const { mergeCreateUseCaseWithDraft } = require('./mergeCreateUseCaseDraft');
 const { normalizeUseCaseScenarioFields, scenarioTextForLlm } = require('./useCaseScenarioFields');
 const {
   flattenUseCasesDepthFirst,
   applyNarrativeOrder,
 } = require('./useCaseNarrativeOrder');
+const {
+  coalesceRawUseCasesDialogue,
+  useCasesMissingAssistantContent,
+  buildDialogueCompleteRetryDirective,
+  throwUseCasesMissingDialogue,
+} = require('./useCaseDialogueEnforcement');
 
 /**
  * HTTP timeout for the OpenAI/Groq request (BaseProvider.makeRequest).
@@ -172,12 +191,24 @@ function logUseCaseDialogueDiagnostics(stage, model, useCases) {
 
 /**
  * Random band per HTTP request so the model cannot settle on a ritual count (e.g. four).
+ * Groq models are often capped at 8192 completion tokens — keep the first-pass band smaller.
+ * @param {'openai'|'groq'|string} [provider]
  * @returns {{ lo: number, hi: number }}
  */
-function pickBundleScenarioTargetBand() {
-  const lo = 8 + Math.floor(Math.random() * 5); // 8–12
-  const hi = Math.min(lo + 4 + Math.floor(Math.random() * 7), 24); // lo+4 … lo+10, cap 24
+function pickBundleScenarioTargetBand(provider) {
+  if (provider === 'openai') {
+    const lo = 8 + Math.floor(Math.random() * 5); // 8–12
+    const hi = Math.min(lo + 4 + Math.floor(Math.random() * 7), 24); // lo+4 … lo+10, cap 24
+    return { lo, hi };
+  }
+  const lo = 5 + Math.floor(Math.random() * 3); // 5–7
+  const hi = Math.min(lo + 2 + Math.floor(Math.random() * 4), 10); // lo+2 … lo+5, cap 10
   return { lo, hi };
+}
+
+/** Output token budget for full use-case bundle generation. */
+function resolveUseCaseBundleMaxTokens(provider) {
+  return provider === 'openai' ? 32768 : 8192;
 }
 
 /** Band for **new** rows only in extend mode (different scale than full bundle). */
@@ -245,6 +276,114 @@ Coverage (not a four-item checklist): where relevant, span situation types such 
 Return valid JSON only.`;
 }
 
+/**
+ * First batch only: logical_steps skeleton + fixed-size use_cases slice (chunked pipeline).
+ * @param {string} userDesc
+ * @param {string} [outputLanguage]
+ * @param {string} [runtimeContext]
+ */
+function buildGenerateUseCasesInitialChunkUserMessage(userDesc, outputLanguage, runtimeContext) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `\nOUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const ctx =
+    typeof runtimeContext === 'string' && runtimeContext.trim()
+      ? `\nRUNTIME_PROMPT_OR_SECTIONS (context):\n"""\n${runtimeContext.slice(0, 12000)}\n"""\n`
+      : '';
+  const n = USE_CASE_BUNDLE_CHUNK_SIZE;
+  return `${lang}DESIGNER_TASK_DESCRIPTION:
+"""
+${userDesc}
+"""
+${ctx}
+CHUNKED_GENERATION (batch 1 of several): This call is only the **first batch**. Later API calls will add more scenarios — do **not** try to exhaust the whole domain now.
+
+Produce JSON with exactly:
+1) "logical_steps" — array of { "id": string (snake_case), "description": string } — **6–10** ordered steps for the full agent (stable skeleton for all future batches).
+2) "use_cases" — array of **exactly ${n}** scenario objects (first coverage slice). Each object:
+   - "id": string (unique among all use_cases in this response)
+   - "label": string
+   - "scenario": { "descrittivo": string, "llm": string }
+   - "payoff": string (= descrittivo)
+   - "parent_id": string | null
+   - "sort_order": number
+   - "refinement_prompt": string (may be "")
+   - "dialogue": [ { "turn_id": string, "role": "assistant", "content": string } ] — one non-empty assistant sentence
+   - "notes": { "behavior": string, "tone": string }
+   - "bubble_notes": {}
+
+Pick ${n} **high-value** distinct scenarios to start coverage (ingresso, chiarimento, successo, …). Keep descrittivo concise (max ~3 sentences); llm max ~2 lines.
+
+CRITICAL: Every use_cases[i] MUST have non-empty dialogue[0].content (one full assistant sentence). Rows without a message are invalid.
+
+Return valid JSON only.`;
+}
+
+/**
+ * Parse model JSON with parse + dialogue completeness retries.
+ * @param {object} params
+ * @param {(userSuffix: string) => Promise<unknown>} params.callModel
+ * @param {number} params.maxAttempts
+ * @param {boolean} [params.chunkedPipeline]
+ * @param {number} [params.compactLo]
+ * @param {number} [params.compactHi]
+ * @param {string} params.stage
+ * @param {boolean} [params.allowEmptyUseCases]
+ */
+async function parseUseCaseModelJsonWithRetries({
+  callModel,
+  maxAttempts,
+  chunkedPipeline = true,
+  compactLo,
+  compactHi,
+  stage,
+  allowEmptyUseCases = false,
+}) {
+  let dialogueRetrySuffix = '';
+  let lastFail;
+  for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex++) {
+    let userSuffix = dialogueRetrySuffix;
+    if (!userSuffix) {
+      if (attemptIndex === 0) {
+        userSuffix = '';
+      } else if (attemptIndex === 1 && typeof compactLo === 'number' && typeof compactHi === 'number') {
+        userSuffix = buildCompactJsonRetryDirective(compactLo, compactHi);
+      } else {
+        userSuffix = buildStrictJsonRetryDirective();
+      }
+    }
+    const response = await callModel(userSuffix);
+    const result = extractAndParseModelJson(response, { errorLabel: 'Model' });
+    if (!result.ok) {
+      lastFail = result;
+      const canRetryParse = chunkedPipeline
+        ? shouldRetryModelJsonParse(attemptIndex, maxAttempts, true)
+        : attemptIndex === 0 && result.truncated;
+      if (!canRetryParse) break;
+      dialogueRetrySuffix = '';
+      continue;
+    }
+    let parsed = result.parsed;
+    if (Array.isArray(parsed.use_cases)) {
+      parsed = { ...parsed, use_cases: coalesceRawUseCasesDialogue(parsed.use_cases) };
+    }
+    if (allowEmptyUseCases && (!parsed.use_cases || parsed.use_cases.length === 0)) {
+      return parsed;
+    }
+    const missing = useCasesMissingAssistantContent(parsed.use_cases || []);
+    if (missing.length === 0) {
+      return parsed;
+    }
+    if (attemptIndex < maxAttempts - 1) {
+      dialogueRetrySuffix = buildDialogueCompleteRetryDirective(missing);
+      continue;
+    }
+    throwUseCasesMissingDialogue(missing, stage, maxAttempts);
+  }
+  throwModelJsonParseFailure(lastFail);
+}
+
 function buildGlobalStyleBlock(globalStyleContract) {
   const contract = typeof globalStyleContract === 'string' ? globalStyleContract.trim() : '';
   if (!contract) return '';
@@ -279,10 +418,15 @@ function validateExtendUseCases(raw) {
     throw new Error('Invalid extend use case JSON: not an object');
   }
   const uc = raw.use_cases;
-  if (!Array.isArray(uc) || uc.length === 0) {
-    throw new Error('Invalid extend JSON: use_cases must be a non-empty array');
+  const coverage_complete =
+    raw.coverage_complete === true || raw.coverageComplete === true;
+  if (!Array.isArray(uc)) {
+    throw new Error('Invalid extend JSON: use_cases must be an array');
   }
-  return { use_cases: uc };
+  if (uc.length === 0 && !coverage_complete) {
+    throw new Error('Invalid extend JSON: use_cases empty without coverage_complete');
+  }
+  return { use_cases: uc, coverage_complete };
 }
 
 /**
@@ -313,8 +457,10 @@ function buildExtendUseCasesUserMessage(
   runtimeContext,
   existingUseCases,
   existingLogicalSteps,
-  newScenarioBand
+  newScenarioBand,
+  opts = {}
 ) {
+  const chunked = opts.chunked === true;
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
       ? `\nOUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
@@ -334,12 +480,13 @@ function buildExtendUseCasesUserMessage(
       : []
   ).slice(0, 8000);
 
-  const band =
-    newScenarioBand &&
-    typeof newScenarioBand.lo === 'number' &&
-    typeof newScenarioBand.hi === 'number' &&
-    newScenarioBand.lo > 0 &&
-    newScenarioBand.hi >= newScenarioBand.lo
+  const band = chunked
+    ? `\nNEW_USE_CASES_BATCH (chunked pipeline): add **up to ${USE_CASE_BUNDLE_CHUNK_SIZE}** net-new scenarios (minimum 1 while meaningful gaps remain). Set "coverage_complete": true when no significant new scenarios remain (themes already in ALREADY_DEFINED_USE_CASES). If coverage_complete is true, "use_cases" may be []. Total catalog cap is about ${USE_CASE_BUNDLE_MAX_TOTAL} — stop adding shallow variants.\n`
+    : newScenarioBand &&
+        typeof newScenarioBand.lo === 'number' &&
+        typeof newScenarioBand.hi === 'number' &&
+        newScenarioBand.lo > 0 &&
+        newScenarioBand.hi >= newScenarioBand.lo
       ? `\nNEW_USE_CASES_BAND (this call only): add **between ${newScenarioBand.lo} and ${newScenarioBand.hi}** net-new scenarios. **Do not add exactly four new rows** unless unavoidable — split edges or combine duplicates if you hit four by habit.\n`
       : '';
 
@@ -363,9 +510,9 @@ Rules:
 - Only **net-new** scenarios that expand coverage relative to ALREADY_DEFINED_USE_CASES.
 - How many: **as many as remain meaningful** — typically **1–14** added items depending on gaps; **never** output a fixed ritual count (e.g. always four). **Do not pad** with shallow variants.
 - Use **new** unique string ids among themselves; parent_id may reference another **new** id in this array or null.
-- Each assistant "dialogue" turn **content** must be non-empty substantive prose (label + payoff + message triplet for designers).
-
-Return valid JSON only: { "use_cases": [ ... ] }`;
+- Each assistant "dialogue" turn **content** must be non-empty substantive prose (label + payoff + message triplet for designers). **Never return a use case without dialogue.content.**
+${chunked ? '- Include top-level boolean "coverage_complete" (required).\n' : ''}
+Return valid JSON only: { "use_cases": [ ... ]${chunked ? ', "coverage_complete": boolean' : ''} }`;
 }
 
 /**
@@ -393,6 +540,7 @@ async function generateUseCaseBundleExtend({
   taskId = null,
   taskLabel = null,
   aiProviderService,
+  chunked = false,
 }) {
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
     throw new Error('userDesc must be a non-empty string (at least 8 characters)');
@@ -401,44 +549,46 @@ async function generateUseCaseBundleExtend({
     throw new Error('existingUseCases required for extend');
   }
   const newBand = pickExtendNewScenarioTargetBand();
-  const messages = [
-    { role: 'system', content: UC_SYSTEM },
-    {
-      role: 'user',
-      content: `${buildExtendUseCasesUserMessage(
-        userDesc.trim(),
-        outputLanguage,
-        runtimeContext,
-        existingUseCases,
-        existingLogicalSteps || [],
-        newBand
-      )}${buildGlobalStyleBlock(globalStyleContract)}`,
-    },
-  ];
-  const maxTokens = provider === 'openai' ? 32768 : 8192;
-  const response = await aiProviderService.callAI(provider, messages, {
-    model: model || undefined,
-    temperature: 0.52,
-    maxTokens,
-    timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
-    purpose,
-    taskId,
-    taskLabel,
+  const maxTokens = resolveUseCaseBundleMaxTokens(provider);
+  const maxAttempts = chunked ? USE_CASE_JSON_PARSE_MAX_ATTEMPTS : 2;
+  const extendBaseUser = `${buildExtendUseCasesUserMessage(
+    userDesc.trim(),
+    outputLanguage,
+    runtimeContext,
+    existingUseCases,
+    existingLogicalSteps || [],
+    newBand,
+    { chunked }
+  )}${buildGlobalStyleBlock(globalStyleContract)}`;
+  const parsed = await parseUseCaseModelJsonWithRetries({
+    stage: chunked ? 'chunk_extend' : 'extend',
+    maxAttempts,
+    chunkedPipeline: chunked,
+    compactLo: Math.max(2, newBand.lo - 1),
+    compactHi: Math.min(6, newBand.hi),
+    allowEmptyUseCases: true,
+    callModel: async (userSuffix) =>
+      aiProviderService.callAI(
+        provider,
+        [
+          { role: 'system', content: UC_SYSTEM },
+          { role: 'user', content: `${extendBaseUser}${userSuffix}` },
+        ],
+        {
+          model: model || undefined,
+          temperature: userSuffix.includes('OUTPUT_RETRY') ? 0.5 : 0.52,
+          maxTokens,
+          timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
+          purpose,
+          taskId,
+          taskLabel,
+        }
+      ),
   });
-  const content = response?.choices?.[0]?.message?.content;
-  const jsonStr = extractJsonString(content);
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    const err = new Error(`Model returned non-JSON: ${e.message}`);
-    err.rawSnippet = jsonStr.slice(0, 500);
-    throw err;
-  }
   const ext = validateExtendUseCases(parsed);
   logUseCaseDialogueDiagnostics('extend', model, ext.use_cases);
   const use_cases = ext.use_cases.map((u) => normalizeUseCase(u, globalStyleId));
-  return { use_cases };
+  return { use_cases, coverage_complete: ext.coverage_complete === true };
 }
 
 /**
@@ -497,6 +647,61 @@ Return JSON:
 /**
  * @param {object} params
  */
+/**
+ * First chunk: logical_steps + exactly USE_CASE_BUNDLE_CHUNK_SIZE use_cases (no narrative reorder).
+ */
+async function generateUseCaseBundleInitialChunk({
+  userDesc,
+  runtimeContext,
+  outputLanguage,
+  globalStyleContract,
+  globalStyleId,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
+    throw new Error('userDesc must be a non-empty string (at least 8 characters)');
+  }
+  const maxTokens = resolveUseCaseBundleMaxTokens(provider);
+  const baseUser = `${buildGenerateUseCasesInitialChunkUserMessage(
+    userDesc.trim(),
+    outputLanguage,
+    runtimeContext
+  )}${buildGlobalStyleBlock(globalStyleContract)}`;
+  const chunkSize = USE_CASE_BUNDLE_CHUNK_SIZE;
+  const parsed = await parseUseCaseModelJsonWithRetries({
+    stage: 'chunk_initial',
+    maxAttempts: USE_CASE_JSON_PARSE_MAX_ATTEMPTS,
+    chunkedPipeline: true,
+    compactLo: chunkSize,
+    compactHi: chunkSize,
+    callModel: async (userSuffix) =>
+      aiProviderService.callAI(
+        provider,
+        [
+          { role: 'system', content: UC_SYSTEM },
+          { role: 'user', content: `${baseUser}${userSuffix}` },
+        ],
+        {
+          model: model || undefined,
+          temperature: userSuffix.includes('OUTPUT_RETRY') ? 0.5 : 0.6,
+          maxTokens,
+          timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
+          purpose,
+          taskId,
+          taskLabel,
+        }
+      ),
+  });
+  const bundle = validateUseCaseBundle(parsed);
+  logUseCaseDialogueDiagnostics('chunk_initial', model, bundle.use_cases);
+  return normalizeUseCaseBundle(bundle, globalStyleId);
+}
+
 async function reorderUseCasesNarratively({
   useCases,
   logicalSteps,
@@ -569,39 +774,42 @@ async function generateUseCaseBundle({
   if (!userDesc || typeof userDesc !== 'string' || userDesc.trim().length < 8) {
     throw new Error('userDesc must be a non-empty string (at least 8 characters)');
   }
-  const scenarioBand = pickBundleScenarioTargetBand();
-  const messages = [
-    { role: 'system', content: UC_SYSTEM },
-    {
-      role: 'user',
-      content: `${buildGenerateUseCasesUserMessage(
-        userDesc.trim(),
-        outputLanguage,
-        runtimeContext,
-        scenarioBand
-      )}${buildGlobalStyleBlock(globalStyleContract)}`,
-    },
-  ];
-  const maxTokens = provider === 'openai' ? 32768 : 8192;
-  const response = await aiProviderService.callAI(provider, messages, {
-    model: model || undefined,
-    temperature: 0.62,
-    maxTokens,
-    timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
-    purpose,
-    taskId,
-    taskLabel,
+  const scenarioBand = pickBundleScenarioTargetBand(provider);
+  const maxTokens = resolveUseCaseBundleMaxTokens(provider);
+  const compactRetryBand = {
+    lo: Math.max(4, scenarioBand.lo - 2),
+    hi: Math.min(8, scenarioBand.hi),
+  };
+  const bundleBaseUser = `${buildGenerateUseCasesUserMessage(
+    userDesc.trim(),
+    outputLanguage,
+    runtimeContext,
+    scenarioBand
+  )}${buildGlobalStyleBlock(globalStyleContract)}`;
+  const parsed = await parseUseCaseModelJsonWithRetries({
+    stage: 'bundle',
+    maxAttempts: USE_CASE_JSON_PARSE_MAX_ATTEMPTS,
+    chunkedPipeline: false,
+    compactLo: compactRetryBand.lo,
+    compactHi: compactRetryBand.hi,
+    callModel: async (userSuffix) =>
+      aiProviderService.callAI(
+        provider,
+        [
+          { role: 'system', content: UC_SYSTEM },
+          { role: 'user', content: `${bundleBaseUser}${userSuffix}` },
+        ],
+        {
+          model: model || undefined,
+          temperature: userSuffix.includes('OUTPUT_RETRY') ? 0.55 : 0.62,
+          maxTokens,
+          timeout: GENERATE_USE_CASE_BUNDLE_TIMEOUT_MS,
+          purpose,
+          taskId,
+          taskLabel,
+        }
+      ),
   });
-  const content = response?.choices?.[0]?.message?.content;
-  const jsonStr = extractJsonString(content);
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    const err = new Error(`Model returned non-JSON: ${e.message}`);
-    err.rawSnippet = jsonStr.slice(0, 500);
-    throw err;
-  }
   const bundle = validateUseCaseBundle(parsed);
   logUseCaseDialogueDiagnostics('bundle', model, bundle.use_cases);
   let normalized = normalizeUseCaseBundle(bundle, globalStyleId);
@@ -1617,8 +1825,11 @@ Legacy synonym (accept internally): matched_wrong_response → treat as exists_b
 
 module.exports = {
   generateUseCaseBundle,
+  generateUseCaseBundleInitialChunk,
   generateUseCaseBundleExtend,
   reorderUseCasesNarratively,
+  USE_CASE_BUNDLE_CHUNK_SIZE,
+  USE_CASE_BUNDLE_MAX_TOTAL,
   createUseCase,
   regenerateUseCase,
   generalizeUseCaseMeta,

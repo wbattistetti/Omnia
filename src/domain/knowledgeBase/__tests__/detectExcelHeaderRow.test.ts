@@ -6,7 +6,16 @@ describe('detectExcelHeaderRow', () => {
     const matrix = [
       ['ultimo aggiornamento dati: 02/04/2026'],
       ['PAROS'],
-      ['COGNOME', 'NOME', 'SESSO', 'ID Dottore', 'Divisione (Name)', '', 'prestazione default (service)', 'codice prest default (serviceId)'],
+      [
+        'COGNOME',
+        'NOME',
+        'SESSO',
+        'ID Dottore',
+        'Divisione (Name)',
+        '',
+        'prestazione default (service)',
+        'codice prest default (serviceId)',
+      ],
       ['Arcidiacono', 'Barbara', 'F', '56', 'OCULISTICA', '', 'oculistica', '206'],
     ];
     const headers = detectExcelHeaderRow(matrix);

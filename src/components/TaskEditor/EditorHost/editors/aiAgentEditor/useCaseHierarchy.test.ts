@@ -27,6 +27,17 @@ function uc(id: string, label: string, parent_id: string | null, sort_order: num
 }
 
 describe('normalizeUseCaseSortOrderLogical', () => {
+  it('preserves object references when sort_order is already correct', () => {
+    const input: AIAgentUseCase[] = [
+      uc('r1', 'Alpha', null, 0),
+      uc('r2', 'Beta', null, 1),
+    ];
+    const out = normalizeUseCaseSortOrderLogical(input);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toBe(input[0]);
+    expect(out[1]).toBe(input[1]);
+  });
+
   it('keeps sibling order by first appearance in array (dialogue flow)', () => {
     const input: AIAgentUseCase[] = [
       uc('r2', 'Zeta', null, 9),

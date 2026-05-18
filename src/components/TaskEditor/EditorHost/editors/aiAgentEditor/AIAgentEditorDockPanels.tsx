@@ -10,6 +10,7 @@ import { FontProvider } from '@context/FontContext';
 import { AIAgentStructuredSectionsPanel } from './AIAgentStructuredSectionsPanel';
 import { AIAgentProposedFieldsTable } from './AIAgentProposedFieldsTable';
 import { AIAgentUseCaseComposer } from './AIAgentUseCaseComposer';
+import { resolveUseCaseBundleGeneratingLabel } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import { ViewSkaGenerator } from './useCaseGeneratorWizard/ViewSkaGenerator';
 import { ConversationsBubbleView } from './useCaseGeneratorWizard/ConversationsBubbleView';
 import { useStyleGateFlash } from './useCaseGeneratorWizard/ConversationsStyleGate';
@@ -39,6 +40,7 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
+import { KnowledgeBaseViewer } from '@components/knowledgeBase/KnowledgeBaseViewer';
 
 /**
  * Wizard step 1 — un singolo Dockview (single-pane) le cui tab sono:
@@ -171,6 +173,8 @@ export function EditorUseCasesPanel() {
     useCaseCatalogMode,
     useCaseComposerBusy,
     useCaseBundleGenerationBusy,
+    useCaseBundleGenerationCount,
+    useCaseBundleGenerationOrdering,
     useCasePhraseStylePropagationBusy,
     useCasePhraseStyleBatchProgress,
     useCaseCreationMessage,
@@ -263,6 +267,13 @@ export function EditorUseCasesPanel() {
     useCaseBundleGenerationBusy ||
     useCasePhraseStylePropagationBusy;
 
+  const bundleGenerateBusyLabel = useCaseBundleGenerationBusy
+    ? resolveUseCaseBundleGeneratingLabel(
+        useCaseBundleGenerationCount,
+        useCaseBundleGenerationOrdering
+      )
+    : undefined;
+
   const baseUseCaseStyleContract = React.useMemo(
     () =>
       AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === useCaseGlobalStyleId)?.contract ?? '',
@@ -341,6 +352,7 @@ export function EditorUseCasesPanel() {
         useWizardShell ? undefined : showGenerateCta ? onGenerateUseCaseBundle : undefined
       }
       generating={generating}
+      bundleGenerateBusyLabel={bundleGenerateBusyLabel}
       primaryGenerateOnRightOnly={useWizardShell}
       highlightIds={useCaseHighlightIds}
       onClearUseCaseHighlight={onClearUseCaseHighlight}
@@ -605,6 +617,8 @@ export function EditorUseCasesPanel() {
               !isErrorHandlingCatalog && showGenerateCta ? onGenerateUseCaseBundle : undefined
             }
             generateBusy={useCaseBundleGenerationBusy || generating}
+            useCaseBundleGenerationCount={useCaseBundleGenerationCount}
+            useCaseBundleGenerationOrdering={useCaseBundleGenerationOrdering}
             showStepOneListToolbar={wizardCatalogCount > 0}
             useCaseCount={wizardCatalogCount}
             onAdvanceWizardStep={() => useCaseGeneratorWizard.advanceToNextStep()}
@@ -665,6 +679,35 @@ export function EditorUseCasesPanel() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+    </div>
+  );
+}
+
+/** Wizard passo Backend — vista Knowledge Base (documenti sul task corrente). */
+export function EditorKnowledgeBasePanel() {
+  const {
+    generating,
+    projectId,
+    knowledgeBaseDocuments,
+    knowledgeBaseAddFiles,
+    knowledgeBaseRemoveDocument,
+    knowledgeBaseUpdateDocument,
+    knowledgeBaseCallMeta,
+  } = useAIAgentEditorDock();
+
+  return (
+    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-violet-950/20 border-l-4 border-violet-500/50">
+      <KnowledgeBaseViewer
+        className="min-h-0 flex-1"
+        documents={knowledgeBaseDocuments}
+        projectId={projectId}
+        callMeta={knowledgeBaseCallMeta}
+        disabled={generating}
+        onAddFiles={(files) => knowledgeBaseAddFiles(files)}
+        onRemoveDocument={knowledgeBaseRemoveDocument}
+        onUpdateDocument={knowledgeBaseUpdateDocument}
+        footerHint="Metadati e regole sul task; i file sono nel repository progetto."
+      />
     </div>
   );
 }

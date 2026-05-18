@@ -42,6 +42,8 @@ const baseState: AIAgentPersistState = {
   agentConversationStyleSelections: {},
   agentConversationDeployStyleId: null,
   agentLogUseCase: false,
+  agentInterfaceJson: '',
+  agentKnowledgeBaseDocumentsJson: '',
 };
 
 describe('phase machine persist roundtrip', () => {

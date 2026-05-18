@@ -57,8 +57,6 @@ export const BracketTokenHighlightedTextarea = React.forwardRef<
 ) {
   const mirrorRef = React.useRef<HTMLDivElement | null>(null);
   const parts = React.useMemo(() => splitAgentMessageParts(value), [value]);
-  /** Con testo trasparente il browser non disegna le ondine ortografiche: testo visibile + niente mirror. */
-  const spellCheckOn = spellCheck === true || spellCheck === '';
 
   const handleScroll = React.useCallback(
     (event: React.UIEvent<HTMLTextAreaElement>) => {
@@ -74,32 +72,28 @@ export const BracketTokenHighlightedTextarea = React.forwardRef<
 
   return (
     <div className={`relative overflow-hidden ${containerClassName}`} style={style}>
-      {!spellCheckOn ? (
-        <div
-          ref={mirrorRef}
-          aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words text-current"
-          style={{ padding: 'inherit', boxSizing: 'border-box' }}
-        >
-          {value.length === 0 && placeholder ? (
-            <span className="text-current opacity-45">{placeholder}</span>
-          ) : (
-            parts.map((part, index) => renderPart(part, index))
-          )}
-        </div>
-      ) : null}
+      <div
+        ref={mirrorRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words text-current"
+        style={{ padding: 'inherit', boxSizing: 'border-box' }}
+      >
+        {value.length === 0 && placeholder ? (
+          <span className="text-current opacity-45">{placeholder}</span>
+        ) : (
+          parts.map((part, index) => renderPart(part, index))
+        )}
+      </div>
       <textarea
         {...textareaProps}
         ref={forwardedRef}
         value={value}
         spellCheck={spellCheck}
-        placeholder={spellCheckOn ? placeholder : ''}
+        placeholder=""
         onScroll={handleScroll}
         className={[
           'relative z-10 block h-full w-full resize-none border-0 bg-transparent p-0 caret-slate-100 outline-none focus:outline-none focus:ring-0 disabled:cursor-not-allowed',
-          spellCheckOn
-            ? 'text-emerald-50 placeholder:text-emerald-300/45'
-            : 'text-transparent placeholder:text-transparent',
+          'text-transparent placeholder:text-transparent selection:bg-violet-500/35',
           className ?? '',
         ]
           .filter(Boolean)
@@ -108,3 +102,5 @@ export const BracketTokenHighlightedTextarea = React.forwardRef<
     </div>
   );
 });
+
+

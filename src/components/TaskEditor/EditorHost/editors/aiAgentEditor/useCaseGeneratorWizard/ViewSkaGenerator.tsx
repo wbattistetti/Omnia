@@ -12,6 +12,7 @@ import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
 import { LastAiCostBadge } from '@components/common/LastAiCostBadge';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { LABEL_GENERATE_USE_CASES } from '../constants';
+import { resolveUseCaseBundleGeneratingLabel } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import type { UseCaseGeneratorWizardModel } from './useUseCaseGeneratorWizard';
 import { UseCaseListStepReviewCard } from './UseCaseListStepReviewCard';
 import {
@@ -125,6 +126,8 @@ export interface ViewSkaGeneratorProps {
   /** Solo passo 1: generazione lista use case — sempre nel pannello destro. */
   onGenerateUseCaseBundle?: () => void | Promise<void>;
   generateBusy?: boolean;
+  useCaseBundleGenerationCount?: number | null;
+  useCaseBundleGenerationOrdering?: boolean;
   /** Passo 1: mostra la toolbar lista (espandi/collassa, Mostra…) sotto lo stepper. */
   showStepOneListToolbar?: boolean;
   /** Numero use case corrente (testo «Ho creato n…» nel pannello DX dopo la prima generazione). */
@@ -241,6 +244,8 @@ export function ViewSkaGenerator({
   leftPanel,
   onGenerateUseCaseBundle,
   generateBusy = false,
+  useCaseBundleGenerationCount = null,
+  useCaseBundleGenerationOrdering = false,
   showStepOneListToolbar = false,
   useCaseCount = 0,
   onAdvanceWizardStep,
@@ -295,6 +300,13 @@ export function ViewSkaGenerator({
     onClearWizardTokenization,
   ]);
   const handleClearCancel = React.useCallback(() => setClearScope(null), []);
+  const useCaseGenerateBusyLabel = generateBusy
+    ? resolveUseCaseBundleGeneratingLabel(
+        useCaseBundleGenerationCount,
+        useCaseBundleGenerationOrdering
+      )
+    : LABEL_GENERATE_USE_CASES;
+
   const examplePhraseStyleBusyLabel =
     examplePhraseStyleBusy &&
     examplePhraseStyleBatchProgress &&
@@ -779,6 +791,7 @@ export function ViewSkaGenerator({
                         bundleFeedback={bundleFeedback}
                         onDismissBundleFeedback={onDismissBundleFeedback}
                         generateBusy={generateBusy}
+                        generateBusyLabel={useCaseGenerateBusyLabel}
                         onGenerateMore={onGenerateUseCaseBundle}
                         canGenerateMore={typeof onGenerateUseCaseBundle === 'function'}
                         onAdvanceStep={onAdvanceWizardStep}
@@ -875,6 +888,7 @@ export function ViewSkaGenerator({
               <div className="shrink-0 border-t border-violet-500/25 bg-slate-50/95 px-3 py-3 dark:bg-slate-950/80">
                 <ViewSkaGenerateButton
                   generateBusy={generateBusy}
+                  generateBusyLabel={useCaseGenerateBusyLabel}
                   onGenerateUseCaseBundle={onGenerateUseCaseBundle}
                 />
               </div>
@@ -1139,12 +1153,14 @@ function ConversationalJsonRightPanel({
  */
 function ViewSkaGenerateButton({
   generateBusy,
+  generateBusyLabel,
   onGenerateUseCaseBundle,
 }: {
   generateBusy: boolean;
+  generateBusyLabel: string;
   onGenerateUseCaseBundle?: () => void | Promise<void>;
 }): React.ReactElement {
-  const { busyLabel, hasModel } = useAiBusyLabel();
+  const { hasModel } = useAiBusyLabel();
   const [showNoModelToast, setShowNoModelToast] = React.useState(false);
 
   React.useEffect(() => {
@@ -1174,7 +1190,7 @@ function ViewSkaGenerateButton({
         ) : (
           <Sparkles size={18} aria-hidden />
         )}
-        {generateBusy ? busyLabel('Creando use case') : LABEL_GENERATE_USE_CASES}
+        {generateBusy ? generateBusyLabel : LABEL_GENERATE_USE_CASES}
         {!generateBusy ? (
           <LastAiCostBadge purpose={AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL} />
         ) : null}

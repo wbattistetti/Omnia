@@ -10,7 +10,9 @@ import type {
 } from '@workspaces/core/types';
 import type { KbLocalSnippetInput } from '@workspaces/elevenlabs/api/kbPromptApi';
 import type { ProjectData } from '@types/project';
-import type { StagedKbDocument, StagedNodeFile } from '@workspaces/elevenlabs/elevenLabsStagedNodeFiles';
+import type { KbDocumentPatch, StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
+import type { AiCallMeta } from '@services/aiAgentDesignApi';
+import type { StagedNodeFile } from '@workspaces/elevenlabs/elevenLabsStagedNodeFiles';
 import { ElevenLabsAgentSystemPromptEditor } from './ElevenLabsAgentSystemPromptEditor';
 import { ElevenLabsNodeKnowledgeBasePanel } from './ElevenLabsNodeKnowledgeBasePanel';
 import { ElevenLabsNodeToolsPanel } from './ElevenLabsNodeToolsPanel';
@@ -26,10 +28,8 @@ export type ElevenLabsNodeInspectorProps = {
   stagedKbDocuments?: readonly StagedKbDocument[];
   onAddKbFiles?: (files: File[]) => void;
   onRemoveStagedKbFile?: (fileId: string) => void;
-  onUpdateKbDoc?: (
-    docId: string,
-    patch: Partial<Pick<StagedKbDocument, 'howToUseText' | 'markdownSnippet'>>
-  ) => void;
+  onUpdateKbDoc?: (docId: string, patch: KbDocumentPatch) => void;
+  kbCallMeta?: AiCallMeta;
   stagedToolFiles?: readonly StagedNodeFile[];
   onAddToolFiles?: (files: File[]) => void;
   onRemoveStagedToolFile?: (fileId: string) => void;
@@ -71,6 +71,7 @@ function ElevenLabsNodeInspectorBody({
   onAddKbFiles,
   onRemoveStagedKbFile,
   onUpdateKbDoc,
+  kbCallMeta,
   stagedToolFiles,
   onAddToolFiles,
   onRemoveStagedToolFile,
@@ -234,6 +235,8 @@ function ElevenLabsNodeInspectorBody({
         {tab === 'knowledgeBase' ? (
           <ElevenLabsNodeKnowledgeBasePanel
             node={node}
+            projectId={projectId}
+            kbCallMeta={kbCallMeta}
             stagedKbDocuments={stagedKbDocuments}
             onAddKbFiles={onAddKbFiles}
             onRemoveStagedKbFile={onRemoveStagedKbFile}

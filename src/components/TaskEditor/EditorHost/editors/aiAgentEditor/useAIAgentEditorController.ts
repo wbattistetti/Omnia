@@ -21,6 +21,7 @@ import {
   createAIAgentUseCaseApi,
   generateAIAgentDesign,
   generateAIAgentUseCases,
+  reorderAIAgentUseCasesNarratively,
   annotateAIAgentAssistantMessageForJsonApi,
   propagateExamplePhraseStyleApi,
   propagateCorrectionStyleApi,
@@ -55,6 +56,10 @@ import {
 } from '@domain/aiAgentUseCase/stripAssistantTurnsFromUseCases';
 import { remapExtendUseCaseIds } from '@domain/aiAgentUseCase/remapExtendUseCaseIds';
 import {
+  USE_CASE_BUNDLE_MAX_TOTAL,
+  formatUseCaseExtendBatchFailureMessage,
+} from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
+import {
   createConversationalRuleFromLabel,
   serializeConversationalRules,
 } from '@domain/conversationalRules/parseSerialize';
@@ -80,6 +85,11 @@ import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContra
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
 import { nextMappingsAfterLabelBlur } from './flowVariableMapping';
 import { buildAIAgentTaskPersistPatch, type AIAgentPersistState } from './buildPersistPatch';
+import { useKnowledgeBaseDocuments } from '@domain/knowledgeBase/useKnowledgeBaseDocuments';
+import {
+  parseAgentKnowledgeBaseDocumentsJson,
+  serializeAgentKnowledgeBaseDocuments,
+} from '@domain/knowledgeBase/serializeKbDocuments';
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import {
   agentInterfaceRowsToMappingEntries,
@@ -287,6 +297,13 @@ export function useAIAgentEditorController({
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   /** Solo generazione bundle use case (wizard): non propagare agli altri pulsanti del pannello DX. */
   const [useCaseBundleGenerationBusy, setUseCaseBundleGenerationBusy] = React.useState(false);
+  /** Conteggio use case generati durante il pipeline chunked (null se idle). */
+  const [useCaseBundleGenerationCount, setUseCaseBundleGenerationCount] = React.useState<
+    number | null
+  >(null);
+  /** Pass finale di riordino narrativo dopo i batch. */
+  const [useCaseBundleGenerationOrdering, setUseCaseBundleGenerationOrdering] =
+    React.useState(false);
   /** Solo propagazione stile frasi esempio (LLM): indipendente da {@link useCaseBundleGenerationBusy}. */
   const [useCasePhraseStylePropagationBusy, setUseCasePhraseStylePropagationBusy] =
     React.useState(false);
@@ -391,6 +408,18 @@ export function useAIAgentEditorController({
   const [hydrated, setHydrated] = React.useState(false);
   /** True when local state diverges from last persisted snapshot (user edits or generation). */
   const [dirty, setDirty] = React.useState(false);
+
+  const {
+    documents: knowledgeBaseDocuments,
+    addFiles: knowledgeBaseAddFilesInternal,
+    removeDocument: knowledgeBaseRemoveInternal,
+    updateDocument: knowledgeBaseUpdateInternal,
+    toPersisted: knowledgeBaseToPersisted,
+    hydrateFromPersisted: hydrateKnowledgeBaseDocuments,
+  } = useKnowledgeBaseDocuments({
+    projectId,
+    onDirty: () => setDirty(true),
+  });
 
   const committedStructuredJsonRef = React.useRef<string>('');
   const iaRuntimeConfigRef = React.useRef<IAAgentConfig>(iaRuntimeConfig);
@@ -745,6 +774,38 @@ export function useAIAgentEditorController({
     [agentInterfaceInput, agentInterfaceOutput]
   );
 
+  const agentKnowledgeBaseDocumentsJson = React.useMemo(
+    () => serializeAgentKnowledgeBaseDocuments(knowledgeBaseToPersisted()),
+    [knowledgeBaseDocuments]
+  );
+
+  const knowledgeBaseAddFiles = React.useCallback(
+    (files: readonly File[]) => {
+      knowledgeBaseAddFilesInternal(files);
+      setDirty(true);
+    },
+    [knowledgeBaseAddFilesInternal]
+  );
+
+  const knowledgeBaseRemoveDocument = React.useCallback(
+    (docId: string) => {
+      knowledgeBaseRemoveInternal(docId);
+      setDirty(true);
+    },
+    [knowledgeBaseRemoveInternal]
+  );
+
+  const knowledgeBaseUpdateDocument = React.useCallback(
+    (
+      docId: string,
+      patch: Parameters<typeof knowledgeBaseUpdateInternal>[1]
+    ) => {
+      knowledgeBaseUpdateInternal(docId, patch);
+      setDirty(true);
+    },
+    [knowledgeBaseUpdateInternal]
+  );
+
   const compileUseCasePhrasesForCatalog = React.useCallback(() => {
     setCompilePhrasesBusy(true);
     try {
@@ -936,6 +997,9 @@ export function useAIAgentEditorController({
     const ifaceLoaded = parseAgentInterfaceJson(b.agentInterfaceJson);
     setAgentInterfaceInputState(agentInterfaceRowsToMappingEntries(ifaceLoaded.input));
     setAgentInterfaceOutputState(agentInterfaceRowsToMappingEntries(ifaceLoaded.output));
+    hydrateKnowledgeBaseDocuments(
+      parseAgentKnowledgeBaseDocumentsJson(b.agentKnowledgeBaseDocumentsJson)
+    );
     setProjectSlotLexicon(loadProjectSlotLexicon(projectId ?? null));
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
@@ -993,7 +1057,7 @@ export function useAIAgentEditorController({
       instanceId,
       ...summarizeAgentTaskFields(taskRepository.getTask(instanceId)),
     });
-  }, [instanceId, loadFromPersisted]);
+  }, [instanceId, loadFromPersisted, hydrateKnowledgeBaseDocuments]);
 
   /**
    * Writes current editor state into TaskRepository (full `buildAIAgentTaskPersistPatch`).
@@ -1054,6 +1118,7 @@ export function useAIAgentEditorController({
       agentLogUseCase,
       agentBehavior,
       agentInterfaceJson,
+      agentKnowledgeBaseDocumentsJson,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -1107,6 +1172,7 @@ export function useAIAgentEditorController({
     agentLogUseCase,
     agentBehavior,
     agentInterfaceJson,
+    agentKnowledgeBaseDocumentsJson,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -1534,9 +1600,22 @@ export function useAIAgentEditorController({
     }
     setUseCaseComposerError(null);
     setUseCaseBundleGenerationBusy(true);
+    setUseCaseBundleGenerationCount(null);
+    setUseCaseBundleGenerationOrdering(false);
     try {
       const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
       const extendMode = useCases.length > 0;
+
+      const normalizeGeneratedUseCases = (ucs: AIAgentUseCase[]): AIAgentUseCase[] => {
+        let normalized = normalizeUseCaseSiblingOrder(ucs, useCaseSiblingSortModeRef.current);
+        if (getDeferAgentMessages?.()) {
+          normalized = normalizeUseCaseSiblingOrder(
+            stripAssistantTurnsFromUseCases(normalized),
+            useCaseSiblingSortModeRef.current
+          );
+        }
+        return normalized;
+      };
 
       if (extendMode) {
         const { useCases: ucsNew } = await generateAIAgentUseCases({
@@ -1573,11 +1652,7 @@ export function useAIAgentEditorController({
         };
       }
 
-      const {
-        logicalSteps: ls,
-        useCases: ucs,
-        useCaseOrderingNote,
-      } = await generateAIAgentUseCases({
+      const initial = await generateAIAgentUseCases({
         userDesc,
         provider,
         model,
@@ -1585,18 +1660,78 @@ export function useAIAgentEditorController({
         outputLanguage,
         globalStyleContract,
         globalStyleId: useCaseGlobalStyleId,
+        chunkInitial: true,
         callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL),
       });
+      const ls = initial.logicalSteps;
       setLogicalSteps(ls);
-      let normalized = normalizeUseCaseSiblingOrder(ucs, useCaseSiblingSortModeRef.current);
-      if (getDeferAgentMessages?.()) {
-        normalized = normalizeUseCaseSiblingOrder(
-          stripAssistantTurnsFromUseCases(normalized),
-          useCaseSiblingSortModeRef.current
-        );
+      let accumulated = normalizeGeneratedUseCases(initial.useCases);
+      setUseCases(accumulated);
+      setUseCaseBundleGenerationCount(accumulated.length);
+      setDirty(true);
+
+      let coverageComplete = false;
+      let extendBatchWarning: string | null = null;
+      while (accumulated.length < USE_CASE_BUNDLE_MAX_TOTAL && !coverageComplete) {
+        try {
+          const ext = await generateAIAgentUseCases({
+            userDesc,
+            provider,
+            model,
+            runtimeContext: agentPrompt.trim(),
+            outputLanguage,
+            globalStyleContract,
+            globalStyleId: useCaseGlobalStyleId,
+            extendFrom: { logicalSteps: ls, useCases: accumulated },
+            chunkedExtend: true,
+            callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE),
+          });
+          coverageComplete = ext.coverageComplete === true;
+          if (ext.useCases.length === 0) break;
+          const newOnes = normalizeGeneratedUseCases(remapExtendUseCaseIds(ext.useCases));
+          accumulated = normalizeUseCaseSiblingOrder(
+            [...accumulated, ...newOnes],
+            useCaseSiblingSortModeRef.current
+          );
+          setUseCases(accumulated);
+          setUseCaseBundleGenerationCount(accumulated.length);
+          setDirty(true);
+          if (accumulated.length >= USE_CASE_BUNDLE_MAX_TOTAL) break;
+        } catch (batchErr) {
+          extendBatchWarning = formatUseCaseExtendBatchFailureMessage(
+            accumulated.length,
+            batchErr
+          );
+          break;
+        }
+      }
+
+      setUseCaseBundleGenerationOrdering(true);
+      let normalized = accumulated;
+      let useCaseOrderingNote: string | undefined;
+      try {
+        const reordered = await reorderAIAgentUseCasesNarratively({
+          useCases: accumulated,
+          logicalSteps: ls,
+          provider,
+          model,
+          outputLanguage,
+          callMeta: buildCallMeta('USE_CASE_BUNDLE_NARRATIVE_ORDER'),
+        });
+        normalized = normalizeGeneratedUseCases(reordered.useCases);
+        useCaseOrderingNote = reordered.useCaseOrderingNote;
+      } catch {
+        const reorderNote = ' Ordinamento narrativo non applicato; puoi riordinare manualmente.';
+        extendBatchWarning = extendBatchWarning
+          ? `${extendBatchWarning}${reorderNote}`
+          : `Generati ${accumulated.length} scenari.${reorderNote} Salva e usa «Crea altri use case» se serve altro coverage.`;
       }
       setUseCases(normalized);
+      setUseCaseBundleGenerationCount(normalized.length);
       setDirty(true);
+      if (extendBatchWarning) {
+        setUseCaseComposerError(extendBatchWarning);
+      }
       const ids = normalized.map((u) => u.id);
       return {
         useCases: normalized,
@@ -1610,6 +1745,8 @@ export function useAIAgentEditorController({
       return null;
     } finally {
       setUseCaseBundleGenerationBusy(false);
+      setUseCaseBundleGenerationCount(null);
+      setUseCaseBundleGenerationOrdering(false);
     }
   }, [
     hasAgentGeneration,
@@ -2267,6 +2404,8 @@ export function useAIAgentEditorController({
     agentConversationDeployStyleId,
     agentLogUseCase,
     agentBehavior,
+    agentInterfaceJson,
+    agentKnowledgeBaseDocumentsJson,
   };
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
@@ -2389,6 +2528,8 @@ export function useAIAgentEditorController({
     setUseCases: setUseCasesUser,
     useCaseComposerBusy,
     useCaseBundleGenerationBusy,
+    useCaseBundleGenerationCount,
+    useCaseBundleGenerationOrdering,
     useCasePhraseStylePropagationBusy,
     useCasePhraseStyleBatchProgress,
     useCaseCreationMessage,
@@ -2447,6 +2588,10 @@ export function useAIAgentEditorController({
     setAgentInterfaceInput,
     setAgentInterfaceOutput,
     agentInterfaceJson,
+    knowledgeBaseDocuments,
+    knowledgeBaseAddFiles,
+    knowledgeBaseRemoveDocument,
+    knowledgeBaseUpdateDocument,
     agentUseCasesJson: serializeUseCases(useCases),
     agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     compileUseCasePhrasesForCatalog,

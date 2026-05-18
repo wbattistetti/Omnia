@@ -483,6 +483,11 @@ export interface Task {
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
   /**
+   * JSON array: knowledge-base documents parsed at design-time (`.txt` / `.xlsx` columns → variables).
+   * @see `PersistedKbDocument` in `@domain/knowledgeBase/kbDocumentTypes`.
+   */
+  agentKnowledgeBaseDocumentsJson?: string;
+  /**
    * When true, runtime starts the agent turn without waiting for real user input (orchestrator injects synthetic utterance).
    */
   agentImmediateStart?: boolean;

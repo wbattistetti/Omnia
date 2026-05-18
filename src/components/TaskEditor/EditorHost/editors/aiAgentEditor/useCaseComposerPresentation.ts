@@ -38,6 +38,17 @@ export const UC_SCENARIO_PANEL_SURFACE =
 export const UC_PARAMETRIC_EDITOR_SURFACE =
   'rounded-md border border-slate-300/80 bg-slate-50 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:border-slate-600/50 dark:bg-slate-900/60 dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.15)]';
 
+/** Colonna icona fissa (messaggio agente + righe azioni nel response use case). */
+export const UC_RESPONSE_ICON_COL =
+  'inline-flex h-6 w-6 shrink-0 items-center justify-center [&_svg]:shrink-0';
+
+/** Gap tra bordo destro colonna icona e inizio label/testo (5px). */
+export const UC_RESPONSE_LABEL_GAP = 'ml-[5px]';
+
+/** Contenuto riga (testo + toolbar) centrato verticalmente con l’icona. */
+export const UC_RESPONSE_ROW_CONTENT =
+  'inline-flex min-w-0 flex-1 flex-wrap items-center gap-x-[5px] gap-y-1';
+
 /** Monospace body in wizard list (aligned with response action rows). */
 export const UC_WIZARD_BODY_MONO = 'font-mono text-sm leading-snug';
 

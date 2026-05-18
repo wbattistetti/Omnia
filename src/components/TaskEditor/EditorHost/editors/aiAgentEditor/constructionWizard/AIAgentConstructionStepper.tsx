@@ -21,7 +21,7 @@
  */
 
 import React from 'react';
-import { Check, DollarSign, Lock, MessagesSquare, ShieldAlert, Unplug } from 'lucide-react';
+import { BookOpen, Check, DollarSign, Lock, MessagesSquare, ShieldAlert, Unplug } from 'lucide-react';
 import {
   AGENT_WIZARD_STEP_COUNT,
   type AgentWizardStepIndex,
@@ -56,6 +56,9 @@ export interface AIAgentConstructionStepperProps {
   /** Vista regole conversazionali (error handling) sul passo Prompts. */
   readonly errorHandlingActive?: boolean;
   readonly onToggleErrorHandling?: () => void;
+  /** Vista Knowledge Base sul passo Backend (documenti .txt / .xlsx del task). */
+  readonly knowledgeBaseActive?: boolean;
+  readonly onToggleKnowledgeBase?: () => void;
   /**
    * Slot opzionale renderizzato all'estrema destra dello stepper, dopo il pulsante "Costi".
    * Tipicamente contiene il dropdown «Deploy»: il parent decide quando mostrarlo (es. solo
@@ -102,6 +105,8 @@ export function AIAgentConstructionStepper({
   onToggleInterface,
   errorHandlingActive = false,
   onToggleErrorHandling,
+  knowledgeBaseActive = false,
+  onToggleKnowledgeBase,
   deploySlot = null,
   bypassGating = false,
 }: AIAgentConstructionStepperProps): React.ReactElement {
@@ -134,8 +139,12 @@ export function AIAgentConstructionStepper({
         */}
         {AGENT_WIZARD_STEPS_META.map((meta) => {
           const isPromptsStep = meta.index === 1;
+          const isBackendStep = meta.index === 2;
           const isCurrent =
-            !costsActive && !errorHandlingActive && meta.index === currentStep;
+            !costsActive &&
+            !errorHandlingActive &&
+            !knowledgeBaseActive &&
+            meta.index === currentStep;
           const isComplete = completion[meta.index] === true;
           const isEnabled = enabled[meta.index] === true;
           const Icon = meta.icon;
@@ -234,6 +243,26 @@ export function AIAgentConstructionStepper({
                 </button>
               </li>
               {errorHandlingButton}
+              {isBackendStep && onToggleKnowledgeBase ? (
+                <li key="knowledge-base">
+                  <button
+                    type="button"
+                    aria-pressed={knowledgeBaseActive}
+                    aria-label="Knowledge Base: documenti tabellari del task"
+                    title="Carica .txt o .xlsx: le colonne diventano variabili cliccabili"
+                    onClick={onToggleKnowledgeBase}
+                    className={
+                      'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
+                      (knowledgeBaseActive
+                        ? 'border-violet-500/55 bg-violet-950/75 text-violet-100 shadow-sm ring-2 ring-violet-400/30'
+                        : 'border-violet-800/45 bg-violet-950/35 text-violet-200/85 hover:border-violet-600/50 hover:bg-violet-950/55 hover:text-violet-100')
+                    }
+                  >
+                    <BookOpen size={15} aria-hidden className="shrink-0 opacity-90" strokeWidth={2} />
+                    <span className="whitespace-nowrap">Knowledge Base</span>
+                  </button>
+                </li>
+              ) : null}
             </React.Fragment>
           );
         })}

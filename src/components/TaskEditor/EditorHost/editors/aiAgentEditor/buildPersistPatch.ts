@@ -53,6 +53,8 @@ export interface AIAgentPersistState {
   agentLogUseCase: boolean;
   agentBehavior: 'A' | 'B' | 'C';
   agentInterfaceJson: string;
+  /** JSON array of {@link import('@domain/knowledgeBase/kbDocumentTypes').PersistedKbDocument}. */
+  agentKnowledgeBaseDocumentsJson: string;
 }
 
 /**
@@ -93,5 +95,6 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentLogUseCase: state.agentLogUseCase,
     agentBehavior: state.agentBehavior,
     agentInterfaceJson: state.agentInterfaceJson,
+    agentKnowledgeBaseDocumentsJson: state.agentKnowledgeBaseDocumentsJson,
   };
 }

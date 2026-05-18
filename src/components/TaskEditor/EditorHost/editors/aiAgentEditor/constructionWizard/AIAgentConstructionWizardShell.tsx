@@ -24,6 +24,7 @@ import { AGENT_WIZARD_STEPS_META, getAgentWizardStepMeta } from './agentWizardSt
 import { AIAgentConstructionStepper } from './AIAgentConstructionStepper';
 import {
   EditorDatiPanel,
+  EditorKnowledgeBasePanel,
   EditorUnifiedDescriptionPanel,
   EditorUseCasesPanel,
 } from '../AIAgentEditorDockPanels';
@@ -59,6 +60,8 @@ export interface AIAgentConstructionWizardShellProps {
   readonly onToggleInterface?: () => void;
   readonly errorHandlingActive?: boolean;
   readonly onToggleErrorHandling?: () => void;
+  readonly knowledgeBaseActive?: boolean;
+  readonly onToggleKnowledgeBase?: () => void;
   /** Identit\u00e0 del task corrente: necessari per filtrare il report. Solo per `costsActive=true`. */
   readonly taskId?: string;
   readonly taskLabel?: string;
@@ -116,6 +119,8 @@ export function AIAgentConstructionWizardShell({
   onToggleInterface,
   errorHandlingActive = false,
   onToggleErrorHandling,
+  knowledgeBaseActive = false,
+  onToggleKnowledgeBase,
   taskId,
   taskLabel,
   deploySlot = null,
@@ -130,7 +135,9 @@ export function AIAgentConstructionWizardShell({
   const stepTitle =
     errorHandlingActive && safeStep === 1
       ? 'Error Handling and others'
-      : meta.title;
+      : knowledgeBaseActive && safeStep === 2
+        ? 'Knowledge Base'
+        : meta.title;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-slate-950 text-slate-100">
@@ -145,6 +152,8 @@ export function AIAgentConstructionWizardShell({
         onToggleInterface={onToggleInterface}
         errorHandlingActive={errorHandlingActive}
         onToggleErrorHandling={onToggleErrorHandling}
+        knowledgeBaseActive={knowledgeBaseActive}
+        onToggleKnowledgeBase={onToggleKnowledgeBase}
         deploySlot={deploySlot}
         bypassGating={bypassGating}
       />
@@ -194,7 +203,13 @@ export function AIAgentConstructionWizardShell({
               </p>
             ) : null}
           </header>
-          <main className="min-h-0 flex-1 overflow-hidden">{renderStepBody()}</main>
+          <main className="min-h-0 flex-1 overflow-hidden">
+            {knowledgeBaseActive && safeStep === 2 ? (
+              <EditorKnowledgeBasePanel />
+            ) : (
+              renderStepBody()
+            )}
+          </main>
         </div>
       )}
     </div>

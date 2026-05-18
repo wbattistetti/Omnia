@@ -35,5 +35,5 @@ export function useUseCaseFieldBaselineSync(
       }
       return changed ? next : prev;
     });
-  }, [ordered, useCases, setFieldBaselineByUseCaseId]);
+  }, [ordered, setFieldBaselineByUseCaseId]);
 }

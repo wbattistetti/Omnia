@@ -46,6 +46,8 @@ export type KbMarkdownMonacoProps = {
   onChange?: (value: string) => void;
   readOnly?: boolean;
   heightPx?: number;
+  /** When true, editor height tracks the parent container (use with flex-1 parent). */
+  fillHeight?: boolean;
   ariaLabel?: string;
   /** `plain` = textbox-like (no line numbers / line highlight). */
   appearance?: 'editor' | 'plain';
@@ -57,6 +59,7 @@ export function KbMarkdownMonaco({
   onChange,
   readOnly = false,
   heightPx = 160,
+  fillHeight = false,
   ariaLabel,
   appearance = 'editor',
   language = 'markdown',
@@ -65,8 +68,22 @@ export function KbMarkdownMonaco({
   const [editorHeight, setEditorHeight] = React.useState(heightPx);
 
   React.useLayoutEffect(() => {
+    if (fillHeight) return;
     setEditorHeight(heightPx);
-  }, [heightPx]);
+  }, [heightPx, fillHeight]);
+
+  React.useLayoutEffect(() => {
+    if (!fillHeight || !hostRef.current) return;
+    const el = hostRef.current;
+    const apply = () => {
+      const h = el.clientHeight;
+      if (h > 0) setEditorHeight(h);
+    };
+    apply();
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fillHeight]);
 
   const isPlain = appearance === 'plain';
   const baseOptions = isPlain ? PLAIN_OPTIONS : EDITOR_OPTIONS;
@@ -75,6 +92,7 @@ export function KbMarkdownMonaco({
     <div
       ref={hostRef}
       className={
+        (fillHeight ? 'h-full min-h-0 ' : '') +
         'overflow-hidden rounded-md border bg-slate-950/80 ' +
         (isPlain ? 'border-slate-700 focus-within:border-violet-500/60' : 'border-slate-700/80 bg-[#0c0c0f]')
       }

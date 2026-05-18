@@ -76,6 +76,8 @@ export type TaskSequenceEditorProps = {
   onDropRejected?: (message: string) => void;
   /** Messaggio se il template non è in `allowedTemplateIds`. */
   dropTemplateNotAllowedMessage?: string;
+  /** Fixed-width icon column class forwarded to {@link TaskRowHeader}. */
+  iconColumnClassName?: string;
 };
 
 const DEFAULT_EMPTY_IDLE =
@@ -98,6 +100,7 @@ export function TaskSequenceEditor({
   onMoveTaskAcrossLists,
   onDropRejected,
   dropTemplateNotAllowedMessage = DROP_TEMPLATE_NOT_ALLOWED_MESSAGE,
+  iconColumnClassName,
 }: TaskSequenceEditorProps): React.ReactElement {
   const onDropRejectedRef = React.useRef(onDropRejected);
   onDropRejectedRef.current = onDropRejected;
@@ -344,37 +347,28 @@ export function TaskSequenceEditor({
             <TaskRowHeader
               showMessageIcon
               color={color}
+              iconColumnClassName={iconColumnClassName}
             />
           ) : (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                flexShrink: 0,
-              }}
-            >
-              <TaskRowHeader
-                icon={
-                  task.iconName
-                    ? getIconComponent(task.iconName, ensureHexColor(task.color))
-                    : getTaskIconNode(templateId, ensureHexColor(task.color))
-                }
-                label={actionLabel}
-                color={color}
-              />
-              {!isEditing ? (
-                <TaskRowActions
-                  onDelete={() => handleDelete(j)}
-                  color="#94a3b8"
-                  style={{
-                    marginLeft: 0,
-                    opacity: 1,
-                    pointerEvents: 'auto',
-                  }}
-                />
-              ) : null}
-            </span>
+            <TaskRowHeader
+              icon={
+                task.iconName
+                  ? getIconComponent(task.iconName, ensureHexColor(task.color))
+                  : getTaskIconNode(templateId, ensureHexColor(task.color))
+              }
+              label={actionLabel}
+              color={color}
+              iconColumnClassName={iconColumnClassName}
+              trailing={
+                !isEditing ? (
+                  <TaskRowActions
+                    onDelete={() => handleDelete(j)}
+                    color="#94a3b8"
+                    style={{ marginLeft: 5 }}
+                  />
+                ) : null
+              }
+            />
           );
 
           const body =
@@ -414,7 +408,7 @@ export function TaskSequenceEditor({
                 color={color}
                 draggable
                 selected={false}
-                onDelete={isMessageRow ? () => handleDelete(j) : undefined}
+                onDelete={isMessageRow && !isEditing ? () => handleDelete(j) : undefined}
                 onEditPrimary={
                   isMessageRow && params.length > 0 ? () => openPrimary(j, task) : undefined
                 }

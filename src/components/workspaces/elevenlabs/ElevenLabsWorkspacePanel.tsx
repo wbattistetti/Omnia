@@ -543,6 +543,8 @@ export function ElevenLabsWorkspacePanel({
                   ? (docId, patch) => updateKbDoc(selectedNode.id, docId, patch)
                   : undefined
               }
+              projectId={projectData?.id}
+              kbCallMeta={{ purpose: 'EL_KB_DOCUMENT_SEMANTIC', taskId: resolvedAgentId }}
               stagedToolFiles={selectedNode ? getStaged(selectedNode.id, 'tools') : []}
               onAddToolFiles={
                 selectedNode ? (files) => addStaged(selectedNode.id, 'tools', files) : undefined

@@ -18,6 +18,8 @@ import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { UseCaseGeneratorWizardModel } from './useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 import type { UseCaseSiblingSortMode } from './useCaseHierarchy';
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
+import type { KbDocumentPatch, StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
+import type { AiCallMeta } from '@services/aiAgentDesignApi';
 
 /** Triade `(purpose, taskId, taskLabel)` serializzabile verso `/design/*` — allineato a {@link AiCallMeta}. */
 /** Which catalog the use-case composer is editing in the Prompts step. */
@@ -70,6 +72,10 @@ export interface AIAgentEditorDockContextValue {
   useCaseComposerBusy: boolean;
   /** Generazione / estensione lista use case (LLM bundle); separato da propagazione stile. */
   useCaseBundleGenerationBusy: boolean;
+  /** Use case già generati nel batch corrente (null se idle). */
+  useCaseBundleGenerationCount: number | null;
+  /** Pass di riordino narrativo dopo i batch chunked. */
+  useCaseBundleGenerationOrdering: boolean;
   /** Propagazione stile frasi esempio (LLM); separato da bundle. */
   useCasePhraseStylePropagationBusy: boolean;
   /** Avanzamento batch (un use case per chiamata); null se non in corso. */
@@ -186,6 +192,14 @@ export interface AIAgentEditorDockContextValue {
   setAgentInterfaceOutput: React.Dispatch<React.SetStateAction<MappingEntry[]>>;
   /** Titolo nell’header «Interface · …». */
   agentInterfaceTitle: string;
+
+  /** Task-scoped knowledge-base documents (design-time). */
+  knowledgeBaseDocuments: readonly StagedKbDocument[];
+  knowledgeBaseAddFiles: (files: readonly File[]) => void;
+  knowledgeBaseRemoveDocument: (docId: string) => void;
+  knowledgeBaseUpdateDocument: (docId: string, patch: KbDocumentPatch) => void;
+  /** Call meta for KB semantic analyze / chat / reanalyze. */
+  knowledgeBaseCallMeta?: AiCallMeta;
 
   /** Presente dopo il mount dell’editor quando il generatore guidato è disponibile. */
   useCaseGeneratorWizard: UseCaseGeneratorWizardModel | null;

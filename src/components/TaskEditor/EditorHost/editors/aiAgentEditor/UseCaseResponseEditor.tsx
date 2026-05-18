@@ -43,26 +43,7 @@ import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { applyUseCaseValidatedOnMessageCommit } from './useCaseComposerDesignerVotes';
-
-const AI_AGENT_RESPONSE_ALLOWED_TEMPLATES = [
-  'sayMessage',
-  'message',
-  'Message',
-  'sendSMS',
-  'readFromBackend',
-  'writeToBackend',
-  'escalateToHuman',
-  'waitForAgent',
-] as const;
-
-/** Stable reference — avoids recreating drop handlers on every parent render. */
-const AI_AGENT_ACTION_ALLOWED_TEMPLATE_IDS: readonly string[] =
-  AI_AGENT_RESPONSE_ALLOWED_TEMPLATES.filter(
-    (id) => !['sayMessage', 'message', 'Message'].includes(id)
-  );
-
-const AI_AGENT_ACTION_DROP_NOT_ALLOWED_MESSAGE =
-  'Questa azione non è supportata nel response dell’use case. Sono ammesse: invio SMS, lettura o scrittura backend, escalation a operatore, attesa operatore.';
+import { UC_RESPONSE_ICON_COL } from './useCaseComposerPresentation';
 
 export interface UseCaseResponseEditorProps {
   useCase: AIAgentUseCase;
@@ -206,21 +187,6 @@ export function UseCaseResponseEditor({
   const hasOnlyMessage = tasks.length === 1 && messageTasks.length === 1 && actionTasks.length === 0;
 
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
-  const [actionDropFeedback, setActionDropFeedback] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!actionDropFeedback) return;
-    const t = window.setTimeout(() => setActionDropFeedback(null), 5000);
-    return () => window.clearTimeout(t);
-  }, [actionDropFeedback]);
-
-  const onActionDropRejected = React.useCallback(
-    (message: string) => {
-      setActionDropFeedback(message);
-      listToolbarCtx?.openActionsPanel();
-    },
-    [listToolbarCtx]
-  );
 
   const actionsDropIdleLabel = React.useMemo(
     () => (
@@ -270,6 +236,7 @@ export function UseCaseResponseEditor({
           <PrimaryAgentMessageField
             useCase={useCase}
             text={messageText}
+            leadingIconColumnClassName={UC_RESPONSE_ICON_COL}
             hideCanonicalPhraseText={hideCanonicalPhraseText}
             busy={busy}
             wizardCompact
@@ -353,23 +320,16 @@ export function UseCaseResponseEditor({
             onPhraseDraftChange={(draft) => onAssistantPhraseDraftChange?.(useCase.id, draft)}
           />
 
-          {actionDropFeedback ? (
-            <p className="text-[11px] text-amber-300/95 px-0.5" role="status">
-              {actionDropFeedback}
-            </p>
-          ) : null}
           <TaskSequenceEditor
             tasks={actionTasks}
             onTasksChange={onActionTasksChange}
             listIndex={0}
             color="#fbbf24"
-            allowedTemplateIds={AI_AGENT_ACTION_ALLOWED_TEMPLATE_IDS}
-            dropTemplateNotAllowedMessage={AI_AGENT_ACTION_DROP_NOT_ALLOWED_MESSAGE}
+            iconColumnClassName={UC_RESPONSE_ICON_COL}
             fillAvailableHeight={false}
             compactEmptyDropZone
             emptyIdleLabel={actionsDropIdleLabel}
             emptyOverLabel="Rilascia per aggiungere al response"
-            onDropRejected={onActionDropRejected}
           />
         </div>
       </TaskSequenceFocusProvider>

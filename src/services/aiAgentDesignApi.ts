@@ -402,6 +402,10 @@ export interface GenerateAIAgentUseCasesParams {
     logicalSteps: readonly AIAgentLogicalStep[];
     useCases: readonly AIAgentUseCase[];
   };
+  /** Primo batch chunked: logical_steps + {@link USE_CASE_BUNDLE_CHUNK_SIZE} use case. */
+  chunkInitial?: boolean;
+  /** Extend in chunked pipeline (coverage_complete + batch size fissi). */
+  chunkedExtend?: boolean;
   callMeta?: AiCallMeta;
 }
 
@@ -410,6 +414,17 @@ export interface GenerateAIAgentUseCasesResult {
   useCases: AIAgentUseCase[];
   /** Nota dal pass di riordino narrativo (ordinamento indicativo, non rigido). */
   useCaseOrderingNote?: string;
+  /** Extend chunked: il modello segnala che non restano scenari significativi da aggiungere. */
+  coverageComplete?: boolean;
+}
+
+export interface ReorderAIAgentUseCasesParams {
+  useCases: readonly AIAgentUseCase[];
+  logicalSteps: readonly AIAgentLogicalStep[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
 }
 
 /**
@@ -427,6 +442,8 @@ export async function generateAIAgentUseCases(
     globalStyleContract,
     globalStyleId,
     extendFrom,
+    chunkInitial,
+    chunkedExtend,
   } = params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
@@ -443,10 +460,16 @@ export async function generateAIAgentUseCases(
       provider: provider.toLowerCase(),
       model,
     };
+    if (chunkInitial === true) {
+      bodyPayload.chunkInitial = true;
+    }
     if (extend) {
       bodyPayload.extendExisting = true;
       bodyPayload.existingUseCases = extendFrom!.useCases;
       bodyPayload.existingLogicalSteps = extendFrom!.logicalSteps;
+      if (chunkedExtend === true) {
+        bodyPayload.chunkedExtend = true;
+      }
     }
     if (typeof runtimeContext === 'string' && runtimeContext.trim().length > 0) {
       bodyPayload.runtimeContext = runtimeContext.trim();
@@ -472,6 +495,7 @@ export async function generateAIAgentUseCases(
           logical_steps?: unknown;
           use_cases: unknown;
           extend_mode?: boolean;
+          coverage_complete?: boolean;
           use_case_ordering_note?: string;
         }
       | AIAgentDesignApiError;
@@ -484,7 +508,16 @@ export async function generateAIAgentUseCases(
     }
 
     const useCases = parseAgentUseCasesFromApi(body.use_cases);
+    const coverageComplete = body.coverage_complete === true;
+
     if (useCases.length === 0) {
+      if (body.extend_mode === true && extendFrom && coverageComplete) {
+        return {
+          logicalSteps: [...extendFrom.logicalSteps],
+          useCases: [],
+          coverageComplete: true,
+        };
+      }
       throw new Error('Risposta use case non valida: use_cases vuoti dopo la normalizzazione.');
     }
 
@@ -492,6 +525,7 @@ export async function generateAIAgentUseCases(
       return {
         logicalSteps: [...extendFrom.logicalSteps],
         useCases,
+        coverageComplete,
       };
     }
 
@@ -504,6 +538,58 @@ export async function generateAIAgentUseCases(
         ? body.use_case_ordering_note.trim()
         : undefined;
     return { logicalSteps, useCases, useCaseOrderingNote };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Narrative reorder pass after all chunks are merged (POST action reorder_use_cases_narratively).
+ */
+export async function reorderAIAgentUseCasesNarratively(
+  params: ReorderAIAgentUseCasesParams
+): Promise<Pick<GenerateAIAgentUseCasesResult, 'useCases' | 'useCaseOrderingNote'>> {
+  const { useCases, logicalSteps, provider, model, outputLanguage } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'reorder_use_cases_narratively',
+      useCases,
+      logicalSteps,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | {
+          success: true;
+          use_cases: unknown;
+          use_case_ordering_note?: string;
+        }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const parsed = parseAgentUseCasesFromApi(body.use_cases);
+    if (parsed.length === 0) {
+      throw new Error('Risposta riordino non valida: use_cases vuoti.');
+    }
+    const useCaseOrderingNote =
+      typeof body.use_case_ordering_note === 'string' && body.use_case_ordering_note.trim()
+        ? body.use_case_ordering_note.trim()
+        : undefined;
+    return { useCases: parsed, useCaseOrderingNote };
   } finally {
     clearTimeout(timeout);
   }

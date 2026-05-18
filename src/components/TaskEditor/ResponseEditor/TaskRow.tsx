@@ -54,7 +54,7 @@ function TaskRowInner({
           position: 'relative',
           borderTop: dndPreview === 'before' ? '2px solid #2563eb' : undefined,
           borderBottom: dndPreview === 'after' ? '2px solid #2563eb' : undefined,
-          alignItems: 'flex-start',
+          alignItems: body != null ? 'flex-start' : 'center',
         }}
       >
         {header}
@@ -64,7 +64,7 @@ function TaskRowInner({
             onEdit={onEditPrimary}
             onDelete={onDelete}
             color="#94a3b8"
-            style={{ marginLeft: 10, alignSelf: 'flex-start' }}
+            style={{ marginLeft: 10, alignSelf: body != null ? 'flex-start' : 'center' }}
           />
         ) : null}
       </div>

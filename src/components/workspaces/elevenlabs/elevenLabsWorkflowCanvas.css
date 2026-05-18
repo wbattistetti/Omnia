@@ -16,3 +16,12 @@
   stroke: none !important;
   font-weight: 600;
 }
+
+/* Hover / prompt tip: lift whole RF node above overlapping siblings */
+.el-workflow-canvas .react-flow__node:has(.el-workflow-node-elevated) {
+  z-index: 1000 !important;
+}
+
+.el-workflow-canvas .el-workflow-prompt-tip {
+  pointer-events: auto;
+}

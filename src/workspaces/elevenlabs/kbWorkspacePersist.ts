@@ -2,7 +2,7 @@
  * Persists ElevenLabs KB editor state (snippets, how-to-use) per agent in sessionStorage.
  */
 
-import type { PersistedKbDocument } from './elevenLabsStagedNodeFiles';
+import type { PersistedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
 
 export type KbWorkspacePersistState = {
   /** nodeId → uploaded/parsed documents (metadata + editor fields, no File blob). */

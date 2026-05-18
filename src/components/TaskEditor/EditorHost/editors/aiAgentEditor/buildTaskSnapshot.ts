@@ -91,6 +91,8 @@ export interface AIAgentTaskSnapshot {
   agentBehavior: 'A' | 'B' | 'C';
   /** Serialized agent INPUT/OUTPUT contract. */
   agentInterfaceJson: string;
+  /** Knowledge-base documents (design-time), JSON array. */
+  agentKnowledgeBaseDocumentsJson: string;
 }
 
 /**
@@ -167,6 +169,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
         ? r.agentBehavior
         : 'B',
     agentInterfaceJson: String(r?.agentInterfaceJson ?? ''),
+    agentKnowledgeBaseDocumentsJson: String(r?.agentKnowledgeBaseDocumentsJson ?? ''),
   };
 }
 

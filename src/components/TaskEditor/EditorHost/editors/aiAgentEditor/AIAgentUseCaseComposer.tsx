@@ -58,9 +58,9 @@ import {
 } from '@types/aiAgentPreview';
 import {
   getScenarioDescrittivoText,
-  getScenarioDisplayText,
   withScenarioDescrittivo,
 } from '@domain/aiAgentUseCase/scenarioText';
+import { UseCaseWizardScenarioDisplay } from './useCaseWizardScenarioDisplay';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 import { applySiblingReorderForPersist } from './useCaseHierarchy';
 import { syncPrimaryPhraseNaturalFromAssistantTurn } from '@domain/useCaseBundle/phraseVariantHelpers';
@@ -218,6 +218,8 @@ export interface AIAgentUseCaseComposerProps {
   onGenerateUseCaseBundle?: () => void | Promise<void>;
   /** Disables generate CTA while Create/Refine agent is running. */
   generating?: boolean;
+  /** Etichetta durante generazione bundle chunked (es. «Generando use case… (8)»). */
+  bundleGenerateBusyLabel?: string;
   /**
    * Generazione lista nel view wizard: nessun pulsante «Genera use case» nel pannello sinistro;
    * messaggio empty state punta al Tutorial destro.
@@ -311,6 +313,7 @@ export function AIAgentUseCaseComposer({
   onPreviewStyleIdChange = () => {},
   onGenerateUseCaseBundle,
   generating = false,
+  bundleGenerateBusyLabel,
   primaryGenerateOnRightOnly = false,
   highlightIds = [],
   onClearUseCaseHighlight,
@@ -399,8 +402,10 @@ export function AIAgentUseCaseComposer({
   );
   const wizardShowScenario =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
-  const wizardScenarioLlmFormat =
-    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioLlmFormat : false;
+  const wizardShowScenarioHuman =
+    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioHuman : true;
+  const wizardShowScenarioLlm =
+    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioLlm : false;
   const wizardShowMessage =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
   const wizardAccordionHeaderMode =
@@ -437,6 +442,14 @@ export function AIAgentUseCaseComposer({
       return text.includes(lower);
     });
   }, [ordered, wizardSearchSeed]);
+
+  const deployRowStatsByUseCaseId = React.useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getUseCaseDeployRowStats>>();
+    for (const u of filteredOrdered) {
+      map.set(u.id, getUseCaseDeployRowStats(u, projectSlotLexicon));
+    }
+    return map;
+  }, [filteredOrdered, projectSlotLexicon]);
 
   const messageSpellLang = resolveAiAgentOutputLanguage().tag;
 
@@ -2055,7 +2068,6 @@ export function AIAgentUseCaseComposer({
   }, [
     primaryGenerateOnRightOnly,
     syncWizardTextareaHeights,
-    useCases,
     wizardShowScenario,
     wizardShowMessage,
     cardExpandedById,
@@ -2367,7 +2379,9 @@ export function AIAgentUseCaseComposer({
                       ) : (
                         <Sparkles size={16} aria-hidden />
                       )}
-                      {busy ? 'Generazione scenari…' : LABEL_GENERATE_USE_CASES}
+                      {busy
+                        ? (bundleGenerateBusyLabel ?? 'Generazione scenari…')
+                        : LABEL_GENERATE_USE_CASES}
                     </button>
                   ) : null}
                 </div>
@@ -2418,11 +2432,12 @@ export function AIAgentUseCaseComposer({
                    */
                   const includedInConv = isUseCaseIncludedInConversations(u);
                   const searchHighlight = highlightIdSet.has(u.id);
+                  const stripeStable = u.id.split('').reduce((h, ch) => h + ch.charCodeAt(0), 0);
                   const zebraRow = primaryGenerateOnRightOnly
-                    ? rowIndex % 2 === 0
+                    ? stripeStable % 2 === 0
                       ? UC_LIST_ZEBRA_WIZARD_EVEN
                       : UC_LIST_ZEBRA_WIZARD_ODD
-                    : rowIndex % 2 === 0
+                    : stripeStable % 2 === 0
                       ? UC_LIST_ZEBRA_CLASSIC_EVEN
                       : UC_LIST_ZEBRA_CLASSIC_ODD;
                   const liSurface = searchHighlight
@@ -2626,7 +2641,10 @@ export function AIAgentUseCaseComposer({
                               </span>
                             </button>
                             <UseCaseRowDeployChips
-                              stats={getUseCaseDeployRowStats(u, projectSlotLexicon)}
+                              stats={
+                                deployRowStatsByUseCaseId.get(u.id) ??
+                                getUseCaseDeployRowStats(u, projectSlotLexicon)
+                              }
                               onInspectCompiled={
                                 primaryGenerateOnRightOnly
                                   ? undefined
@@ -2865,71 +2883,23 @@ export function AIAgentUseCaseComposer({
                                   </div>
                                 </div>
                               ) : (
-                                <div
-                                  className={[
-                                    'group/payoff-row flex w-full min-w-0 rounded px-0.5 py-0',
-                                    wizardScenarioLlmFormat ? '' : 'cursor-pointer',
-                                  ].join(' ')}
-                                  onDoubleClick={(e) => {
-                                    if (busy || wizardScenarioLlmFormat) return;
-                                    if ((e.target as HTMLElement).closest('button')) return;
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    beginPayoffEdit(u.id, getScenarioDescrittivoText(u));
-                                  }}
-                                >
-                                  <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1">
-                                    {scenarioFieldLabel}
-                                    <div className="min-w-0 flex-1 text-sm leading-snug">
-                                      <span
-                                        className={`inline whitespace-pre-wrap align-baseline ${UC_SCENARIO_BODY_TEXT} ${
-                                          primaryGenerateOnRightOnly
-                                            ? wizardScenarioLlmFormat
-                                              ? 'font-mono text-[11px] text-violet-200/90'
-                                              : UC_WIZARD_SCENARIO_TEXT
-                                            : fieldTextClass(
-                                                u.designer_payoff_vote,
-                                                getScenarioDescrittivoText(u),
-                                                rowBaseline?.payoff
-                                              )
-                                        }`}
-                                      >
-                                        {getScenarioDisplayText(u, wizardScenarioLlmFormat).trim() ? (
-                                          getScenarioDisplayText(u, wizardScenarioLlmFormat)
-                                        ) : (
-                                          <span className="text-slate-500">
-                                            {wizardScenarioLlmFormat
-                                              ? '— nessun testo LLM'
-                                              : '— passa il mouse e usa la matita a destra'}
-                                          </span>
-                                        )}
-                                      </span>
-                                      {!wizardScenarioLlmFormat ? (
-                                        <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                                          <VoteThumbPair
-                                            vote={u.designer_payoff_vote}
-                                            disabled={busy}
-                                            outerBtnClass={UC_SCENARIO_VOTE_BTN}
-                                            onVote={(choice) =>
-                                              toggleDesignerFieldVote(u.id, 'payoff', choice)
-                                            }
-                                          />
-                                          <button
-                                            type="button"
-                                            disabled={busy}
-                                            title="Modifica scenario"
-                                            className={UC_SCENARIO_ROW_EDIT_BTN}
-                                            onClick={() =>
-                                              beginPayoffEdit(u.id, getScenarioDescrittivoText(u))
-                                            }
-                                          >
-                                            <Pencil size={12} aria-hidden />
-                                          </button>
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
+                                <UseCaseWizardScenarioDisplay
+                                  useCase={u}
+                                  busy={busy}
+                                  showHuman={wizardShowScenarioHuman}
+                                  showLlm={wizardShowScenarioLlm}
+                                  scenarioFieldLabel={scenarioFieldLabel}
+                                  textClassName=""
+                                  onDoubleClickEdit={() =>
+                                    beginPayoffEdit(u.id, getScenarioDescrittivoText(u))
+                                  }
+                                  onVote={(choice) =>
+                                    toggleDesignerFieldVote(u.id, 'payoff', choice)
+                                  }
+                                  onEditClick={() =>
+                                    beginPayoffEdit(u.id, getScenarioDescrittivoText(u))
+                                  }
+                                />
                               )}
                             </div>
                           ) : null}

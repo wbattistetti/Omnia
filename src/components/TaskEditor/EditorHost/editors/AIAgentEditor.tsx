@@ -9,6 +9,7 @@ import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import { taskRepository } from '@services/TaskRepository';
 import { AI_AGENT_HEADER_COLOR, LABEL_GENERATE_USE_CASES } from './aiAgentEditor/constants';
+import { resolveUseCaseBundleGeneratingLabel } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import type { AIAgentEditorDockContextValue } from './aiAgentEditor/AIAgentEditorDockContext';
 import {
   useAIAgentEditorController,
@@ -799,6 +800,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     }
   }, [agentInterfaceOpenStorageKey, agentInterfacePanelOpen]);
 
+  const [knowledgeBasePanelOpen, setKnowledgeBasePanelOpen] = React.useState(false);
+
   const agentInterfaceTitle = React.useMemo(() => {
     const tid = String(c.instanceId ?? '').trim();
     if (!tid) return 'Agent';
@@ -815,11 +818,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       onCreateSpecs={() => invokeBackendsAddManual('emulate')}
     />
   );
-  const wizardStepHeaderAction = isWizardTaskStep
-    ? headerAction
-    : isWizardBackendStep
-      ? wizardBackendHeaderActions
-      : null;
+  const wizardStepHeaderAction =
+    isWizardTaskStep
+      ? headerAction
+      : isWizardBackendStep && !knowledgeBasePanelOpen
+        ? wizardBackendHeaderActions
+        : null;
 
   /**
    * Dialog «Crea prompt conversazionale»: state e mount risiedono nel root dell'editor (non
@@ -906,6 +910,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     (next: AgentWizardStepIndex) => {
       setCostsViewActive(false);
       setErrorHandlingPanelOpen(false);
+      setKnowledgeBasePanelOpen(false);
       if (next !== 2) setAgentInterfacePanelOpen(false);
       stepSetter(next);
     },
@@ -915,10 +920,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setCostsViewActive(true);
     setAgentInterfacePanelOpen(false);
     setErrorHandlingPanelOpen(false);
+    setKnowledgeBasePanelOpen(false);
   }, []);
   const onToggleInterfaceView = React.useCallback(() => {
     setCostsViewActive(false);
     setErrorHandlingPanelOpen(false);
+    setKnowledgeBasePanelOpen(false);
     setAgentInterfacePanelOpen((prev) => {
       const next = !prev;
       if (next) stepSetter(2);
@@ -928,9 +935,20 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const onToggleErrorHandlingView = React.useCallback(() => {
     setCostsViewActive(false);
     setAgentInterfacePanelOpen(false);
+    setKnowledgeBasePanelOpen(false);
     setErrorHandlingPanelOpen((prev) => {
       const next = !prev;
       if (next) stepSetter(1);
+      return next;
+    });
+  }, [stepSetter]);
+  const onToggleKnowledgeBaseView = React.useCallback(() => {
+    setCostsViewActive(false);
+    setAgentInterfacePanelOpen(false);
+    setErrorHandlingPanelOpen(false);
+    setKnowledgeBasePanelOpen((prev) => {
+      const next = !prev;
+      if (next) stepSetter(2);
       return next;
     });
   }, [stepSetter]);
@@ -1200,6 +1218,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCaseCatalogMode,
     useCaseComposerBusy: c.useCaseComposerBusy,
     useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
+    useCaseBundleGenerationCount: c.useCaseBundleGenerationCount,
+    useCaseBundleGenerationOrdering: c.useCaseBundleGenerationOrdering,
     useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
     useCasePhraseStyleBatchProgress: c.useCasePhraseStyleBatchProgress,
     useCaseCreationMessage: c.useCaseCreationMessage,
@@ -1255,6 +1275,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentInterfaceInput: c.setAgentInterfaceInput,
     setAgentInterfaceOutput: c.setAgentInterfaceOutput,
     agentInterfaceTitle,
+
+    knowledgeBaseDocuments: c.knowledgeBaseDocuments,
+    knowledgeBaseAddFiles: c.knowledgeBaseAddFiles,
+    knowledgeBaseRemoveDocument: c.knowledgeBaseRemoveDocument,
+    knowledgeBaseUpdateDocument: c.knowledgeBaseUpdateDocument,
+    knowledgeBaseCallMeta: c.buildCallMeta('KB_DOCUMENT_SEMANTIC'),
 
     useCaseGeneratorWizard: useCaseGenWizard,
 
@@ -1393,7 +1419,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
                     <Sparkles size={16} aria-hidden />
                   )}
                   {c.useCaseBundleGenerationBusy || c.generating
-                    ? 'Generando…'
+                    ? resolveUseCaseBundleGeneratingLabel(
+                        c.useCaseBundleGenerationCount,
+                        c.useCaseBundleGenerationOrdering
+                      )
                     : LABEL_GENERATE_USE_CASES}
                 </button>
               ) : null}
@@ -1456,6 +1485,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               onToggleInterface={onToggleInterfaceView}
               errorHandlingActive={errorHandlingPanelOpen && !costsViewActive}
               onToggleErrorHandling={onToggleErrorHandlingView}
+              knowledgeBaseActive={knowledgeBasePanelOpen && !costsViewActive}
+              onToggleKnowledgeBase={onToggleKnowledgeBaseView}
               taskId={instanceId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}

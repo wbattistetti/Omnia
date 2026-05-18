@@ -21,6 +21,7 @@ import {
   UC_AGENT_VOTE_BTN,
   UC_CLASSIC_TEXTAREA_AGENT,
   UC_WIZARD_AGENT_MESSAGE_TEXT,
+  UC_RESPONSE_ROW_CONTENT,
   fieldTextClass,
 } from '../useCaseComposerPresentation';
 import { useAgentMessageTextField } from '../useAgentMessageTextField';
@@ -66,13 +67,15 @@ export type PrimaryAgentMessageFieldProps = {
   onPatchUseCase?: (updater: (uc: AIAgentUseCase) => AIAgentUseCase) => void;
   /** Vista messaggio wizard: nasconde il corpo testo (icona + toolbar + versioni restano). */
   hideCanonicalPhraseText?: boolean;
+  /** Colonna icona allineata alle righe azioni del response (es. {@link UC_RESPONSE_ICON_COL}). */
+  leadingIconColumnClassName?: string;
 };
 
 const INLINE_TOOLBAR_ICON_PX = 18;
 const EDIT_MODE_ICON_PX = 21;
 
 const INLINE_ACTIONS =
-  'ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline opacity-0 transition-opacity group-hover/agentmsg-row:opacity-100 group-focus-within/agentmsg-row:opacity-100';
+  'inline-flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/agentmsg-row:opacity-100 group-focus-within/agentmsg-row:opacity-100';
 
 export function PrimaryAgentMessageField({
   useCase,
@@ -98,6 +101,7 @@ export function PrimaryAgentMessageField({
   onStyleTokenVariantsChange,
   onPatchUseCase,
   hideCanonicalPhraseText = false,
+  leadingIconColumnClassName,
 }: PrimaryAgentMessageFieldProps): React.ReactElement {
   const { provider, model } = useAIProvider();
   const outputLanguage = resolveAiAgentOutputLanguage().tag;
@@ -256,11 +260,18 @@ export function PrimaryAgentMessageField({
     </button>
   );
 
+  const wrapLeadingIcon = (node: React.ReactNode) =>
+    leadingIconColumnClassName ? (
+      <span className={leadingIconColumnClassName}>{node}</span>
+    ) : (
+      node
+    );
+
   const renderLeadingMessageIcon = (opts: { styleToggleInteractive: boolean }) => {
     if (iconKind === 'style' && opts.styleToggleInteractive) {
-      return styleToggleButton;
+      return wrapLeadingIcon(styleToggleButton);
     }
-    return <AgentMessageKindIcon kind={iconKind} />;
+    return wrapLeadingIcon(<AgentMessageKindIcon kind={iconKind} size={16} />);
   };
 
   const messageTextForStyle = (editing ? draft : text).trim();
@@ -392,7 +403,7 @@ export function PrimaryAgentMessageField({
         <TokenizedHighlightedText
           text={tokenizedDisplayText}
           inlineFlow
-          className="inline min-w-0 whitespace-pre-wrap align-baseline"
+          className="inline min-w-0 whitespace-pre-wrap"
         />
       );
     }
@@ -405,7 +416,7 @@ export function PrimaryAgentMessageField({
     }
     if (searchSeed.trim()) {
       return (
-        <span className="inline min-w-0 whitespace-pre-wrap align-baseline">
+        <span className="inline min-w-0 whitespace-pre-wrap">
           <SeedHighlightedText text={text} seed={searchSeed} />
         </span>
       );
@@ -413,16 +424,16 @@ export function PrimaryAgentMessageField({
     return (
       <BracketTokenHighlightedText
         text={text}
-        className="inline min-w-0 whitespace-pre-wrap align-baseline"
+        className="inline min-w-0 whitespace-pre-wrap"
       />
     );
   };
 
-  const parametricToggleButton = (
+  const parametricToggleButton = wrapLeadingIcon(
     <button
       type="button"
       disabled={busy}
-      className="shrink-0 rounded p-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/80"
+      className="rounded p-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/80"
       title={showParametricBody ? 'Comprimi messaggio parametrico' : 'Espandi messaggio parametrico'}
       aria-expanded={showParametricBody}
       aria-label="Messaggio parametrico"
@@ -436,7 +447,7 @@ export function PrimaryAgentMessageField({
   );
 
   const renderCanonicalEdit = () => (
-    <div className="flex w-full flex-wrap items-start gap-2">
+    <div className="flex w-full flex-wrap items-center gap-x-[5px] gap-y-2">
       {parametricToggleButton}
       <div className="min-w-0 flex-1 flex-col">
         <BracketTokenHighlightedTextarea
@@ -475,7 +486,7 @@ export function PrimaryAgentMessageField({
         />
         {selectionTokenPopover}
       </div>
-      <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+      <span className="inline-flex shrink-0 items-center gap-0.5">
         {renderStyleToolbarButtons(true, true)}
         <button
           type="button"
@@ -578,7 +589,7 @@ export function PrimaryAgentMessageField({
         ) : (
           <>
             <div
-              className={`group/agentmsg-row flex w-full min-w-0 gap-x-1 rounded px-0.5 py-0 ${showParametricBody ? 'items-center' : 'flex-wrap items-end gap-y-1 cursor-pointer'}`}
+              className={`group/agentmsg-row flex w-full min-w-0 gap-x-[5px] rounded py-0 ${showParametricBody ? 'items-center' : 'flex-wrap items-center gap-y-1 cursor-pointer'}`}
               onDoubleClick={(e) => {
                 if (showParametricBody || busy || readOnlyTokenized) return;
                 if ((e.target as HTMLElement).closest('button')) return;
@@ -591,7 +602,7 @@ export function PrimaryAgentMessageField({
               {showParametricBody ? (
                 parametricExpandedHeader
               ) : (
-                <div className={`min-w-0 flex-1 ${displayTextClass}`}>
+                <div className={`${UC_RESPONSE_ROW_CONTENT} ${displayTextClass}`}>
                   {renderDisplayBody()}
                   {inlineToolbar}
                 </div>
@@ -614,7 +625,7 @@ export function PrimaryAgentMessageField({
     return (
       <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
         <div
-          className="flex min-h-[52px] flex-wrap items-start gap-2"
+          className="flex min-h-[52px] flex-wrap items-center gap-x-[5px] gap-y-2"
           onDoubleClick={(e) => e.stopPropagation()}
         >
           {renderLeadingMessageIcon({ styleToggleInteractive: false })}
@@ -655,7 +666,7 @@ export function PrimaryAgentMessageField({
             />
             {selectionTokenPopover}
           </div>
-          <span className="inline-flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+          <span className="inline-flex shrink-0 items-center gap-0.5">
             {renderStyleToolbarButtons(true, true)}
             <button
               type="button"
@@ -685,7 +696,7 @@ export function PrimaryAgentMessageField({
   return (
     <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
       <div
-        className="group/agentmsg-row flex min-h-[52px] w-full min-w-0 cursor-pointer flex-wrap items-end gap-x-1 gap-y-1 rounded px-0.5 py-0"
+        className="group/agentmsg-row flex min-h-[52px] w-full min-w-0 cursor-pointer flex-wrap items-center gap-x-[5px] gap-y-1 rounded py-0"
         onDoubleClick={(e) => {
           if (busy) return;
           if ((e.target as HTMLElement).closest('button')) return;
@@ -695,7 +706,7 @@ export function PrimaryAgentMessageField({
         }}
       >
         {renderLeadingMessageIcon({ styleToggleInteractive: true })}
-        <div className={`min-w-0 ${displayTextClass}`}>
+        <div className={`${UC_RESPONSE_ROW_CONTENT} ${displayTextClass}`}>
           {renderDisplayBody()}
           {inlineToolbar}
         </div>
