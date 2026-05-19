@@ -2,8 +2,8 @@
  * Parse / serialize KB document lists stored on AI Agent tasks (`agentKnowledgeBaseDocumentsJson`).
  */
 
-import { normalizeKbRules } from './kbRuleTypes';
 import type { PersistedKbDocument } from './kbDocumentTypes';
+import { persistedKbToStaged, stagedKbToPersisted } from './kbDocumentTypes';
 
 function isPersistedKbDocument(row: unknown): row is PersistedKbDocument {
   if (!row || typeof row !== 'object') return false;
@@ -18,16 +18,9 @@ export function parseAgentKnowledgeBaseDocumentsJson(raw: string): PersistedKbDo
   try {
     const parsed = JSON.parse(trimmed) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isPersistedKbDocument).map((row) => ({
-      ...row,
-      dataTypes: Array.isArray(row.dataTypes)
-        ? row.dataTypes.map((t) => String(t).trim()).filter(Boolean)
-        : [],
-      rules: normalizeKbRules(row.rules),
-      chatStarted: Boolean(row.chatStarted),
-      chatMessages: Array.isArray(row.chatMessages) ? row.chatMessages : [],
-      semanticStatus: row.semanticStatus ?? 'idle',
-    }));
+    return parsed
+      .filter(isPersistedKbDocument)
+      .map((row) => stagedKbToPersisted(persistedKbToStaged(row)));
   } catch {
     return [];
   }

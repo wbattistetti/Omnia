@@ -1280,7 +1280,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     knowledgeBaseAddFiles: c.knowledgeBaseAddFiles,
     knowledgeBaseRemoveDocument: c.knowledgeBaseRemoveDocument,
     knowledgeBaseUpdateDocument: c.knowledgeBaseUpdateDocument,
+    knowledgeBaseReorderDocuments: c.knowledgeBaseReorderDocuments,
     knowledgeBaseCallMeta: c.buildCallMeta('KB_DOCUMENT_SEMANTIC'),
+    knowledgeBaseTaskContext: c.knowledgeBaseTaskContext,
+    onMergeKbPromotedUseCases: c.onMergeKbPromotedUseCases,
+    regenerateKbPromotedUseCase: c.regenerateKbPromotedUseCase,
 
     useCaseGeneratorWizard: useCaseGenWizard,
 

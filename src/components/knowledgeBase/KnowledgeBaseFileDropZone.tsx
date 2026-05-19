@@ -1,9 +1,8 @@
 /**
- * File picker + drag-and-drop zone for knowledge-base documents (.txt / .xlsx).
+ * File picker + full-area drag-and-drop for the KB document list column.
  */
 
 import React from 'react';
-import { Upload } from 'lucide-react';
 
 export type KnowledgeBaseFileDropZoneHandle = {
   openPicker: () => void;
@@ -13,7 +12,6 @@ export type KnowledgeBaseFileDropZoneProps = {
   accept: string;
   onFiles: (files: File[]) => void;
   disabled?: boolean;
-  emptyHint?: string;
   className?: string;
   children?: React.ReactNode;
 };
@@ -33,14 +31,7 @@ export const KnowledgeBaseFileDropZone = React.forwardRef<
   KnowledgeBaseFileDropZoneHandle,
   KnowledgeBaseFileDropZoneProps
 >(function KnowledgeBaseFileDropZone(
-  {
-    accept,
-    onFiles,
-    disabled = false,
-    emptyHint = 'Trascina file qui oppure clicca per selezionare',
-    className = '',
-    children,
-  },
+  { accept, onFiles, disabled = false, className = '', children },
   ref
 ) {
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -91,6 +82,7 @@ export const KnowledgeBaseFileDropZone = React.forwardRef<
   const onDrop = React.useCallback(
     (e: React.DragEvent) => {
       if (disabled) return;
+      if (!e.dataTransfer.types.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
       setDragOver(false);
@@ -99,20 +91,17 @@ export const KnowledgeBaseFileDropZone = React.forwardRef<
     [disabled, emitFiles]
   );
 
-  const pickerActivatorProps = {
-    role: 'button' as const,
-    tabIndex: disabled ? -1 : 0,
-    onKeyDown: (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        openPicker();
-      }
-    },
-    onClick: () => openPicker(),
-  };
-
   return (
-    <div className={className}>
+    <div
+      className={
+        className +
+        ' flex min-h-0 min-w-0 flex-col transition-colors ' +
+        (dragOver ? 'bg-violet-950/25 ring-1 ring-inset ring-violet-500/40' : '')
+      }
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <input
         ref={inputRef}
         type="file"
@@ -122,49 +111,7 @@ export const KnowledgeBaseFileDropZone = React.forwardRef<
         disabled={disabled}
         onChange={onInputChange}
       />
-      <div
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        className={
-          'flex min-h-[120px] min-w-0 flex-col rounded-lg border border-dashed transition-colors ' +
-          (disabled
-            ? 'cursor-not-allowed border-slate-700/50 bg-slate-950/20 opacity-60'
-            : dragOver
-              ? 'border-violet-400/80 bg-violet-950/40'
-              : 'border-slate-600/70 bg-slate-900/30')
-        }
-      >
-        {children ? (
-          <div
-            className="flex min-h-0 flex-1 flex-col p-2"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            {children}
-          </div>
-        ) : null}
-        {!children ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6 text-center">
-            <Upload
-              className={'h-8 w-8 ' + (dragOver ? 'text-violet-300' : 'text-slate-500')}
-              aria-hidden
-            />
-            <p className="text-slate-400">{emptyHint}</p>
-          </div>
-        ) : (
-          <div
-            {...pickerActivatorProps}
-            className={
-              'flex shrink-0 cursor-pointer items-center justify-center gap-1 border-t border-slate-800/80 py-1.5 text-slate-500 ' +
-              (disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-slate-900/50 hover:text-slate-400')
-            }
-          >
-            <Upload className="h-3 w-3" aria-hidden />
-            Rilascia o clicca per aggiungere altri file
-          </div>
-        )}
-      </div>
+      {children}
     </div>
   );
 });

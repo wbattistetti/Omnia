@@ -4,13 +4,19 @@
 
 import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
+import type * as Monaco from 'monaco-editor';
+import {
+  ensureKbReaderMonacoTheme,
+  KB_READER_MONACO_THEME_ID,
+  kbReaderMonacoOptions,
+} from '@components/knowledgeBase/kbMonacoTheme';
+import { ensureKbMarkdownLanguage } from '@components/knowledgeBase/kbMarkdownLanguage';
 
 const EDITOR_OPTIONS = {
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
   wordWrap: 'on' as const,
   automaticLayout: true,
-  fontSize: 12,
   lineNumbers: 'on' as const,
   folding: true,
   renderLineHighlight: 'line' as const,
@@ -22,7 +28,6 @@ const PLAIN_OPTIONS = {
   scrollBeyondLastLine: false,
   wordWrap: 'on' as const,
   automaticLayout: true,
-  fontSize: 12,
   lineNumbers: 'off' as const,
   glyphMargin: false,
   folding: false,
@@ -66,6 +71,10 @@ export function KbMarkdownMonaco({
 }: KbMarkdownMonacoProps): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = React.useState(heightPx);
+  const handleEditorWillMount = React.useCallback((monaco: typeof Monaco) => {
+    ensureKbMarkdownLanguage(monaco);
+    ensureKbReaderMonacoTheme(monaco);
+  }, []);
 
   React.useLayoutEffect(() => {
     if (fillHeight) return;
@@ -86,7 +95,7 @@ export function KbMarkdownMonaco({
   }, [fillHeight]);
 
   const isPlain = appearance === 'plain';
-  const baseOptions = isPlain ? PLAIN_OPTIONS : EDITOR_OPTIONS;
+  const baseOptions = kbReaderMonacoOptions(isPlain ? PLAIN_OPTIONS : EDITOR_OPTIONS);
 
   return (
     <div
@@ -94,7 +103,7 @@ export function KbMarkdownMonaco({
       className={
         (fillHeight ? 'h-full min-h-0 ' : '') +
         'overflow-hidden rounded-md border bg-slate-950/80 ' +
-        (isPlain ? 'border-slate-700 focus-within:border-violet-500/60' : 'border-slate-700/80 bg-[#0c0c0f]')
+        (isPlain ? 'border-slate-700 focus-within:border-violet-500/60' : 'border-slate-700/80')
       }
       aria-label={ariaLabel}
     >
@@ -102,8 +111,9 @@ export function KbMarkdownMonaco({
         width="100%"
         height={editorHeight}
         language={language}
-        theme="vs-dark"
+        theme={KB_READER_MONACO_THEME_ID}
         value={value}
+        editorWillMount={handleEditorWillMount}
         options={{
           ...baseOptions,
           readOnly,
@@ -114,5 +124,3 @@ export function KbMarkdownMonaco({
     </div>
   );
 }
-
-

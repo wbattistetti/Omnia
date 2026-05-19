@@ -6671,6 +6671,10 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         documentName,
         variables,
         sampleText,
+        analysisIntent,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
       } = body;
       const callMeta = readCallMetaFromBody(body, { purpose: 'KB_ANALYZE_SEMANTIC' });
       const result = await analyzeSemantic({
@@ -6678,6 +6682,12 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
         documentName: typeof documentName === 'string' ? documentName : 'document',
         variables: Array.isArray(variables) ? variables : [],
+        analysisIntent: typeof analysisIntent === 'string' ? analysisIntent : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
         provider,
         model,
         aiProviderService,
@@ -6699,6 +6709,9 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         rules,
         dataTypes,
         analysisIntent,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
       } = body;
       const callMeta = readCallMetaFromBody(body, { purpose: 'KB_REANALYZE_RULES' });
       const result = await reanalyzeRules({
@@ -6710,6 +6723,11 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         rules: Array.isArray(rules) ? rules : [],
         dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
         analysisIntent: typeof analysisIntent === 'string' ? analysisIntent : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
         provider,
         model,
         aiProviderService,
@@ -6758,6 +6776,10 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         dataTypes,
         messages,
         userMessage,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+        currentRuleId,
       } = body;
       const callMeta = readCallMetaFromBody(body, { purpose: 'KB_CHAT' });
       const result = await chatAboutDocument({
@@ -6770,6 +6792,12 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
         messages: Array.isArray(messages) ? messages : [],
         userMessage: typeof userMessage === 'string' ? userMessage : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
+        currentRuleId: typeof currentRuleId === 'string' ? currentRuleId : '',
         provider,
         model,
         aiProviderService,

@@ -14,6 +14,10 @@ const {
 
 const MAX_SAMPLE_CHARS = 100_000;
 
+/** KB semantic passes can exceed default 60s provider timeout on large documents. */
+const KB_SEMANTIC_TIMEOUT_MS =
+  parseInt(process.env.KB_SEMANTIC_TIMEOUT_MS || '', 10) || 120_000;
+
 function extractJsonObject(text) {
   const raw = String(text || '').trim();
   if (!raw) throw new Error('Model returned empty content');
@@ -37,6 +41,30 @@ function normalizeDataTypes(raw) {
     .slice(0, 20);
 }
 
+function normalizeRuleStatus(raw, included) {
+  const s = String(raw || '').trim().toLowerCase();
+  const map = {
+    hypothesized: 'hypothesized',
+    hypothesis: 'hypothesized',
+    validated: 'validated',
+    confirmed: 'validated',
+    corrected: 'corrected',
+    reworked: 'reworked',
+    invalid: 'invalid',
+    rejected: 'invalid',
+    skipped: 'invalid',
+    deferred: 'hypothesized',
+  };
+  if (map[s]) return map[s];
+  return included === false ? 'invalid' : 'hypothesized';
+}
+
+function normalizeConfidence(raw) {
+  const c = String(raw || '').trim();
+  if (c === 'high' || c === 'medium' || c === 'low') return c;
+  return 'medium';
+}
+
 function normalizeRules(rules) {
   if (!Array.isArray(rules)) return [];
   return rules
@@ -50,15 +78,33 @@ function normalizeRules(rules) {
       let validation = r.validation;
       if (validation !== 'up' && validation !== 'down') validation = null;
       const ruleText = rule || '—';
+      const status = normalizeRuleStatus(r.status, r.included !== false);
+      const confidence = normalizeConfidence(r.confidence);
+      const rel = String(r.relevanceToTask || '').trim();
+      const rawKind = String(r.ruleKind || r.kind || '').trim().toLowerCase();
+      const ruleKind =
+        rawKind === 'macro' || rawKind === 'micro' ? rawKind : 'atomic';
+      const parentRuleId =
+        ruleKind === 'macro'
+          ? null
+          : String(r.parentRuleId || r.parentId || '').trim() || null;
       return {
         id,
+        ruleKind,
+        parentRuleId,
         title: title || field || ruleText.slice(0, 72),
         field: field || '—',
         rule: ruleText,
         evidence: String(r.evidence || r.evidenza || '').trim(),
         note: String(r.note || r.notes || '').trim(),
-        included: r.included !== false,
+        included: status !== 'invalid',
         validation,
+        status,
+        confidence,
+        trigger: String(r.trigger || '').trim(),
+        action: String(r.action || r.azione || '').trim(),
+        fallback: String(r.fallback || '').trim(),
+        relevanceToTask: rel === 'high' || rel === 'low' ? rel : undefined,
       };
     })
     .filter(Boolean);
@@ -71,9 +117,12 @@ function normalizeAnalysisPayload(parsed) {
   const rules = normalizeRules(parsed?.rules);
   const analysisNote =
     typeof parsed?.analysisNote === 'string' ? parsed.analysisNote.trim() : '';
+  const reviewOpener =
+    typeof parsed?.reviewOpener === 'string' ? parsed.reviewOpener.trim() : '';
   const chatOpener =
-    typeof parsed?.chatOpener === 'string' ? parsed.chatOpener.trim() : '';
-  return { structure, dataTypes, rules, analysisNote, chatOpener };
+    reviewOpener ||
+    (typeof parsed?.chatOpener === 'string' ? parsed.chatOpener.trim() : '');
+  return { structure, dataTypes, rules, analysisNote, chatOpener, reviewOpener };
 }
 
 async function callJsonModel({
@@ -96,6 +145,7 @@ async function callJsonModel({
       model,
       temperature: 0.25,
       maxTokens: provider === 'openai' ? 4096 : 8192,
+      timeout: KB_SEMANTIC_TIMEOUT_MS,
       purpose,
       taskId,
       taskLabel,
@@ -115,6 +165,10 @@ function buildDocumentUserBlock({
   rules,
   dataTypes,
   analysisIntent,
+  agentTaskSummary,
+  taskVariables,
+  existingUseCaseSummaries,
+  currentRuleId,
 }) {
   const varLines =
     Array.isArray(variables) && variables.length > 0
@@ -145,7 +199,39 @@ function buildDocumentUserBlock({
       ? `\nObiettivo analisi (dal designer in chat):\n${String(analysisIntent).trim()}\n`
       : '';
 
+  const taskBlock =
+    agentTaskSummary && String(agentTaskSummary).trim()
+      ? `\n--- AGENT TASK (evaluate every rule against this) ---\n${String(agentTaskSummary).trim()}\n`
+      : '';
+
+  let taskVarBlock = '';
+  if (Array.isArray(taskVariables) && taskVariables.length > 0) {
+    taskVarBlock = `\nTask variables (agent I/O):\n${taskVariables
+      .map((v) => {
+        if (!v || typeof v !== 'object') return '';
+        const label = String(v.label || v.slotId || v.internalName || '').trim();
+        const slot = String(v.slotId || v.internalName || '').trim();
+        return label ? `- ${label}${slot ? ` (${slot})` : ''}` : '';
+      })
+      .filter(Boolean)
+      .join('\n')}\n`;
+  }
+
+  let ucBlock = '';
+  if (Array.isArray(existingUseCaseSummaries) && existingUseCaseSummaries.length > 0) {
+    ucBlock = `\nExisting use cases on task (avoid duplicates):\n${existingUseCaseSummaries
+      .map((u) => `- ${String(u).trim()}`)
+      .filter(Boolean)
+      .join('\n')}\n`;
+  }
+
+  const currentRuleBlock =
+    currentRuleId && String(currentRuleId).trim()
+      ? `\nCURRENT RULE UNDER REVIEW (id): ${String(currentRuleId).trim()}\n`
+      : '';
+
   return `Document: ${documentName}
+${taskBlock}${taskVarBlock}${ucBlock}${currentRuleBlock}
 ${truncNote}
 ${typesBlock}
 ${intentBlock}
@@ -182,6 +268,10 @@ async function analyzeSemantic(params) {
     repositoryDocumentId,
     documentName,
     variables,
+    analysisIntent,
+    agentTaskSummary,
+    taskVariables,
+    existingUseCaseSummaries,
     provider,
     model,
     aiProviderService,
@@ -203,6 +293,10 @@ async function analyzeSemantic(params) {
     truncated,
     totalChars,
     variables,
+    analysisIntent,
+    agentTaskSummary,
+    taskVariables,
+    existingUseCaseSummaries,
   });
 
   const out = await callJsonModel({
@@ -237,6 +331,9 @@ async function reanalyzeRules(params) {
     rules,
     dataTypes,
     analysisIntent,
+    agentTaskSummary,
+    taskVariables,
+    existingUseCaseSummaries,
     provider,
     model,
     aiProviderService,
@@ -258,6 +355,9 @@ async function reanalyzeRules(params) {
     rules: activeRules,
     dataTypes,
     analysisIntent,
+    agentTaskSummary,
+    taskVariables,
+    existingUseCaseSummaries,
   });
 
   const out = await callJsonModel({
@@ -338,6 +438,10 @@ async function chatAboutDocument({
   dataTypes,
   messages,
   userMessage,
+  agentTaskSummary,
+  taskVariables,
+  existingUseCaseSummaries,
+  currentRuleId,
   provider,
   model,
   aiProviderService,
@@ -356,6 +460,10 @@ async function chatAboutDocument({
     structureJson,
     rules: (Array.isArray(rules) ? rules : []).filter((r) => r && !r.deleted),
     dataTypes,
+    agentTaskSummary,
+    taskVariables,
+    existingUseCaseSummaries,
+    currentRuleId,
   });
 
   const history = Array.isArray(messages) ? messages : [];
@@ -372,6 +480,7 @@ async function chatAboutDocument({
     model,
     temperature: 0.35,
     maxTokens: provider === 'openai' ? 4096 : 8192,
+    timeout: KB_SEMANTIC_TIMEOUT_MS,
     purpose: purpose || 'KB_CHAT',
     taskId,
     taskLabel,

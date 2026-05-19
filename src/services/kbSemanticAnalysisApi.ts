@@ -5,7 +5,9 @@
 import type { KbExtractedVariable } from '@workspaces/elevenlabs/parseKbDocument';
 import type { AiCallMeta } from '@services/aiAgentDesignApi';
 import type { KbChatMessage, KbDocumentStructure, KbInducedRule } from '@domain/knowledgeBase/kbRuleTypes';
+import { linkKbRuleHierarchy } from '@domain/knowledgeBase/kbRuleHierarchy';
 import { normalizeKbRules } from '@domain/knowledgeBase/kbRuleTypes';
+import type { KbTaskVariableWire } from '@domain/knowledgeBase/kbAgentTaskContext';
 import { confirmAiAgentGenerateIfEnabled } from '@utils/aiAgentGenerateConfirmGate';
 import { designAiFetch } from '@services/designAiRequestPipeline';
 import { readFetchJson } from '@utils/readFetchJson';
@@ -35,6 +37,25 @@ function applyCallMeta(body: Record<string, unknown>, callMeta?: AiCallMeta): vo
   if (callMeta.taskLabel?.trim()) body.taskLabel = callMeta.taskLabel.trim();
 }
 
+function applyKbTaskContext(
+  body: Record<string, unknown>,
+  ctx?: {
+    agentTaskSummary?: string;
+    taskVariables?: readonly KbTaskVariableWire[];
+    existingUseCaseSummaries?: readonly string[];
+    currentRuleId?: string | null;
+  }
+): void {
+  if (!ctx) return;
+  const summary = String(ctx.agentTaskSummary || '').trim();
+  if (summary) body.agentTaskSummary = summary;
+  if (ctx.taskVariables?.length) body.taskVariables = ctx.taskVariables;
+  if (ctx.existingUseCaseSummaries?.length) {
+    body.existingUseCaseSummaries = ctx.existingUseCaseSummaries;
+  }
+  if (ctx.currentRuleId?.trim()) body.currentRuleId = ctx.currentRuleId.trim();
+}
+
 async function postKbJsonAction(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   await confirmAiAgentGenerateIfEnabled();
   const res = await designAiFetch('/design/ai-agent-generate', {
@@ -61,13 +82,20 @@ function mapAnalysisResult(raw: Record<string, unknown>): KbSemanticAnalysisResu
         ? (raw.structure as KbDocumentStructure)
         : {},
     dataTypes: mapDataTypes(raw.dataTypes),
-    rules: normalizeKbRules(raw.rules),
+    rules: linkKbRuleHierarchy(normalizeKbRules(raw.rules)),
     chatOpener: typeof raw.chatOpener === 'string' ? raw.chatOpener : undefined,
     analysisNote: typeof raw.analysisNote === 'string' ? raw.analysisNote : undefined,
     truncated: raw.truncated === true,
     totalChars: typeof raw.totalChars === 'number' ? raw.totalChars : undefined,
   };
 }
+
+export type KbSemanticTaskContext = {
+  agentTaskSummary?: string;
+  taskVariables?: readonly KbTaskVariableWire[];
+  existingUseCaseSummaries?: readonly string[];
+  currentRuleId?: string | null;
+};
 
 export async function analyzeKbSemantic(params: {
   projectId: string;
@@ -77,6 +105,9 @@ export async function analyzeKbSemantic(params: {
   provider: string;
   model: string;
   callMeta?: AiCallMeta;
+  taskContext?: KbSemanticTaskContext;
+  /** Designer hypothesis or analysis goal (initial analyze). */
+  analysisIntent?: string;
 }): Promise<KbSemanticAnalysisResult> {
   const body: Record<string, unknown> = {
     action: 'kb_analyze_semantic',
@@ -87,7 +118,10 @@ export async function analyzeKbSemantic(params: {
     provider: params.provider.toLowerCase(),
     model: params.model,
   };
+  const intent = params.analysisIntent?.trim();
+  if (intent) body.analysisIntent = intent;
   applyCallMeta(body, params.callMeta);
+  applyKbTaskContext(body, params.taskContext);
   return mapAnalysisResult(await postKbJsonAction(body));
 }
 
@@ -103,6 +137,7 @@ export async function reanalyzeKbRules(params: {
   provider: string;
   model: string;
   callMeta?: AiCallMeta;
+  taskContext?: KbSemanticTaskContext;
 }): Promise<KbSemanticAnalysisResult> {
   const body: Record<string, unknown> = {
     action: 'kb_reanalyze_rules',
@@ -118,6 +153,7 @@ export async function reanalyzeKbRules(params: {
     model: params.model,
   };
   applyCallMeta(body, params.callMeta);
+  applyKbTaskContext(body, params.taskContext);
   return mapAnalysisResult(await postKbJsonAction(body));
 }
 
@@ -166,6 +202,7 @@ export async function chatKbDocument(params: {
   provider: string;
   model: string;
   callMeta?: AiCallMeta;
+  taskContext?: KbSemanticTaskContext;
 }): Promise<KbChatResult> {
   const body: Record<string, unknown> = {
     action: 'kb_chat',
@@ -182,6 +219,7 @@ export async function chatKbDocument(params: {
     model: params.model,
   };
   applyCallMeta(body, params.callMeta);
+  applyKbTaskContext(body, params.taskContext);
   const raw = await postKbJsonAction(body);
   return {
     reply: String(raw.reply ?? ''),

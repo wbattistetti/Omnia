@@ -21,3 +21,17 @@ export function hasKbUserChatQuestion(messages: readonly KbChatMessage[]): boole
 
 export const KB_ANALYSIS_INTENT_REQUIRED_MSG =
   'Indica in chat che tipo di analisi vuoi fare (es. quali regole estrarre, quali campi approfondire). Poi usa Rianalizza o continua la conversazione.';
+
+export function isKbConsentAcceptReply(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  return /^(s[iì](\s*,?\s*analizza)?|ok|va bene|yes|analizza)/.test(lower);
+}
+
+export function isKbConsentDeclineReply(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  return /^(no|non ora|più tardi|piu tardi|annulla|stop)/.test(lower);
+}
+
+export function isKbRetryReply(text: string): boolean {
+  return /^riprova$/i.test(String(text || '').trim());
+}

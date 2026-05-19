@@ -8,12 +8,30 @@ import type {
   KbDocumentStructure,
   KbSemanticAnalysisStatus,
 } from './kbRuleTypes';
+import { linkKbRuleHierarchy } from './kbRuleHierarchy';
 import { normalizeKbRules } from './kbRuleTypes';
 import type { KbInducedRule } from './kbRuleTypes';
+import type { KbAnalysisPhase, KbPromotionStatus } from './kbAnalysisSession';
+import { normalizeKbPromotedDrafts, type KbPromotedUseCaseDraft } from './kbPromotedUseCaseDraft';
 
-export type { KbChatMessage, KbDocumentStructure, KbInducedRule, KbRuleValidation, KbSemanticAnalysisStatus } from './kbRuleTypes';
+export type {
+  KbChatMessage,
+  KbDocumentStructure,
+  KbInducedRule,
+  KbRuleValidation,
+  KbRuleStatus,
+  KbRuleConfidence,
+  KbSemanticAnalysisStatus,
+} from './kbRuleTypes';
+export type { KbAnalysisPhase, KbPromotionStatus } from './kbAnalysisSession';
+export type { KbPromotedUseCaseDraft } from './kbPromotedUseCaseDraft';
 export { KB_DOCUMENT_ACCEPT } from './kbFileKinds';
-export { detectKbFileFormat, isKbGenericTextReadable, isKbParsableTabular } from './kbFileKinds';
+export {
+  detectKbFileFormat,
+  isKbGenericTextReadable,
+  isKbImageFormat,
+  isKbParsableTabular,
+} from './kbFileKinds';
 
 export type KbParseStatus = 'parsing' | 'ready' | 'error' | 'unsupported';
 
@@ -47,6 +65,15 @@ export type StagedKbDocument = KbStagedFileBase & {
   semanticError?: string;
   analysisNote?: string;
   chatMessages: readonly KbChatMessage[];
+  /** Guided analysis workflow (per document). */
+  analysisPhase: KbAnalysisPhase;
+  consentGiven: boolean;
+  currentRuleId: string | null;
+  kbAnalysisComplete: boolean;
+  noActionableRules?: boolean;
+  designerSignOffNoUseCases?: boolean;
+  promotionStatus: KbPromotionStatus;
+  promotedDrafts: readonly KbPromotedUseCaseDraft[];
 };
 
 export type PersistedKbDocument = Omit<StagedKbDocument, 'file'>;
@@ -90,6 +117,12 @@ export function emptyKbDocument(
     chatStarted: false,
     semanticStatus: 'idle',
     chatMessages: [],
+    analysisPhase: 'idle',
+    consentGiven: false,
+    currentRuleId: null,
+    kbAnalysisComplete: false,
+    promotionStatus: 'idle',
+    promotedDrafts: [],
   };
 }
 
@@ -100,10 +133,21 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
     dataTypes: Array.isArray(p.dataTypes)
       ? p.dataTypes.map((t) => String(t).trim()).filter(Boolean)
       : [],
-    rules: normalizeKbRules(p.rules),
+    rules: linkKbRuleHierarchy(normalizeKbRules(p.rules)),
     chatStarted: Boolean(p.chatStarted),
     chatMessages: Array.isArray(p.chatMessages) ? p.chatMessages : [],
     semanticStatus: p.semanticStatus ?? 'idle',
+    analysisPhase: p.analysisPhase ?? (p.chatStarted && p.rules?.length ? 'phase_b' : 'idle'),
+    consentGiven: Boolean(p.consentGiven),
+    currentRuleId:
+      typeof p.currentRuleId === 'string' && p.currentRuleId.trim()
+        ? p.currentRuleId.trim()
+        : null,
+    kbAnalysisComplete: Boolean(p.kbAnalysisComplete),
+    noActionableRules: p.noActionableRules === true,
+    designerSignOffNoUseCases: p.designerSignOffNoUseCases === true,
+    promotionStatus: p.promotionStatus ?? 'idle',
+    promotedDrafts: normalizeKbPromotedDrafts(p.promotedDrafts),
   };
 }
 
@@ -130,5 +174,13 @@ export type KbDocumentPatch = Partial<
     | 'variables'
     | 'variableDictionary'
     | 'format'
+    | 'analysisPhase'
+    | 'consentGiven'
+    | 'currentRuleId'
+    | 'kbAnalysisComplete'
+    | 'noActionableRules'
+    | 'designerSignOffNoUseCases'
+    | 'promotionStatus'
+    | 'promotedDrafts'
   >
 >;

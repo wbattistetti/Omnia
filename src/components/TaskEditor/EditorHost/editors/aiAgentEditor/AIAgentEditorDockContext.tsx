@@ -198,8 +198,12 @@ export interface AIAgentEditorDockContextValue {
   knowledgeBaseAddFiles: (files: readonly File[]) => void;
   knowledgeBaseRemoveDocument: (docId: string) => void;
   knowledgeBaseUpdateDocument: (docId: string, patch: KbDocumentPatch) => void;
+  knowledgeBaseReorderDocuments: (next: readonly StagedKbDocument[]) => void;
   /** Call meta for KB semantic analyze / chat / reanalyze. */
   knowledgeBaseCallMeta?: AiCallMeta;
+  knowledgeBaseTaskContext?: import('@services/kbSemanticAnalysisApi').KbSemanticTaskContext;
+  onMergeKbPromotedUseCases?: (useCases: AIAgentUseCase[]) => void;
+  regenerateKbPromotedUseCase?: (skeleton: AIAgentUseCase) => Promise<AIAgentUseCase | null>;
 
   /** Presente dopo il mount dell’editor quando il generatore guidato è disponibile. */
   useCaseGeneratorWizard: UseCaseGeneratorWizardModel | null;

@@ -23,6 +23,14 @@ const sample: PersistedKbDocument[] = [
     chatStarted: false,
     semanticStatus: 'idle',
     chatMessages: [],
+    analysisPhase: 'idle',
+    consentGiven: false,
+    currentRuleId: null,
+    kbAnalysisComplete: false,
+    noActionableRules: false,
+    designerSignOffNoUseCases: false,
+    promotionStatus: 'idle',
+    promotedDrafts: [],
   },
 ];
 

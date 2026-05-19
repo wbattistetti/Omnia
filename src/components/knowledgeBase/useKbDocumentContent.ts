@@ -27,14 +27,19 @@ export function useKbDocumentContent(
 
   const reload = React.useCallback(() => setTick((t) => t + 1), []);
 
+  React.useLayoutEffect(() => {
+    setText('');
+    setError(null);
+    setTruncated(false);
+    setTotalChars(0);
+    setLoading(Boolean(projectId?.trim() && repositoryDocumentId?.trim()));
+  }, [projectId, repositoryDocumentId]);
+
   React.useEffect(() => {
     const pid = String(projectId || '').trim();
     const rid = String(repositoryDocumentId || '').trim();
     if (!pid || !rid) {
-      setText('');
-      setError(null);
-      setTruncated(false);
-      setTotalChars(0);
+      setLoading(false);
       return;
     }
     let cancelled = false;

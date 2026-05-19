@@ -13,6 +13,7 @@ import {
   type KbStagedFileBase,
   type StagedKbDocument,
 } from './kbDocumentTypes';
+import { patchKbConsentIfReady } from './kbAnalysisSession';
 
 export type KbDocumentListUpdater = (
   updater: (prev: StagedKbDocument[]) => StagedKbDocument[]
@@ -63,16 +64,16 @@ export async function ingestKbFileToRepository(
       documentId: docId,
     });
     setDocuments((prev) =>
-      prev.map((d) =>
-        d.id === docId
-          ? {
-              ...d,
-              repositoryDocumentId: meta.id,
-              parseStatus: d.parseStatus === 'parsing' ? ('ready' as const) : d.parseStatus,
-              parseError: d.parseStatus === 'error' ? d.parseError : undefined,
-            }
-          : d
-      )
+      prev.map((d) => {
+        if (d.id !== docId) return d;
+        const next: StagedKbDocument = {
+          ...d,
+          repositoryDocumentId: meta.id,
+          parseStatus: d.parseStatus === 'parsing' ? ('ready' as const) : d.parseStatus,
+          parseError: d.parseStatus === 'error' ? d.parseError : undefined,
+        };
+        return patchKbConsentIfReady(next);
+      })
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -93,18 +94,18 @@ export async function ingestKbTabularParse(
   try {
     const result = await parseKbFile(file);
     setDocuments((prev) =>
-      prev.map((d) =>
-        d.id === docId
-          ? {
-              ...d,
-              parseStatus: d.parseStatus === 'error' ? ('error' as const) : ('ready' as const),
-              format: result.format,
-              variables: result.variables,
-              variableDictionary: result.variableDictionary,
-              parseError: d.parseStatus === 'error' ? d.parseError : undefined,
-            }
-          : d
-      )
+      prev.map((d) => {
+        if (d.id !== docId) return d;
+        const next: StagedKbDocument = {
+          ...d,
+          parseStatus: d.parseStatus === 'error' ? ('error' as const) : ('ready' as const),
+          format: result.format,
+          variables: result.variables,
+          variableDictionary: result.variableDictionary,
+          parseError: d.parseStatus === 'error' ? d.parseError : undefined,
+        };
+        return patchKbConsentIfReady(next);
+      })
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

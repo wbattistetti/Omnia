@@ -15,6 +15,9 @@ import { kbDocumentFileUrl } from '@services/kbDocumentRepositoryApi';
 import { KbTabularPreview } from './KbTabularPreview';
 import { KbPdfViewer } from './viewers/KbPdfViewer';
 import { KbWordViewer } from './viewers/KbWordViewer';
+import { KbImageViewer } from './viewers/KbImageViewer';
+import { OMNIA_KB_MD_LANG } from './kbMarkdownLanguage';
+import { kbType } from './kbTypography';
 
 export type KnowledgeBaseDocumentReaderProps = {
   documentName: string;
@@ -28,6 +31,9 @@ export type KnowledgeBaseDocumentReaderProps = {
   error?: string | null;
   truncated?: boolean;
   totalChars?: number;
+  imageDocIds?: readonly string[];
+  currentDocId?: string;
+  onSelectImageId?: (docId: string) => void;
   className?: string;
 };
 
@@ -59,6 +65,9 @@ export function KnowledgeBaseDocumentReader({
   error = null,
   truncated = false,
   totalChars = 0,
+  imageDocIds = [],
+  currentDocId = '',
+  onSelectImageId,
   className = '',
 }: KnowledgeBaseDocumentReaderProps): React.ReactElement {
   const isMd = documentName.toLowerCase().endsWith('.md');
@@ -100,6 +109,20 @@ export function KnowledgeBaseDocumentReader({
       if (fileUrl) return <KbWordViewer fileUrl={fileUrl} className="min-h-0 flex-1" />;
       return <p className="p-2 text-slate-500">Documento Word in attesa di salvataggio…</p>;
     }
+    if (format === 'image') {
+      if (fileUrl) {
+        return (
+          <KbImageViewer
+            fileUrl={fileUrl}
+            documentName={documentName}
+            imageIds={imageDocIds}
+            currentId={currentDocId}
+            onSelectId={(id) => onSelectImageId?.(id)}
+          />
+        );
+      }
+      return <p className="p-2 text-slate-500">Immagine in attesa di salvataggio nel repository…</p>;
+    }
     if (!text.trim() && !isKbBinaryViewerFormat(format)) {
       return <p className="p-2 text-slate-500">Nessun contenuto testuale disponibile.</p>;
     }
@@ -115,7 +138,7 @@ export function KnowledgeBaseDocumentReader({
     return (
       <KbMarkdownMonaco
         appearance="plain"
-        language={isMd ? 'markdown' : format === 'json' ? 'json' : 'plaintext'}
+        language={isMd ? OMNIA_KB_MD_LANG : format === 'json' ? 'json' : 'plaintext'}
         value={displayText}
         readOnly
         fillHeight
@@ -127,9 +150,9 @@ export function KnowledgeBaseDocumentReader({
   return (
     <div className={'flex min-h-0 flex-1 flex-col rounded-md border border-slate-800 bg-slate-950/60 ' + className}>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 px-2 py-1">
-        <span className="font-medium uppercase tracking-wide text-slate-500">Reader</span>
+        <span className={kbType.label}>Reader</span>
         {truncated ? (
-          <span className="text-amber-400/90" title="Anteprima troncata per analisi IA">
+          <span className={kbType.warn} title="Anteprima troncata per analisi IA">
             Anteprima {text.length.toLocaleString()}
             {totalChars > 0 ? ` / ${totalChars.toLocaleString()} car.` : ''}
           </span>

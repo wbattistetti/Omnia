@@ -15,6 +15,11 @@ import {
   type PersistedKbDocument,
   type StagedKbDocument,
 } from './kbDocumentTypes';
+import { mergeKbDocumentPatch } from './kbAnalysisSession';
+
+export type KbDocumentPatcher =
+  | KbDocumentPatch
+  | ((prev: StagedKbDocument) => KbDocumentPatch);
 
 export type UseKnowledgeBaseDocumentsOptions = {
   projectId: string | undefined;
@@ -25,7 +30,8 @@ export type UseKnowledgeBaseDocumentsResult = {
   documents: readonly StagedKbDocument[];
   addFiles: (files: readonly File[]) => void;
   removeDocument: (docId: string) => void;
-  updateDocument: (docId: string, patch: KbDocumentPatch) => void;
+  updateDocument: (docId: string, patch: KbDocumentPatcher) => void;
+  reorderDocuments: (next: readonly StagedKbDocument[]) => void;
   toPersisted: () => PersistedKbDocument[];
   hydrateFromPersisted: (rows: readonly PersistedKbDocument[]) => void;
 };
@@ -70,8 +76,22 @@ export function useKnowledgeBaseDocuments(
   );
 
   const updateDocument = React.useCallback(
-    (docId: string, patch: KbDocumentPatch) => {
-      setDocuments((prev) => prev.map((d) => (d.id === docId ? { ...d, ...patch } : d)));
+    (docId: string, patch: KbDocumentPatcher) => {
+      setDocuments((prev) =>
+        prev.map((d) => {
+          if (d.id !== docId) return d;
+          const resolved = typeof patch === 'function' ? patch(d) : patch;
+          return mergeKbDocumentPatch(d, resolved);
+        })
+      );
+      markDirty();
+    },
+    [markDirty]
+  );
+
+  const reorderDocuments = React.useCallback(
+    (next: readonly StagedKbDocument[]) => {
+      setDocuments([...next]);
       markDirty();
     },
     [markDirty]
@@ -84,6 +104,7 @@ export function useKnowledgeBaseDocuments(
     addFiles,
     removeDocument,
     updateDocument,
+    reorderDocuments,
     toPersisted,
     hydrateFromPersisted,
   };

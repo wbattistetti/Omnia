@@ -11,6 +11,7 @@ import {
   FileJson,
   FileType,
   File,
+  FileImage,
 } from 'lucide-react';
 import type { KbFileFormat } from './kbFileKinds';
 
@@ -24,6 +25,15 @@ export function detectKbFormatFromName(name: string, mimeType?: string): KbFileF
   if (lower.endsWith('.json') || mime === 'application/json') return 'json';
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'md';
   if (lower.endsWith('.txt') || mime === 'text/plain') return 'txt';
+  if (
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.png') ||
+    lower.endsWith('.webp') ||
+    mime.startsWith('image/')
+  ) {
+    return 'image';
+  }
   if (mime.startsWith('text/')) return 'text';
   return 'text';
 }
@@ -41,6 +51,8 @@ export function kbFormatIcon(format: KbFileFormat | undefined, fileName: string,
       return FileJson;
     case 'md':
       return FileCode2;
+    case 'image':
+      return FileImage;
     case 'csv':
     case 'txt':
     case 'text':
@@ -64,6 +76,8 @@ export function kbFormatIconClass(format: KbFileFormat | undefined, fileName: st
       return 'text-violet-400';
     case 'csv':
       return 'text-teal-400';
+    case 'image':
+      return 'text-pink-400';
     default:
       return 'text-slate-400';
   }

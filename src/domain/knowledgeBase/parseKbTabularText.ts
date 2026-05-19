@@ -73,10 +73,27 @@ export type ParseKbTabularOptions = {
 /**
  * Parses tabular preview text, skipping preamble rows above the real header.
  */
+/** Prose KB markdown (## sections, lists) — not a delimiter table. */
+export function looksLikeProseMarkdown(text: string): boolean {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  let headings = 0;
+  let listOrBold = 0;
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (/^#{1,6}\s+\S/.test(t)) headings += 1;
+    if (/^[-*]\s+\S/.test(t) || /^\*\*[^*]+\*\*/.test(t)) listOrBold += 1;
+  }
+  return headings >= 1 && headings + listOrBold >= 2;
+}
+
 export function parseKbTabularDocument(
   text: string,
   opts: ParseKbTabularOptions = {}
 ): KbTabularParseResult | null {
+  if (looksLikeProseMarkdown(text) && !looksLikeMarkdownPipeTable(text)) {
+    return null;
+  }
   if (looksLikeMarkdownPipeTable(text)) {
     const md = parseMarkdownPipeTable(text, opts);
     if (md) return md;
