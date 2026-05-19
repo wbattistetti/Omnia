@@ -1541,7 +1541,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   if (fullscreenPref.enabled && typeof document !== 'undefined') {
     return createPortal(
       <div
-        className="fixed left-0 right-0 bottom-0 z-50 flex flex-col bg-slate-100 dark:bg-slate-950"
+        className="fixed left-0 right-0 bottom-0 z-40 flex flex-col bg-slate-100 dark:bg-slate-950"
         style={{ top: appToolbarBottom ?? 0 }}
         role="region"
         aria-label="AI Agent editor a tutto schermo"

@@ -18,21 +18,19 @@ Tasks:
 
 1. structure: document_type, entities/sections, properties [{ name, type, required, role, description }] tied to real fields when possible.
 
-2. dataTypes: 3–5 short Italian "focus areas" for further review (specific, actionable — NOT a generic table of contents).
+2. rules: 0–8 high-confidence induced rules. Group recurring patterns:
 
-3. rules: 0–8 high-confidence induced rules. Group recurring patterns:
+   - ruleKind "macro": one GENERAL pattern (must generalize all children; rule text MUST NOT copy a single micro). parentRuleId null.
 
-   - ruleKind "macro": one general pattern (specialty/keyword → variant IDs, else standard IDs). parentRuleId null.
-
-   - ruleKind "micro": concrete examples under a macro (e.g. Cardiologia, Dermatologia). parentRuleId = macro id.
+   - ruleKind "micro": concrete examples under a macro (e.g. Cardiologia, Dermatologia). parentRuleId = macro id. Each micro rule text must be specific to that example, not the macro wording.
 
    - ruleKind "atomic": standalone rules without grouping.
 
-   Each rule: title, field (or "—"), rule, evidence, note "", trigger, action, fallback, status "hypothesized", confidence, relevanceToTask.
+   Each rule: title (short), field (or "—"), rule, evidence (document excerpt or reference list, not duplicate of rule), note "", fallback (optional), status "hypothesized", confidence, relevanceToTask. Do NOT output trigger or action fields.
 
-   Prefer 1 macro + 2–4 micros over duplicate flat rules when the same trigger/action pattern repeats.
+   Prefer 1 macro + 2–4 micros over duplicate flat rules when the same pattern repeats.
 
-4. reviewOpener: Italian (max 280 chars). If macro+micro: say you found N specific rules subsumable in macro-rule(s), invite opening accordions. Else one question about the first rule.
+3. reviewOpener: Italian (max 280 chars). If macro+micro: say you found N specific rules subsumable in macro-rule(s), invite opening accordions. Else one question about the first rule.
 
 
 
@@ -42,9 +40,7 @@ Return ONLY valid JSON (no markdown fence):
 
   "structure": { "document_type": "", "entities": [], "properties": [] },
 
-  "dataTypes": ["..."],
-
-  "rules": [{ "id", "ruleKind": "macro|micro|atomic", "parentRuleId": null, "title", "field", "rule", "evidence", "note", "trigger", "action", "fallback", "status": "hypothesized|validated|corrected|reworked|invalid", "confidence", "relevanceToTask", "included": true, "validation": null }],
+  "rules": [{ "id", "ruleKind": "macro|micro|atomic", "parentRuleId": null, "title", "field", "rule", "evidence", "note", "fallback", "status": "hypothesized|validated|corrected|reworked|invalid", "confidence", "relevanceToTask", "included": true, "validation": null }],
 
   "reviewOpener": "string",
 
@@ -58,7 +54,7 @@ const REANALYZE_SYSTEM = `You refine induced rules for a KB document using desig
 
 Semantic analysis: constraints, uniqueness, cardinality, cross-field relations. Italian string values.
 
-Each rule: trigger, action, fallback, status, confidence, relevanceToTask.
+Each rule: title, field, rule, evidence, fallback (optional), status, confidence, relevanceToTask. Do NOT output trigger or action.
 
 Return ONLY valid JSON:
 
@@ -66,9 +62,7 @@ Return ONLY valid JSON:
 
   "structure": {...},
 
-  "dataTypes": ["..."],
-
-  "rules": [{ "id", "title", "field", "rule", "evidence", "note", "trigger", "action", "fallback", "status", "confidence", "relevanceToTask", "included": true, "validation": null }],
+  "rules": [{ "id", "title", "field", "rule", "evidence", "note", "fallback", "status", "confidence", "relevanceToTask", "included": true, "validation": null }],
 
   "analysisNote": "optional"
 
@@ -86,7 +80,7 @@ STRICT style:
 
 - Max 3 short sentences in the visible reply. Focus on the current rule id in context.
 
-- Put ALL rule updates inside a single \`\`\`json ... \`\`\` block (rules array with one or more objects, must include id).
+- Put ALL rule updates inside a single \`\`\`json ... \`\`\` block (rules array with one or more objects, must include id). Never include trigger or action in rule objects.
 
 - Prose: acknowledge confirm/reject/defer only.
 

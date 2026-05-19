@@ -1,5 +1,5 @@
 /**
- * Single KB chat row: avatar + speech-bubble styling for bot vs designer.
+ * Single KB chat row: WhatsApp-style bubbles (sky = bot, emerald = user).
  */
 
 import React from 'react';
@@ -12,7 +12,7 @@ import {
   KB_MSG_VERIFYING_HYPOTHESIS,
   KB_MSG_AI_ANALYZE_DOC,
 } from '@domain/knowledgeBase/kbChatInteractive';
-import { Loader2, Smile, Sparkles } from 'lucide-react';
+import { Bot, Loader2 } from 'lucide-react';
 import {
   KbChatInteractiveBlock,
   type KbChatInteractiveAction,
@@ -29,64 +29,35 @@ function isKbWorkingMessage(m: KbChatMessage): boolean {
   );
 }
 
-function KbBotAvatar({ working }: { working?: boolean }): React.ReactElement {
-  return (
-    <span
-      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-violet-500/40 bg-gradient-to-br from-violet-600/90 to-indigo-800/90 shadow-md shadow-violet-950/50"
-      aria-hidden
-    >
-      {working ? (
-        <span className="absolute inset-0 rounded-full bg-violet-400/20 animate-ping" />
-      ) : null}
-      <Sparkles className="relative h-4 w-4 text-violet-50" strokeWidth={2} />
-    </span>
-  );
-}
+const BUBBLE_BASE =
+  'relative max-w-[min(100%,28rem)] px-3 py-2 text-sm leading-relaxed shadow-sm ';
 
-function KbUserAvatar(): React.ReactElement {
-  return (
-    <span
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-sky-500/35 bg-gradient-to-br from-sky-700/80 to-slate-700/90 shadow-md shadow-slate-950/40"
-      aria-hidden
-    >
-      <Smile className="h-4 w-4 text-sky-50" strokeWidth={2} />
-    </span>
-  );
-}
+/** Bot / system bubble: washed sky blue, tail bottom-left. */
+const BOT_BUBBLE =
+  BUBBLE_BASE +
+  'rounded-2xl rounded-bl-sm border border-sky-200/90 bg-sky-200/95 text-sky-950 ' +
+  'shadow-sky-900/10 before:pointer-events-none before:absolute before:bottom-0 before:-left-1.5 ' +
+  'before:h-3 before:w-3 before:rotate-45 before:border-b before:border-l before:border-sky-200/90 ' +
+  'before:bg-sky-200/95 before:content-[""]';
 
-type BubbleTone = 'bot' | 'user' | 'error' | 'working';
+const BOT_WORKING =
+  BOT_BUBBLE +
+  ' border-violet-300/50 bg-sky-100/95 before:border-violet-300/50 before:bg-sky-100/95';
 
-function bubbleClass(tone: BubbleTone, opaqueSurface: boolean): string {
-  const base = 'relative max-w-full px-3 py-2 text-sm leading-relaxed shadow-sm ';
-  switch (tone) {
-    case 'user':
-      return (
-        base +
-        'rounded-2xl rounded-br-md border border-violet-500/35 ' +
-        (opaqueSurface ? 'bg-violet-900/90' : 'bg-violet-950/75') +
-        ' text-violet-50'
-      );
-    case 'error':
-      return (
-        base +
-        'rounded-2xl rounded-bl-md border border-rose-600/45 bg-rose-950/70 text-rose-50'
-      );
-    case 'working':
-      return (
-        base +
-        'rounded-2xl rounded-bl-md border border-violet-500/45 bg-violet-950/80 text-violet-100 ' +
-        'shadow-[0_0_14px_rgba(139,92,246,0.15)]'
-      );
-    case 'bot':
-    default:
-      return (
-        base +
-        'rounded-2xl rounded-bl-md border border-slate-600/50 ' +
-        (opaqueSurface ? 'bg-slate-800/95' : 'bg-slate-800/85') +
-        ' text-slate-200'
-      );
-  }
-}
+const BOT_ERROR =
+  BUBBLE_BASE +
+  'rounded-2xl rounded-bl-sm border border-rose-300/80 bg-rose-50 text-rose-950 ' +
+  'before:pointer-events-none before:absolute before:bottom-0 before:-left-1.5 ' +
+  'before:h-3 before:w-3 before:rotate-45 before:border-b before:border-l before:border-rose-300/80 ' +
+  'before:bg-rose-50 before:content-[""]';
+
+/** User bubble: washed green, tail bottom-right, no avatar. */
+const USER_BUBBLE =
+  BUBBLE_BASE +
+  'rounded-2xl rounded-br-sm border border-emerald-200/90 bg-emerald-200/95 text-emerald-950 ' +
+  'shadow-emerald-900/10 after:pointer-events-none after:absolute after:bottom-0 after:-right-1.5 ' +
+  'after:h-3 after:w-3 after:rotate-45 after:border-b after:border-r after:border-emerald-200/90 ' +
+  'after:bg-emerald-200/95 after:content-[""]';
 
 export type KbChatMessageRowProps = {
   message: KbChatMessage;
@@ -98,38 +69,40 @@ export type KbChatMessageRowProps = {
 
 export function KbChatMessageRow({
   message,
-  opaqueSurface,
+  opaqueSurface: _opaqueSurface,
   interactiveActive,
   busy,
   onInteractiveAction,
 }: KbChatMessageRowProps): React.ReactElement {
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end gap-2 pl-6" role="listitem">
-        <div className={bubbleClass('user', opaqueSurface)} aria-label="Messaggio designer">
+      <div className="flex justify-end pl-8 pr-1" role="listitem">
+        <div className={USER_BUBBLE} aria-label="Messaggio designer">
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
-        <KbUserAvatar />
       </div>
     );
   }
 
   const working = isKbWorkingMessage(message);
   const error = message.tone === 'error';
-  const tone: BubbleTone = error ? 'error' : working ? 'working' : 'bot';
+  const bubbleClass = error ? BOT_ERROR : working ? BOT_WORKING : BOT_BUBBLE;
 
   return (
-    <div className="flex justify-start gap-2 pr-6" role="listitem">
-      <KbBotAvatar working={working} />
+    <div className="flex justify-start pl-1 pr-8" role="listitem">
       <div
-        className={bubbleClass(tone, opaqueSurface)}
+        className={bubbleClass}
         role={working ? 'status' : undefined}
         aria-live={working ? 'polite' : undefined}
         aria-label="Messaggio assistente"
       >
+        <div className="mb-1 flex items-center gap-1.5 text-sky-800/80">
+          <Bot className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+          <span className="text-[10px] font-medium uppercase tracking-wide">Assistente</span>
+        </div>
         {working ? (
           <div className="flex items-start gap-2">
-            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-violet-300" aria-hidden />
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-violet-600" aria-hidden />
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
           </div>
         ) : (

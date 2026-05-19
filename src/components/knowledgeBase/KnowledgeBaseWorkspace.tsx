@@ -1,6 +1,6 @@
 /**
 
- * KB workspace: list | reader (center) | analysis dock (pills, rules, chat).
+ * KB workspace: list | tab host (Focus / Documento) | chat column.
 
  */
 
@@ -28,9 +28,8 @@ import {
 
 import { KbDocumentList } from './KbDocumentList';
 
-import { KnowledgeBaseDocumentDetail } from './KnowledgeBaseDocumentDetail';
-
-import { KbAnalysisDock } from './KbAnalysisDock';
+import { KbWorkspaceTabHost } from './KbWorkspaceTabHost';
+import { KbChatDock } from './KbChatDock';
 
 import { useKbDocumentActions } from './useKbDocumentActions';
 
@@ -94,9 +93,9 @@ function buildGridColumns(
 
   listWidthPx: number,
 
-  dockShare: number,
+  chatShare: number,
 
-  readerExpanded: boolean
+  hideChatColumn: boolean
 
 ): string {
 
@@ -108,15 +107,15 @@ function buildGridColumns(
 
   }
 
-  if (readerExpanded) {
+  if (hideChatColumn) {
 
     return `${listCol} ${SPLIT_COL} minmax(0, 1fr)`;
 
   }
 
-  const dockCol = `minmax(160px, ${Math.round(dockShare * 100)}%)`;
+  const chatCol = `minmax(220px, ${Math.round(chatShare * 100)}%)`;
 
-  return `${listCol} ${SPLIT_COL} minmax(0, 1fr) ${SPLIT_COL} ${dockCol}`;
+  return `${listCol} ${SPLIT_COL} minmax(0, 1fr) ${SPLIT_COL} ${chatCol}`;
 
 }
 
@@ -126,7 +125,7 @@ type KbResizeState =
 
   | { edge: 'list'; startX: number; startListWidth: number; width: number }
 
-  | { edge: 'dock'; startX: number; startDockShare: number; width: number };
+  | { edge: 'chat'; startX: number; startChatShare: number; width: number };
 
 
 
@@ -221,11 +220,10 @@ export function KnowledgeBaseWorkspace({
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   const [readerExpanded, setReaderExpanded] = React.useState(false);
-  const [dockExpanded, setDockExpanded] = React.useState(false);
-
+  const [focusTabExpanded, setFocusTabExpanded] = React.useState(false);
   const [listWidthPx, setListWidthPx] = React.useState(DEFAULT_LIST_WIDTH_PX);
 
-  const [dockShare, setDockShare] = React.useState(0.34);
+  const [chatShare, setChatShare] = React.useState(0.32);
 
   const resizeRef = React.useRef<KbResizeState | null>(null);
 
@@ -246,8 +244,7 @@ export function KnowledgeBaseWorkspace({
       setSelectedId(null);
 
       setReaderExpanded(false);
-      setDockExpanded(false);
-
+      setFocusTabExpanded(false);
       return;
 
     }
@@ -261,22 +258,20 @@ export function KnowledgeBaseWorkspace({
   }, [documents, selectedId]);
 
   React.useEffect(() => {
-    setDockExpanded(false);
+    setFocusTabExpanded(false);
   }, [selectedId]);
 
   const onToggleReaderExpanded = React.useCallback(() => {
     setReaderExpanded((prev) => {
-      const next = !prev;
-      if (next) setDockExpanded(false);
-      return next;
+      if (!prev) setFocusTabExpanded(false);
+      return !prev;
     });
   }, []);
 
-  const onToggleDockExpanded = React.useCallback(() => {
-    setDockExpanded((prev) => {
-      const next = !prev;
-      if (next) setReaderExpanded(false);
-      return next;
+  const onToggleFocusTabExpanded = React.useCallback(() => {
+    setFocusTabExpanded((prev) => {
+      if (!prev) setReaderExpanded(false);
+      return !prev;
     });
   }, []);
 
@@ -348,17 +343,16 @@ export function KnowledgeBaseWorkspace({
 
 
 
-  const gridColumns = buildGridColumns(
+  const isEmptyWorkspace = documents.length === 0;
 
-    Boolean(selectedDoc),
-
-    listWidthPx,
-
-    dockShare,
-
-    readerExpanded
-
-  );
+  const gridColumns = isEmptyWorkspace
+    ? 'minmax(0, 1fr)'
+    : buildGridColumns(
+        Boolean(selectedDoc),
+        listWidthPx,
+        chatShare,
+        readerExpanded || focusTabExpanded
+      );
 
 
 
@@ -394,7 +388,7 @@ export function KnowledgeBaseWorkspace({
 
 
 
-  const onDockResizePointerDown = React.useCallback(
+  const onChatResizePointerDown = React.useCallback(
 
     (e: React.PointerEvent) => {
 
@@ -404,11 +398,11 @@ export function KnowledgeBaseWorkspace({
 
       resizeRef.current = {
 
-        edge: 'dock',
+        edge: 'chat',
 
         startX: e.clientX,
 
-        startDockShare: dockShare,
+        startChatShare: chatShare,
 
         width: w,
 
@@ -418,7 +412,7 @@ export function KnowledgeBaseWorkspace({
 
     },
 
-    [dockShare]
+    [chatShare]
 
   );
 
@@ -448,7 +442,7 @@ export function KnowledgeBaseWorkspace({
 
     const delta = st.startX - e.clientX;
 
-    setDockShare(Math.min(0.5, Math.max(0.26, st.startDockShare + delta / st.width)));
+    setChatShare(Math.min(0.48, Math.max(0.22, st.startChatShare - delta / st.width)));
 
   }, []);
 
@@ -520,140 +514,84 @@ export function KnowledgeBaseWorkspace({
 
       >
 
-        <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-
+        {isEmptyWorkspace ? (
           <KnowledgeBaseFileDropZone
-
             ref={dropRef}
-
             accept={KB_DOCUMENT_ACCEPT}
-
             disabled={!canEdit}
-
             onFiles={(files) => onAddFiles(files)}
-
-            className="min-h-0 flex-1"
-
+            className="min-h-0 min-w-0 flex-1"
           >
-
             <KbDocumentList
-
               documents={documents}
-
               selectedId={selectedId}
-
               disabled={disabled}
-
               onSelect={setSelectedId}
-
               onReorder={handleReorder}
-
               onRemove={onRemoveDocument}
-
+              emptyFormatsHint={emptyHint}
             />
-
           </KnowledgeBaseFileDropZone>
-
-        </aside>
-
-
-
-        <KbColumnSplitter
-
-          ariaLabel="Ridimensiona lista documenti"
-
-          onPointerDown={onListResizePointerDown}
-
-          onPointerMove={onResizePointerMove}
-
-          onPointerEnd={finishResize}
-
-        />
-
-
-
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-slate-950/40">
-
-          {selectedDoc ? (
-
-            <KnowledgeBaseDocumentDetail
-
-              doc={selectedDoc}
-
-              projectId={projectId}
-
-              disabled={disabled}
-              readerExpanded={readerExpanded}
-
-              onToggleReaderExpanded={onToggleReaderExpanded}
-
-              imageDocIds={imageDocIds}
-
-              onSelectDocumentId={setSelectedId}
-
-              onUpdateDoc={(patch) => onUpdateDocument(selectedDoc.id, patch)}
-
-            />
-
-          ) : (
-
-            <p className="flex flex-1 items-center justify-center px-4 text-center text-slate-500">
-
-              {emptyHint}
-
-            </p>
-
-          )}
-
-        </main>
-
-
-
-        {selectedDoc && !readerExpanded ? (
-
+        ) : (
           <>
-
-            {!dockExpanded ? (
-              <KbColumnSplitter
-                ariaLabel="Ridimensiona pannello analisi"
-                onPointerDown={onDockResizePointerDown}
-                onPointerMove={onResizePointerMove}
-                onPointerEnd={finishResize}
-              />
-            ) : null}
-
-            <aside
-              className={
-                'flex min-h-0 min-w-0 flex-col overflow-hidden ' +
-                (dockExpanded
-                  ? 'absolute z-30 border-l border-violet-800/50 bg-slate-950 shadow-2xl shadow-black/40'
-                  : 'bg-slate-950/80')
-              }
-              style={
-                dockExpanded
-                  ? {
-                      left: listWidthPx + 6,
-                      top: 0,
-                      right: 0,
-                      bottom: 0,
-                    }
-                  : undefined
-              }
-            >
-              <KbAnalysisDock
-                doc={selectedDoc}
-                disabled={disabled}
-                actions={dockActions}
-                dockExpanded={dockExpanded}
-                onToggleDockExpanded={onToggleDockExpanded}
-                readerError={selectedContent.error}
-                onUpdateDoc={(patch) => onUpdateDocument(selectedDoc.id, patch)}
-              />
+            <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+              <KnowledgeBaseFileDropZone
+                ref={dropRef}
+                accept={KB_DOCUMENT_ACCEPT}
+                disabled={!canEdit}
+                onFiles={(files) => onAddFiles(files)}
+                className="min-h-0 flex-1"
+              >
+                <KbDocumentList
+                  documents={documents}
+                  selectedId={selectedId}
+                  disabled={disabled}
+                  onSelect={setSelectedId}
+                  onReorder={handleReorder}
+                  onRemove={onRemoveDocument}
+                />
+              </KnowledgeBaseFileDropZone>
             </aside>
 
-          </>
+            <KbColumnSplitter
+              ariaLabel="Ridimensiona lista documenti"
+              onPointerDown={onListResizePointerDown}
+              onPointerMove={onResizePointerMove}
+              onPointerEnd={finishResize}
+            />
 
-        ) : null}
+            {selectedDoc ? (
+              <>
+                <KbWorkspaceTabHost
+                  doc={selectedDoc}
+                  projectId={projectId}
+                  disabled={disabled}
+                  actions={dockActions}
+                  imageDocIds={imageDocIds}
+                  readerError={selectedContent.error}
+                  readerExpanded={readerExpanded}
+                  onToggleReaderExpanded={onToggleReaderExpanded}
+                  focusTabExpanded={focusTabExpanded}
+                  onToggleFocusTabExpanded={onToggleFocusTabExpanded}
+                  onSelectDocumentId={setSelectedId}
+                  onUpdateDoc={(patch) => onUpdateDocument(selectedDoc.id, patch)}
+                />
+
+                {!readerExpanded && !focusTabExpanded ? (
+                  <>
+                    <KbColumnSplitter
+                      ariaLabel="Ridimensiona colonna chat"
+                      onPointerDown={onChatResizePointerDown}
+                      onPointerMove={onResizePointerMove}
+                      onPointerEnd={finishResize}
+                    />
+                    <KbChatDock doc={selectedDoc} disabled={disabled} actions={dockActions} />
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </>
+        )}
 
       </div>
 

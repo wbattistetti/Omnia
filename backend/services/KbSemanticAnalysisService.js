@@ -101,7 +101,7 @@ function normalizeRules(rules) {
         validation,
         status,
         confidence,
-        trigger: String(r.trigger || '').trim(),
+        trigger: '',
         action: String(r.action || r.azione || '').trim(),
         fallback: String(r.fallback || '').trim(),
         relevanceToTask: rel === 'high' || rel === 'low' ? rel : undefined,

@@ -8,8 +8,6 @@ const FIELDS: (keyof KbInducedRule)[] = [
   'title',
   'field',
   'rule',
-  'trigger',
-  'action',
   'fallback',
   'note',
 ];

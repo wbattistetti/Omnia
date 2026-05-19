@@ -16,6 +16,8 @@ export type KbDocumentListProps = {
   onSelect: (docId: string) => void;
   onReorder: (next: StagedKbDocument[]) => void;
   onRemove?: (docId: string) => void;
+  /** Elenco formati ammessi (empty state a workspace vuoto). */
+  emptyFormatsHint?: string;
 };
 
 type DropIndicator = {
@@ -30,6 +32,7 @@ export function KbDocumentList({
   onSelect,
   onReorder,
   onRemove,
+  emptyFormatsHint,
 }: KbDocumentListProps): React.ReactElement {
   const dragRef = React.useRef<{ fromIdx: number | null }>({ fromIdx: null });
   const [dropIndicator, setDropIndicator] = React.useState<DropIndicator | null>(null);
@@ -42,10 +45,15 @@ export function KbDocumentList({
   );
 
   if (documents.length === 0) {
+    const formats = emptyFormatsHint?.trim();
     return (
-      <p className="flex flex-1 items-center justify-center px-3 py-8 text-center text-sm text-slate-500">
-        Nessun documento. Trascina file qui.
-      </p>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+        <p className="text-sm font-medium text-slate-300">Nessun documento.</p>
+        <p className="text-sm text-slate-400">Trascina file qui.</p>
+        {formats ? (
+          <p className="max-w-md text-xs leading-relaxed text-slate-500">{formats}</p>
+        ) : null}
+      </div>
     );
   }
 

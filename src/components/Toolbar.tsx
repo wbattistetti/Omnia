@@ -201,7 +201,7 @@ export function Toolbar({
        * senza coprirla. Vedi `useAppToolbarBottom`.
        */
       data-omnia-app-toolbar
-      className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center gap-3 min-w-0"
+      className="relative z-[70] bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center gap-3 min-w-0"
     >
       {/* Sinistra: Home + label progetto + Chiudi + Salva (icona dischetto) */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -277,7 +277,7 @@ export function Toolbar({
             )}
           </button>
           {showSaveMenu && currentProject && (
-            <div className="absolute left-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 min-w-[260px] py-1">
+            <div className="absolute left-0 top-full z-[100] mt-1 min-w-[260px] rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-lg">
               <div className="px-4 py-2 border-b border-slate-600/80 space-y-0.5">
                 <div className="text-xs text-slate-400">
                   Versione corrente: <span className="text-slate-200 font-medium">{currentProject?.version?.trim() && isValidVersion(currentProject.version) ? currentProject.version : '1.0'}</span>

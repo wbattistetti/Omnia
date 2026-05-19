@@ -116,8 +116,6 @@ export function formatRuleReviewPrompt(rule: KbInducedRule): string {
   const title = rule.title || rule.field || 'Regola';
   const parts = [
     `Ho trovato questa regola: **${title}**.`,
-    rule.trigger ? `Trigger: ${rule.trigger}` : null,
-    rule.action ? `Azione: ${rule.action}` : null,
     rule.fallback ? `Fallback: ${rule.fallback}` : null,
     rule.rule && rule.rule !== '—' ? rule.rule : null,
   ].filter(Boolean);

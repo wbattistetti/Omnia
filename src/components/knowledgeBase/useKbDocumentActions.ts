@@ -130,11 +130,12 @@ export function useKbDocumentActions({
   const awaitingHypothesisInput = Boolean(
     doc && doc.analysisPhase === 'awaiting_hypothesis_input' && !doc.consentGiven
   );
-  const hasClassification = Boolean(doc && doc.dataTypes.length > 0);
+  const hasClassification = Boolean(
+    doc && (doc.rules.some((r) => !r.deleted) || doc.semanticStatus === 'ready')
+  );
   const hasAnalyzed = Boolean(
     doc &&
-      (doc.dataTypes.length > 0 ||
-        doc.rules.some((r) => !r.deleted) ||
+      (doc.rules.some((r) => !r.deleted) ||
         doc.analysisPhase === 'phase_b' ||
         doc.analysisPhase === 'phase_c' ||
         doc.analysisPhase === 'complete' ||
@@ -259,7 +260,7 @@ export function useKbDocumentActions({
           const withoutPending = prev.chatMessages.filter((m) => m.id !== pendingId);
           return {
             structure: result.structure ?? {},
-            dataTypes: result.dataTypes,
+            dataTypes: [],
             rules,
             analysisNote: result.analysisNote,
             semanticStatus: 'ready',
@@ -382,7 +383,10 @@ export function useKbDocumentActions({
     (ruleId: string, patch: Partial<KbInducedRule>) => {
       if (!doc) return;
       const before = doc.rules;
-      const rules = before.map((r) => (r.id === ruleId ? { ...r, ...patch } : r));
+      const { trigger: _t, ...safePatch } = patch;
+      const rules = before.map((r) =>
+        r.id === ruleId ? { ...r, ...safePatch, trigger: '' } : r
+      );
       patchDoc({ rules });
       if (kbRulesWereEdited(before, rules)) {
         notifyRulesEdited();
@@ -560,7 +564,7 @@ export function useKbDocumentActions({
           chatMessages: [...withoutPending, assistantMsg],
           rules: merged,
           structure: result.structure ?? prev.structure,
-          dataTypes: result.dataTypes?.length ? result.dataTypes : prev.dataTypes,
+          dataTypes: [],
           analysisNote: result.analysisNote ?? prev.analysisNote,
           semanticStatus: 'ready',
           semanticError: undefined,
@@ -629,7 +633,7 @@ export function useKbDocumentActions({
         await runAnalyze();
         return;
       }
-      if (!doc.chatStarted || doc.dataTypes.length === 0) {
+      if (!doc.chatStarted || !hasAnalyzed) {
         if (!awaitingHypothesisChoice && doc.analysisPhase !== 'awaiting_hypothesis_choice') {
           setActionError('Attendi la scelta iniziale in chat (Sì / No) per avviare l\'analisi.');
         }
@@ -740,6 +744,7 @@ export function useKbDocumentActions({
       beginAnalyzeFromChoice,
       advanceAfterRuleChange,
       runAnalyze,
+      hasAnalyzed,
     ]
   );
 

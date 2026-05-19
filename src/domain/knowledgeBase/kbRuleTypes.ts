@@ -130,7 +130,7 @@ export function normalizeKbRules(raw: unknown): KbInducedRule[] {
         deleted: o.deleted === true,
         status,
         confidence,
-        trigger: String(o.trigger ?? '').trim(),
+        trigger: '',
         action: String(o.action ?? o.azione ?? '').trim(),
         fallback: String(o.fallback ?? '').trim(),
         relevanceToTask: rel === 'high' || rel === 'low' ? rel : undefined,

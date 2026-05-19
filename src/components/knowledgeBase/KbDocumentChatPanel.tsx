@@ -127,8 +127,8 @@ export function KbDocumentChatPanel({
       </div>
       <div
         className={
-          'min-h-[120px] flex-1 overflow-y-auto p-2 space-y-3 ' +
-          (opaqueSurface ? 'bg-slate-950' : '')
+          'min-h-0 flex-1 overflow-y-auto p-2 space-y-3 ' +
+          (opaqueSurface ? 'bg-slate-950' : 'bg-slate-950/50')
         }
         role="list"
         aria-label="Conversazione KB"

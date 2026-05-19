@@ -1,6 +1,57 @@
 {
   "records": [
     {
+      "id": "57207b7e-6096-449a-aed0-c2dd3200f513",
+      "ts": "2026-05-19T01:39:21.762Z",
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "purpose": "KB_DOCUMENT_SEMANTIC",
+      "inputTokens": 3488,
+      "outputTokens": 4161,
+      "totalTokens": 7649,
+      "costUsd": 0.04597,
+      "costEur": 0.0395337403,
+      "durationMs": 31521,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_2468b70ef7c21dd7ac10aa63c75e8a61-tf04u0fm7",
+      "taskLabel": "Identificazione prestazione"
+    },
+    {
+      "id": "02dbfbd7-4b9d-42a4-a77d-6210e17cdca2",
+      "ts": "2026-05-19T01:09:51.571Z",
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "purpose": "KB_DOCUMENT_SEMANTIC",
+      "inputTokens": 3527,
+      "outputTokens": 4225,
+      "totalTokens": 7752,
+      "costUsd": 0.04665875,
+      "costEur": 0.0401260584125,
+      "durationMs": 25619,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_2468b70ef7c21dd7ac10aa63c75e8a61-tf04u0fm7",
+      "taskLabel": "Identificazione prestazione"
+    },
+    {
+      "id": "9cd16557-b761-4264-aaea-8f9e87fc4914",
+      "ts": "2026-05-19T00:32:53.937Z",
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "purpose": "KB_DOCUMENT_SEMANTIC",
+      "inputTokens": 3497,
+      "outputTokens": 5689,
+      "totalTokens": 9186,
+      "costUsd": 0.06126125,
+      "costEur": 0.05268406238750001,
+      "durationMs": 39673,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_2468b70ef7c21dd7ac10aa63c75e8a61-tf04u0fm7",
+      "taskLabel": "Identificazione prestazione"
+    },
+    {
       "id": "8a6867d6-4236-4464-95b1-ed9ada83a2aa",
       "ts": "2026-05-19T00:11:09.094Z",
       "providerId": "openai",
@@ -8448,60 +8499,9 @@
       "error": null,
       "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778681911289-nq5mw1",
       "taskLabel": "patrick"
-    },
-    {
-      "id": "222c261b-81cf-4d37-9fca-eaab3601bbfe",
-      "ts": "2026-05-14T02:11:34.925Z",
-      "providerId": "openai",
-      "modelId": "gpt-5.1",
-      "purpose": "USE_CASE_COMPLETE_CORRECTION_PREVIEW",
-      "inputTokens": 980,
-      "outputTokens": 485,
-      "totalTokens": 1465,
-      "costUsd": 0.006075,
-      "costEur": 0.00517547475,
-      "durationMs": 3690,
-      "pricingFound": true,
-      "error": null,
-      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778681911289-nq5mw1",
-      "taskLabel": "patrick"
-    },
-    {
-      "id": "20821e16-edb0-4a5c-8741-8c9229bee2a8",
-      "ts": "2026-05-14T02:11:34.894Z",
-      "providerId": "openai",
-      "modelId": "gpt-5.1",
-      "purpose": "USE_CASE_COMPLETE_CORRECTION_PREVIEW",
-      "inputTokens": 980,
-      "outputTokens": 452,
-      "totalTokens": 1432,
-      "costUsd": 0.005745,
-      "costEur": 0.0048943378499999995,
-      "durationMs": 4746,
-      "pricingFound": true,
-      "error": null,
-      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778681911289-nq5mw1",
-      "taskLabel": "patrick"
-    },
-    {
-      "id": "8e259d5f-56c3-40a4-8a29-6a6f168132ce",
-      "ts": "2026-05-14T02:11:34.873Z",
-      "providerId": "openai",
-      "modelId": "gpt-5.1",
-      "purpose": "USE_CASE_COMPLETE_CORRECTION_PREVIEW",
-      "inputTokens": 980,
-      "outputTokens": 503,
-      "totalTokens": 1483,
-      "costUsd": 0.006255,
-      "costEur": 0.00532882215,
-      "durationMs": 6136,
-      "pricingFound": true,
-      "error": null,
-      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778681911289-nq5mw1",
-      "taskLabel": "patrick"
     }
   ],
   "meta": {
-    "updatedAt": "2026-05-19T00:11:09.094Z"
+    "updatedAt": "2026-05-19T01:39:21.762Z"
   }
 }

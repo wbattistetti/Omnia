@@ -12,8 +12,16 @@ import {
   type KbRuleReviewVisualState,
 } from '@domain/knowledgeBase/kbRuleHierarchy';
 import { isKbRuleStatusClosed } from '@domain/knowledgeBase/kbRuleStatus';
-import { ChevronDown, ChevronRight, CheckCircle2, Circle, Loader2 } from 'lucide-react';
-import { KbPanelExpandButton } from './KbPanelExpandButton';
+import {
+  ChevronDown,
+  ChevronRight,
+  CheckCircle2,
+  Circle,
+  CornerDownRight,
+  FileText,
+  Layers,
+  Loader2,
+} from 'lucide-react';
 import { KbRuleStatusControl } from './KbRuleStatusControl';
 
 export type KbRuleReviewCardsProps = {
@@ -26,8 +34,49 @@ export type KbRuleReviewCardsProps = {
   onConfirmAllHigh?: () => void;
   openRuleCount?: number;
   opaqueSurface?: boolean;
-  onRuleMaximizedChange?: (ruleId: string | null) => void;
 };
+
+/** Macro / macro-body / micro backgrounds — same family, increasing emphasis inward. */
+function ruleReviewSurfaces(opaque: boolean) {
+  if (opaque) {
+    return {
+      macro: 'bg-slate-900',
+      macroBody: 'bg-slate-800/90',
+      micro: 'bg-slate-800/65',
+      atomic: 'bg-slate-900',
+    };
+  }
+  return {
+    macro: 'bg-slate-900/55',
+    macroBody: 'bg-slate-800/50',
+    micro: 'bg-slate-800/35',
+    atomic: 'bg-slate-900/50',
+  };
+}
+
+function RuleKindIcon({ rule }: { rule: KbInducedRule }): React.ReactElement {
+  const cls = 'h-3.5 w-3.5 shrink-0';
+  if (isKbMacroRule(rule)) {
+    return <Layers className={cls + ' text-violet-300/90'} aria-hidden title="Macro-regola" />;
+  }
+  if (rule.ruleKind === 'micro') {
+    return (
+      <CornerDownRight className={cls + ' text-slate-400'} aria-hidden title="Esempio" />
+    );
+  }
+  return <FileText className={cls + ' text-slate-500'} aria-hidden title="Regola" />;
+}
+
+function confidenceTitle(confidence: KbInducedRule['confidence']): string {
+  switch (confidence) {
+    case 'high':
+      return 'Confidenza IA: alta — estrazione ritenuta affidabile';
+    case 'low':
+      return 'Confidenza IA: bassa — verifica con attenzione';
+    default:
+      return 'Confidenza IA: media — verifica prima di chiudere la regola';
+  }
+}
 
 function ReviewStateIcon({ state }: { state: KbRuleReviewVisualState }): React.ReactElement {
   if (state === 'in_review') {
@@ -52,11 +101,11 @@ function RuleAccordionHeader({
   onSetRuleStatus,
   onPatchRule,
 }: RuleHeaderProps): React.ReactElement {
-  const macro = isKbMacroRule(rule);
   return (
     <div className="mb-1 flex flex-wrap items-center gap-1.5">
       <label
         className="inline-flex items-center gap-1 text-[10px] text-slate-400"
+        title="Se deselezionata, la regola non entra in promozione use case"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -74,14 +123,17 @@ function RuleAccordionHeader({
         disabled={disabled}
         onCycle={(next) => onSetRuleStatus(rule.id, next)}
       />
-      <span className="rounded bg-slate-800 px-1 py-0.5 text-[10px] text-slate-400">{rule.confidence}</span>
-      {macro ? (
-        <span className="rounded bg-violet-950/60 px-1 py-0.5 text-[10px] text-violet-200">macro</span>
-      ) : rule.ruleKind === 'micro' ? (
-        <span className="rounded bg-slate-800 px-1 py-0.5 text-[10px] text-slate-400">esempio</span>
-      ) : null}
+      <span
+        className="rounded bg-slate-800 px-1 py-0.5 text-[10px] text-slate-400"
+        title={confidenceTitle(rule.confidence)}
+      >
+        {rule.confidence}
+      </span>
       {confidenceBlocksPromotion(rule.confidence) && rule.status === 'hypothesized' ? (
-        <span className="text-[10px] text-amber-400" title="Richiede validazione esplicita">
+        <span
+          className="text-[10px] text-amber-400"
+          title="Confidenza non alta: valida esplicitamente prima di promuovere"
+        >
           da validare
         </span>
       ) : null}
@@ -100,34 +152,78 @@ function RuleBody({
 }): React.ReactElement {
   const fieldClass =
     'mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus:border-violet-500 focus:outline-none disabled:opacity-50';
+  const ruleLabel = isKbMacroRule(rule) ? 'Regola (generalizzazione)' : 'Regola';
   return (
     <>
-      <label className="mt-1 block text-[10px] text-slate-500">Regola</label>
+      <label className="mt-1 block text-[10px] text-slate-500">{ruleLabel}</label>
       <textarea
-        rows={2}
+        rows={isKbMacroRule(rule) ? 3 : 2}
         disabled={disabled}
         value={rule.rule}
         onChange={(e) => onPatchRule(rule.id, { rule: e.target.value })}
         className={fieldClass}
+        placeholder={
+          isKbMacroRule(rule)
+            ? 'Pattern generale che riassume gli esempi sotto (non copiare un singolo esempio)'
+            : undefined
+        }
       />
-      {rule.evidence ? <p className="mt-1 text-xs text-slate-500">«{rule.evidence}»</p> : null}
-      <label className="mt-2 block text-[10px] text-slate-500">Trigger</label>
-      <input
-        type="text"
-        disabled={disabled}
-        value={rule.trigger}
-        onChange={(e) => onPatchRule(rule.id, { trigger: e.target.value })}
-        className={fieldClass}
-      />
-      <label className="mt-1 block text-[10px] text-slate-500">Azione</label>
-      <input
-        type="text"
-        disabled={disabled}
-        value={rule.action}
-        onChange={(e) => onPatchRule(rule.id, { action: e.target.value })}
-        className={fieldClass}
-      />
+      <RuleEvidenceSection rule={rule} disabled={disabled} onPatchRule={onPatchRule} />
     </>
+  );
+}
+
+function RuleEvidenceSection({
+  rule,
+  disabled,
+  onPatchRule,
+}: {
+  rule: KbInducedRule;
+  disabled: boolean;
+  onPatchRule: (id: string, patch: Partial<KbInducedRule>) => void;
+}): React.ReactElement {
+  const [open, setOpen] = React.useState(Boolean(rule.evidence?.trim()));
+  const fieldClass =
+    'mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200 focus:border-violet-500 focus:outline-none disabled:opacity-50';
+  const hasText = Boolean(rule.evidence?.trim());
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1 text-left text-[10px] font-medium text-slate-400 hover:text-slate-200"
+        aria-expanded={open}
+      >
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0" aria-hidden />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" aria-hidden />
+        )}
+        Evidenza documento
+        {hasText ? (
+          <span className="font-normal text-slate-500">(riferimento IA)</span>
+        ) : (
+          <span className="font-normal text-slate-600">— opzionale</span>
+        )}
+      </button>
+      {open ? (
+        <div className="mt-1 rounded border border-slate-800/80 bg-slate-950/60 px-2 py-1.5">
+          <p className="mb-1 text-[10px] leading-snug text-slate-500">
+            Testo proposto dall&apos;analisi; verifica nel tab Documento. Non è ancora un link al
+            punto esatto nel file.
+          </p>
+          <textarea
+            rows={3}
+            disabled={disabled}
+            value={rule.evidence}
+            onChange={(e) => onPatchRule(rule.id, { evidence: e.target.value })}
+            className={fieldClass + ' mt-0'}
+            placeholder="Estratto o elenco dal documento KB…"
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -162,19 +258,26 @@ type MicroRuleRowProps = {
   currentRuleId: string | null;
   disabled: boolean;
   open: boolean;
-  microBg: string;
+  microSurface: string;
   onToggle: () => void;
   onFocusRule: (id: string) => void;
   onSetRuleStatus: (id: string, status: KbRuleStatus) => void;
   onPatchRule: (id: string, patch: Partial<KbInducedRule>) => void;
 };
 
+function ruleHeaderPreview(rule: KbInducedRule): string | null {
+  const title = (rule.title || rule.field || '').trim();
+  const body = rule.rule.trim();
+  if (!body || body === title) return null;
+  return body;
+}
+
 function MicroRuleRow({
   rule,
   currentRuleId,
   disabled,
   open,
-  microBg,
+  microSurface,
   onToggle,
   onFocusRule,
   onSetRuleStatus,
@@ -182,13 +285,15 @@ function MicroRuleRow({
 }: MicroRuleRowProps): React.ReactElement {
   const visual = getKbRuleReviewVisualState(rule, currentRuleId);
   const focused = rule.id === currentRuleId;
+  const preview = open ? null : ruleHeaderPreview(rule);
+
   return (
     <li
       className={
-        'rounded border text-sm ' +
+        'ml-2 text-sm rounded-md border ' +
         (focused
-          ? 'border-violet-500/70 bg-violet-950/25 ring-1 ring-violet-500/30'
-          : 'border-slate-800/80 ' + microBg)
+          ? 'border-violet-500/70 bg-violet-950/30 ring-1 ring-violet-500/30'
+          : 'border-slate-700/60 ' + microSurface)
       }
     >
       <div className="flex items-start gap-0.5">
@@ -198,14 +303,20 @@ function MicroRuleRow({
           className="flex min-w-0 flex-1 items-start gap-1.5 px-2 py-1.5 text-left"
           aria-expanded={open}
         >
+          <RuleKindIcon rule={rule} />
           <ReviewStateIcon state={visual} />
           {open ? (
             <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-slate-500" aria-hidden />
           ) : (
             <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-slate-500" aria-hidden />
           )}
-          <span className="min-w-0 flex-1 truncate font-medium text-slate-100">
-            {rule.title || rule.field}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium text-slate-100">
+              {rule.title || rule.field}
+            </span>
+            {preview ? (
+              <span className="mt-0.5 block line-clamp-1 text-xs text-slate-500">{preview}</span>
+            ) : null}
           </span>
         </button>
         <div className="shrink-0 py-1 pr-1" onClick={(e) => e.stopPropagation()}>
@@ -243,14 +354,11 @@ export function KbRuleReviewCards({
   onConfirmAllHigh,
   openRuleCount = 0,
   opaqueSurface = false,
-  onRuleMaximizedChange,
 }: KbRuleReviewCardsProps): React.ReactElement {
-  const cardBg = opaqueSurface ? 'bg-slate-900' : 'bg-slate-900/50';
-  const microBg = opaqueSurface ? 'bg-slate-950' : 'bg-slate-950/40';
+  const surfaces = ruleReviewSurfaces(opaqueSurface);
   const forest = React.useMemo(() => buildKbRuleForest(rules), [rules]);
   const [openMacroIds, setOpenMacroIds] = React.useState<Set<string>>(() => new Set());
   const [openMicroIds, setOpenMicroIds] = React.useState<Set<string>>(() => new Set());
-  const [maximizedRuleId, setMaximizedRuleId] = React.useState<string | null>(null);
 
   const visible = rules.filter((r) => !r.deleted);
   const highOpen = visible.filter(
@@ -273,41 +381,6 @@ export function KbRuleReviewCards({
       setOpenMicroIds((prev) => new Set(prev).add(currentRuleId));
     }
   }, [currentRuleId, rules]);
-
-  React.useEffect(() => {
-    setMaximizedRuleId(null);
-    onRuleMaximizedChange?.(null);
-  }, [rules, onRuleMaximizedChange]);
-
-  React.useEffect(() => {
-    if (maximizedRuleId && !forest.some((n) => n.rule.id === maximizedRuleId)) {
-      setMaximizedRuleId(null);
-      onRuleMaximizedChange?.(null);
-    }
-  }, [forest, maximizedRuleId, onRuleMaximizedChange]);
-
-  const toggleMaximize = React.useCallback(
-    (ruleId: string, children: readonly KbInducedRule[] = []) => {
-      setMaximizedRuleId((prev) => {
-        const next = prev === ruleId ? null : ruleId;
-        onRuleMaximizedChange?.(next);
-        if (next) {
-          setOpenMacroIds((s) => new Set(s).add(ruleId));
-          setOpenMicroIds((s) => {
-            const n = new Set(s);
-            if (children.length > 0) {
-              for (const c of children) n.add(c.id);
-            } else {
-              n.add(ruleId);
-            }
-            return n;
-          });
-        }
-        return next;
-      });
-    },
-    [onRuleMaximizedChange]
-  );
 
   if (visible.length === 0) {
     return (
@@ -335,16 +408,10 @@ export function KbRuleReviewCards({
     });
   };
 
-  const nodesToShow = maximizedRuleId
-    ? forest.filter((n) => n.rule.id === maximizedRuleId)
-    : forest;
-
   return (
     <div
       className={
-        'flex min-h-0 flex-1 flex-col gap-2 ' +
-        (maximizedRuleId ? 'overflow-hidden ' : 'overflow-y-auto ') +
-        (opaqueSurface ? 'bg-slate-950' : '')
+        'flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto ' + (opaqueSurface ? 'bg-slate-950' : '')
       }
     >
       {openRuleCount > 0 ? (
@@ -362,28 +429,23 @@ export function KbRuleReviewCards({
           ) : null}
         </p>
       ) : null}
-      <ul
-        className={
-          'flex min-h-0 flex-1 flex-col gap-1.5 ' + (maximizedRuleId ? 'overflow-hidden' : '')
-        }
-      >
-        {nodesToShow.map((node) => {
+      <ul className="flex min-h-0 flex-1 flex-col gap-1.5">
+        {forest.map((node) => {
           const { rule, children } = node;
           const isMacro = children.length > 0 || isKbMacroRule(rule);
           if (isMacro && children.length > 0) {
-            const isMaximized = maximizedRuleId === rule.id;
-            const macroOpen = isMaximized || openMacroIds.has(rule.id);
+            const macroOpen = openMacroIds.has(rule.id);
             const macroVisual = getKbRuleReviewVisualState(rule, currentRuleId);
             const macroFocused = rule.id === currentRuleId;
+            const macroPreview = macroOpen ? null : ruleHeaderPreview(rule);
             return (
               <li
                 key={rule.id}
                 className={
-                  (isMaximized ? 'flex min-h-0 flex-1 flex-col ' : 'shrink-0 ') +
-                  'rounded-md border ' +
+                  'shrink-0 overflow-hidden rounded-lg border ' +
                   (macroFocused
-                    ? 'border-violet-500/80 bg-violet-950/20'
-                    : 'border-slate-800 ' + cardBg)
+                    ? 'border-violet-500/70 ring-1 ring-violet-500/25 ' + surfaces.macro
+                    : 'border-slate-700/70 ' + surfaces.macro)
                 }
               >
                 <div className="flex shrink-0 items-start gap-1 px-2 py-2">
@@ -393,6 +455,7 @@ export function KbRuleReviewCards({
                     className="flex min-w-0 flex-1 items-start gap-1.5 text-left"
                     aria-expanded={macroOpen}
                   >
+                    <RuleKindIcon rule={rule} />
                     <ReviewStateIcon state={macroVisual} />
                     {macroOpen ? (
                       <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
@@ -400,46 +463,32 @@ export function KbRuleReviewCards({
                       <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <span className="font-medium text-slate-100">{rule.title || rule.field}</span>
-                        <span className="rounded bg-violet-950/60 px-1 py-0.5 text-[10px] text-violet-200">
-                          macro · {children.length} esempi
-                        </span>
+                        <span className="text-[10px] text-slate-500">{children.length} esempi</span>
                       </div>
-                      <p
-                        className={
-                          'mt-0.5 text-xs text-slate-400 ' + (isMaximized ? '' : 'line-clamp-2')
-                        }
-                      >
-                        {rule.rule}
-                      </p>
+                      {macroPreview ? (
+                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">{macroPreview}</p>
+                      ) : null}
                     </div>
                   </button>
-                  <KbPanelExpandButton
-                    expanded={isMaximized}
-                    onToggle={() => toggleMaximize(rule.id, children)}
-                    expandTitle="Espandi regola a tutto il pannello"
-                    collapseTitle="Riduci elenco regole"
-                    expandAriaLabel="Espandi regola"
-                    collapseAriaLabel="Riduci regola"
-                  />
                 </div>
                 {macroOpen ? (
-                  <div
-                    className={
-                      (isMaximized
-                        ? 'flex min-h-0 flex-1 flex-col overflow-y-auto '
-                        : '') + 'space-y-1.5 border-t border-slate-800/80 px-2 pb-2 pt-1'
-                    }
-                  >
-                    <RuleAccordionHeader
-                      rule={rule}
-                      disabled={disabled}
-                      onSetRuleStatus={onSetRuleStatus}
-                      onPatchRule={onPatchRule}
-                    />
-                    <RuleBody rule={rule} disabled={disabled} onPatchRule={onPatchRule} />
-                    <ul className="space-y-1 pl-1">
+                  <div className="space-y-2 px-2 pb-2">
+                    <div
+                      className={
+                        'rounded-md border border-slate-700/50 px-2 py-2 ' + surfaces.macroBody
+                      }
+                    >
+                      <RuleAccordionHeader
+                        rule={rule}
+                        disabled={disabled}
+                        onSetRuleStatus={onSetRuleStatus}
+                        onPatchRule={onPatchRule}
+                      />
+                      <RuleBody rule={rule} disabled={disabled} onPatchRule={onPatchRule} />
+                    </div>
+                    <ul className="space-y-1.5">
                       {children.map((child) => (
                         <MicroRuleRow
                           key={child.id}
@@ -447,7 +496,7 @@ export function KbRuleReviewCards({
                           currentRuleId={currentRuleId}
                           disabled={disabled}
                           open={openMicroIds.has(child.id)}
-                          microBg={microBg}
+                          microSurface={surfaces.micro}
                           onToggle={() => toggleMicro(child.id)}
                           onFocusRule={onFocusRule}
                           onSetRuleStatus={onSetRuleStatus}
@@ -465,14 +514,15 @@ export function KbRuleReviewCards({
           const open = openMicroIds.has(rule.id);
           const visual = getKbRuleReviewVisualState(rule, currentRuleId);
           const focused = rule.id === currentRuleId;
+          const preview = open ? null : ruleHeaderPreview(rule);
           return (
             <li
               key={rule.id}
               className={
-                'shrink-0 rounded-md border ' +
+                'shrink-0 rounded-lg border ' +
                 (focused
-                  ? 'border-violet-500/80 bg-violet-950/30 ring-1 ring-violet-500/40'
-                  : 'border-slate-800 ' + cardBg)
+                  ? 'border-violet-500/70 bg-violet-950/30 ring-1 ring-violet-500/30'
+                  : 'border-slate-700/70 ' + surfaces.atomic)
               }
             >
               <button
@@ -481,14 +531,20 @@ export function KbRuleReviewCards({
                 className="flex w-full items-start gap-1.5 px-2 py-1.5 text-left"
                 aria-expanded={open}
               >
+                <RuleKindIcon rule={rule} />
                 <ReviewStateIcon state={visual} />
                 {open ? (
                   <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                 ) : (
                   <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-slate-500" aria-hidden />
                 )}
-                <span className="min-w-0 flex-1 truncate font-medium text-slate-100">
-                  {rule.title || rule.field}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-slate-100">
+                    {rule.title || rule.field}
+                  </span>
+                  {preview ? (
+                    <span className="mt-0.5 block line-clamp-1 text-xs text-slate-500">{preview}</span>
+                  ) : null}
                 </span>
               </button>
               {open ? (

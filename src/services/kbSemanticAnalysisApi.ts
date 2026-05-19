@@ -236,7 +236,7 @@ export function mergeKbRules(
 ): KbInducedRule[] {
   const byId = new Map(existing.map((r) => [r.id, r]));
   for (const r of incoming) {
-    byId.set(r.id, r);
+    byId.set(r.id, { ...r, trigger: '' });
   }
-  return [...byId.values()];
+  return [...byId.values()].map((r) => ({ ...r, trigger: '' }));
 }

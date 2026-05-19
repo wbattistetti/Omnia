@@ -40,9 +40,10 @@ export function buildDraftsFromConfirmedRules(
         draftId: createKbDraftId(),
         useCaseId,
         intent,
-        trigger: r.trigger || r.field || '—',
+        trigger:
+          r.field && r.field !== '—' ? r.field : (r.title || r.rule.slice(0, 120) || '—'),
         slots: r.field && r.field !== '—' ? [r.field] : [],
-        message: r.action || r.rule,
+        message: r.rule.trim() || r.action || '—',
         fallback: r.fallback || 'Chiedi chiarimento o passa a operatore.',
         linkedRuleIds: [r.id],
         sourceDocumentId,

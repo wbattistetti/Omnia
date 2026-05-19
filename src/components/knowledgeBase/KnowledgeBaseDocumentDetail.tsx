@@ -16,7 +16,7 @@ import { KnowledgeBaseDocumentReader } from './KnowledgeBaseDocumentReader';
 
 import { KbFormatIcon } from '@domain/knowledgeBase/kbFileKindIcons';
 import { kbType } from './kbTypography';
-import { Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 
 
@@ -27,10 +27,6 @@ export type KnowledgeBaseDocumentDetailProps = {
   projectId?: string;
 
   disabled?: boolean;
-  readerExpanded: boolean;
-
-  onToggleReaderExpanded: () => void;
-
   imageDocIds: readonly string[];
 
   onSelectDocumentId: (docId: string) => void;
@@ -48,10 +44,6 @@ export function KnowledgeBaseDocumentDetail({
   projectId,
 
   disabled = false,
-  readerExpanded,
-
-  onToggleReaderExpanded,
-
   imageDocIds,
 
   onSelectDocumentId,
@@ -105,27 +97,6 @@ export function KnowledgeBaseDocumentDetail({
           <h3 className={'min-w-0 flex-1 ' + kbType.title} title={doc.name}>
             {doc.name}
           </h3>
-
-          <button
-
-            type="button"
-
-            onClick={onToggleReaderExpanded}
-
-            title={readerExpanded ? 'Riduci lettore' : 'Espandi lettore (nasconde chat)'}
-
-            aria-label={readerExpanded ? 'Riduci lettore' : 'Espandi lettore'}
-
-            aria-pressed={readerExpanded}
-
-            className="inline-flex shrink-0 items-center justify-center rounded-md border border-slate-600/70 bg-slate-900/60 px-1.5 py-1.5 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
-
-          >
-
-            {readerExpanded ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
-
-          </button>
-
         </div>
 
         {doc.parseStatus === 'parsing' ? (
