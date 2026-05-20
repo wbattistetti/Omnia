@@ -341,7 +341,7 @@ export function EditorUseCasesPanel() {
       bundleGenerateBusyLabel={bundleGenerateBusyLabel}
       useCaseBundleGenerationCount={useCaseBundleGenerationCount}
       useCaseBundleGenerationOrdering={useCaseBundleGenerationOrdering}
-      primaryGenerateOnRightOnly={false}
+      primaryGenerateOnRightOnly={useWizardShell}
       highlightIds={useCaseHighlightIds}
       onClearUseCaseHighlight={onClearUseCaseHighlight}
       assistantPhraseStyleNewIds={assistantPhraseStyleNewIds}
