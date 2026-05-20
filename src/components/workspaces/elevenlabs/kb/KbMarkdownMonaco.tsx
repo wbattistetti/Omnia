@@ -7,7 +7,9 @@ import MonacoEditor from 'react-monaco-editor';
 import type * as Monaco from 'monaco-editor';
 import {
   ensureKbReaderMonacoTheme,
+  KB_MARKDOWN_PLAIN_CHROME,
   KB_READER_MONACO_THEME_ID,
+  kbAgentProseMarkdownOptions,
   kbReaderMonacoOptions,
 } from '@components/knowledgeBase/kbMonacoTheme';
 import { ensureKbMarkdownLanguage } from '@components/knowledgeBase/kbMarkdownLanguage';
@@ -23,29 +25,6 @@ const EDITOR_OPTIONS = {
   tabSize: 2,
 };
 
-const PLAIN_OPTIONS = {
-  minimap: { enabled: false },
-  scrollBeyondLastLine: false,
-  wordWrap: 'on' as const,
-  automaticLayout: true,
-  lineNumbers: 'off' as const,
-  glyphMargin: false,
-  folding: false,
-  lineDecorationsWidth: 0,
-  lineNumbersMinChars: 0,
-  renderLineHighlight: 'none' as const,
-  overviewRulerLanes: 0,
-  hideCursorInOverviewRuler: true,
-  overviewRulerBorder: false,
-  scrollbar: {
-    vertical: 'auto' as const,
-    horizontal: 'hidden' as const,
-    verticalScrollbarSize: 8,
-  },
-  padding: { top: 8, bottom: 8 },
-  tabSize: 2,
-};
-
 export type KbMarkdownMonacoProps = {
   value: string;
   onChange?: (value: string) => void;
@@ -54,9 +33,12 @@ export type KbMarkdownMonacoProps = {
   /** When true, editor height tracks the parent container (use with flex-1 parent). */
   fillHeight?: boolean;
   ariaLabel?: string;
-  /** `plain` = textbox-like (no line numbers / line highlight). */
-  appearance?: 'editor' | 'plain';
+  /** `plain` = no line numbers; `agentProse` = plain + sans body (AI Agent fields). */
+  appearance?: 'editor' | 'plain' | 'agentProse';
   language?: string;
+  editorDidMount?: (editor: Monaco.editor.IStandaloneCodeEditor) => void;
+  /** Host wrapper context menu (e.g. backend path insert). */
+  onHostContextMenu?: (e: React.MouseEvent) => void;
 };
 
 export function KbMarkdownMonaco({
@@ -68,6 +50,8 @@ export function KbMarkdownMonaco({
   ariaLabel,
   appearance = 'editor',
   language = 'markdown',
+  editorDidMount,
+  onHostContextMenu,
 }: KbMarkdownMonacoProps): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = React.useState(heightPx);
@@ -94,8 +78,11 @@ export function KbMarkdownMonaco({
     return () => ro.disconnect();
   }, [fillHeight]);
 
-  const isPlain = appearance === 'plain';
-  const baseOptions = kbReaderMonacoOptions(isPlain ? PLAIN_OPTIONS : EDITOR_OPTIONS);
+  const isAgentProse = appearance === 'agentProse';
+  const isPlain = appearance === 'plain' || isAgentProse;
+  const baseOptions = isAgentProse
+    ? kbAgentProseMarkdownOptions(readOnly)
+    : kbReaderMonacoOptions(isPlain ? KB_MARKDOWN_PLAIN_CHROME : EDITOR_OPTIONS);
 
   return (
     <div
@@ -103,9 +90,12 @@ export function KbMarkdownMonaco({
       className={
         (fillHeight ? 'h-full min-h-0 ' : '') +
         'overflow-hidden rounded-md border bg-slate-950/80 ' +
-        (isPlain ? 'border-slate-700 focus-within:border-violet-500/60' : 'border-slate-700/80')
+        (isPlain
+          ? 'border-slate-700 focus-within:border-violet-500/60'
+          : 'border-slate-700/80')
       }
       aria-label={ariaLabel}
+      onContextMenu={onHostContextMenu}
     >
       <MonacoEditor
         width="100%"
@@ -114,11 +104,12 @@ export function KbMarkdownMonaco({
         theme={KB_READER_MONACO_THEME_ID}
         value={value}
         editorWillMount={handleEditorWillMount}
-        options={{
-          ...baseOptions,
-          readOnly,
-          domReadOnly: readOnly,
-        }}
+        editorDidMount={editorDidMount}
+        options={
+          isAgentProse
+            ? baseOptions
+            : { ...baseOptions, readOnly, domReadOnly: readOnly }
+        }
         onChange={readOnly ? undefined : (v) => onChange?.(v ?? '')}
       />
     </div>

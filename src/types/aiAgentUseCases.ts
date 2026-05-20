@@ -31,7 +31,7 @@ export interface AIAgentLogicalStep {
   description: string;
 }
 
-/** Scenario: narrativa umana + forma sintetica per motori LLM. */
+/** Scenario: testo canonico sintetico (`llm`); `descrittivo` e `payoff` sono mirror per compatibilità. */
 export interface AIAgentUseCaseScenario {
   descrittivo: string;
   llm: string;
@@ -58,12 +58,10 @@ export interface AIAgentUseCase {
   /** Global style id (cortese / ironico / formale) for this use case contract. */
   style_id?: string;
   /**
-   * Scenario strutturato: `descrittivo` per designer, `llm` per catalogo/runtime LLM.
+   * Scenario strutturato: `llm` è il testo canonico; `descrittivo` è mirror (stesso valore).
    */
   scenario?: AIAgentUseCaseScenario;
-  /**
-   * Alias persistito di `scenario.descrittivo` (backward compat e edit UI).
-   */
+  /** Alias persistito di `scenario.llm` (backward compat e edit UI). */
   payoff?: string;
   dialogue: AIAgentUseCaseTurn[];
   notes: {
@@ -75,10 +73,10 @@ export interface AIAgentUseCase {
   designer_edit_confirmed?: boolean;
   /** Design-time wizard: visto/ok con cerchio anche senza modifica. */
   designer_acknowledged?: boolean;
-  /** Validazione manuale pollice su/giù (persistita nel bundle use case). */
-  designer_label_vote?: 'up' | 'down';
-  designer_payoff_vote?: 'up' | 'down';
-  designer_agent_message_vote?: 'up' | 'down';
+  /** Validazione manuale: su / giù / da approfondire (`review`). */
+  designer_label_vote?: 'up' | 'down' | 'review';
+  designer_payoff_vote?: 'up' | 'down' | 'review';
+  designer_agent_message_vote?: 'up' | 'down' | 'review';
   /**
    * Wizard passo 3 «Tokenizzazione»: versione della frase canonica assistente con le parti
    * variabili sostituite da placeholder tra parentesi quadre (es. `[data]`, `[ora1]`, `[nome]`).
@@ -299,14 +297,14 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
           llm = so.llm.trim();
         }
       }
-      if (!descrittivo && typeof o.payoff === 'string' && o.payoff.trim()) descrittivo = o.payoff.trim();
-      else if (!descrittivo && typeof o.description === 'string' && o.description.trim()) {
-        descrittivo = o.description.trim();
+      if (!llm && descrittivo) llm = descrittivo.slice(0, Math.min(2000, descrittivo.length));
+      if (!llm && typeof o.payoff === 'string' && o.payoff.trim()) llm = o.payoff.trim();
+      else if (!llm && typeof o.description === 'string' && o.description.trim()) {
+        llm = o.description.trim();
       }
-      if (!llm && descrittivo) llm = descrittivo.slice(0, Math.min(400, descrittivo.length));
-      const payoff = descrittivo;
-      const scenario =
-        descrittivo || llm ? { descrittivo, llm } : undefined;
+      const text = llm || descrittivo;
+      const payoff = text;
+      const scenario = text ? { descrittivo: text, llm: text } : undefined;
       const notesRaw = o.notes && typeof o.notes === 'object' ? (o.notes as Record<string, unknown>) : {};
       const behavior = typeof notesRaw.behavior === 'string' ? notesRaw.behavior : '';
       const tone = typeof notesRaw.tone === 'string' ? notesRaw.tone : '';
@@ -362,15 +360,21 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
       const designer_edit_confirmed = o.designer_edit_confirmed === true;
       const designer_acknowledged = o.designer_acknowledged === true;
       const designer_label_vote =
-        o.designer_label_vote === 'up' || o.designer_label_vote === 'down'
+        o.designer_label_vote === 'up' ||
+        o.designer_label_vote === 'down' ||
+        o.designer_label_vote === 'review'
           ? o.designer_label_vote
           : undefined;
       const designer_payoff_vote =
-        o.designer_payoff_vote === 'up' || o.designer_payoff_vote === 'down'
+        o.designer_payoff_vote === 'up' ||
+        o.designer_payoff_vote === 'down' ||
+        o.designer_payoff_vote === 'review'
           ? o.designer_payoff_vote
           : undefined;
       const designer_agent_message_vote =
-        o.designer_agent_message_vote === 'up' || o.designer_agent_message_vote === 'down'
+        o.designer_agent_message_vote === 'up' ||
+        o.designer_agent_message_vote === 'down' ||
+        o.designer_agent_message_vote === 'review'
           ? o.designer_agent_message_vote
           : undefined;
       const assistant_example_tokenized =

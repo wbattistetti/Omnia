@@ -21,6 +21,8 @@ export const AI_CALL_PURPOSE = {
   USE_CASE_BUNDLE_INITIAL: 'USE_CASE_BUNDLE_INITIAL',
   USE_CASE_GENERATE_MORE: 'USE_CASE_GENERATE_MORE',
   USE_CASE_DIALOGUE_CREATE: 'USE_CASE_DIALOGUE_CREATE',
+  /** Root composer INVIO: quanti use case dal testo incollato (semantica, non punteggiatura). */
+  USE_CASE_SPLIT_ROOT_DRAFT: 'USE_CASE_SPLIT_ROOT_DRAFT',
   CONVERSATION_POSITIVE: 'CONVERSATION_POSITIVE',
   CONVERSATION_NEGATIVE: 'CONVERSATION_NEGATIVE',
   CONVERSATION_SUGGESTED: 'CONVERSATION_SUGGESTED',
@@ -28,6 +30,10 @@ export const AI_CALL_PURPOSE = {
   USE_CASE_TOKENIZE: 'USE_CASE_TOKENIZE',
   /** Generalizza titolo + scenario (payoff) per riuso cross-dominio. */
   USE_CASE_GENERALIZE_META: 'USE_CASE_GENERALIZE_META',
+  /** Rifinisce forma scenario (stesso significato, testo più chiaro/sintetico). */
+  USE_CASE_POLISH_SCENARIO: 'USE_CASE_POLISH_SCENARIO',
+  /** Rifinisce forma descrizione task (struttura/paragrafi, stesso significato). */
+  AGENT_POLISH_DESIGN_DESCRIPTION: 'AGENT_POLISH_DESIGN_DESCRIPTION',
   USE_CASE_COMPLETE_CORRECTION: 'USE_CASE_COMPLETE_CORRECTION',
   USE_CASE_COMPLETE_CORRECTION_PREVIEW: 'USE_CASE_COMPLETE_CORRECTION_PREVIEW',
   TRAINING_PHRASES_GENERATE: 'TRAINING_PHRASES_GENERATE',
@@ -42,12 +48,17 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL]: 'Generazione iniziale use case bundle',
   [AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE]: 'Generazione altri use case',
   [AI_CALL_PURPOSE.USE_CASE_DIALOGUE_CREATE]: 'Creazione dialogo per nuovo use case',
+  [AI_CALL_PURPOSE.USE_CASE_SPLIT_ROOT_DRAFT]:
+    'Analisi bozza root: quanti use case creare dal testo incollato',
   [AI_CALL_PURPOSE.CONVERSATION_POSITIVE]: 'Conversazione con chiusura positiva',
   [AI_CALL_PURPOSE.CONVERSATION_NEGATIVE]: 'Conversazione con chiusura negativa',
   [AI_CALL_PURPOSE.CONVERSATION_SUGGESTED]: 'Conversazione esplorativa nuovi use case',
   [AI_CALL_PURPOSE.CONVERSATION_PROOFREAD]: 'Correzione ortografica frasi modificate',
   [AI_CALL_PURPOSE.USE_CASE_TOKENIZE]: 'Tokenizzazione use case',
   [AI_CALL_PURPOSE.USE_CASE_GENERALIZE_META]: 'Generalizzazione titolo e scenario use case',
+  [AI_CALL_PURPOSE.USE_CASE_POLISH_SCENARIO]: 'Aggiusta forma testo scenario (senza cambiare significato)',
+  [AI_CALL_PURPOSE.AGENT_POLISH_DESIGN_DESCRIPTION]:
+    'Riformatta descrizione task (senza cambiare significato)',
   [AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION]:
     'Completa correzione: propagazione directional dello stile sui messaggi agente',
   [AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION_PREVIEW]:

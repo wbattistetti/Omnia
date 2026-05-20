@@ -1,12 +1,11 @@
 /**
- * Single primary field: natural-language description (textarea) or runtime prompt (revision editor shell).
+ * Single primary field: task description (Monaco markdown) or runtime prompt (section editor shell).
  */
 
 import React from 'react';
-import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { AIAgentRevisionEditorShell } from './AIAgentRevisionEditorShell';
+import { AgentDescriptionMarkdownEditor } from './AgentDescriptionMarkdownEditor';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
-import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import type { InsertOp } from './effectiveFromRevisionMask';
 import type { RevisionBatchOp } from './textRevisionLinear';
 
@@ -21,14 +20,10 @@ export interface AIAgentUnifiedPromptFieldProps {
   instanceId: string | undefined;
   iaRevisionDiff: { oldIaPrompt: string; newIaPrompt: string } | null;
   onDismissIaRevisionDiff: () => void;
-  /** Agent mode: immutable base + revision patch. */
   promptBaseText: string;
   deletedMask: readonly boolean[];
   inserts: readonly InsertOp[];
   onApplyRevisionOps: (ops: readonly RevisionBatchOp[]) => void;
-  /**
-   * Task description: right-click → insert `🗄️ path` at caret / selection (overrides optional dock context).
-   */
   insertBackendPathInDesign?: (path: string, rangeStart: number, rangeEnd?: number) => void;
 }
 
@@ -48,35 +43,21 @@ export function AIAgentUnifiedPromptField({
   insertBackendPathInDesign: insertBackendPathInDesignProp,
 }: AIAgentUnifiedPromptFieldProps) {
   const dock = useOptionalAIAgentEditorDock();
-  const insertBackendPathInDesign = insertBackendPathInDesignProp ?? dock?.insertBackendPathInDesign;
-  const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
-
-  const onDesignInsert = React.useCallback(
-    (path: string, s: number, e: number) => {
-      insertBackendPathInDesign?.(path, s, e);
-    },
-    [insertBackendPathInDesign]
-  );
-
-  const { onContextMenu, backendPathMenu } = useBackendPathInsertMenu({
-    enabled: Boolean(insertBackendPathInDesign),
-    readOnly,
-    inputRef: descriptionRef,
-    onInsert: onDesignInsert,
-  });
+  const insertBackendPathInDesign =
+    insertBackendPathInDesignProp ?? dock?.insertBackendPathInDesign;
 
   return (
     <section>
       {mode === 'description' ? (
         headerAction ? (
-          <div className="flex flex-wrap items-center justify-end gap-2 mb-2">{headerAction}</div>
+          <div className="mb-2 flex flex-wrap items-center justify-end gap-2">{headerAction}</div>
         ) : null
       ) : (
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
-          <label className="block text-sm font-medium text-slate-300 min-w-0 flex-1">
+        <div className="mb-1 flex flex-wrap items-start justify-between gap-2">
+          <label className="block min-w-0 flex-1 text-sm font-medium text-slate-300">
             Prompt agente runtime (modificabile)
           </label>
-          {headerAction ? <div className="shrink-0 flex items-center">{headerAction}</div> : null}
+          {headerAction ? <div className="flex shrink-0 items-center">{headerAction}</div> : null}
         </div>
       )}
       {mode === 'agent_prompt' ? (
@@ -91,22 +72,14 @@ export function AIAgentUnifiedPromptField({
           onDismissIaRevisionDiff={onDismissIaRevisionDiff}
         />
       ) : (
-        <>
-          <textarea
-            ref={descriptionRef}
-            className="w-full min-h-[200px] lg:min-h-[280px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-            placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
-            aria-label="Descrizione"
-            value={value}
-            onChange={(e) => {
-              onChange(e.target.value);
-            }}
-            readOnly={readOnly}
-            spellCheck
-            onContextMenu={onContextMenu}
-          />
-          {backendPathMenu}
-        </>
+        <AgentDescriptionMarkdownEditor
+          value={value}
+          onChange={onChange}
+          readOnly={readOnly}
+          fillHeight={false}
+          containerClassName="relative flex min-h-[200px] flex-col lg:min-h-[280px]"
+          insertBackendPathInDesign={insertBackendPathInDesign}
+        />
       )}
     </section>
   );

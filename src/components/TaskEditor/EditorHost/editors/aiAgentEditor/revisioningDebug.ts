@@ -1,5 +1,5 @@
 /**
- * Opt-in revisioning diagnostics for the dual-layer textarea pipeline.
+ * Opt-in revisioning diagnostics for structured section revision commits.
  *
  * Enable (pick one):
  * - `localStorage.setItem('omnia.revisioningDebug', '1')` then reload (or type in editor — flag is read each call).

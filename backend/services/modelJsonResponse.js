@@ -107,7 +107,7 @@ function extractAndParseModelJson(response, opts = {}) {
  * @param {number} hi
  */
 function buildCompactJsonRetryDirective(lo, hi) {
-  return `\nOUTPUT_RETRY (mandatory): Your previous answer was cut off before the JSON object ended. Return ONE complete valid JSON object only. Target **${lo}–${hi}** use_cases (do not exceed ${hi}). Keep each "scenario.descrittivo" to at most 3 short sentences; "scenario.llm" at most 2 telegraphic lines; assistant "dialogue"[0]."content" exactly one short sentence. Use 6–8 "logical_steps" with brief descriptions. Close every array and the root object — no commentary after the closing brace.\n`;
+  return `\nOUTPUT_RETRY (mandatory): Your previous answer was cut off before the JSON object ended. Return ONE complete valid JSON object only. Target **${lo}–${hi}** use_cases (do not exceed ${hi}). Keep "scenario.llm" to at most 3 telegraphic lines (descrittivo = llm); assistant "dialogue"[0]."content" exactly one short sentence. Use 6–8 "logical_steps" with brief descriptions. Close every array and the root object — no commentary after the closing brace.\n`;
 }
 
 /** Second/third attempt after invalid JSON (syntax, unescaped quotes, trailing commas). */

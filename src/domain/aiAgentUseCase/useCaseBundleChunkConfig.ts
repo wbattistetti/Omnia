@@ -40,3 +40,20 @@ export function resolveUseCaseBundleGeneratingLabel(
   if (count != null && count >= 0) return formatGeneratingUseCasesLabel(count);
   return 'Generando use case…';
 }
+
+/**
+ * Messaggio tutor in cima alla lista (o empty state) mentre il bundle è in corso.
+ */
+export function formatUseCaseBundleProgressBanner(
+  count: number | null,
+  ordering: boolean
+): string {
+  if (ordering) {
+    return 'Sto riordinando gli use case per metterli in sequenza logica… Ti avviso quando ho finito.';
+  }
+  if (count != null && count > 0) {
+    const noun = count === 1 ? 'use case' : 'use case';
+    return `Ho generato intanto ${count} ${noun}, ne sto generando altri… Ti avviso quando ho finito.`;
+  }
+  return 'Sto generando gli use case… Ti avviso quando ho finito.';
+}

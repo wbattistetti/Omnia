@@ -321,126 +321,6 @@ function LabeledInlineToggle({
   );
 }
 
-const SCENARIO_HUMAN_CHECKBOX_TITLE =
-  'Mostra la narrativa umana dello scenario (scenario.descrittivo).';
-const SCENARIO_LLM_CHECKBOX_TITLE =
-  'Mostra il formato sintetico LLM dello scenario (scenario.llm). Puoi attivare entrambi.';
-
-function ScenarioFormatCheckbox({
-  id,
-  label,
-  checked,
-  disabled,
-  activeClass,
-  title,
-  onToggle,
-}: {
-  id: string;
-  label: string;
-  checked: boolean;
-  disabled: boolean;
-  activeClass: string;
-  title: string;
-  onToggle: () => void;
-}): React.ReactElement {
-  return (
-    <label
-      htmlFor={id}
-      className={[
-        'inline-flex cursor-pointer items-center gap-0.5 px-0',
-        checked ? activeClass : 'text-slate-400',
-        disabled ? 'pointer-events-none opacity-45' : '',
-      ].join(' ')}
-      title={title}
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      <input
-        id={id}
-        type="checkbox"
-        className="m-0 h-2.5 w-2.5 shrink-0 rounded border-slate-500 accent-violet-500"
-        checked={checked}
-        disabled={disabled}
-        onChange={() => onToggle()}
-        onClick={(e) => e.stopPropagation()}
-        aria-label={title}
-      />
-      <span className="text-[10px] font-semibold leading-none">{label}</span>
-    </label>
-  );
-}
-
-/**
- * Toggle scenario + formati Human / LLM nello stesso pill: «Scenario (☑ Human · ☑ LLM)».
- */
-function ScenarioWithFormatToggles({
-  showScenario,
-  showScenarioHuman,
-  showScenarioLlm,
-  onToggleScenario,
-  onToggleScenarioHuman,
-  onToggleScenarioLlm,
-  activeClass,
-}: {
-  showScenario: boolean;
-  showScenarioHuman: boolean;
-  showScenarioLlm: boolean;
-  onToggleScenario: () => void;
-  onToggleScenarioHuman: () => void;
-  onToggleScenarioLlm: () => void;
-  activeClass: string;
-}): React.ReactElement {
-  const formatsDisabled = !showScenario;
-  return (
-    <button
-      type="button"
-      aria-pressed={showScenario}
-      title="Mostra/nascondi lo scenario"
-      onClick={onToggleScenario}
-      className={[
-        'inline-flex h-8 items-center gap-1.5 rounded-md pl-2 pr-1.5 text-[11px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
-        showScenario ? activeClass : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-300',
-      ].join(' ')}
-    >
-      <BookOpen size={15} aria-hidden />
-      <span className="inline-flex items-center gap-1.5">
-        <span>Scenario</span>
-        <span
-          className={[
-            'inline-flex items-center gap-1 font-normal tracking-tight',
-            formatsDisabled ? 'pointer-events-none opacity-45' : '',
-          ].join(' ')}
-          aria-hidden={formatsDisabled}
-        >
-          <span className="text-[10px] text-slate-500/90 select-none">(</span>
-          <ScenarioFormatCheckbox
-            id="uc-scenario-format-human"
-            label="Human"
-            checked={showScenarioHuman}
-            disabled={formatsDisabled}
-            activeClass="text-sky-200"
-            title={SCENARIO_HUMAN_CHECKBOX_TITLE}
-            onToggle={onToggleScenarioHuman}
-          />
-          <span className="text-[10px] text-slate-500/70 select-none" aria-hidden>
-            ·
-          </span>
-          <ScenarioFormatCheckbox
-            id="uc-scenario-format-llm"
-            label="LLM"
-            checked={showScenarioLlm}
-            disabled={formatsDisabled}
-            activeClass="text-violet-200"
-            title={SCENARIO_LLM_CHECKBOX_TITLE}
-            onToggle={onToggleScenarioLlm}
-          />
-          <span className="text-[10px] text-slate-500/90 select-none">)</span>
-        </span>
-      </span>
-    </button>
-  );
-}
-
 /**
  * Toggle «Mostra Tokens» riusabile (Passo 1, Passo 3 e — implicitamente — Passo 2 via
  * la toolbar conversazioni). Quando ON:
@@ -517,12 +397,8 @@ export function WizardStepOneListToolbarControls({
     selectListAccordionHeaderMode,
     showScenario,
     showMessage,
-    showScenarioHuman,
-    showScenarioLlm,
     showActionsPanel,
     toggleScenario,
-    toggleScenarioHuman,
-    toggleScenarioLlm,
     toggleMessage,
     toggleActionsPanel,
     triggerExpandAll,
@@ -590,14 +466,13 @@ export function WizardStepOneListToolbarControls({
             ariaLabel="Intestazione riga: etichetta use case"
             onSelect={() => selectListAccordionHeaderMode('label')}
           />
-          <ScenarioWithFormatToggles
-            showScenario={showScenario}
-            showScenarioHuman={showScenarioHuman}
-            showScenarioLlm={showScenarioLlm}
-            onToggleScenario={toggleScenario}
-            onToggleScenarioHuman={toggleScenarioHuman}
-            onToggleScenarioLlm={toggleScenarioLlm}
+          <LabeledInlineToggle
+            active={showScenario}
+            onClick={toggleScenario}
+            title="Mostra/nascondi lo scenario nel corpo espanso"
             activeClass="text-violet-300 bg-violet-500/15"
+            icon={<BookOpen size={15} aria-hidden />}
+            label="Scenario"
           />
         </span>
         <span className="inline-flex items-center gap-0.5">

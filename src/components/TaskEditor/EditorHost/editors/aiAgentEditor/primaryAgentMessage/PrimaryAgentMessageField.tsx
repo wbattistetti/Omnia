@@ -14,6 +14,7 @@ import {
 } from '../BracketTokenHighlightedTextarea';
 import { AgentMessageSelectionTokenPopover } from '../AgentMessageSelectionTokenPopover';
 import { VoteThumbPair } from '../VoteThumbPair';
+import type { DesignerFieldVote } from '../useCaseComposerDesignerVotes';
 import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
 import { TokenizedHighlightedText } from '../useCaseGeneratorWizard/TokenizedHighlightedText';
 import {
@@ -47,8 +48,8 @@ export type PrimaryAgentMessageFieldProps = {
   wizardCompact?: boolean;
   searchSeed?: string;
   tokenizedDisplayText?: string;
-  assistantVote?: 'up' | 'down';
-  onAssistantVote?: (choice: 'up' | 'down') => void;
+  assistantVote?: DesignerFieldVote;
+  onAssistantVote?: (choice: DesignerFieldVote) => void;
   assistantContentBaseline?: string;
   parametricEnabled?: boolean;
   onToggleParametric?: (enabled: boolean) => void;

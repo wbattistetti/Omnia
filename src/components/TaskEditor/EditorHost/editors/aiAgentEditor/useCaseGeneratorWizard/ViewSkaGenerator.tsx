@@ -320,10 +320,8 @@ export function ViewSkaGenerator({
   const isStepTokenization = wizard.currentStepId === 'tokenization';
   const stepOneHasUseCases = isStepOne && useCaseCount > 0;
   const showStepOneInitialTutorial = isStepOne && !stepOneHasUseCases;
-  const showFooterGenerateInitial =
-    isStepOne &&
-    typeof onGenerateUseCaseBundle === 'function' &&
-    !stepOneHasUseCases;
+  /** Generazione bundle: CTA nel pannello sinistro (tutor / textbox), non nel footer destro. */
+  const showFooterGenerateInitial = false;
   /**
    * Passo 3 riusa la stessa toolbar Riga 2 del Passo 1 (`espandi/collassa` + `Mostra scenario/frase`):
    * la lista accordion del Passo 3 è gestita dallo stesso `UseCaseWizardListToolbarContext`.
@@ -793,7 +791,7 @@ export function ViewSkaGenerator({
                         generateBusy={generateBusy}
                         generateBusyLabel={useCaseGenerateBusyLabel}
                         onGenerateMore={onGenerateUseCaseBundle}
-                        canGenerateMore={typeof onGenerateUseCaseBundle === 'function'}
+                        canGenerateMore={false}
                         onAdvanceStep={onAdvanceWizardStep}
                         canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
                         advanceStepAnchorRef={advanceStepAnchorRef}

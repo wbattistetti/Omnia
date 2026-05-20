@@ -1,15 +1,16 @@
 /**
- * Coppia pollice su/giù per validazione manuale campo (etichetta, scenario, messaggio).
+ * Validazione manuale campo: su / giù / da approfondire (icona ?).
  */
 
 import * as React from 'react';
-import { ThumbsDown, ThumbsUp } from 'lucide-react';
+import { HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
+import type { DesignerFieldVote } from './useCaseComposerDesignerVotes';
 
 export interface VoteThumbPairProps {
-  vote?: 'up' | 'down';
+  vote?: DesignerFieldVote;
   disabled?: boolean;
   outerBtnClass: string;
-  onVote: (choice: 'up' | 'down') => void;
+  onVote: (choice: DesignerFieldVote) => void;
   /** Lucide icon size (default 12). */
   iconSize?: number;
 }
@@ -29,6 +30,18 @@ export function VoteThumbPair(props: VoteThumbPairProps): React.ReactElement {
         }}
       >
         <ThumbsUp size={iconSize} aria-hidden />
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        title={vote === 'review' ? 'Rimuovi «da approfondire»' : 'Da approfondire (evidenza arancione)'}
+        className={`${outerBtnClass} ${vote === 'review' ? 'text-orange-400' : 'text-slate-500 hover:text-orange-300/90'}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onVote('review');
+        }}
+      >
+        <HelpCircle size={iconSize} aria-hidden />
       </button>
       <button
         type="button"

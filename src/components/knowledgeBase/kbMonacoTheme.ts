@@ -61,3 +61,43 @@ export function kbReaderMonacoOptions(
     lineHeight: 18,
   };
 }
+
+/** No line numbers / gutter — reads like a text area, not an IDE. */
+export const KB_MARKDOWN_PLAIN_CHROME: Record<string, unknown> = {
+  minimap: { enabled: false },
+  scrollBeyondLastLine: false,
+  wordWrap: 'on',
+  automaticLayout: true,
+  lineNumbers: 'off',
+  glyphMargin: false,
+  folding: false,
+  lineDecorationsWidth: 0,
+  lineNumbersMinChars: 0,
+  renderLineHighlight: 'none',
+  overviewRulerLanes: 0,
+  hideCursorInOverviewRuler: true,
+  overviewRulerBorder: false,
+  guides: { indentation: false },
+  scrollbar: {
+    vertical: 'auto',
+    horizontal: 'hidden',
+    verticalScrollbarSize: 8,
+  },
+  padding: { top: 10, bottom: 10 },
+  tabSize: 2,
+};
+
+const AGENT_PROSE_FONT =
+  'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+/** AI Agent description / sections: plain chrome + readable sans body (syntax colors kept). */
+export function kbAgentProseMarkdownOptions(readOnly: boolean): Record<string, unknown> {
+  return {
+    ...KB_MARKDOWN_PLAIN_CHROME,
+    fontSize: 14,
+    lineHeight: 22,
+    fontFamily: AGENT_PROSE_FONT,
+    readOnly,
+    domReadOnly: readOnly,
+  };
+}

@@ -8,17 +8,18 @@ import type { WorkspaceState } from '../../../../../flows/FlowTypes';
 import { getActiveFlowCanvasId } from '../../../../../flows/activeFlowCanvas';
 import { useFlowWorkspace } from '../../../../../flows/FlowStore';
 import { BackendPathInsertContextMenu } from './BackendPathInsertContextMenu';
+import type { BackendPathSelectionAdapter } from './backendPathSelectionAdapter';
 
 export type UseBackendPathInsertMenuParams = {
   enabled: boolean;
   readOnly: boolean;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  selection: BackendPathSelectionAdapter;
   /** Insert token; range replaces [rangeStart, rangeEnd) when rangeEnd > rangeStart. */
   onInsert: (backendPath: string, rangeStart: number, rangeEnd: number) => void;
 };
 
 export type UseBackendPathInsertMenuResult = {
-  onContextMenu: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
   backendPathMenu: React.ReactNode;
   suppressBlurWhileMenuRef: React.MutableRefObject<boolean>;
 };
@@ -26,7 +27,7 @@ export type UseBackendPathInsertMenuResult = {
 export function useBackendPathInsertMenu(
   params: UseBackendPathInsertMenuParams
 ): UseBackendPathInsertMenuResult {
-  const { enabled, readOnly, inputRef, onInsert } = params;
+  const { enabled, readOnly, selection, onInsert } = params;
   const suppressBlurWhileMenuRef = useRef(false);
   const [menu, setMenu] = useState<{ open: boolean; x: number; y: number }>({
     open: false,
@@ -55,32 +56,22 @@ export function useBackendPathInsertMenu(
 
   const applyInsert = useCallback(
     (path: string) => {
-      const el = inputRef.current;
       const raw = String(path ?? '').trim();
       if (!raw) return;
       const tokenLen = formatBackendDisplayToken(raw).length;
-      const a = el?.selectionStart ?? 0;
-      const b = el?.selectionEnd ?? a;
-      const s = Math.min(a, b);
-      const e = Math.max(a, b);
+      const { start: s, end: e } = selection.getRange();
       onInsert(raw, s, e);
       closeMenu();
       requestAnimationFrame(() => {
-        if (!el) return;
-        el.focus();
-        const after = s + tokenLen;
-        try {
-          el.setSelectionRange(after, after);
-        } catch {
-          /* ignore */
-        }
+        selection.focus();
+        selection.setCaret(s + tokenLen);
       });
     },
-    [inputRef, onInsert, closeMenu]
+    [selection, onInsert, closeMenu]
   );
 
   const onContextMenu = useCallback(
-    (e: React.MouseEvent<HTMLTextAreaElement>) => {
+    (e: React.MouseEvent) => {
       if (!enabled || readOnly) return;
       suppressBlurWhileMenuRef.current = true;
       e.preventDefault();

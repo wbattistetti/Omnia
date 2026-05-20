@@ -242,6 +242,17 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setUseCaseHighlightIds((prev) => prev.filter((id) => id !== useCaseId));
   }, []);
 
+  const onRootUseCaseBatchCreated = React.useCallback((createdIds: readonly string[]) => {
+    if (createdIds.length === 0) return;
+    setUseCaseHighlightIds((prev) => {
+      const merged = [...prev];
+      for (const id of createdIds) {
+        if (!merged.includes(id)) merged.push(id);
+      }
+      return merged;
+    });
+  }, []);
+
   /**
    * Fullscreen mode: l'AI Agent editor occupa tutta l'area dell'app sotto la toolbar globale,
    * nascondendo TaskTree e ogni altra chrome circostante. Preferenza persistita in `localStorage`
@@ -316,6 +327,27 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     },
     [
       c.handleGeneralizeUseCaseMeta,
+      c.useCases,
+      c.useCaseSiblingSortMode,
+      captureUseCaseListAiBaseline,
+    ]
+  );
+
+  const runPolishUseCaseScenario = React.useCallback(
+    async (useCaseId: string, scenarioTextOverride?: string) => {
+      const merged = await c.handlePolishUseCaseScenario(useCaseId, scenarioTextOverride);
+      if (merged) {
+        captureUseCaseListAiBaseline(
+          normalizeUseCaseSiblingOrder(
+            c.useCases.map((u) => (u.id === useCaseId ? merged : u)),
+            c.useCaseSiblingSortMode
+          )
+        );
+      }
+      return merged;
+    },
+    [
+      c.handlePolishUseCaseScenario,
       c.useCases,
       c.useCaseSiblingSortMode,
       captureUseCaseListAiBaseline,
@@ -1190,6 +1222,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     hasAgentGeneration: c.hasAgentGeneration,
     designDescription: c.designDescription,
     setDesignDescription: c.setDesignDescription,
+    designDescriptionPolishBaseline: c.designDescriptionPolishBaseline,
+    showDesignDescriptionPolishOffer: c.showDesignDescriptionPolishOffer,
+    designDescriptionPolishBusy: c.designDescriptionPolishBusy,
+    onPolishDesignDescription: c.onPolishDesignDescription,
+    onDismissDesignDescriptionPolishOffer: c.onDismissDesignDescriptionPolishOffer,
     composedRuntimeMarkdown: c.composedRuntimeMarkdown,
     structuredDesignDirty: c.structuredDesignDirty,
     structuredSectionsState: c.structuredSectionsState,
@@ -1227,8 +1264,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onClearUseCaseComposerError: c.clearUseCaseComposerError,
     onGenerateUseCaseBundle: runGenerateUseCaseBundle,
     onCreateUseCase: c.handleCreateUseCase,
+    onSplitRootUseCaseDraft: c.handleSplitRootUseCaseDraft,
+    onRootUseCaseBatchCreated,
     onRegenerateUseCase: runRegenerateUseCase,
     onGeneralizeUseCaseMeta: runGeneralizeUseCaseMeta,
+    onPolishUseCaseScenario: runPolishUseCaseScenario,
     onRegenerateAgentMessage: c.handleRegenerateAgentMessage,
     onAnnotateAgentMessageForJson: c.handleAnnotateAgentMessageForJson,
     onDeleteUseCase: c.handleDeleteUseCase,

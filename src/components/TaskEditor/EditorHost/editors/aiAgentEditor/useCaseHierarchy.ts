@@ -85,6 +85,21 @@ export function normalizeUseCaseSiblingOrder(
 }
 
 /**
+ * Appends one use case at the end of its sibling group without re-sorting the catalog.
+ * Used during root batch creation to avoid list reorder flicker between LLM create calls.
+ */
+export function appendUseCaseToSiblingGroup(
+  useCases: readonly AIAgentUseCase[],
+  item: AIAgentUseCase
+): AIAgentUseCase[] {
+  const parentId = item.parent_id ?? null;
+  const siblings = useCases.filter((u) => (u.parent_id ?? null) === parentId);
+  const maxOrder = siblings.reduce((max, u) => Math.max(max, u.sort_order), -1);
+  const withOrder = withSiblingOrderIfChanged(item, parentId, maxOrder + 1);
+  return [...useCases, withOrder];
+}
+
+/**
  * Reassigns sibling `sort_order` alphabetically by label for every parent group.
  */
 export function normalizeUseCaseSortOrderAlphabetically(

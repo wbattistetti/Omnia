@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   getScenarioDescrittivoText,
-  getScenarioDisplayText,
   getScenarioLlmText,
-  withScenarioDescrittivo,
+  getScenarioText,
+  normalizeScenarioOnUseCase,
+  withScenarioText,
 } from '../scenarioText';
 
 function uc(partial: Partial<AIAgentUseCase> & Pick<AIAgentUseCase, 'id'>): AIAgentUseCase {
@@ -21,42 +22,43 @@ function uc(partial: Partial<AIAgentUseCase> & Pick<AIAgentUseCase, 'id'>): AIAg
   };
 }
 
-describe('scenarioText', () => {
-  it('reads descrittivo from scenario object', () => {
+describe('scenarioText unified', () => {
+  it('prefers llm as canonical text', () => {
     const item = uc({
       id: 'a',
-      scenario: { descrittivo: 'Narrativa umana.', llm: 'UC: ingresso' },
-      payoff: 'Narrativa umana.',
+      scenario: { descrittivo: 'Narrativa lunga.', llm: 'UC: ingresso' },
+      payoff: 'Narrativa lunga.',
     });
-    expect(getScenarioDescrittivoText(item)).toBe('Narrativa umana.');
+    expect(getScenarioText(item)).toBe('UC: ingresso');
     expect(getScenarioLlmText(item)).toBe('UC: ingresso');
+    expect(getScenarioDescrittivoText(item)).toBe('UC: ingresso');
   });
 
-  it('falls back to payoff when scenario missing', () => {
+  it('migrates legacy payoff-only to unified text', () => {
     const item = uc({ id: 'b', payoff: 'Solo payoff legacy.' });
-    expect(getScenarioDescrittivoText(item)).toBe('Solo payoff legacy.');
-    expect(getScenarioLlmText(item)).toBe('Solo payoff legacy.');
+    expect(getScenarioText(item)).toBe('Solo payoff legacy.');
   });
 
-  it('display toggles llm vs descrittivo', () => {
-    const item = uc({
-      id: 'c',
-      scenario: { descrittivo: 'Lungo.', llm: 'Breve.' },
-      payoff: 'Lungo.',
-    });
-    expect(getScenarioDisplayText(item, false)).toBe('Lungo.');
-    expect(getScenarioDisplayText(item, true)).toBe('Breve.');
-  });
-
-  it('withScenarioDescrittivo updates payoff and keeps llm', () => {
+  it('withScenarioText syncs llm, descrittivo and payoff', () => {
     const item = uc({
       id: 'd',
       scenario: { descrittivo: 'Vecchio', llm: 'slot: ingresso' },
       payoff: 'Vecchio',
     });
-    const next = withScenarioDescrittivo(item, 'Nuovo testo');
+    const next = withScenarioText(item, 'Nuovo testo');
     expect(next.payoff).toBe('Nuovo testo');
     expect(next.scenario?.descrittivo).toBe('Nuovo testo');
-    expect(next.scenario?.llm).toBe('slot: ingresso');
+    expect(next.scenario?.llm).toBe('Nuovo testo');
+  });
+
+  it('normalizeScenarioOnUseCase mirrors single text', () => {
+    const item = uc({
+      id: 'e',
+      scenario: { descrittivo: 'Solo descrittivo', llm: '' },
+      payoff: '',
+    });
+    const next = normalizeScenarioOnUseCase(item);
+    expect(next.scenario?.llm).toBe('Solo descrittivo');
+    expect(next.payoff).toBe('Solo descrittivo');
   });
 });

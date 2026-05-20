@@ -42,7 +42,10 @@ import { PrimaryAgentMessageField } from './primaryAgentMessage';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
-import { applyUseCaseValidatedOnMessageCommit } from './useCaseComposerDesignerVotes';
+import {
+  applyUseCaseValidatedOnMessageCommit,
+  type DesignerFieldVote,
+} from './useCaseComposerDesignerVotes';
 import { UC_RESPONSE_ICON_COL } from './useCaseComposerPresentation';
 
 export interface UseCaseResponseEditorProps {
@@ -50,7 +53,7 @@ export interface UseCaseResponseEditorProps {
   onPatchResponseTasks: PatchUseCaseResponseTasksFn;
   /** Full use case patch (parametric, votes). */
   onPatchUseCase: (updater: (uc: AIAgentUseCase) => AIAgentUseCase) => void;
-  onAgentMessageVote?: (choice: 'up' | 'down') => void;
+  onAgentMessageVote?: (choice: DesignerFieldVote) => void;
   onSeedUseCase?: (next: AIAgentUseCase) => void;
   onAssistantPhraseDraftChange?: (useCaseId: string, draft: string | null) => void;
   parametricCartesianFeedback?: string | null;

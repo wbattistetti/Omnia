@@ -24,8 +24,16 @@ describe('formatOperationalSequenceNewlines', () => {
     expect(formatOperationalSequenceNewlines(ml)).toBe('1. a\n2. b');
   });
 
-  it('returns single block when no step pattern', () => {
-    expect(formatOperationalSequenceNewlines('solo testo')).toBe('solo testo');
+  it('prefixes a single line with a bullet for scanability', () => {
+    expect(formatOperationalSequenceNewlines('solo testo')).toBe('- solo testo');
+  });
+
+  it('splits long prose into sentence bullets', () => {
+    const prose =
+      'Chiedere il tipo di visita. Verificare disponibilità. Confermare con il paziente prima di procedere.';
+    const out = formatOperationalSequenceNewlines(prose);
+    expect(out.split('\n').length).toBeGreaterThanOrEqual(3);
+    expect(out).toMatch(/^- /m);
   });
 });
 

@@ -36,10 +36,6 @@ export interface UseCaseWizardListToolbarContextValue {
   selectListAccordionHeaderMode: (mode: WizardAccordionHeaderMode) => void;
   /** Pill Scenario: corpo espanso — blocco scenario visibile. */
   showScenario: boolean;
-  /** Card: mostra `scenario.descrittivo` (narrativa umana). */
-  showScenarioHuman: boolean;
-  /** Card: mostra `scenario.llm` (formato sintetico). */
-  showScenarioLlm: boolean;
   /** Pill Messaggio: corpo espanso — blocco messaggio visibile. */
   showMessage: boolean;
   /** Right aside: actions palette for use case response (replaces tutorial when on). */
@@ -47,8 +43,6 @@ export interface UseCaseWizardListToolbarContextValue {
   /** Right aside: Slot Mapping (sostituisce tutorial). */
   showSlotMappingPanel: boolean;
   toggleScenario: () => void;
-  toggleScenarioHuman: () => void;
-  toggleScenarioLlm: () => void;
   toggleMessage: () => void;
   toggleActionsPanel: () => void;
   /** Apre il pannello azioni; se già aperto non fa nulla (no toggle). */
@@ -128,8 +122,6 @@ export function UseCaseWizardListToolbarProvider({
     React.useState<WizardAccordionHeaderMode>('label');
   const [showScenarioVisible, setShowScenarioVisible] = React.useState(true);
   const [showMessageVisible, setShowMessageVisible] = React.useState(true);
-  const [showScenarioHuman, setShowScenarioHuman] = React.useState(true);
-  const [showScenarioLlm, setShowScenarioLlm] = React.useState(false);
   const [showActionsPanel, setShowActionsPanel] = React.useState(false);
   const [showSlotMappingPanel, setShowSlotMappingPanel] = React.useState(false);
   const [bulkFold, setBulkFold] = React.useState<WizardBulkFoldState>('expanded');
@@ -197,14 +189,6 @@ export function UseCaseWizardListToolbarProvider({
 
   const toggleScenario = React.useCallback(() => {
     setShowScenarioVisible((v) => !v);
-  }, []);
-
-  const toggleScenarioHuman = React.useCallback(() => {
-    setShowScenarioHuman((v) => !v);
-  }, []);
-
-  const toggleScenarioLlm = React.useCallback(() => {
-    setShowScenarioLlm((v) => !v);
   }, []);
 
   const toggleMessage = React.useCallback(() => {
@@ -299,14 +283,10 @@ export function UseCaseWizardListToolbarProvider({
       listAccordionHeaderMode,
       selectListAccordionHeaderMode,
       showScenario: showScenarioVisible,
-      showScenarioHuman,
-      showScenarioLlm,
       showMessage: showMessageVisible,
       showActionsPanel,
       showSlotMappingPanel,
       toggleScenario,
-      toggleScenarioHuman,
-      toggleScenarioLlm,
       toggleMessage,
       toggleActionsPanel,
       openActionsPanel,
@@ -336,14 +316,10 @@ export function UseCaseWizardListToolbarProvider({
       listAccordionHeaderMode,
       selectListAccordionHeaderMode,
       showScenarioVisible,
-      showScenarioHuman,
-      showScenarioLlm,
       showMessageVisible,
       showActionsPanel,
       showSlotMappingPanel,
       toggleScenario,
-      toggleScenarioHuman,
-      toggleScenarioLlm,
       toggleMessage,
       toggleActionsPanel,
       openActionsPanel,

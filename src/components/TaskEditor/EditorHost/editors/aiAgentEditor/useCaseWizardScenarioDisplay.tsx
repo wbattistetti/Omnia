@@ -1,15 +1,18 @@
 /**
- * Scenario body in wizard use-case cards: optional Human + LLM blocks (toolbar-driven).
+ * Scenario body in wizard use-case cards: single synthetic scenario block (edit + vote + polish).
  */
 
 import React from 'react';
-import { Pencil } from 'lucide-react';
+import { Loader2, Pencil, Wand2 } from 'lucide-react';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
-import {
-  getScenarioDescrittivoText,
-  getScenarioLlmText,
-} from '@domain/aiAgentUseCase/scenarioText';
+import { getScenarioText } from '@domain/aiAgentUseCase/scenarioText';
 import { VoteThumbPair } from './VoteThumbPair';
+import type { DesignerFieldVote } from './useCaseComposerDesignerVotes';
+import {
+  LABEL_POLISH_USE_CASE_SCENARIO,
+  LABEL_POLISH_USE_CASE_SCENARIO_PENDING,
+  TOOLTIP_POLISH_USE_CASE_SCENARIO,
+} from './constants';
 import {
   UC_SCENARIO_BODY_TEXT,
   UC_SCENARIO_ROW_EDIT_BTN,
@@ -20,39 +23,42 @@ import {
 export type UseCaseWizardScenarioDisplayProps = {
   useCase: AIAgentUseCase;
   busy: boolean;
-  showHuman: boolean;
-  showLlm: boolean;
   scenarioFieldLabel: React.ReactNode;
   textClassName: string;
   onDoubleClickEdit: () => void;
-  onVote: (choice: 'up' | 'down') => void;
+  onVote: (choice: DesignerFieldVote) => void;
   onEditClick: () => void;
+  /** Rifinisce forma scenario (stesso significato). */
+  onPolishClick?: () => void;
+  polishPending?: boolean;
+  polishDisabled?: boolean;
 };
 
 export function UseCaseWizardScenarioDisplay({
   useCase,
   busy,
-  showHuman,
-  showLlm,
   scenarioFieldLabel,
   textClassName,
   onDoubleClickEdit,
   onVote,
   onEditClick,
+  onPolishClick,
+  polishPending = false,
+  polishDisabled = false,
 }: UseCaseWizardScenarioDisplayProps): React.ReactElement {
-  const humanText = getScenarioDescrittivoText(useCase);
-  const llmText = getScenarioLlmText(useCase);
-  const showBoth = showHuman && showLlm;
-  const anyFormat = showHuman || showLlm;
+  const scenarioText = getScenarioText(useCase);
+  const polishBusy = polishPending;
+  const canPolish =
+    Boolean(onPolishClick) &&
+    !busy &&
+    !polishDisabled &&
+    scenarioText.trim().length >= 8;
 
   return (
     <div
-      className={[
-        'group/payoff-row flex w-full min-w-0 rounded px-0.5 py-0',
-        showHuman ? 'cursor-pointer' : '',
-      ].join(' ')}
+      className="group/payoff-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
       onDoubleClick={(e) => {
-        if (!showHuman || busy) return;
+        if (busy || polishBusy) return;
         if ((e.target as HTMLElement).closest('button')) return;
         e.preventDefault();
         e.stopPropagation();
@@ -61,68 +67,60 @@ export function UseCaseWizardScenarioDisplay({
     >
       <div className="flex min-w-0 w-full flex-wrap items-start gap-x-1.5 gap-y-1">
         {scenarioFieldLabel}
-        <div className="min-w-0 flex-1 flex flex-col gap-y-2 text-sm leading-snug">
-          {!anyFormat ? (
-            <span className="text-slate-500">— seleziona Human o LLM nella toolbar</span>
-          ) : null}
-          {showHuman ? (
-            <div className="min-w-0">
-              {showBoth ? (
-                <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-sky-300/80">
-                  Human
-                </span>
-              ) : null}
-              <span
-                className={`inline whitespace-pre-wrap ${UC_SCENARIO_BODY_TEXT} ${UC_WIZARD_SCENARIO_TEXT}`}
+        <div className="min-w-0 flex-1 text-sm leading-snug">
+          <span
+            className={`inline whitespace-pre-wrap ${UC_SCENARIO_BODY_TEXT} ${UC_WIZARD_SCENARIO_TEXT} ${textClassName}`}
+          >
+            {scenarioText.trim() ? (
+              scenarioText
+            ) : (
+              <span className="text-slate-500">— passa il mouse e usa la matita a destra</span>
+            )}
+          </span>
+          <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-middle">
+            <VoteThumbPair
+              vote={useCase.designer_payoff_vote}
+              disabled={busy || polishBusy}
+              outerBtnClass={UC_SCENARIO_VOTE_BTN}
+              onVote={onVote}
+            />
+            {onPolishClick ? (
+              <button
+                type="button"
+                disabled={!canPolish || polishBusy}
+                title={
+                  polishBusy
+                    ? LABEL_POLISH_USE_CASE_SCENARIO_PENDING
+                    : TOOLTIP_POLISH_USE_CASE_SCENARIO
+                }
+                aria-label={LABEL_POLISH_USE_CASE_SCENARIO}
+                className={UC_SCENARIO_ROW_EDIT_BTN}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!canPolish || polishBusy) return;
+                  onPolishClick();
+                }}
               >
-                {humanText.trim() ? (
-                  humanText
+                {polishBusy ? (
+                  <Loader2 size={12} className="animate-spin" aria-hidden />
                 ) : (
-                  <span className="text-slate-500">
-                    — passa il mouse e usa la matita a destra
-                  </span>
+                  <Wand2 size={12} aria-hidden />
                 )}
-              </span>
-              <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-middle">
-                <VoteThumbPair
-                  vote={useCase.designer_payoff_vote}
-                  disabled={busy}
-                  outerBtnClass={UC_SCENARIO_VOTE_BTN}
-                  onVote={onVote}
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  title="Modifica scenario"
-                  className={UC_SCENARIO_ROW_EDIT_BTN}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditClick();
-                  }}
-                >
-                  <Pencil size={12} aria-hidden />
-                </button>
-              </span>
-            </div>
-          ) : null}
-          {showLlm ? (
-            <div className="min-w-0">
-              {showBoth ? (
-                <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-violet-300/80">
-                  LLM
-                </span>
-              ) : null}
-              <span
-                className={`inline whitespace-pre-wrap ${UC_SCENARIO_BODY_TEXT} ${UC_WIZARD_SCENARIO_TEXT} ${textClassName}`}
-              >
-                {llmText.trim() ? (
-                  llmText
-                ) : (
-                  <span className="font-sans text-slate-500">— nessun testo LLM</span>
-                )}
-              </span>
-            </div>
-          ) : null}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy || polishBusy}
+              title="Modifica scenario"
+              className={UC_SCENARIO_ROW_EDIT_BTN}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditClick();
+              }}
+            >
+              <Pencil size={12} aria-hidden />
+            </button>
+          </span>
         </div>
       </div>
     </div>

@@ -7,7 +7,6 @@ import {
   BookOpen,
   Brackets,
   Check,
-  ClipboardPaste,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -23,6 +22,7 @@ import {
   Sparkles,
   Trash2,
   Variable,
+  Wand2,
   X,
 } from 'lucide-react';
 import {
@@ -57,8 +57,8 @@ import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
 } from '@types/aiAgentPreview';
 import {
-  getScenarioDescrittivoText,
-  withScenarioDescrittivo,
+  getScenarioText,
+  withScenarioText,
 } from '@domain/aiAgentUseCase/scenarioText';
 import { UseCaseWizardScenarioDisplay } from './useCaseWizardScenarioDisplay';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
@@ -68,15 +68,23 @@ import {
   AI_AGENT_GLOBAL_USE_CASE_STYLES,
   LABEL_AGENT_MSG_STRIP_TOKENS,
   LABEL_AGENT_MSG_WRAP_TOKEN,
+  LABEL_ANALYZE_AND_CREATE_USE_CASES,
+  LABEL_CREATING_MULTIPLE_USE_CASES,
+  LABEL_CREATING_ONE_USE_CASE,
+  LABEL_ROOT_DRAFT_ANALYZING,
   LABEL_GENERATE_USE_CASES,
   LABEL_GENERALIZE_USE_CASE_META_CONFIRM,
   LABEL_GENERALIZE_USE_CASE_META_PENDING,
+  LABEL_POLISH_USE_CASE_SCENARIO,
+  LABEL_POLISH_USE_CASE_SCENARIO_PENDING,
   LABEL_REGENERATE_AGENT_EXAMPLE,
   LABEL_REGENERATE_USE_CASE_FOR_SCENARIO,
+  TOOLTIP_POLISH_USE_CASE_SCENARIO,
 } from './constants';
 import {
   normalizeRootUseCaseDraftDisplay,
-  parseRootUseCaseDraftSegments,
+  parseRootUseCaseDraftSegmentsFallback,
+  resolveRootUseCaseDraftForCreateAsync,
   ROOT_USE_CASE_BATCH_MAX,
 } from './parseRootUseCaseDraft';
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
@@ -126,6 +134,7 @@ import {
   UC_WIZARD_AGENT_MESSAGE_PANEL,
   UC_WIZARD_AGENT_MESSAGE_TEXT,
   UC_WIZARD_ROW_EXPANDED,
+  UC_ROW_REVIEW_EDGE,
   useCaseHeaderShellClass,
   useCaseHeaderTitleTextClass,
   UC_WIZARD_SCENARIO_BLOCK,
@@ -142,6 +151,8 @@ import {
 } from './useCaseAccordionFold';
 import {
   applyDesignerFieldVoteToggle,
+  useCaseHasDesignerReviewVote,
+  type DesignerFieldVote,
   applyUseCaseHeaderVoteToggle,
   applyUseCaseValidatedOnMessageCommit,
   type DesignerVoteField,
@@ -157,6 +168,8 @@ import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
 import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHighlightedText';
 import { CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE } from './useCaseGeneratorWizard/CompletaCorrezioneCallout';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
+import { UseCaseEmptyTutorPanel } from './useCaseGeneratorWizard/UseCaseEmptyTutorPanel';
+import { UseCaseRootComposerHeader } from './useCaseGeneratorWizard/UseCaseRootComposerHeader';
 import {
   BracketTokenHighlightedText,
   BracketTokenHighlightedTextarea,
@@ -196,10 +209,21 @@ export interface AIAgentUseCaseComposerProps {
     label: string;
     parentId: string | null;
     creationScope?: 'single' | 'batch';
+    holdComposerBusy?: boolean;
+    deferSiblingReorder?: boolean;
   }) => Promise<string>;
+  /** Root INVIO: semantic split via LLM (Prompts catalog only). */
+  onSplitRootUseCaseDraft?: (draftText: string) => Promise<string[]>;
+  /** Fine batch root: evidenzia tutti gli id creati (bordo ambra + chip New). */
+  onRootUseCaseBatchCreated?: (createdIds: readonly string[]) => void;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
   /** Generalizza titolo e scenario (payoff) via LLM; assente = nessun pulsante. */
   onGeneralizeUseCaseMeta?: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  /** Rifinisce forma scenario (stesso significato); assente = nessun pulsante bacchetta. */
+  onPolishUseCaseScenario?: (
+    useCaseId: string,
+    scenarioTextOverride?: string
+  ) => void | Promise<void | AIAgentUseCase | null>;
   onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   /** IA: tokenizza il messaggio con [slot] e allinea il JSON motore (preview sotto). */
   onAnnotateAgentMessageForJson: (
@@ -220,9 +244,13 @@ export interface AIAgentUseCaseComposerProps {
   generating?: boolean;
   /** Etichetta durante generazione bundle chunked (es. «Generando use case… (8)»). */
   bundleGenerateBusyLabel?: string;
+  /** Scenari già creati nel batch corrente (banner in cima alla lista). */
+  useCaseBundleGenerationCount?: number | null;
+  /** Fase finale di riordino scenari. */
+  useCaseBundleGenerationOrdering?: boolean;
   /**
-   * Generazione lista nel view wizard: nessun pulsante «Genera use case» nel pannello sinistro;
-   * messaggio empty state punta al Tutorial destro.
+   * @deprecated La generazione bundle è sempre nel pannello sinistro (textbox + CTA).
+   * Mantenuto per compatibilità; non nasconde più il pulsante inline.
    */
   primaryGenerateOnRightOnly?: boolean;
   /** Id da evidenziare dopo generazione / «creane altri». */
@@ -263,10 +291,9 @@ export interface AIAgentUseCaseComposerProps {
    */
   onSelectionChange?: (selectedUseCaseId: string | null) => void;
   /**
-   * Selezione richiesta dall'esterno (es. frecce ◀ ▶ del pannello DX «Mostra JSON»).
-   * Quando cambia ed è un id valido nel catalogo corrente, l'internal state del composer si
-   * adegua. Pattern «request-based»: serve solo quando il consumer vuole forzare un cambio
-   * di selezione; per la selezione default basta `onSelectionChange`. Idempotente.
+   * Selezione controllata dal parent (wizard + pannello DX). Va passata insieme a
+   * `onSelectionChange`: il composer non duplica lo stato e non risincronizza con un effect
+   * separato (evita loop di update). `undefined` = selezione solo interna al composer.
    */
   controlledSelectionId?: string | null;
   /**
@@ -300,8 +327,11 @@ export function AIAgentUseCaseComposer({
   error,
   onDismissError,
   onCreateUseCase,
+  onSplitRootUseCaseDraft,
+  onRootUseCaseBatchCreated,
   onRegenerateUseCase,
   onGeneralizeUseCaseMeta,
+  onPolishUseCaseScenario,
   onRegenerateAgentMessage,
   onAnnotateAgentMessageForJson: _onAnnotateAgentMessageForJson,
   onDeleteUseCase,
@@ -314,6 +344,8 @@ export function AIAgentUseCaseComposer({
   onGenerateUseCaseBundle,
   generating = false,
   bundleGenerateBusyLabel,
+  useCaseBundleGenerationCount = null,
+  useCaseBundleGenerationOrdering = false,
   primaryGenerateOnRightOnly = false,
   highlightIds = [],
   onClearUseCaseHighlight,
@@ -358,6 +390,13 @@ export function AIAgentUseCaseComposer({
     useCaseStyleLearningNotes.trim().length > 0 || styleLearningNotesEditorOpen;
   const { ordered } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
+  /** Rimuove chip/bordo «New» solo dopo un’azione designer esplicita (voto, commit testo, …). */
+  const clearNewHighlightOnDesignerAction = React.useCallback(
+    (useCaseId: string) => {
+      onClearUseCaseHighlight?.(useCaseId);
+    },
+    [onClearUseCaseHighlight]
+  );
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
   const dock = useOptionalAIAgentEditorDock();
   /** `dock` dal parent è un oggetto nuovo a ogni render: non va nelle deps dell'effect anteprima. */
@@ -402,10 +441,6 @@ export function AIAgentUseCaseComposer({
   );
   const wizardShowScenario =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
-  const wizardShowScenarioHuman =
-    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioHuman : true;
-  const wizardShowScenarioLlm =
-    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenarioLlm : false;
   const wizardShowMessage =
     primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
   const wizardAccordionHeaderMode =
@@ -467,9 +502,58 @@ export function AIAgentUseCaseComposer({
     [dock, setUseCases]
   );
 
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  /**
+   * Selezione «lifted»: parent tiene `selectedUseCaseId` e passa `controlledSelectionId` +
+   * `onSelectionChange`. Una sola fonte di verità — niente stato interno duplicato né effect
+   * che risincronizzano in direzioni opposte (causa «Maximum update depth» dopo batch root).
+   */
+  const isLiftedSelection =
+    onSelectionChange != null && controlledSelectionId !== undefined;
+  const [internalSelectedId, setInternalSelectedId] = React.useState<string | null>(null);
+  const selectedId = isLiftedSelection ? (controlledSelectionId ?? null) : internalSelectedId;
+  const setSelectedId = React.useCallback(
+    (value: React.SetStateAction<string | null>) => {
+      if (isLiftedSelection) {
+        const prev = controlledSelectionId ?? null;
+        const next = typeof value === 'function' ? value(prev) : value;
+        if (next !== prev) onSelectionChange(next);
+        return;
+      }
+      setInternalSelectedId(value);
+    },
+    [isLiftedSelection, controlledSelectionId, onSelectionChange]
+  );
+  /** Blocca effetti selezione durante batch root (evita salti lista / flicker). */
+  const rootBatchInProgressRef = React.useRef(false);
+  const [rootDraftSubmitting, setRootDraftSubmitting] = React.useState(false);
+  /** True for entire handleCreateRoot (split + create); drives chip + hides top creation banner. */
+  const [rootDraftFlowActive, setRootDraftFlowActive] = React.useState(false);
+  const [rootDraftLabel, setRootDraftLabel] = React.useState('');
+  const rootComposerLocked = busy || rootDraftSubmitting;
+  const rootChipBusy = rootDraftFlowActive && rootComposerLocked;
+  const rootChipLabel = React.useMemo(() => {
+    if (!rootChipBusy) return LABEL_ANALYZE_AND_CREATE_USE_CASES;
+    if (rootDraftSubmitting && !busy) return LABEL_ROOT_DRAFT_ANALYZING;
+    return (
+      creationMessage ??
+      (busy ? LABEL_CREATING_MULTIPLE_USE_CASES : LABEL_CREATING_ONE_USE_CASE)
+    );
+  }, [rootChipBusy, rootDraftSubmitting, busy, creationMessage]);
+  const suppressTopCreationMessage =
+    !isConversationalRulesCatalog && rootDraftFlowActive;
+  /** Chip CTA visibile solo con bozza in textbox o mentre split/creazione è in corso. */
+  const showRootAnalyzeChip =
+    !isConversationalRulesCatalog &&
+    (rootChipBusy || rootDraftLabel.trim().length > 0);
+
+  const showUseCaseEmptyTutor =
+    ordered.length === 0 && !isConversationalRulesCatalog;
+
+  const bundleGenerateBusy =
+    Boolean(bundleGenerateBusyLabel) && busy && !rootChipBusy;
 
   React.useEffect(() => {
+    if (rootBatchInProgressRef.current) return;
     if (useCases.length === 0) {
       setSelectedId(null);
       return;
@@ -493,19 +577,7 @@ export function AIAgentUseCaseComposer({
       const { ordered: o } = orderUseCasesWithDepth(useCases);
       return o[0]?.id ?? null;
     });
-  }, [editorTaskInstanceId, useCases]);
-
-  /**
-   * Sincronizza la selezione interna quando il consumer richiede esplicitamente di selezionare
-   * un altro use case (es. frecce ◀ ▶ del pannello DX «Mostra JSON»). No-op se l'id richiesto
-   * coincide con quello già selezionato, così non innesca rerender inutili.
-   */
-  React.useEffect(() => {
-    if (!controlledSelectionId) return;
-    if (controlledSelectionId === selectedId) return;
-    if (!useCases.some((u) => u.id === controlledSelectionId)) return;
-    setSelectedId(controlledSelectionId);
-  }, [controlledSelectionId, selectedId, useCases]);
+  }, [editorTaskInstanceId, useCases, setSelectedId]);
 
   /** Stable selection while the list is non-empty (avoids empty right pane before effect runs). */
   const effectiveSelectedId = React.useMemo(() => {
@@ -521,7 +593,6 @@ export function AIAgentUseCaseComposer({
 
   const [editingTitleId, setEditingTitleId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
-  const [rootDraftLabel, setRootDraftLabel] = React.useState('');
   const [creatingChildParentId, setCreatingChildParentId] = React.useState<string | null>(null);
   const [childDraftLabel, setChildDraftLabel] = React.useState('');
   /** Valori triplet (etichetta, scenario, messaggio) all’ingresso in lista o dopo rigenera IA. */
@@ -667,20 +738,63 @@ export function AIAgentUseCaseComposer({
   const [agentMsgEditUseCaseId, setAgentMsgEditUseCaseId] = React.useState<string | null>(null);
   const [agentMsgEditDraft, setAgentMsgEditDraft] = React.useState('');
 
+  const [polishScenarioPendingUseCaseId, setPolishScenarioPendingUseCaseId] = React.useState<
+    string | null
+  >(null);
+
+  const resolveScenarioTextForPolish = React.useCallback(
+    (useCaseId: string): string => {
+      const uc = useCases.find((x) => x.id === useCaseId);
+      if (!uc) return '';
+      if (payoffEditUseCaseId === useCaseId) {
+        return payoffEditDraft.trim();
+      }
+      return getScenarioText(uc);
+    },
+    [useCases, payoffEditUseCaseId, payoffEditDraft]
+  );
+
+  const invokePolishUseCaseScenario = React.useCallback(
+    async (useCaseId: string): Promise<void> => {
+      if (!onPolishUseCaseScenario) return;
+      const text = resolveScenarioTextForPolish(useCaseId);
+      if (text.length < 8) return;
+      setPolishScenarioPendingUseCaseId(useCaseId);
+      try {
+        const merged = await Promise.resolve(
+          onPolishUseCaseScenario(useCaseId, text)
+        );
+        if (merged) {
+          if (payoffEditUseCaseId === useCaseId) {
+            setPayoffEditDraft(getScenarioText(merged));
+          }
+          clearNewHighlightOnDesignerAction(useCaseId);
+        }
+      } finally {
+        setPolishScenarioPendingUseCaseId((cur) => (cur === useCaseId ? null : cur));
+      }
+    },
+    [
+      onPolishUseCaseScenario,
+      resolveScenarioTextForPolish,
+      payoffEditUseCaseId,
+      clearNewHighlightOnDesignerAction,
+    ]
+  );
+
   React.useEffect(() => {
     setEditingTitleId(null);
   }, [effectiveSelectedId]);
 
   /**
-   * Lift-up della selezione lista verso il parent (es. wizard right-panel «Mostra JSON»).
-   * Notifichiamo SOLO quando l'id effettivo cambia: usare `effectiveSelectedId` (che è
-   * `selectedId` reso stabile rispetto al primo elemento ordinato) evita di emettere un
-   * `null` transitorio durante l'effetto di pre-popolamento. Idempotente — il consumer
-   * deve gestire chiamate ripetute con lo stesso id (no-op tipico).
+   * Lift-up solo in modalità non controllata: se il parent passa anche `controlledSelectionId`,
+   * la selezione è già condivisa e `setSelectedId` notifica il parent — un secondo effect qui
+   * creerebbe ping-pong con la risincronizzazione controllata.
    */
   React.useEffect(() => {
+    if (isLiftedSelection) return;
     onSelectionChange?.(effectiveSelectedId);
-  }, [effectiveSelectedId, onSelectionChange]);
+  }, [effectiveSelectedId, onSelectionChange, isLiftedSelection]);
 
   React.useEffect(() => {
     if (!primaryGenerateOnRightOnly) {
@@ -709,7 +823,7 @@ export function AIAgentUseCaseComposer({
       const scenario =
         payoffEditUseCaseId === u.id
           ? payoffEditDraft
-          : getScenarioDescrittivoText(u);
+          : getScenarioText(u);
       return {
         id: u.id,
         current: { scenario, agentMessage },
@@ -1118,10 +1232,10 @@ export function AIAgentUseCaseComposer({
             : u
         )
       );
-      onClearUseCaseHighlight?.(useCaseId);
+      clearNewHighlightOnDesignerAction(useCaseId);
       setEditingTitleId(null);
     },
-    [draftTitle, setUseCases, onClearUseCaseHighlight]
+    [draftTitle, setUseCases, clearNewHighlightOnDesignerAction]
   );
 
   const createUseCase = React.useCallback(
@@ -1129,25 +1243,34 @@ export function AIAgentUseCaseComposer({
       label: string;
       parentId: string | null;
       creationScope?: 'single' | 'batch';
+      holdComposerBusy?: boolean;
+      deferSiblingReorder?: boolean;
+      skipSelectAfterCreate?: boolean;
     }) => {
       const label = String(params.label || '').trim();
       if (!label) {
         logUseCaseRootBatch('createUseCase_skip_empty_label', { parentId: params.parentId });
-        return;
+        return '';
       }
       logUseCaseRootBatch('createUseCase_call', {
         labelPreview: label.slice(0, 120),
         labelLen: label.length,
         parentId: params.parentId,
         creationScope: params.creationScope ?? 'single',
+        holdComposerBusy: params.holdComposerBusy === true,
       });
       const createdId = await onCreateUseCase({
         label,
         parentId: params.parentId,
         creationScope: params.creationScope,
+        holdComposerBusy: params.holdComposerBusy,
+        deferSiblingReorder: params.deferSiblingReorder,
       });
       logUseCaseRootBatch('createUseCase_done', { createdId });
-      setSelectedId(createdId);
+      if (!params.skipSelectAfterCreate && createdId) {
+        setSelectedId(createdId);
+      }
+      return createdId;
     },
     [onCreateUseCase]
   );
@@ -1155,43 +1278,134 @@ export function AIAgentUseCaseComposer({
   const handleCreateRoot = React.useCallback(async () => {
     logUseCaseRootBatch('handleCreateRoot_start', {
       busy,
+      rootDraftSubmitting,
       rawLen: rootDraftLabel.length,
       rawPreview: rootDraftLabel.slice(0, 200),
     });
-    if (busy) {
+    if (rootComposerLocked) {
       logUseCaseRootBatch('handleCreateRoot_abort_busy');
       return;
     }
-    const parts = parseRootUseCaseDraftSegments(rootDraftLabel);
-    logUseCaseRootBatch('handleCreateRoot_parsed', { segmentCount: parts.length, partsPreview: parts.map((p) => p.slice(0, 80)) });
-    if (parts.length === 0) {
-      logUseCaseRootBatch('handleCreateRoot_abort_no_segments');
-      return;
-    }
-    if (parts.length > ROOT_USE_CASE_BATCH_MAX) {
-      setRootBatchWarning(`Massimo ${ROOT_USE_CASE_BATCH_MAX} use case per invio. Riduci il batch.`);
-      logUseCaseRootBatch('handleCreateRoot_abort_over_cap', { cap: ROOT_USE_CASE_BATCH_MAX });
-      return;
-    }
-    setRootBatchWarning(null);
-    const batchScope = parts.length > 1 ? 'batch' : 'single';
+    const rawSnapshot = rootDraftLabel;
+    rootBatchInProgressRef.current = true;
+    setRootDraftFlowActive(true);
+    setRootDraftSubmitting(true);
     try {
-      for (let i = 0; i < parts.length; i++) {
-        const label = parts[i];
-        logUseCaseRootBatch('batch_segment_start', { index: i, total: parts.length });
-        await createUseCase({ label, parentId: null, creationScope: batchScope });
-        logUseCaseRootBatch('batch_segment_ok', { index: i, total: parts.length });
+      if (!String(rawSnapshot || '').trim()) {
+        logUseCaseRootBatch('handleCreateRoot_abort_no_segments');
+        return;
       }
-      logUseCaseRootBatch('handleCreateRoot_batch_complete');
+
+      if (isConversationalRulesCatalog) {
+        const parts = parseRootUseCaseDraftSegmentsFallback(rawSnapshot);
+        if (parts.length === 0) return;
+        if (parts.length > ROOT_USE_CASE_BATCH_MAX) {
+          setRootBatchWarning(
+            `Massimo ${ROOT_USE_CASE_BATCH_MAX} use case per invio. Riduci il batch.`
+          );
+          return;
+        }
+        setRootBatchWarning(null);
+        setRootDraftLabel('');
+        const batchScope = parts.length > 1 ? 'batch' : 'single';
+        for (const label of parts) {
+          await createUseCase({ label, parentId: null, creationScope: batchScope });
+        }
+        return;
+      }
+
+      let resolved: Awaited<ReturnType<typeof resolveRootUseCaseDraftForCreateAsync>>;
+      try {
+        resolved = await resolveRootUseCaseDraftForCreateAsync({
+          raw: rawSnapshot,
+          catalog: useCases,
+          splitApi: onSplitRootUseCaseDraft
+            ? (draft) => onSplitRootUseCaseDraft(draft)
+            : undefined,
+        });
+      } catch (e) {
+        logUseCaseRootBatch('handleCreateRoot_resolve_error', {
+          message: e instanceof Error ? e.message : String(e),
+        });
+        throw e;
+      }
+
+      logUseCaseRootBatch('handleCreateRoot_parsed', {
+        segmentCount: resolved.labels.length,
+        skippedCount: resolved.skippedCount,
+        usedLlm: resolved.usedLlm,
+        partsPreview: resolved.labels.map((p) => p.slice(0, 80)),
+      });
+
+      setRootDraftLabel('');
+      logUseCaseRootBatch('handleCreateRoot_cleared_textarea');
+
+      if (resolved.labels.length === 0) {
+        if (resolved.skippedCount > 0) {
+          setRootBatchWarning(
+            resolved.skippedCount === 1
+              ? '1 use case già presente, saltato.'
+              : `${resolved.skippedCount} use case già presenti, saltati.`
+          );
+        }
+        logUseCaseRootBatch('handleCreateRoot_abort_no_segments');
+        return;
+      }
+
+      if (resolved.skippedCount > 0) {
+        setRootBatchWarning(
+          resolved.skippedCount === 1
+            ? '1 duplicato saltato; creazione degli altri in corso…'
+            : `${resolved.skippedCount} duplicati saltati; creazione degli altri in corso…`
+        );
+      } else {
+        setRootBatchWarning(null);
+      }
+
+      const batchScope = resolved.labels.length > 1 ? 'batch' : 'single';
+      const deferReorder = batchScope === 'batch';
+      const createdIds: string[] = [];
+      for (let i = 0; i < resolved.labels.length; i++) {
+        const label = resolved.labels[i];
+        const isLast = i === resolved.labels.length - 1;
+        logUseCaseRootBatch('batch_segment_start', { index: i, total: resolved.labels.length });
+        const createdId = await createUseCase({
+          label,
+          parentId: null,
+          creationScope: batchScope,
+          holdComposerBusy: !isLast,
+          deferSiblingReorder: deferReorder,
+          skipSelectAfterCreate: true,
+        });
+        if (createdId) createdIds.push(createdId);
+        logUseCaseRootBatch('batch_segment_ok', { index: i, total: resolved.labels.length });
+      }
+      logUseCaseRootBatch('handleCreateRoot_batch_complete', { createdCount: createdIds.length });
+      if (createdIds.length > 0) {
+        requestAnimationFrame(() => {
+          onRootUseCaseBatchCreated?.(createdIds);
+        });
+      }
     } catch (e) {
       logUseCaseRootBatch('handleCreateRoot_batch_error', {
         message: e instanceof Error ? e.message : String(e),
       });
       throw e;
+    } finally {
+      rootBatchInProgressRef.current = false;
+      setRootDraftSubmitting(false);
+      setRootDraftFlowActive(false);
     }
-    setRootDraftLabel('');
-    logUseCaseRootBatch('handleCreateRoot_cleared_textarea');
-  }, [busy, rootDraftLabel, createUseCase]);
+  }, [
+    rootComposerLocked,
+    rootDraftSubmitting,
+    rootDraftLabel,
+    useCases,
+    isConversationalRulesCatalog,
+    onSplitRootUseCaseDraft,
+    onRootUseCaseBatchCreated,
+    createUseCase,
+  ]);
 
   React.useLayoutEffect(() => {
     const el = rootDraftRef.current;
@@ -1266,13 +1480,13 @@ export function AIAgentUseCaseComposer({
             : u
         )
       );
-      onClearUseCaseHighlight?.(useCaseId);
+      clearNewHighlightOnDesignerAction(useCaseId);
       if (primaryGenerateOnRightOnly) {
         commitCardExpansion(useCaseId, false, 'programmatic');
         listToolbarCtx?.notifyCardToggle();
       }
     },
-    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
+    [setUseCases, clearNewHighlightOnDesignerAction, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
   );
 
   const [parametricCartesianErrorById, setParametricCartesianErrorById] = React.useState<
@@ -1457,16 +1671,16 @@ export function AIAgentUseCaseComposer({
         prev.map((u) =>
           u.id === useCaseId
             ? {
-                ...withScenarioDescrittivo(u, value),
+                ...withScenarioText(u, value),
                 designer_edit_confirmed: true as const,
                 designer_payoff_vote: 'up' as const,
               }
             : u
         )
       );
-      onClearUseCaseHighlight?.(useCaseId);
+      clearNewHighlightOnDesignerAction(useCaseId);
     },
-    [setUseCases, onClearUseCaseHighlight]
+    [setUseCases, clearNewHighlightOnDesignerAction]
   );
 
   /**
@@ -1494,11 +1708,11 @@ export function AIAgentUseCaseComposer({
   );
 
   const toggleDesignerFieldVote = React.useCallback(
-    (useCaseId: string, field: DesignerVoteField, choice: 'up' | 'down') => {
+    (useCaseId: string, field: DesignerVoteField, choice: DesignerFieldVote) => {
       setUseCases((prev) => applyDesignerFieldVoteToggle(prev, useCaseId, field, choice));
-      onClearUseCaseHighlight?.(useCaseId);
+      clearNewHighlightOnDesignerAction(useCaseId);
     },
-    [setUseCases, onClearUseCaseHighlight]
+    [setUseCases, clearNewHighlightOnDesignerAction]
   );
 
   /**
@@ -1516,15 +1730,15 @@ export function AIAgentUseCaseComposer({
    * `'up'`, rosso su `'down'`, neutro altrimenti — vedi `headerBgClass` più sotto.
    */
   const validateUseCaseFromHeader = React.useCallback(
-    (useCaseId: string, choice: 'up' | 'down') => {
+    (useCaseId: string, choice: DesignerFieldVote) => {
       setUseCases((prev) => applyUseCaseHeaderVoteToggle(prev, useCaseId, choice));
-      onClearUseCaseHighlight?.(useCaseId);
+      clearNewHighlightOnDesignerAction(useCaseId);
       if (primaryGenerateOnRightOnly) {
         commitCardExpansion(useCaseId, false, 'programmatic');
         listToolbarCtx?.notifyCardToggle();
       }
     },
-    [setUseCases, onClearUseCaseHighlight, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
+    [setUseCases, clearNewHighlightOnDesignerAction, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
   );
 
   const beginPayoffEdit = React.useCallback((useCaseId: string, current: string) => {
@@ -1621,7 +1835,7 @@ export function AIAgentUseCaseComposer({
     if (!selected) return false;
     const b = fieldBaselineByUseCaseId[selected.id];
     if (!b) return false;
-    return getScenarioDescrittivoText(selected) !== b.payoff;
+    return getScenarioText(selected) !== b.payoff;
   }, [selected, fieldBaselineByUseCaseId]);
 
   const agentMessageEmpty = React.useMemo(
@@ -2236,7 +2450,7 @@ export function AIAgentUseCaseComposer({
         </div>
       ) : null}
 
-      {creationMessage ? (
+      {creationMessage && !suppressTopCreationMessage ? (
         <div className="rounded-lg border border-violet-800/70 bg-violet-950/40 px-3 py-2 text-sm text-violet-100 inline-flex items-center gap-2">
           <Loader2 size={14} className="animate-spin shrink-0" aria-hidden />
           <span>{creationMessage}</span>
@@ -2268,19 +2482,18 @@ export function AIAgentUseCaseComposer({
           } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="shrink-0 border-b border-slate-700/50 px-2 pt-2 pb-1 space-y-1">
-                <textarea
-                  ref={rootDraftRef}
-                  rows={1}
-                  value={rootDraftLabel}
-                  onChange={(e) => {
+              {!showUseCaseEmptyTutor ? (
+                <UseCaseRootComposerHeader
+                  rootDraftRef={rootDraftRef}
+                  rootDraftLabel={rootDraftLabel}
+                  onRootDraftChange={(v) => {
                     setRootBatchWarning(null);
-                    setRootDraftLabel(e.target.value);
+                    setRootDraftLabel(v);
                   }}
-                  onBlur={() => {
+                  onRootDraftBlur={() => {
                     setRootDraftLabel((prev) => normalizeRootUseCaseDraftDisplay(prev));
                   }}
-                  onPaste={(e) => {
+                  onRootDraftPaste={(e) => {
                     const pasted = e.clipboardData.getData('text/plain');
                     if (!/[;,\r\n]/.test(pasted)) return;
                     e.preventDefault();
@@ -2292,14 +2505,7 @@ export function AIAgentUseCaseComposer({
                     setRootDraftLabel(normalizeRootUseCaseDraftDisplay(before + pasted + after));
                     setRootBatchWarning(null);
                   }}
-                  disabled={busy}
-                  placeholder={
-                    isConversationalRulesCatalog
-                      ? 'Una o più regole: una riga per titolo, oppure separa con ; o ,. INVIO crea tutte in sequenza.'
-                      : 'Uno o più use case: una riga per scenario, oppure separa con ; o ,. INVIO crea tutti in sequenza.'
-                  }
-                  className="w-full resize-none overflow-hidden rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 min-h-[36px]"
-                  onKeyDown={(e) => {
+                  onRootDraftKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       void handleCreateRoot();
@@ -2308,82 +2514,76 @@ export function AIAgentUseCaseComposer({
                       setRootBatchWarning(null);
                     }
                   }}
+                  rootComposerLocked={rootComposerLocked}
+                  placeholder={
+                    isConversationalRulesCatalog
+                      ? 'Una o più regole: una riga per titolo, oppure separa con ; o ,. INVIO crea tutte in sequenza.'
+                      : 'Incolla o scrivi uno o più scenari (anche un paragrafo). INVIO: l’IA decide quanti use case creare.'
+                  }
+                  showAnalyzeChip={showRootAnalyzeChip}
+                  rootChipBusy={rootChipBusy}
+                  rootChipLabel={rootChipLabel}
+                  onAnalyzeClick={() => void handleCreateRoot()}
+                  rootBatchWarning={rootBatchWarning}
+                  bundleGenerateBusy={bundleGenerateBusy}
+                  bundleGenerationCount={useCaseBundleGenerationCount}
+                  bundleGenerationOrdering={useCaseBundleGenerationOrdering}
+                  onGenerateUseCaseBundle={onGenerateUseCaseBundle}
+                  generating={generating}
+                  hasExistingUseCases={ordered.length > 0}
                 />
-                {rootBatchWarning ? (
-                  <p className="text-[11px] text-amber-300/95">{rootBatchWarning}</p>
-                ) : null}
-              </div>
-              {ordered.length === 0 ? (
+              ) : null}
+              {showUseCaseEmptyTutor ? (
+                <UseCaseEmptyTutorPanel
+                  rootDraftRef={rootDraftRef}
+                  rootDraftLabel={rootDraftLabel}
+                  onRootDraftChange={(v) => {
+                    setRootBatchWarning(null);
+                    setRootDraftLabel(v);
+                  }}
+                  onRootDraftBlur={() => {
+                    setRootDraftLabel((prev) => normalizeRootUseCaseDraftDisplay(prev));
+                  }}
+                  onRootDraftPaste={(e) => {
+                    const pasted = e.clipboardData.getData('text/plain');
+                    if (!/[;,\r\n]/.test(pasted)) return;
+                    e.preventDefault();
+                    const ta = e.currentTarget;
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = rootDraftLabel.slice(0, start);
+                    const after = rootDraftLabel.slice(end);
+                    setRootDraftLabel(normalizeRootUseCaseDraftDisplay(before + pasted + after));
+                    setRootBatchWarning(null);
+                  }}
+                  onRootDraftKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleCreateRoot();
+                    } else if (e.key === 'Escape') {
+                      setRootDraftLabel('');
+                      setRootBatchWarning(null);
+                    }
+                  }}
+                  rootComposerLocked={rootComposerLocked}
+                  placeholder="Incolla o scrivi uno o più scenari (anche un paragrafo). INVIO: l’IA decide quanti use case creare."
+                  showAnalyzeChip={showRootAnalyzeChip}
+                  rootChipBusy={rootChipBusy}
+                  rootChipLabel={rootChipLabel}
+                  onAnalyzeClick={() => void handleCreateRoot()}
+                  rootBatchWarning={rootBatchWarning}
+                  onGenerateFromScratch={onGenerateUseCaseBundle}
+                  generating={generating}
+                  bundleGenerateBusy={bundleGenerateBusy}
+                  bundleGenerationCount={useCaseBundleGenerationCount}
+                  bundleGenerationOrdering={useCaseBundleGenerationOrdering}
+                />
+              ) : ordered.length === 0 ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6">
-                  {onGenerateUseCaseBundle ? (
-                    <p className="max-w-md text-center text-sm text-slate-500">
-                      Nessuno scenario ancora. Puoi generarli con IA usando il pulsante qui sotto.
-                    </p>
-                  ) : isConversationalRulesCatalog ? (
-                    <p className="max-w-md text-center text-sm text-slate-500">
-                      Le regole predefinite (error handling) compaiono qui. Aggiungi nuove regole nella
-                      text box sopra e premi INVIO.
-                    </p>
-                  ) : primaryGenerateOnRightOnly ? (
-                    <div
-                      className="flex w-full max-w-xl flex-col items-stretch gap-8 px-2 py-2"
-                      aria-label="Come iniziare con gli use case"
-                    >
-                      <p className="text-center text-xl font-semibold tracking-tight text-amber-200/95 sm:text-2xl">
-                        Nessuno use case ancora.
-                      </p>
-                      <ol className="flex flex-col gap-6">
-                        <li className="flex items-start gap-4">
-                          <span
-                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-violet-500/35 bg-violet-500/15 text-violet-300 shadow-[0_0_24px_rgba(139,92,246,0.12)]"
-                            aria-hidden
-                          >
-                            <ClipboardPaste size={26} strokeWidth={1.75} />
-                          </span>
-                          <p className="min-w-0 pt-1 text-base font-medium leading-snug text-slate-200 sm:text-lg">
-                            Se hai già un insieme di use case definiti, incollali nella text box sopra e
-                            premi{' '}
-                            <kbd className="rounded border border-slate-600/80 bg-slate-800/90 px-1.5 py-0.5 text-sm font-mono text-violet-200">
-                              Invio
-                            </kbd>
-                          </p>
-                        </li>
-                        <li className="flex items-start gap-4">
-                          <span
-                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-500/35 bg-emerald-500/15 text-emerald-300 shadow-[0_0_24px_rgba(52,211,153,0.12)]"
-                            aria-hidden
-                          >
-                            <Sparkles size={26} strokeWidth={1.75} />
-                          </span>
-                          <p className="min-w-0 pt-1 text-base font-medium leading-snug text-slate-200 sm:text-lg">
-                            Altrimenti clicca sul pulsante in basso nel pannello di destra{' '}
-                            <span className="text-emerald-300">«{LABEL_GENERATE_USE_CASES}»</span>
-                          </p>
-                        </li>
-                      </ol>
-                    </div>
-                  ) : (
-                    <p className="max-w-md text-center text-sm text-slate-500">
-                      Nessuno scenario. Genera con IA o crea il design agent prima.
-                    </p>
-                  )}
-                  {onGenerateUseCaseBundle ? (
-                    <button
-                      type="button"
-                      disabled={busy || generating}
-                      onClick={() => void onGenerateUseCaseBundle()}
-                      className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
-                    >
-                      {busy ? (
-                        <Loader2 className="animate-spin" size={16} aria-hidden />
-                      ) : (
-                        <Sparkles size={16} aria-hidden />
-                      )}
-                      {busy
-                        ? (bundleGenerateBusyLabel ?? 'Generazione scenari…')
-                        : LABEL_GENERATE_USE_CASES}
-                    </button>
-                  ) : null}
+                  <p className="max-w-md text-center text-sm text-slate-500">
+                    Le regole predefinite (error handling) compaiono qui. Aggiungi nuove regole nella
+                    text box sopra e premi INVIO.
+                  </p>
                 </div>
               ) : (
               <>
@@ -2432,6 +2632,7 @@ export function AIAgentUseCaseComposer({
                    */
                   const includedInConv = isUseCaseIncludedInConversations(u);
                   const searchHighlight = highlightIdSet.has(u.id);
+                  const reviewHighlight = useCaseHasDesignerReviewVote(u);
                   const stripeStable = u.id.split('').reduce((h, ch) => h + ch.charCodeAt(0), 0);
                   const zebraRow = primaryGenerateOnRightOnly
                     ? stripeStable % 2 === 0
@@ -2442,9 +2643,11 @@ export function AIAgentUseCaseComposer({
                       : UC_LIST_ZEBRA_CLASSIC_ODD;
                   const liSurface = searchHighlight
                     ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-50/90 ring-2 ring-amber-300/50 dark:bg-amber-950/20 dark:ring-amber-400/40'
-                    : primaryGenerateOnRightOnly && cardExpanded
-                      ? `overflow-hidden rounded-md border ${UC_WIZARD_ROW_EXPANDED}`
-                      : `rounded-md ${zebraRow}`;
+                    : reviewHighlight
+                      ? `overflow-hidden rounded-md ${UC_ROW_REVIEW_EDGE}`
+                      : primaryGenerateOnRightOnly && cardExpanded
+                        ? `overflow-hidden rounded-md border ${UC_WIZARD_ROW_EXPANDED}`
+                        : `rounded-md ${zebraRow}`;
                   const nextInFiltered = filteredOrdered[rowIndex + 1];
                   const showSiblingGapSentinel =
                     nextInFiltered != null &&
@@ -2534,6 +2737,14 @@ export function AIAgentUseCaseComposer({
                               <ChevronRight size={14} aria-hidden />
                             )}
                           </button>
+                        ) : null}
+                        {searchHighlight ? (
+                          <span
+                            className="mt-[2px] shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide bg-sky-500/25 text-sky-200 ring-1 ring-sky-400/40"
+                            aria-label="Use case appena aggiunto"
+                          >
+                            New
+                          </span>
                         ) : null}
                         <GitBranch size={12} className="mt-[4px] shrink-0 opacity-60 text-slate-400" aria-hidden />
                         {editingTitle ? (
@@ -2862,6 +3073,34 @@ export function AIAgentUseCaseComposer({
                                     }}
                                   />
                                   <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                                    {onPolishUseCaseScenario ? (
+                                      <button
+                                        type="button"
+                                        title={
+                                          polishScenarioPendingUseCaseId === u.id
+                                            ? LABEL_POLISH_USE_CASE_SCENARIO_PENDING
+                                            : TOOLTIP_POLISH_USE_CASE_SCENARIO
+                                        }
+                                        aria-label={LABEL_POLISH_USE_CASE_SCENARIO}
+                                        disabled={
+                                          busy ||
+                                          polishScenarioPendingUseCaseId === u.id ||
+                                          payoffEditDraft.trim().length < 8
+                                        }
+                                        className="rounded p-0.5 text-sky-300 hover:bg-slate-800/90 disabled:opacity-40"
+                                        onClick={() => void invokePolishUseCaseScenario(u.id)}
+                                      >
+                                        {polishScenarioPendingUseCaseId === u.id ? (
+                                          <Loader2
+                                            size={14}
+                                            className="animate-spin"
+                                            aria-hidden
+                                          />
+                                        ) : (
+                                          <Wand2 size={14} aria-hidden />
+                                        )}
+                                      </button>
+                                    ) : null}
                                     <button
                                       type="button"
                                       title="Conferma"
@@ -2886,18 +3125,25 @@ export function AIAgentUseCaseComposer({
                                 <UseCaseWizardScenarioDisplay
                                   useCase={u}
                                   busy={busy}
-                                  showHuman={wizardShowScenarioHuman}
-                                  showLlm={wizardShowScenarioLlm}
                                   scenarioFieldLabel={scenarioFieldLabel}
                                   textClassName=""
                                   onDoubleClickEdit={() =>
-                                    beginPayoffEdit(u.id, getScenarioDescrittivoText(u))
+                                    beginPayoffEdit(u.id, getScenarioText(u))
                                   }
                                   onVote={(choice) =>
                                     toggleDesignerFieldVote(u.id, 'payoff', choice)
                                   }
                                   onEditClick={() =>
-                                    beginPayoffEdit(u.id, getScenarioDescrittivoText(u))
+                                    beginPayoffEdit(u.id, getScenarioText(u))
+                                  }
+                                  onPolishClick={
+                                    onPolishUseCaseScenario
+                                      ? () => void invokePolishUseCaseScenario(u.id)
+                                      : undefined
+                                  }
+                                  polishPending={polishScenarioPendingUseCaseId === u.id}
+                                  polishDisabled={
+                                    resolveScenarioTextForPolish(u.id).length < 8
                                   }
                                 />
                               )}
@@ -2920,7 +3166,7 @@ export function AIAgentUseCaseComposer({
                                     toggleDesignerFieldVote(u.id, 'agentMessage', choice)
                                   }
                                   onMessageCommitted={() => {
-                                    onClearUseCaseHighlight?.(u.id);
+                                    clearNewHighlightOnDesignerAction(u.id);
                                     if (primaryGenerateOnRightOnly) {
                                       commitCardExpansion(u.id, false, 'programmatic');
                                       listToolbarCtx?.notifyCardToggle();
@@ -3410,6 +3656,30 @@ export function AIAgentUseCaseComposer({
                           }}
                         />
                         <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
+                          {onPolishUseCaseScenario ? (
+                            <button
+                              type="button"
+                              title={
+                                polishScenarioPendingUseCaseId === selected.id
+                                  ? LABEL_POLISH_USE_CASE_SCENARIO_PENDING
+                                  : TOOLTIP_POLISH_USE_CASE_SCENARIO
+                              }
+                              aria-label={LABEL_POLISH_USE_CASE_SCENARIO}
+                              disabled={
+                                busy ||
+                                polishScenarioPendingUseCaseId === selected.id ||
+                                payoffEditDraft.trim().length < 8
+                              }
+                              className="rounded p-0.5 text-sky-300 hover:bg-slate-800/90 disabled:opacity-40"
+                              onClick={() => void invokePolishUseCaseScenario(selected.id)}
+                            >
+                              {polishScenarioPendingUseCaseId === selected.id ? (
+                                <Loader2 size={14} className="animate-spin" aria-hidden />
+                              ) : (
+                                <Wand2 size={14} aria-hidden />
+                              )}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             title="Conferma"
@@ -3438,7 +3708,7 @@ export function AIAgentUseCaseComposer({
                           if ((e.target as HTMLElement).closest('button')) return;
                           e.preventDefault();
                           e.stopPropagation();
-                          beginPayoffEdit(selected.id, getScenarioDescrittivoText(selected));
+                          beginPayoffEdit(selected.id, getScenarioText(selected));
                         }}
                       >
                         <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
@@ -3446,13 +3716,13 @@ export function AIAgentUseCaseComposer({
                           <div
                             className={`min-w-0 flex-1 text-sm leading-snug ${UC_SCENARIO_BODY_TEXT} ${fieldTextClass(
                               selected.designer_payoff_vote,
-                              getScenarioDescrittivoText(selected),
+                              getScenarioText(selected),
                               fieldBaselineByUseCaseId[selected.id]?.payoff
                             )}`}
                           >
                             <span className="inline whitespace-pre-wrap align-baseline">
-                              {getScenarioDescrittivoText(selected).trim() ? (
-                                getScenarioDescrittivoText(selected)
+                              {getScenarioText(selected).trim() ? (
+                                getScenarioText(selected)
                               ) : (
                                 <span className="text-slate-500">
                                   — passa il mouse sulla riga e usa la matita a destra
@@ -3462,16 +3732,42 @@ export function AIAgentUseCaseComposer({
                             <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
                               <VoteThumbPair
                                 vote={selected.designer_payoff_vote}
-                                disabled={busy}
+                                disabled={busy || polishScenarioPendingUseCaseId === selected.id}
                                 outerBtnClass={UC_SCENARIO_VOTE_BTN}
                                 onVote={(choice) => toggleDesignerFieldVote(selected.id, 'payoff', choice)}
                               />
+                              {onPolishUseCaseScenario ? (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    busy ||
+                                    polishScenarioPendingUseCaseId === selected.id ||
+                                    resolveScenarioTextForPolish(selected.id).length < 8
+                                  }
+                                  title={
+                                    polishScenarioPendingUseCaseId === selected.id
+                                      ? LABEL_POLISH_USE_CASE_SCENARIO_PENDING
+                                      : TOOLTIP_POLISH_USE_CASE_SCENARIO
+                                  }
+                                  aria-label={LABEL_POLISH_USE_CASE_SCENARIO}
+                                  className={UC_SCENARIO_ROW_EDIT_BTN}
+                                  onClick={() => void invokePolishUseCaseScenario(selected.id)}
+                                >
+                                  {polishScenarioPendingUseCaseId === selected.id ? (
+                                    <Loader2 size={12} className="animate-spin" aria-hidden />
+                                  ) : (
+                                    <Wand2 size={12} aria-hidden />
+                                  )}
+                                </button>
+                              ) : null}
                               <button
                                 type="button"
-                                disabled={busy}
+                                disabled={busy || polishScenarioPendingUseCaseId === selected.id}
                                 title="Modifica scenario"
                                 className={UC_SCENARIO_ROW_EDIT_BTN}
-                                onClick={() => beginPayoffEdit(selected.id, selected.payoff ?? '')}
+                                onClick={() =>
+                                  beginPayoffEdit(selected.id, getScenarioText(selected))
+                                }
                               >
                                 <Pencil size={12} aria-hidden />
                               </button>

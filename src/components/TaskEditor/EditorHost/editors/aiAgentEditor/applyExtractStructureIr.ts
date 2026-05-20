@@ -6,7 +6,10 @@ import type { AIAgentRuntimeCompact } from '@types/aiAgentDesign';
 import { seedPreviewByStyleFromSample } from '@types/aiAgentPreview';
 import { composeRuntimePromptMarkdown } from './composeRuntimePromptMarkdown';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
-import { formatOperationalSequenceNewlines } from './operationalSequenceDisplay';
+import {
+  formatConstraintsBullets,
+  formatOperationalSequenceNewlines,
+} from './structuredSectionDisplay';
 import type { GenerateDesignApplyResult } from './mergeDesignFromApi';
 
 /** JSON IR returned by POST /design/extract-structure (Phase 1). */
@@ -48,9 +51,9 @@ function constraintsIrToSectionText(c: { must: string; must_not: string }): stri
   const mLow = must.toLowerCase();
   const nLow = mustNot.toLowerCase();
   const parts: string[] = [];
-  if (must && mLow !== 'missing' && mLow !== 'ambiguous') parts.push(`Must: ${must}`);
-  if (mustNot && nLow !== 'missing' && nLow !== 'ambiguous') parts.push(`Must not: ${mustNot}`);
-  return parts.join('\n');
+  if (must && mLow !== 'missing' && mLow !== 'ambiguous') parts.push(`Must:\n${must}`);
+  if (mustNot && nLow !== 'missing' && nLow !== 'ambiguous') parts.push(`Must not:\n${mustNot}`);
+  return formatConstraintsBullets(parts.join('\n\n'));
 }
 
 function isStructuredIr(raw: unknown): raw is AgentStructuredDesignIr {

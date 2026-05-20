@@ -1,10 +1,10 @@
 /**
- * IA revision diff (toggleable) + dual-layer textarea revision editor (base + insert/delete patch ops).
+ * IA revision diff (toggleable) + Monaco markdown editor for structured sections.
  */
 
 import React from 'react';
 import { AIAgentIaRevisionOverlay } from './AIAgentIaRevisionOverlay';
-import { TextDualLayerRevisionEditor } from './TextDualLayerRevisionEditor';
+import { StructuredSectionMarkdownMonacoEditor } from './StructuredSectionMarkdownMonacoEditor';
 import type { InsertOp } from './effectiveFromRevisionMask';
 import type { OtOp } from './otTypes';
 import type { RevisionBatchOp } from './textRevisionLinear';
@@ -18,13 +18,11 @@ export interface AIAgentRevisionEditorShellProps {
   readOnly: boolean;
   iaRevisionDiff: { oldIaPrompt: string; newIaPrompt: string } | null;
   onDismissIaRevisionDiff: () => void;
-  /** When true with {@link otCurrentText} and {@link onApplyOtCommit}, textarea uses OT commit path. */
   otMode?: boolean;
   otCurrentText?: string;
   onApplyOtCommit?: (ops: readonly OtOp[]) => void;
   onUndoRequest?: () => void;
   onRedoRequest?: () => void;
-  /** Right-click: insert BackendCall path token at caret / selection in section text. */
   onInsertBackendPathAtCaret?: (backendPath: string, rangeStart: number, rangeEnd?: number) => void;
 }
 
@@ -55,18 +53,18 @@ export function AIAgentRevisionEditorShell({
 
   const editorBlock = (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <TextDualLayerRevisionEditor
+      <StructuredSectionMarkdownMonacoEditor
         baseText={promptBaseText}
         deletedMask={deletedMask}
         inserts={inserts}
         readOnly={readOnly}
-        onApplyRevisionOps={onApplyRevisionOps}
         otMode={otMode}
         otCurrentText={otCurrentText}
+        onApplyRevisionOps={onApplyRevisionOps}
         onApplyOtCommit={onApplyOtCommit}
+        onInsertBackendPathAtCaret={onInsertBackendPathAtCaret}
         onUndoRequest={onUndoRequest}
         onRedoRequest={onRedoRequest}
-        onInsertBackendPathAtCaret={onInsertBackendPathAtCaret}
       />
     </div>
   );

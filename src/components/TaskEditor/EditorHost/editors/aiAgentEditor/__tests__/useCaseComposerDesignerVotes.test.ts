@@ -9,6 +9,7 @@ import {
   applyDesignerFieldVoteToggle,
   applyUseCaseHeaderVoteToggle,
   applyUseCaseValidatedOnMessageCommit,
+  useCaseHasDesignerReviewVote,
 } from '../useCaseComposerDesignerVotes';
 
 function minimalUseCase(id: string): AIAgentUseCase {
@@ -67,6 +68,14 @@ describe('applyDesignerFieldVoteToggle', () => {
     expect(next[0].designer_payoff_vote).toBeUndefined();
     expect(next[1].designer_payoff_vote).toBe('down');
   });
+
+  it('sets review vote and clears on second click', () => {
+    const prev = [minimalUseCase('a')];
+    const next = applyDesignerFieldVoteToggle(prev, 'a', 'payoff', 'review');
+    expect(next[0].designer_payoff_vote).toBe('review');
+    const cleared = applyDesignerFieldVoteToggle(next, 'a', 'payoff', 'review');
+    expect(cleared[0].designer_payoff_vote).toBeUndefined();
+  });
 });
 
 describe('applyUseCaseValidatedOnMessageCommit', () => {
@@ -84,6 +93,18 @@ describe('applyUseCaseValidatedOnMessageCommit', () => {
   });
 });
 
+describe('useCaseHasDesignerReviewVote', () => {
+  it('is true when any field has review vote', () => {
+    expect(useCaseHasDesignerReviewVote(minimalUseCase('a'))).toBe(false);
+    expect(
+      useCaseHasDesignerReviewVote({
+        ...minimalUseCase('a'),
+        designer_agent_message_vote: 'review',
+      })
+    ).toBe(true);
+  });
+});
+
 describe('applyUseCaseHeaderVoteToggle', () => {
   it('marks a red header vote as excluded from conversations', () => {
     const prev = [{ ...minimalUseCase('a'), included_in_conversations: true }];
@@ -96,6 +117,13 @@ describe('applyUseCaseHeaderVoteToggle', () => {
     const prev = [{ ...minimalUseCase('a'), included_in_conversations: false }];
     const next = applyUseCaseHeaderVoteToggle(prev, 'a', 'up');
     expect(next[0].designer_label_vote).toBe('up');
+    expect(next[0].included_in_conversations).toBe(true);
+  });
+
+  it('review header vote keeps use case included', () => {
+    const prev = [{ ...minimalUseCase('a'), included_in_conversations: false }];
+    const next = applyUseCaseHeaderVoteToggle(prev, 'a', 'review');
+    expect(next[0].designer_label_vote).toBe('review');
     expect(next[0].included_in_conversations).toBe(true);
   });
 

@@ -1,6 +1,6 @@
 /**
  * Derives linear revision mask/inserts from IA base + effective body so OT sections can reuse
- * the same dual-layer mirror (strikethrough / green inserts) as the legacy linear path.
+ * mask/inserts derived from base+effective (Monaco editor commits via revision ops).
  *
  * Uses {@link splitPrefixSuffixMiddle} so deletions and insertions form one contiguous change
  * region (never interlaced character-by-character).

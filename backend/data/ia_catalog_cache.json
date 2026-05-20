@@ -7426,6 +7426,7 @@
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
           "available_reasoning_efforts": [
+            "none",
             "low",
             "medium",
             "high",
@@ -7551,7 +7552,12 @@
           "supports_image_input": true,
           "supports_document_input": true,
           "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
+          "available_reasoning_efforts": [
+            "none",
+            "low",
+            "medium",
+            "high"
+          ],
           "deprecation_info": null,
           "regional_processing_surcharge": null
         }
@@ -7900,7 +7906,7 @@
             "is_in_warning_period": true,
             "is_in_fallback_period": false,
             "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-05-27T00:00:00Z",
+            "provider_deprecation_date": "2026-06-04T00:00:00Z",
             "replacement_model": "qwen35-397b-a17b",
             "deprecation_config": {
               "warning_start_days": 30,
@@ -9151,7 +9157,7 @@
             "is_in_warning_period": true,
             "is_in_fallback_period": false,
             "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-05-27T00:00:00Z",
+            "provider_deprecation_date": "2026-06-04T00:00:00Z",
             "replacement_model": "qwen36-35b-a3b",
             "deprecation_config": {
               "warning_start_days": 30,
@@ -9333,12 +9339,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-19T01:35:45.366Z",
-    "lastLanguagesSync": "2026-05-19T01:35:43.908Z",
-    "lastModelsSync": "2026-05-19T01:35:45.366Z",
+    "updatedAt": "2026-05-20T19:14:15.678Z",
+    "lastLanguagesSync": "2026-05-20T19:14:14.671Z",
+    "lastModelsSync": "2026-05-20T19:14:15.678Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-19T01:35:43.879Z",
+      "at": "2026-05-20T19:14:14.616Z",
       "apiVoiceCount": 25,
       "mappedCount": 25,
       "emptyApiList": false

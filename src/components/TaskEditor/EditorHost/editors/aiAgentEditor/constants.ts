@@ -6,16 +6,40 @@ export const LABEL_CREATE_AGENT = 'Create Agent';
 export const LABEL_REFINE_AGENT = 'Refine comportamento';
 /** Toolbar / empty-state CTA for IA scenario generation. */
 export const LABEL_GENERATE_USE_CASES = 'Genera use case';
+/** CTA accanto alla textbox quando la lista ha già use case (iniziativa IA). */
+export const LABEL_GENERATE_MORE_USE_CASES = 'Crea altri use case';
+/** Guida sotto la textbox con lista già popolata (aggiunta da input utente). */
+export const HINT_ADD_USE_CASES_FROM_INPUT =
+  'Incolla o scrivi uno o più scenari qui sotto: INVIO e l’IA li analizza e li aggiunge alla lista.';
 /** In-tab / toolbar status while Create or Refine is in flight. */
 export const LABEL_GENERATING_IA_AGENT = 'generating IA agent...';
 /** Status while IA creates a single root/child use case. */
 export const LABEL_CREATING_ONE_USE_CASE = 'Sto creando il nuovo use case…';
 /** Status while IA creates several root use cases in one batch (Enter su più righe / separatori). */
 export const LABEL_CREATING_MULTIPLE_USE_CASES = 'Sto creando i nuovi use case…';
+/** Root draft textarea: explicit CTA (same action as Enter). */
+export const LABEL_ANALYZE_AND_CREATE_USE_CASES =
+  'Analizza e crea eventualmente nuovi use case';
+/** Root draft chip: LLM split phase (replaces top banner). */
+export const LABEL_ROOT_DRAFT_ANALYZING =
+  'OK, sto analizzando… per capire quali use case aggiungere…';
 /** Shown when scenario text diverges from last AI baseline — refines label + message to match. */
 export const LABEL_REGENERATE_USE_CASE_FOR_SCENARIO = 'Rigenera use case';
 /** Messaggio accanto al globo / sotto il menu mentre la generalizzazione IA è in corso. */
 export const LABEL_GENERALIZE_USE_CASE_META_PENDING = 'Sto generalizzando, attendi …';
+/** Toolbar scenario: rifinisce forma del testo senza cambiare significato. */
+export const LABEL_POLISH_USE_CASE_SCENARIO = 'Aggiusta testo';
+export const TOOLTIP_POLISH_USE_CASE_SCENARIO =
+  'Rifinisce chiarezza e forma dello scenario (stesso significato, nessun fatto nuovo)';
+/** Durante polish scenario sulla riga. */
+export const LABEL_POLISH_USE_CASE_SCENARIO_PENDING = 'Sto aggiustando il testo…';
+/** Pillola sulla textarea Descrizione task. */
+export const LABEL_POLISH_DESIGN_DESCRIPTION_OFFER =
+  'Vuoi che ti riscriva il testo in modo più formattato, senza cambiarne il contenuto?';
+export const LABEL_POLISH_DESIGN_DESCRIPTION_PENDING =
+  'Attendi: sto riscrivendo il testo in un formato più organizzato, senza modificarne il senso…';
+/** Soglia minima di caratteri «diversi» per proporre il polish descrizione. */
+export const DESIGN_DESCRIPTION_POLISH_MIN_CHAR_DELTA = 50;
 /** Conferma nel menu a tendina del globo (evita generalizzazioni accidentali). */
 export const LABEL_GENERALIZE_USE_CASE_META_CONFIRM = 'Generalizza';
 /** Shown when assistant example is empty after generation — retry LLM for that turn. */

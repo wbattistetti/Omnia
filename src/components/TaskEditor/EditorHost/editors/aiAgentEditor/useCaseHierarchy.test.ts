@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
+  appendUseCaseToSiblingGroup,
   applySiblingReorderForPersist,
   collectUseCaseSubtreeIds,
   normalizeUseCaseSiblingOrder,
@@ -174,6 +175,15 @@ describe('collectUseCaseSubtreeIds', () => {
   it('returns only the node when there are no children', () => {
     const input: AIAgentUseCase[] = [uc('solo', 'Solo', null, 0)];
     expect(collectUseCaseSubtreeIds(input, 'solo')).toEqual(new Set(['solo']));
+  });
+});
+
+describe('appendUseCaseToSiblingGroup', () => {
+  it('appends at end of root sibling group without reordering existing rows', () => {
+    const input: AIAgentUseCase[] = [uc('r1', 'Alpha', null, 0), uc('r2', 'Beta', null, 1)];
+    const out = appendUseCaseToSiblingGroup(input, uc('r3', 'Gamma', null, 99));
+    expect(out.map((x) => x.id)).toEqual(['r1', 'r2', 'r3']);
+    expect(out.find((x) => x.id === 'r3')?.sort_order).toBe(2);
   });
 });
 

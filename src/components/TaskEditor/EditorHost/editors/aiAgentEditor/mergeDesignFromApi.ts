@@ -6,7 +6,10 @@ import type { AIAgentDesignPayload, AIAgentProposedVariable } from '@types/aiAge
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { seedPreviewByStyleFromSample } from '@types/aiAgentPreview';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
-import { formatOperationalSequenceNewlines } from './operationalSequenceDisplay';
+import {
+  formatConstraintsBullets,
+  formatOperationalSequenceNewlines,
+} from './structuredSectionDisplay';
 import { createAgentOutputSlotId } from './aiAgentSlotIdentity';
 
 /**
@@ -61,7 +64,7 @@ export function sectionTextsFromDesignPayload(
     goal: design.goal.trim(),
     operational_sequence: formatOperationalSequenceNewlines(design.operational_sequence),
     context: typeof design.context === 'string' ? design.context.trim() : '',
-    constraints: design.constraints.trim(),
+    constraints: formatConstraintsBullets(design.constraints),
     personality: design.personality.trim(),
     tone: design.tone.trim(),
     examples: ex,

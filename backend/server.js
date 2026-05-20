@@ -20,8 +20,11 @@ const {
   generateUseCaseBundleExtend,
   reorderUseCasesNarratively,
   createUseCase,
+  splitRootUseCaseDraft,
   regenerateUseCase,
   generalizeUseCaseMeta,
+  polishUseCaseScenario,
+  polishDesignDescription,
   regenerateTurn,
   propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,
@@ -7028,6 +7031,86 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         aiProviderService,
       });
       return res.json({ success: true, label: gl, payoff: gp });
+    }
+
+    if (action === 'polish_use_case_scenario') {
+      const scenarioText =
+        typeof body.scenarioText === 'string'
+          ? body.scenarioText
+          : typeof body.payoff === 'string'
+            ? body.payoff
+            : '';
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] polish_use_case_scenario`, {
+        provider,
+        model,
+        len: scenarioText.length,
+      });
+      const polished = await polishUseCaseScenario({
+        scenarioText,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_POLISH_SCENARIO',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({
+        success: true,
+        scenario_llm: polished.scenario_llm,
+        payoff: polished.scenario_llm,
+      });
+    }
+
+    if (action === 'polish_design_description') {
+      const descriptionText =
+        typeof body.descriptionText === 'string'
+          ? body.descriptionText
+          : typeof body.designDescription === 'string'
+            ? body.designDescription
+            : '';
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] polish_design_description`, {
+        provider,
+        model,
+        len: descriptionText.length,
+      });
+      const polished = await polishDesignDescription({
+        descriptionText,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'AGENT_POLISH_DESIGN_DESCRIPTION',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({
+        success: true,
+        design_description: polished.design_description,
+      });
+    }
+
+    if (action === 'split_root_use_case_draft') {
+      const draftText = typeof body.draftText === 'string' ? body.draftText : '';
+      const allUseCasesSplit = Array.isArray(body.allUseCases) ? body.allUseCases : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] split_root_use_case_draft`, {
+        provider,
+        model,
+        draftLen: draftText.length,
+        catalogCount: allUseCasesSplit.length,
+      });
+      const split = await splitRootUseCaseDraft({
+        draftText,
+        allCases: allUseCasesSplit,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_SPLIT_ROOT_DRAFT',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({ success: true, labels: split.labels });
     }
 
     if (action === 'create_use_case') {

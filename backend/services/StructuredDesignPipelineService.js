@@ -158,6 +158,10 @@ Return ONLY a JSON object with exactly these keys:
 - "personality": string
 - "tone": string
 
+FORMATTING (when section is not "missing" or "ambiguous"):
+- "operational_sequence": one operational step per line; each line starts with "- " (extract order from the description; do not merge steps into one paragraph).
+- "constraints.must" and "constraints.must_not": short rule phrases separated by newlines or "; " (one rule per phrase; no long prose blocks).
+
 No markdown fences. No commentary outside JSON.`;
 
 /**

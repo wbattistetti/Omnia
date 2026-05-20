@@ -107,7 +107,7 @@ function buildDialogueCompleteRetryDirective(missing) {
   return (
     `\nOUTPUT_RETRY (mandatory): ${n} use case(s) in your previous JSON had missing or empty assistant "dialogue"[0]."content". ` +
     `Every object in "use_cases" MUST include dialogue: [{ "turn_id": string, "role": "assistant", "content": "<one full non-empty sentence>" }]. ` +
-    `Keep scenario.descrittivo short if needed, but never omit or leave blank the assistant message. ` +
+    `Keep scenario.llm short if needed, but never omit or leave blank the assistant message. ` +
     (labels ? `Rows that were incomplete: ${labels}.` : '')
   );
 }

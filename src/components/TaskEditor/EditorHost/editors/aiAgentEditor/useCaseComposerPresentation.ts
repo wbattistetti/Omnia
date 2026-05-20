@@ -107,14 +107,19 @@ export function aiFieldToneClass(current: string, baseline: string | undefined):
   return current === baseline ? 'text-slate-500' : 'text-emerald-400';
 }
 
-/** Colore testo: pollice (verde/rosso) ha priorità su baseline IA. */
+/** Bordo/sfondo riga wizard quando un campo è «da approfondire». */
+export const UC_ROW_REVIEW_EDGE =
+  'border-l-[3px] border-l-orange-500/75 bg-orange-50/55 dark:border-l-orange-400/70 dark:bg-orange-950/35';
+
+/** Colore testo: pollice (verde/rosso/arancione) ha priorità su baseline IA. */
 export function fieldTextClass(
-  vote: 'up' | 'down' | undefined,
+  vote: 'up' | 'down' | 'review' | undefined,
   current: string,
   baseline: string | undefined
 ): string {
   if (vote === 'up') return 'text-emerald-700 dark:text-emerald-100';
   if (vote === 'down') return 'text-rose-900 dark:text-rose-100';
+  if (vote === 'review') return 'text-orange-800 dark:text-orange-200';
   return aiFieldToneClass(current, baseline);
 }
 
@@ -132,7 +137,7 @@ export function useCaseHeaderShellClass(active: boolean): string {
  * riconoscibile ma molto attenuata.
  */
 export function useCaseHeaderTitleTextClass(
-  labelVote: 'up' | 'down' | undefined,
+  labelVote: 'up' | 'down' | 'review' | undefined,
   active: boolean,
   included = true
 ): string {
@@ -143,6 +148,9 @@ export function useCaseHeaderTitleTextClass(
   }
   if (labelVote === 'down') {
     return `${UC_WIZARD_BODY_MONO} ${weight} text-rose-700 dark:text-rose-300${dim}`;
+  }
+  if (labelVote === 'review') {
+    return `${UC_WIZARD_BODY_MONO} ${weight} text-orange-700 dark:text-orange-300${dim}`;
   }
   return `${UC_WIZARD_BODY_MONO} ${weight} text-amber-700 dark:text-amber-400${dim}`;
 }

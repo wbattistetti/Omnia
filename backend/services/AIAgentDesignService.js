@@ -30,7 +30,8 @@ The server assembles editor Markdown from structured sections only.
 
 STRICT RULES FOR structured sections:
 - "tone" MUST begin with Tone: <token> on line 1; token MUST be one of: neutral, friendly_professional, warm, concise, formal, playful.
-- "constraints" MUST contain two labeled blocks: Must: ... and Must not: ... (plain text, no markdown headings).
+- "operational_sequence": ordered operational steps as a readable list — ONE step per line. Each line MUST start with "- " (bullet) OR "N. " (numbered). Never put multiple steps in one paragraph or one line.
+- "constraints": two labeled blocks only (plain labels, no markdown # headings): line "Must:" then one obligation per line (each line starts with "- "); blank line; line "Must not:" then one prohibition per line (each line starts with "- "). No prose paragraphs under either label.
 
 STRICT RULES FOR runtime_compact (LLM-authored; code only joins fields with blank lines, never rewrites wording):
 - NON-OVERLAP: behavior_compact, constraints_compact, sequence_compact, corrections_compact must each hold unique information. No duplicated meaning across these four fields.
@@ -79,9 +80,10 @@ const REQUIRED_NONEMPTY_SECTION_KEYS = [
 function coalesceEmptyRequiredSections(parsed) {
   const defaults = {
     goal: 'Define the agent goal in a follow-up refinement if needed.',
-    operational_sequence: 'Describe operational steps in a follow-up refinement if needed.',
+    operational_sequence:
+      '- Define operational steps in a follow-up refinement if needed.\n- Confirm order with the designer.',
     constraints:
-      'Must:\nFollow user intent and applicable platform rules.\n\nMust not:\nHarm users or mishandle data.',
+      'Must:\n- Follow user intent and applicable platform rules.\n\nMust not:\n- Harm users or mishandle data.',
     personality: 'Helpful and clear.',
     tone: 'Tone: neutral\n\nRefine to set voice details.',
   };
@@ -375,13 +377,14 @@ Produce JSON with exactly these REQUIRED top-level keys:
    - "task_completed": false
 
 3) "goal": string (non-empty, rich) — what the agent must achieve by the end of the conversation.
-4) "operational_sequence": string (non-empty, rich) — ordered steps: which data to collect, in what order, confirmations, corrections.
-5) "context": string (may be empty) — where the conversation happens, who the user is, what is already known.
-6) "constraints": string (non-empty, rich) — MUST use exactly two labeled blocks (plain lines, no markdown):
+4) "operational_sequence": string (non-empty, rich) — ordered steps the agent follows in conversation. Format: ONE step per line; each line starts with "- " or "N. ". Cover data collection order, confirmations, corrections, hand-offs. No multi-step paragraphs.
+5) "context": string (may be empty) — where the conversation happens, who the user is, what is already known. Short prose or bullet list is OK.
+6) "constraints": string (non-empty, rich) — exactly:
    Must:
-   <obligations>
+   - <one obligation per line>
    Must not:
-   <prohibitions>
+   - <one prohibition per line>
+   Use plain "Must:" / "Must not:" labels (no markdown headings). Blank line between the two blocks.
 7) "personality": string (non-empty, rich) — who the agent is: role, attitude, empathy (no register/voice details; those go in "tone").
 8) "tone": string (non-empty, rich). MUST start with line 1 exactly: Tone: <token> where <token> is one of: ${TONE_TOKENS.join(', ')}. After a blank line, how the agent speaks: brevity, clarity, formality, empathy in 2–6 short sentences.
 

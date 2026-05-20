@@ -14,7 +14,10 @@ import type { StructuredRefinementOp } from './structuredRefinementOps';
 import { applyRevisionBatchToSlice } from './applyRevisionBatchToSlice';
 import type { RevisionBatchOp } from './textRevisionLinear';
 import { diffToOps } from './otDiffToOps';
-import { formatOperationalSequenceNewlines } from './operationalSequenceDisplay';
+import {
+  formatConstraintsBullets,
+  formatOperationalSequenceNewlines,
+} from './structuredSectionDisplay';
 
 export interface StructuredSectionRevisionSlice {
   promptBaseText: string;
@@ -76,10 +79,13 @@ function emptyOtSlice(base: string): StructuredSectionRevisionSlice {
  * Reformats operational_sequence with newlines between steps when safe (OT: recompute op log;
  * linear: only when there are no mask/insert edits).
  */
-function normalizeOperationalSequenceSlice(slice: StructuredSectionRevisionSlice): StructuredSectionRevisionSlice {
+function normalizeSectionSliceIfUnedited(
+  slice: StructuredSectionRevisionSlice,
+  format: (text: string) => string
+): StructuredSectionRevisionSlice {
   if (slice.storageMode === 'ot' && slice.ot) {
-    const baseF = formatOperationalSequenceNewlines(slice.ot.revisionBase);
-    const curF = formatOperationalSequenceNewlines(slice.ot.currentText);
+    const baseF = format(slice.ot.revisionBase);
+    const curF = format(slice.ot.currentText);
     if (baseF === slice.ot.revisionBase && curF === slice.ot.currentText) {
       return slice;
     }
@@ -101,7 +107,7 @@ function normalizeOperationalSequenceSlice(slice: StructuredSectionRevisionSlice
   if (hasEdits) {
     return slice;
   }
-  const baseF = formatOperationalSequenceNewlines(slice.promptBaseText);
+  const baseF = format(slice.promptBaseText);
   if (baseF === slice.promptBaseText) {
     return slice;
   }
@@ -110,6 +116,14 @@ function normalizeOperationalSequenceSlice(slice: StructuredSectionRevisionSlice
     promptBaseText: baseF,
     deletedMask: new Array(Math.max(0, baseF.length)).fill(false),
   };
+}
+
+function normalizeOperationalSequenceSlice(slice: StructuredSectionRevisionSlice): StructuredSectionRevisionSlice {
+  return normalizeSectionSliceIfUnedited(slice, formatOperationalSequenceNewlines);
+}
+
+function normalizeConstraintsSlice(slice: StructuredSectionRevisionSlice): StructuredSectionRevisionSlice {
+  return normalizeSectionSliceIfUnedited(slice, formatConstraintsBullets);
 }
 
 function effectiveTextFromSlice(slice: StructuredSectionRevisionSlice): string {
@@ -132,6 +146,8 @@ export function effectiveBySectionFromPersistedStructured(
     let slice = row ? sliceFromPersisted(row) : emptySlice('');
     if (id === 'operational_sequence') {
       slice = normalizeOperationalSequenceSlice(slice);
+    } else if (id === 'constraints') {
+      slice = normalizeConstraintsSlice(slice);
     }
     state[id] = slice;
   }
@@ -195,6 +211,8 @@ export function structuredSectionsRevisionReducer(
         let b = action.bases[id] ?? '';
         if (id === 'operational_sequence') {
           b = formatOperationalSequenceNewlines(b);
+        } else if (id === 'constraints') {
+          b = formatConstraintsBullets(b);
         }
         next[id] = useOt ? emptyOtSlice(b) : emptySlice(b);
       }
@@ -207,6 +225,8 @@ export function structuredSectionsRevisionReducer(
         let slice = row ? sliceFromPersisted(row) : emptySlice('');
         if (id === 'operational_sequence') {
           slice = normalizeOperationalSequenceSlice(slice);
+        } else if (id === 'constraints') {
+          slice = normalizeConstraintsSlice(slice);
         }
         next[id] = slice;
       }

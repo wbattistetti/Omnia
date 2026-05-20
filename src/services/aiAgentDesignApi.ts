@@ -744,6 +744,118 @@ export async function generalizeAIAgentUseCaseMetaApi(
   }
 }
 
+export interface PolishUseCaseScenarioParams {
+  scenarioText: string;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+/**
+ * Rifinisce il testo scenario (forma/chiarezza) preservando il significato.
+ */
+export async function polishUseCaseScenarioApi(
+  params: PolishUseCaseScenarioParams
+): Promise<{ scenario_llm: string }> {
+  const { scenarioText, provider, model, outputLanguage } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'polish_use_case_scenario',
+      scenarioText: String(scenarioText ?? ''),
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | { success: true; scenario_llm: string; payoff?: string }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const text =
+      typeof body.scenario_llm === 'string'
+        ? body.scenario_llm.trim()
+        : typeof body.payoff === 'string'
+          ? body.payoff.trim()
+          : '';
+    if (!text) {
+      throw new Error('Risposta non valida: scenario_llm mancante.');
+    }
+    return { scenario_llm: text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface PolishDesignDescriptionParams {
+  descriptionText: string;
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+/**
+ * Riformatta la descrizione task (paragrafi/elenco) preservando il significato.
+ */
+export async function polishDesignDescriptionApi(
+  params: PolishDesignDescriptionParams
+): Promise<{ design_description: string }> {
+  const { descriptionText, provider, model, outputLanguage } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'polish_design_description',
+      descriptionText: String(descriptionText ?? ''),
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | { success: true; design_description: string }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const text =
+      typeof body.design_description === 'string' ? body.design_description.trim() : '';
+    if (!text) {
+      throw new Error('Risposta non valida: design_description mancante.');
+    }
+    return { design_description: text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface CreateAIAgentUseCaseParams {
   useCase: AIAgentUseCase;
   allUseCases: AIAgentUseCase[];
@@ -759,6 +871,67 @@ export interface CreateAIAgentUseCaseParams {
 /**
  * Create one new use case and auto-generate dialogue from context.
  */
+export interface SplitRootUseCaseDraftParams {
+  draftText: string;
+  allUseCases: readonly AIAgentUseCase[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+/**
+ * LLM decides 1..N root use case draft labels from free text (semantic split, not punctuation).
+ */
+export async function splitRootUseCaseDraftApi(
+  params: SplitRootUseCaseDraftParams
+): Promise<{ labels: string[] }> {
+  const { draftText, allUseCases, provider, model, outputLanguage } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'split_root_use_case_draft',
+      draftText,
+      allUseCases,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | { success: true; labels: unknown }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      const msg = err.error || `HTTP ${res.status}`;
+      const extra = err.rawSnippet ? ` — snippet: ${err.rawSnippet.slice(0, 200)}` : '';
+      throw new Error(msg + extra);
+    }
+    const raw = body.labels;
+    if (!Array.isArray(raw)) {
+      throw new Error('Risposta non valida: labels mancante.');
+    }
+    const labels = raw
+      .map((x) => (typeof x === 'string' ? x.trim() : ''))
+      .filter((x) => x.length > 0);
+    if (labels.length === 0) {
+      throw new Error('Risposta non valida: labels vuoto.');
+    }
+    return { labels };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function createAIAgentUseCaseApi(
   params: CreateAIAgentUseCaseParams
 ): Promise<AIAgentUseCase> {

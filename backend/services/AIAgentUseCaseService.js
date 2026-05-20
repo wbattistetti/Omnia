@@ -42,13 +42,16 @@ const REGENERATE_TURN_TIMEOUT_MS = 90000;
 const PROPAGATE_EXAMPLE_PHRASE_STYLE_TIMEOUT_MS = 120000;
 /** Debugger flow-mode: classify turn vs catalog / suggest new scenario. */
 const ANALYZE_DEBUG_TURN_TIMEOUT_MS = 90000;
+/** Root composer: decide 1..N use case drafts from free text (meaning, not punctuation). */
+const SPLIT_ROOT_USE_CASE_DRAFT_TIMEOUT_MS = 90000;
+const SPLIT_ROOT_USE_CASE_DRAFT_MAX_LABELS = 30;
 
 const UC_SYSTEM = `You are an expert conversational AI designer for OMNIA.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
 When OUTPUT_LANGUAGE is set, write every human-readable string in that language.
 Never output "editable" (the platform injects it).
-Each use case must include a clear human scenario ("scenario.descrittivo" / "payoff") plus a minimal "scenario.llm" line for routing, and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
+Each use case must include one concise synthetic scenario ("scenario.llm", mirrored to "payoff") and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
 For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.
 The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. **Do not collapse to exactly four scenarios by habit** (a frequent shortcut); vary the count with real coverage.`;
 
@@ -252,9 +255,9 @@ Produce JSON with exactly:
    - "id": string (unique among all use_cases)
    - "label": string — short title for this scenario (shown in the UI tree).
    - "scenario": object with exactly:
-     - "descrittivo": string — human-readable narrative (who wants what, constraints, outcome). Full prose for designers/reviewers. NOT the agent script.
-     - "llm": string — same facts in minimal synthetic form for LLM routing (short bullets or telegraphic clauses; no storytelling; max ~2–4 lines).
-   - "payoff": string — MUST equal "scenario.descrittivo" exactly (backward compatibility).
+     - "llm": string — minimal synthetic scenario (who, goal, constraints, outcome) in telegraphic form for designers and LLM routing (1–3 short lines; NOT the agent dialogue script).
+     - "descrittivo": string — MUST equal "scenario.llm" exactly (platform mirror).
+   - "payoff": string — MUST equal "scenario.llm" exactly.
    - "parent_id": string | null — null = root; if a string, it MUST equal the "id" of another object in this same "use_cases" array (no dangling references)
    - "sort_order": number — among siblings (same parent_id), use 0-based integers 0,1,2,... with strictly increasing order (no ties per sibling group)
    - "refinement_prompt": string (may be "")
@@ -269,8 +272,7 @@ ID rules:
 
 Content rules:
 - Every human-readable string must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
-- "scenario.descrittivo" must make the scenario understandable without a multi-turn transcript.
-- "scenario.llm" must not introduce facts absent from "descrittivo".
+- "scenario.llm" must make the scenario understandable without a multi-turn transcript.
 
 Coverage (not a four-item checklist): where relevant, span situation types such as success path, corrections/clarifications, ambiguity, refusals/guardrails — using **as many use_cases as appropriate** (multiple rows per type if needed, or parent/child structure). **Listing these themes does not mean “output exactly four use_cases”.**
 Return valid JSON only.`;
@@ -304,8 +306,8 @@ Produce JSON with exactly:
 2) "use_cases" — array of **exactly ${n}** scenario objects (first coverage slice). Each object:
    - "id": string (unique among all use_cases in this response)
    - "label": string
-   - "scenario": { "descrittivo": string, "llm": string }
-   - "payoff": string (= descrittivo)
+   - "scenario": { "llm": string, "descrittivo": string (= llm) }
+   - "payoff": string (= llm)
    - "parent_id": string | null
    - "sort_order": number
    - "refinement_prompt": string (may be "")
@@ -313,7 +315,7 @@ Produce JSON with exactly:
    - "notes": { "behavior": string, "tone": string }
    - "bubble_notes": {}
 
-Pick ${n} **high-value** distinct scenarios to start coverage (ingresso, chiarimento, successo, …). Keep descrittivo concise (max ~3 sentences); llm max ~2 lines.
+Pick ${n} **high-value** distinct scenarios to start coverage (ingresso, chiarimento, successo, …). Keep scenario.llm to 1–3 telegraphic lines.
 
 CRITICAL: Every use_cases[i] MUST have non-empty dialogue[0].content (one full assistant sentence). Rows without a message are invalid.
 
@@ -503,7 +505,7 @@ ${existingJson}
 ${band}
 Produce JSON with **exactly one** top-level key:
 "use_cases" — array of **NEW** scenarios only (minimum 1). Each object uses the same shape as in the full bundle:
-"id", "label", "scenario" ({ "descrittivo", "llm" }), "payoff" (= descrittivo), "parent_id", "sort_order", "refinement_prompt",
+"id", "label", "scenario" ({ "llm", "descrittivo" (= llm) }), "payoff" (= llm), "parent_id", "sort_order", "refinement_prompt",
 "dialogue" (exactly one assistant turn), "notes", "bubble_notes".
 
 Rules:
@@ -837,7 +839,7 @@ function buildRegenerateUseCaseUserMessage(outputLanguage, useCase, allCases, lo
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
   const styleBlock = buildGlobalStyleBlock(globalStyleContract);
-  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReuse tone from existing use cases.${styleBlock}\n\nThe designer may have edited "scenario.descrittivo" / "payoff" — if so, you MUST:\n- Update "label" to a short UI title (max ~64 chars) that matches the CURRENT descrittivo (do not keep an obsolete label).\n- Refresh "scenario.llm" to match the same facts in minimal telegraphic form.\n- Set "payoff" equal to "scenario.descrittivo".\n- Rewrite "dialogue"[0].content so it fits the scenario and GLOBAL_STYLE_CONTRACT.\n- Bracket only runtime-varying fragments; **Italian:** keep \`al\`, \`alle\`, \`alla\`, … outside brackets (\`alle [8]\` not \`[alle 8]\`).\n- "dialogue" content must be non-empty after refinement.\n\nReturn JSON with a single key "use_case" containing the full updated object. Requirements:\n- "scenario": { "descrittivo", "llm" } — keep or lightly polish descrittivo (respect user edits); sync llm.\n- "payoff": equal to scenario.descrittivo.\n- "label": short tree title aligned with descrittivo.\n- "dialogue": exactly ONE assistant turn { turn_id, role "assistant", content } — virtual agent output example only; non-empty content.\n- Do NOT include "editable". Preserve "id" and "parent_id". Valid JSON only.`;
+  return `${lang}You refine ONE use case. Current use case (JSON):\n${JSON.stringify(useCase)}\n\nAll use cases (context, do not remove others):\n${JSON.stringify(allCases).slice(0, 8000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nReuse tone from existing use cases.${styleBlock}\n\nThe designer may have edited "scenario.llm" / "payoff" — if so, you MUST:\n- Update "label" to a short UI title (max ~64 chars) that matches the CURRENT scenario (do not keep an obsolete label).\n- Keep "scenario.llm" as the canonical scenario text (telegraphic); set "scenario.descrittivo" equal to "scenario.llm".\n- Set "payoff" equal to "scenario.llm".\n- Rewrite "dialogue"[0].content so it fits the scenario and GLOBAL_STYLE_CONTRACT.\n- Bracket only runtime-varying fragments; **Italian:** keep \`al\`, \`alle\`, \`alla\`, … outside brackets (\`alle [8]\` not \`[alle 8]\`).\n- "dialogue" content must be non-empty after refinement.\n\nReturn JSON with a single key "use_case" containing the full updated object. Requirements:\n- "scenario": { "llm", "descrittivo" (= llm) } — respect user edits on scenario.llm.\n- "payoff": equal to scenario.llm.\n- "label": short tree title aligned with scenario.llm.\n- "dialogue": exactly ONE assistant turn { turn_id, role "assistant", content } — virtual agent output example only; non-empty content.\n- Do NOT include "editable". Preserve "id" and "parent_id". Valid JSON only.`;
 }
 
 /**
@@ -984,13 +986,182 @@ async function generalizeUseCaseMeta({
   return { label: outLabel, payoff: outPayoff };
 }
 
+const POLISH_USE_CASE_SCENARIO_TIMEOUT_MS = 90000;
+
+const POLISH_USE_CASE_SCENARIO_SYSTEM = `You polish OMNIA use-case scenario text for designers.
+Respond with a single valid JSON object only (no markdown fences, no commentary): { "scenario_llm": string }.
+
+Rules:
+- Improve clarity, grammar, and telegraphic form ONLY — **preserve the exact meaning**, intent, constraints, actors, and outcome.
+- Do NOT add new facts, steps, policies, or assumptions. Do NOT remove material constraints.
+- Keep 1–3 short lines, synthetic style suitable for LLM routing (not conversational agent script).
+- When OUTPUT_LANGUAGE is set, write in that language.
+- If the input is already clean, return a lightly tightened version (minimal edits).`;
+
+/**
+ * @param {string} outputLanguage
+ * @param {string} scenarioText
+ */
+function buildPolishUseCaseScenarioUserMessage(outputLanguage, scenarioText) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const safe = typeof scenarioText === 'string' ? scenarioText : '';
+  return `${lang}Polish this scenario text (designer draft):
+
+"""
+${safe.slice(0, 12000)}
+"""
+
+Return JSON: { "scenario_llm": "<polished text>" } only. Valid JSON only.`;
+}
+
+/**
+ * LLM: rifinisce forma dello scenario senza cambiare significato.
+ * @param {object} params
+ * @param {string} params.scenarioText
+ */
+async function polishUseCaseScenario({
+  scenarioText,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  const raw = typeof scenarioText === 'string' ? scenarioText.trim() : '';
+  if (!raw) {
+    throw new Error('scenarioText is required');
+  }
+  const messages = [
+    { role: 'system', content: POLISH_USE_CASE_SCENARIO_SYSTEM },
+    {
+      role: 'user',
+      content: buildPolishUseCaseScenarioUserMessage(outputLanguage, raw),
+    },
+  ];
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.2,
+    maxTokens: provider === 'openai' ? 2048 : 4096,
+    timeout: POLISH_USE_CASE_SCENARIO_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  const parsed = JSON.parse(jsonStr);
+  const out =
+    typeof parsed.scenario_llm === 'string'
+      ? parsed.scenario_llm.trim()
+      : typeof parsed.payoff === 'string'
+        ? parsed.payoff.trim()
+        : '';
+  if (!out) {
+    throw new Error('Invalid JSON: expected non-empty scenario_llm');
+  }
+  if (out.length > 2000) {
+    throw new Error('Invalid response: scenario_llm exceeds maximum length');
+  }
+  return { scenario_llm: out };
+}
+
+const POLISH_DESIGN_DESCRIPTION_TIMEOUT_MS = 120000;
+
+const POLISH_DESIGN_DESCRIPTION_SYSTEM = `You polish OMNIA AI Agent TASK DESCRIPTION text for designers.
+Respond with a single valid JSON object only (no markdown fences, no commentary): { "design_description": string }.
+
+Rules:
+- Improve **formatting and readability** only: short titled sections with ## when helpful, bullet lists (- ) for enumerations, line breaks, light grammar fixes.
+- **Preserve the exact meaning**, intent, constraints, policies, actors, tools, and outcomes. Do NOT add or remove material facts.
+- Do NOT shorten aggressively; keep the same level of detail as the input.
+- No markdown code fences; no commentary outside the JSON field.
+- When OUTPUT_LANGUAGE is set, write in that language.
+- If the input is already well formatted, return a lightly improved version (minimal edits).`;
+
+/**
+ * @param {string} outputLanguage
+ * @param {string} descriptionText
+ */
+function buildPolishDesignDescriptionUserMessage(outputLanguage, descriptionText) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const safe = typeof descriptionText === 'string' ? descriptionText : '';
+  return `${lang}Polish this task description (designer draft) for clearer structure without changing meaning:
+
+"""
+${safe.slice(0, 48000)}
+"""
+
+Return JSON: { "design_description": "<polished text>" } only. Valid JSON only.`;
+}
+
+/**
+ * LLM: rifinisce forma della descrizione task (paragrafi/elenco) senza cambiare significato.
+ * @param {object} params
+ * @param {string} params.descriptionText
+ */
+async function polishDesignDescription({
+  descriptionText,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  const raw = typeof descriptionText === 'string' ? descriptionText.trim() : '';
+  if (!raw) {
+    throw new Error('descriptionText is required');
+  }
+  const messages = [
+    { role: 'system', content: POLISH_DESIGN_DESCRIPTION_SYSTEM },
+    {
+      role: 'user',
+      content: buildPolishDesignDescriptionUserMessage(outputLanguage, raw),
+    },
+  ];
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.2,
+    maxTokens: provider === 'openai' ? 8192 : 8192,
+    timeout: POLISH_DESIGN_DESCRIPTION_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  const parsed = JSON.parse(jsonStr);
+  const out =
+    typeof parsed.design_description === 'string'
+      ? parsed.design_description.trim()
+      : typeof parsed.agentDesignDescription === 'string'
+        ? parsed.agentDesignDescription.trim()
+        : '';
+  if (!out) {
+    throw new Error('Invalid JSON: expected non-empty design_description');
+  }
+  if (out.length > 120000) {
+    throw new Error('Invalid response: design_description exceeds maximum length');
+  }
+  return { design_description: out };
+}
+
 function buildCreateUseCaseUserMessage(outputLanguage, useCase, allCases, logicalSteps, globalStyleContract) {
   const lang =
     typeof outputLanguage === 'string' && outputLanguage.trim()
       ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
       : '';
   const styleBlock = buildGlobalStyleBlock(globalStyleContract);
-  return `${lang}Create ONE new use case from this DESIGNER DRAFT (JSON):\n${JSON.stringify(useCase)}\n\nThe draft "label" and/or notes.behavior may be rough notes or a long paragraph — treat them as intent only.\n\nAll existing use cases (context):\n${JSON.stringify(allCases).slice(0, 10000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nYou MUST output:\n- "label": short UI title for the tree (max ~64 characters), polished and specific — NOT a copy-paste of the whole draft.\n- "payoff": expanded, clear scenario narrative (who, goal, constraints, outcome). More explicit and readable than the draft.\n- "dialogue": exactly ONE assistant turn example matching tone from existing use cases.${styleBlock}\n- In assistant "content", bracket only runtime-varying fragments. **Italian:** leave \`al\`, \`alle\`, \`alla\`, \`allo\`, \`ai\`, \`nel\`, \`sul\`, \`del\`, … **outside** brackets — e.g. \`alle [8]\`, \`al [pomeriggio]\`, not \`[alle 8]\` / \`[al pomeriggio]\`.\n- "dialogue"[0].content MUST be non-empty.\n- "notes": { "behavior": string (one-line summary aligned with payoff), "tone": string } — may mirror GLOBAL_STYLE_CONTRACT briefly in "tone" if helpful.\n\n"dialogue" must be exactly ONE object: { turn_id, role "assistant", content }. Do NOT include "editable".\n\nPreserve exactly as in the draft (do not change): "id", "parent_id", "sort_order". You MAY replace "label", "payoff", "refinement_prompt", "notes", "bubble_notes", "dialogue", "style_id".\nReturn JSON with exactly: { "use_case": <full use case object> }.\nValid JSON only.`;
+  return `${lang}Create ONE new use case from this DESIGNER DRAFT (JSON):\n${JSON.stringify(useCase)}\n\nThe draft "label" and/or notes.behavior may be rough notes or a long paragraph — treat them as intent only.\n\nAll existing use cases (context):\n${JSON.stringify(allCases).slice(0, 10000)}\n\nLogical steps:\n${JSON.stringify(logicalSteps).slice(0, 4000)}\n\nYou MUST output:\n- "label": short UI title for the tree (max ~64 characters), polished and specific — NOT a copy-paste of the whole draft.\n- "scenario": { "llm": string, "descrittivo": string (= llm) } — concise telegraphic scenario (1–3 lines) from the draft intent; NOT a copy-paste of the whole draft.\n- "payoff": MUST equal scenario.llm.\n- "dialogue": exactly ONE assistant turn example matching tone from existing use cases.${styleBlock}\n- In assistant "content", bracket only runtime-varying fragments. **Italian:** leave \`al\`, \`alle\`, \`alla\`, \`allo\`, \`ai\`, \`nel\`, \`sul\`, \`del\`, … **outside** brackets — e.g. \`alle [8]\`, \`al [pomeriggio]\`, not \`[alle 8]\` / \`[al pomeriggio]\`.\n- "dialogue"[0].content MUST be non-empty.\n- "notes": { "behavior": string (one-line summary aligned with payoff), "tone": string } — may mirror GLOBAL_STYLE_CONTRACT briefly in "tone" if helpful.\n\n"dialogue" must be exactly ONE object: { turn_id, role "assistant", content }. Do NOT include "editable".\n\nPreserve exactly as in the draft (do not change): "id", "parent_id", "sort_order". You MAY replace "label", "payoff", "refinement_prompt", "notes", "bubble_notes", "dialogue", "style_id".\nReturn JSON with exactly: { "use_case": <full use case object> }.\nValid JSON only.`;
 }
 
 /**
@@ -1052,6 +1223,98 @@ async function createUseCase({
   }
   const normalized = normalizeUseCase(parsed.use_case, globalStyleId);
   return mergeCreateUseCaseWithDraft(normalized, useCase);
+}
+
+const SPLIT_ROOT_USE_CASE_DRAFT_SYSTEM = `You analyze designer text pasted into the root use case composer in OMNIA.
+Respond with a single valid JSON object only (no markdown fences, no commentary): { "labels": ["...", ...] }.
+
+Decide how many DISTINCT use cases exist from MEANING and intent — NOT from punctuation.
+Semicolons, commas, and line breaks may be formatting only (one paragraph can be one use case).
+
+Rules:
+- Return between 1 and ${SPLIT_ROOT_USE_CASE_DRAFT_MAX_LABELS} entries in "labels".
+- Each label is a short draft title or one-line scenario intent (max ~120 characters), in OUTPUT_LANGUAGE when set.
+- Do NOT include labels that duplicate scenarios already in EXISTING_CATALOG (same meaning, not just similar wording).
+- If the paste is a single coherent scenario, return exactly one label.
+- If the paste lists multiple independent scenarios, return one label per scenario.`;
+
+/**
+ * @param {string} outputLanguage
+ * @param {string} draftText
+ * @param {object[]} allCases
+ */
+function buildSplitRootUseCaseDraftUserMessage(outputLanguage, draftText, allCases) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const catalog = summarizeExistingUseCasesForPrompt(allCases || []);
+  return `${lang}DESIGNER_DRAFT (verbatim):
+"""
+${String(draftText || '').slice(0, 24000)}
+"""
+
+EXISTING_CATALOG (do not duplicate by meaning):
+${JSON.stringify(catalog).slice(0, 14000)}
+
+Return JSON only: { "labels": [ "draft label 1", ... ] }`;
+}
+
+/**
+ * LLM: split root paste into 1..N draft labels (semantic, not punctuation).
+ * @param {object} params
+ * @param {string} params.draftText
+ * @param {object[]} params.allCases
+ * @param {string} [params.outputLanguage]
+ * @param {string} [params.provider]
+ * @param {string} [params.model]
+ * @param {import('./AIProviderService')} params.aiProviderService
+ */
+async function splitRootUseCaseDraft({
+  draftText,
+  allCases,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  const draft = typeof draftText === 'string' ? draftText.trim() : '';
+  if (!draft) {
+    throw new Error('draftText is required');
+  }
+  const messages = [
+    { role: 'system', content: SPLIT_ROOT_USE_CASE_DRAFT_SYSTEM },
+    {
+      role: 'user',
+      content: buildSplitRootUseCaseDraftUserMessage(outputLanguage, draft, allCases || []),
+    },
+  ];
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.2,
+    maxTokens: provider === 'openai' ? 2048 : 4096,
+    timeout: SPLIT_ROOT_USE_CASE_DRAFT_TIMEOUT_MS,
+    purpose,
+    taskId,
+    taskLabel,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  const parsed = JSON.parse(jsonStr);
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.labels)) {
+    throw new Error('Invalid JSON: expected { labels: string[] }');
+  }
+  const labels = parsed.labels
+    .map((x) => (typeof x === 'string' ? x.trim() : ''))
+    .filter((x) => x.length > 0)
+    .slice(0, SPLIT_ROOT_USE_CASE_DRAFT_MAX_LABELS);
+  if (labels.length === 0) {
+    throw new Error('Invalid JSON: labels array empty');
+  }
+  return { labels };
 }
 
 function buildRegenerateTurnUserMessage(outputLanguage, useCase, turnId) {
@@ -1831,8 +2094,11 @@ module.exports = {
   USE_CASE_BUNDLE_CHUNK_SIZE,
   USE_CASE_BUNDLE_MAX_TOTAL,
   createUseCase,
+  splitRootUseCaseDraft,
   regenerateUseCase,
   generalizeUseCaseMeta,
+  polishUseCaseScenario,
+  polishDesignDescription,
   regenerateTurn,
   propagateExamplePhraseStyle,
   annotateAssistantMessageForJson,

@@ -1,10 +1,21 @@
 /**
- * Toggle pollice su/giù per campo designer su un use case (stesso comportamento della UI composer).
+ * Toggle pollice su/giù / «da approfondire» per campo designer su un use case.
  */
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
+export type DesignerFieldVote = 'up' | 'down' | 'review';
+
 export type DesignerVoteField = 'label' | 'payoff' | 'agentMessage';
+
+/** True se almeno un campo ha voto «da approfondire». */
+export function useCaseHasDesignerReviewVote(uc: AIAgentUseCase): boolean {
+  return (
+    uc.designer_label_vote === 'review' ||
+    uc.designer_payoff_vote === 'review' ||
+    uc.designer_agent_message_vote === 'review'
+  );
+}
 
 /**
  * Applica il toggle pollice: secondo clic sullo stesso valore rimuove il voto.
@@ -25,7 +36,7 @@ export function applyDesignerFieldVoteToggle(
   prev: readonly AIAgentUseCase[],
   useCaseId: string,
   field: DesignerVoteField,
-  choice: 'up' | 'down'
+  choice: DesignerFieldVote
 ): AIAgentUseCase[] {
   return prev.map((u) => {
     if (u.id !== useCaseId) return u;
@@ -48,10 +59,7 @@ export function applyDesignerFieldVoteToggle(
  * A differenza del voto generico sul campo `label`, questo voto governa anche
  * l'inclusione nella generazione conversazioni:
  * - rosso (`down`) => use case escluso (`included_in_conversations=false`);
- * - verde (`up`) o voto rimosso => torna al default incluso (`true`).
- *
- * Manteniamo qui la regola per evitare che UI diverse applichino solo metà
- * dell'invariante (colore rosso senza esclusione).
+ * - verde (`up`), «da approfondire» (`review`) o voto rimosso => incluso di default (`true`).
  */
 /**
  * Conferma correzione messaggio a design-time: pollice verde su use case e messaggio,
@@ -71,7 +79,7 @@ export function applyUseCaseValidatedOnMessageCommit(uc: AIAgentUseCase): AIAgen
 export function applyUseCaseHeaderVoteToggle(
   prev: readonly AIAgentUseCase[],
   useCaseId: string,
-  choice: 'up' | 'down'
+  choice: DesignerFieldVote
 ): AIAgentUseCase[] {
   return prev.map((u) => {
     if (u.id !== useCaseId) return u;

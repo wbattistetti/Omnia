@@ -1,11 +1,12 @@
 /**
- * Left column: phase 1 description textarea; phase 2 description + structured sections + global refine.
+ * Left column: phase 1 description (Monaco); phase 2 description + structured sections + global refine.
  */
 
 import React from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
-import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER, LABEL_GENERATING_IA_AGENT } from './constants';
+import { LABEL_GENERATING_IA_AGENT } from './constants';
 import { AIAgentUnifiedPromptField } from './AIAgentUnifiedPromptField';
+import { AgentDescriptionMarkdownEditor } from './AgentDescriptionMarkdownEditor';
 import { AIAgentStructuredSectionsPanel } from './AIAgentStructuredSectionsPanel';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
@@ -82,15 +83,13 @@ export function AIAgentLeftColumn({
         />
       ) : (
         <>
-          <section>
-            <textarea
-              className="w-full min-h-[200px] lg:min-h-[280px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed"
-              placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
-              aria-label="Descrizione"
+          <section className="min-h-[200px] lg:min-h-[280px]">
+            <AgentDescriptionMarkdownEditor
               value={designDescription}
-              onChange={(e) => onDesignDescriptionChange(e.target.value)}
+              onChange={onDesignDescriptionChange}
               readOnly={generating}
-              spellCheck
+              fillHeight={false}
+              containerClassName="relative flex min-h-[200px] flex-col lg:min-h-[280px]"
             />
           </section>
           <AIAgentStructuredSectionsPanel

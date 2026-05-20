@@ -38,7 +38,7 @@ import {
 } from '@domain/conversationalRules/ruleUseCaseMapping';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
-import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
+import { DesignDescriptionTextarea } from './DesignDescriptionTextarea';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
 import { KnowledgeBaseViewer } from '@components/knowledgeBase/KnowledgeBaseViewer';
 
@@ -94,38 +94,12 @@ export function EditorUnifiedDescriptionPanel() {
 }
 
 export function EditorTaskDescriptionPanel() {
-  const { designDescription, setDesignDescription, generating, insertBackendPathInDesign } =
-    useAIAgentEditorDock();
-  const descRef = React.useRef<HTMLTextAreaElement | null>(null);
-
-  const onInsert = React.useCallback(
-    (path: string, s: number, e: number) => {
-      insertBackendPathInDesign(path, s, e);
-    },
-    [insertBackendPathInDesign]
-  );
-
-  const { onContextMenu, backendPathMenu } = useBackendPathInsertMenu({
-    enabled: true,
-    readOnly: generating,
-    inputRef: descRef,
-    onInsert,
-  });
-
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-teal-950/25 border-l-4 border-teal-500/55 space-y-2">
-      <textarea
-        ref={descRef}
+      <DesignDescriptionTextarea
+        containerClassName="flex min-h-0 flex-1 flex-col"
         className="w-full flex-1 min-h-[200px] rounded-md bg-slate-900 border border-slate-700 p-3 text-sm font-mono text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed resize-none"
-        placeholder={AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER}
-        aria-label="Descrizione"
-        value={designDescription}
-        onChange={(e) => setDesignDescription(e.target.value)}
-        readOnly={generating}
-        spellCheck
-        onContextMenu={onContextMenu}
       />
-      {backendPathMenu}
     </div>
   );
 }
@@ -181,9 +155,12 @@ export function EditorUseCasesPanel() {
     useCaseComposerError,
     onClearUseCaseComposerError,
     onCreateUseCase,
+    onSplitRootUseCaseDraft,
+    onRootUseCaseBatchCreated,
     onCreateConversationalRule,
     onRegenerateUseCase,
     onGeneralizeUseCaseMeta,
+    onPolishUseCaseScenario,
     onRegenerateAgentMessage,
     onAnnotateAgentMessageForJson,
     onDeleteUseCase,
@@ -333,8 +310,17 @@ export function EditorUseCasesPanel() {
       error={useCaseComposerError}
       onDismissError={onClearUseCaseComposerError}
       onCreateUseCase={catalogOnCreate}
+      onSplitRootUseCaseDraft={
+        isErrorHandlingCatalog ? async () => [] : onSplitRootUseCaseDraft
+      }
+      onRootUseCaseBatchCreated={
+        isErrorHandlingCatalog ? () => {} : onRootUseCaseBatchCreated
+      }
       onRegenerateUseCase={isErrorHandlingCatalog ? noopRegenerate : onRegenerateUseCase}
       onGeneralizeUseCaseMeta={isErrorHandlingCatalog ? noopRegenerate : onGeneralizeUseCaseMeta}
+      onPolishUseCaseScenario={
+        isErrorHandlingCatalog ? noopRegenerate : onPolishUseCaseScenario
+      }
       onRegenerateAgentMessage={
         isErrorHandlingCatalog ? async () => null : onRegenerateAgentMessage
       }
@@ -349,11 +335,13 @@ export function EditorUseCasesPanel() {
       previewStyleId={previewStyleId}
       onPreviewStyleIdChange={setPreviewStyleId}
       onGenerateUseCaseBundle={
-        useWizardShell ? undefined : showGenerateCta ? onGenerateUseCaseBundle : undefined
+        isErrorHandlingCatalog ? undefined : showGenerateCta ? onGenerateUseCaseBundle : undefined
       }
       generating={generating}
       bundleGenerateBusyLabel={bundleGenerateBusyLabel}
-      primaryGenerateOnRightOnly={useWizardShell}
+      useCaseBundleGenerationCount={useCaseBundleGenerationCount}
+      useCaseBundleGenerationOrdering={useCaseBundleGenerationOrdering}
+      primaryGenerateOnRightOnly={false}
       highlightIds={useCaseHighlightIds}
       onClearUseCaseHighlight={onClearUseCaseHighlight}
       assistantPhraseStyleNewIds={assistantPhraseStyleNewIds}

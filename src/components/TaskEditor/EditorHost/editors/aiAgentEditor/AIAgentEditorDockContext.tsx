@@ -36,6 +36,13 @@ export interface AIAgentEditorDockContextValue {
   hasAgentGeneration: boolean;
   designDescription: string;
   setDesignDescription: (value: string) => void;
+  /** Baseline testo per rilevare edit sostanziali e proporre polish descrizione. */
+  designDescriptionPolishBaseline: string;
+  /** Pillola «riformatta senza cambiare contenuto» visibile dopo edit significative. */
+  showDesignDescriptionPolishOffer: boolean;
+  designDescriptionPolishBusy: boolean;
+  onPolishDesignDescription: () => void | Promise<void>;
+  onDismissDesignDescriptionPolishOffer: () => void;
   composedRuntimeMarkdown: string;
   /** True when structured sections diverge from last committed snapshot (Create/Refine baseline). */
   structuredDesignDirty: boolean;
@@ -87,10 +94,21 @@ export interface AIAgentEditorDockContextValue {
     label: string;
     parentId: string | null;
     creationScope?: 'single' | 'batch';
+    holdComposerBusy?: boolean;
+    deferSiblingReorder?: boolean;
   }) => Promise<string>;
+  /** Root INVIO: LLM split draft into 1..N labels (semantic). */
+  onSplitRootUseCaseDraft: (draftText: string) => Promise<string[]>;
+  /** After a root batch finishes: merge highlight ids (amber border + New chip). */
+  onRootUseCaseBatchCreated: (createdIds: readonly string[]) => void;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
   /** Generalizza titolo e scenario (payoff) via LLM, senza rigenerare il dialogo. */
   onGeneralizeUseCaseMeta: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
+  /** Rifinisce solo il testo scenario (forma/chiarezza, stesso significato). */
+  onPolishUseCaseScenario: (
+    useCaseId: string,
+    scenarioTextOverride?: string
+  ) => void | Promise<void | AIAgentUseCase | null>;
   /** Risolve con il nuovo testo assistente quando la rigenerazione ha successo (per baseline UI). */
   onRegenerateAgentMessage: (useCaseId: string) => void | Promise<string | null | void>;
   onAnnotateAgentMessageForJson: (

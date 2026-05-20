@@ -1,9 +1,8 @@
 /**
- * Normalizza `scenario` { descrittivo, llm } e `payoff` (alias descrittivo) su use case design-time.
+ * Normalizza `scenario` su use case design-time: testo canonico sintetico (`llm`), mirror su descrittivo/payoff.
  */
 
-const MAX_DESCRITTIVO = 8000;
-const MAX_LLM = 2000;
+const MAX_SCENARIO = 2000;
 
 /**
  * @param {unknown} raw
@@ -14,11 +13,11 @@ function parseScenarioObject(raw) {
   let llm = '';
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const o = raw;
-    if (typeof o.descrittivo === 'string' && o.descrittivo.trim()) {
-      descrittivo = o.descrittivo.trim().slice(0, MAX_DESCRITTIVO);
-    }
     if (typeof o.llm === 'string' && o.llm.trim()) {
-      llm = o.llm.trim().slice(0, MAX_LLM);
+      llm = o.llm.trim().slice(0, MAX_SCENARIO);
+    }
+    if (typeof o.descrittivo === 'string' && o.descrittivo.trim()) {
+      descrittivo = o.descrittivo.trim().slice(0, MAX_SCENARIO);
     }
   }
   return { descrittivo, llm };
@@ -31,19 +30,15 @@ function parseScenarioObject(raw) {
 function normalizeUseCaseScenarioFields(uc) {
   if (!uc || typeof uc !== 'object') return uc;
   const fromScenario = parseScenarioObject(uc.scenario);
-  let descrittivo = fromScenario.descrittivo;
-  let llm = fromScenario.llm;
-  if (!descrittivo && typeof uc.payoff === 'string' && uc.payoff.trim()) {
-    descrittivo = uc.payoff.trim().slice(0, MAX_DESCRITTIVO);
+  let text = fromScenario.llm || fromScenario.descrittivo;
+  if (!text && typeof uc.payoff === 'string' && uc.payoff.trim()) {
+    text = uc.payoff.trim().slice(0, MAX_SCENARIO);
   }
-  if (!descrittivo && typeof uc.description === 'string' && uc.description.trim()) {
-    descrittivo = uc.description.trim().slice(0, MAX_DESCRITTIVO);
+  if (!text && typeof uc.description === 'string' && uc.description.trim()) {
+    text = uc.description.trim().slice(0, MAX_SCENARIO);
   }
-  if (!llm && descrittivo) {
-    llm = descrittivo.slice(0, Math.min(400, MAX_LLM));
-  }
-  const scenario = { descrittivo, llm };
-  const payoff = descrittivo;
+  const scenario = { descrittivo: text, llm: text };
+  const payoff = text;
   return { ...uc, scenario, payoff };
 }
 
