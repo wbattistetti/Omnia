@@ -6,8 +6,8 @@ import React from 'react';
 import {
   TaskSequenceEditor,
   TaskSequenceFocusProvider,
-} from '@responseEditor/tasksequence';
-import type { TaskSequenceRow } from '@responseEditor/tasksequence';
+} from '@responseEditor/taskSequence';
+import type { TaskSequenceRow } from '@responseEditor/taskSequence';
 import {
   ensureUseCaseResponse,
   getUseCaseResponseTasks,
