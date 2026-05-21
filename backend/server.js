@@ -83,6 +83,12 @@ const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalo
 const { mountAiCostRoutes } = require('./services/aiCost/aiCostRoutes');
 const { syncPricingFromOpenRouter } = require('./services/aiCost/pricingSync');
 const { getUsdToEur } = require('./services/aiCost/exchangeRateSync');
+const {
+  getReviewChannel,
+  putReviewChannel,
+  listAllReviewChannels,
+  assertReviewToken,
+} = require('./services/agentReviewChannelService');
 
 console.log('>>> SERVER.JS AVVIATO <<<');
 
@@ -826,6 +832,72 @@ app.get('/api/projects/:id/debugger-use-cases', async (req, res) => {
   } catch (e) {
     console.error('[Projects.debugger-use-cases GET]', e?.message);
     res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// GET /api/agent-review-channels — elenco review pubblicati (tutti i progetti)
+app.get('/api/agent-review-channels', async (req, res) => {
+  if (!assertReviewToken(req)) {
+    return res.status(401).json({ error: 'review_token_invalid' });
+  }
+  try {
+    const client = await getMongoClient();
+    const items = await listAllReviewChannels(client, getProjectDb, dbProjects);
+    res.json({ items });
+  } catch (e) {
+    console.error('[agent-review-channels list]', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// GET /api/projects/:pid/agent-tasks/:taskInstanceId/review-channel — shared review JSON (Omnia + web portal)
+app.get('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel', async (req, res) => {
+  const projectId = req.params.pid;
+  const taskInstanceId = req.params.taskInstanceId;
+  if (!projectId || !taskInstanceId) {
+    return res.status(400).json({ error: 'projectId_and_taskInstanceId_required' });
+  }
+  if (!assertReviewToken(req)) {
+    return res.status(401).json({ error: 'review_token_invalid' });
+  }
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const row = await getReviewChannel(projDb, projectId, taskInstanceId);
+    res.json({
+      document: row.document,
+      updatedAt: row.updatedAt,
+    });
+  } catch (e) {
+    console.error('[Projects.review-channel GET]', e?.message);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// PUT /api/projects/:pid/agent-tasks/:taskInstanceId/review-channel
+app.put('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel', async (req, res) => {
+  const projectId = req.params.pid;
+  const taskInstanceId = req.params.taskInstanceId;
+  if (!projectId || !taskInstanceId) {
+    return res.status(400).json({ error: 'projectId_and_taskInstanceId_required' });
+  }
+  if (!assertReviewToken(req)) {
+    return res.status(401).json({ error: 'review_token_invalid' });
+  }
+  const body = req.body || {};
+  const doc = body.document ?? body;
+  try {
+    const client = await getMongoClient();
+    const projDb = await getProjectDb(client, projectId);
+    const result = await putReviewChannel(projDb, projectId, taskInstanceId, doc);
+    res.json({ ok: true, document: result.document, updatedAt: result.updatedAt });
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (msg.includes('_required')) {
+      return res.status(400).json({ error: msg });
+    }
+    console.error('[Projects.review-channel PUT]', msg);
+    res.status(500).json({ error: msg });
   }
 });
 
@@ -9459,6 +9531,22 @@ console.log(
   '[Routes] dev-tunnel ngrok — GET /api/dev-tunnel/ngrok/status, POST /api/dev-tunnel/ngrok/start, POST /api/dev-tunnel/ngrok/stop'
 );
 
+// ── Review portal static build ────────────────────────────────────────────────
+// Serve the pre-built review portal under /review-portal/*
+// Build: npm run review-portal:build  (from project root)
+const reviewPortalDist = path.join(__dirname, '../use-case-review-portal/dist');
+if (require('fs').existsSync(reviewPortalDist)) {
+  app.use('/review-portal', express.static(reviewPortalDist));
+  // SPA fallback (Express 5: no bare `*` in path — static calls next() if file missing)
+  app.use('/review-portal', (_req, res) => {
+    res.sendFile(path.join(reviewPortalDist, 'index.html'));
+  });
+  console.log('[Routes] review-portal static → /review-portal (dist found)');
+} else {
+  console.warn('[Routes] review-portal static → dist not found, run: npm run review-portal:build');
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ✅ Add timeout to prevent blocking forever
 const INIT_TIMEOUT_MS = 10000; // 10 seconds max
 
@@ -9469,12 +9557,14 @@ const timeoutPromise = new Promise((_, reject) => {
   }, INIT_TIMEOUT_MS);
 });
 
+const PORT = process.env.PORT || 3100;
+
 Promise.race([initPromise, timeoutPromise])
   .then(() => {
     console.log('[Server] MongoDB pool initialized, starting Express server...');
-    app.listen(3100, () => {
-      console.log('[Server] ✅ Express server ready on port 3100');
-      logInfo('Express', { message: 'Server ready on port 3100' });
+    app.listen(PORT, () => {
+      console.log(`[Server] ✅ Express server ready on port ${PORT}`);
+      logInfo('Express', { message: `Server ready on port ${PORT}` });
       runStartupIaCatalogSync();
     });
   })
@@ -9482,10 +9572,9 @@ Promise.race([initPromise, timeoutPromise])
     console.error('[Server] ❌ Error during initialization:', error);
     console.error('[Server] ⚠️ Starting Express server anyway (MongoDB will initialize on first request)...');
     logError('Express', error, { message: 'Failed to start server' });
-    // Avvia comunque il server, il pool verrà inizializzato alla prima richiesta
-    app.listen(3100, () => {
-      console.log('[Server] ✅ Express server ready on port 3100 (MongoDB pool will initialize on first request)');
-      logInfo('Express', { message: 'Server ready on port 3100 (MongoDB pool will initialize on first request)' });
+    app.listen(PORT, () => {
+      console.log(`[Server] ✅ Express server ready on port ${PORT} (MongoDB pool will initialize on first request)`);
+      logInfo('Express', { message: `Server ready on port ${PORT} (MongoDB pool will initialize on first request)` });
       runStartupIaCatalogSync();
     });
   });

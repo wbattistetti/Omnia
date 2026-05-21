@@ -1,0 +1,20 @@
+# Deploy portale review + API Express su Render (https://render.com)
+# Dashboard: New → Blueprint oppure Web Service collegato a questo repo.
+# Dopo il deploy: https://<tuo-servizio>.onrender.com/review-portal
+
+services:
+  - type: web
+    name: omnia-review-portal
+    runtime: node
+    plan: free
+    buildCommand: npm run render:build
+    startCommand: node backend/server.js
+    healthCheckPath: /api/ping
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: OMNIA_WRITABLE_CONFIG
+        value: "1"
+      # Imposta in Render Dashboard (Environment) — stesso valore per entrambe:
+      # AGENT_REVIEW_CHANNEL_TOKEN=...
+      # VITE_AGENT_REVIEW_CHANNEL_TOKEN=...  (necessaria in BUILD per il portale)

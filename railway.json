@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm install && npm run review-portal:build"
+  },
+  "deploy": {
+    "startCommand": "node backend/server.js",
+    "healthcheckPath": "/api/agent-review-channels",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
