@@ -11,7 +11,7 @@
     "review-portal:dev": "npm run dev --prefix use-case-review-portal",
     "review-portal:build": "npm run build --prefix use-case-review-portal",
     "review-portal:serve": "npm run review-portal:build && npm run be:express",
-    "render:build": "npm install --prefix backend && npm install --prefix use-case-review-portal && npm run review-portal:build",
+    "render:build": "npm install && npm install --prefix backend && npm install --prefix use-case-review-portal && npm run review-portal:build",
     "render:build:ci": "npm ci --prefix backend && npm ci --prefix use-case-review-portal && npm run review-portal:build",
     "dev:dialogue": "concurrently -n web,vb -c green,magenta \"vite\" \"npm run be:vbnet\"",
     "redis:up": "docker-compose up -d redis",

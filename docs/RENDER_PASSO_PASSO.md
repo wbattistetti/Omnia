@@ -14,7 +14,9 @@ Menu sinistro → **Settings** → scorri **Build & Deploy**:
 | Campo | Copia-incolla esatto |
 |--------|----------------------|
 | **Branch** | `demo-flow` |
-| **Build Command** | `npm install && npm run render:build` |
+| **Build Command** | `npm run render:build` |
+
+(`render:build` esegue già `npm install` alla root + backend + portale.)
 | **Start Command** | `node backend/server.js` |
 
 Clicca **Save Changes** in fondo.

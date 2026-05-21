@@ -27,8 +27,9 @@ export default defineConfig(({ mode }) => {
     // In production the portal is served by Express under /review-portal/
     base: mode === 'production' ? '/review-portal/' : '/',
     resolve: {
-      dedupe: ['react', 'react-dom'],
-      modules: [path.resolve(__dirname, 'node_modules'), rootNodeModules],
+      dedupe: ['react', 'react-dom', 'zustand'],
+      // Root Omnia deps first (Render: senza npm install alla root fallisce su src/*)
+      modules: [rootNodeModules, path.resolve(__dirname, 'node_modules')],
       alias: {
         '@services': path.resolve(root, 'src/services'),
         '@utils': path.resolve(root, 'src/utils'),
