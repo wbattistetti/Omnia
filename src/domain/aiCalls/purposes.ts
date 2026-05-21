@@ -19,6 +19,8 @@ export const AI_CALL_PURPOSE = {
   AGENT_CREATE: 'AGENT_CREATE',
   AGENT_REFINE: 'AGENT_REFINE',
   USE_CASE_BUNDLE_INITIAL: 'USE_CASE_BUNDLE_INITIAL',
+  USE_CASE_BUNDLE_NARRATIVE_ORDER: 'USE_CASE_BUNDLE_NARRATIVE_ORDER',
+  USE_CASE_CATEGORIZE: 'USE_CASE_CATEGORIZE',
   USE_CASE_GENERATE_MORE: 'USE_CASE_GENERATE_MORE',
   USE_CASE_DIALOGUE_CREATE: 'USE_CASE_DIALOGUE_CREATE',
   /** Root composer INVIO: quanti use case dal testo incollato (semantica, non punteggiatura). */
@@ -46,6 +48,8 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.AGENT_CREATE]: 'Creazione agente (estrazione struttura dal task)',
   [AI_CALL_PURPOSE.AGENT_REFINE]: 'Raffinamento agente (rigenerazione su descrizione modificata)',
   [AI_CALL_PURPOSE.USE_CASE_BUNDLE_INITIAL]: 'Generazione iniziale use case bundle',
+  [AI_CALL_PURPOSE.USE_CASE_BUNDLE_NARRATIVE_ORDER]: 'Ordinamento narrativo use case',
+  [AI_CALL_PURPOSE.USE_CASE_CATEGORIZE]: 'Categorizzazione use case',
   [AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE]: 'Generazione altri use case',
   [AI_CALL_PURPOSE.USE_CASE_DIALOGUE_CREATE]: 'Creazione dialogo per nuovo use case',
   [AI_CALL_PURPOSE.USE_CASE_SPLIT_ROOT_DRAFT]:

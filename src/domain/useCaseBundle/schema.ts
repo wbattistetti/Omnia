@@ -3,7 +3,10 @@
  * Versione ufficiale piattaforma — non estendere senza bump `USE_CASE_BUNDLE_SCHEMA_VERSION`.
  */
 
-export const USE_CASE_BUNDLE_SCHEMA_VERSION = 2 as const;
+export const USE_CASE_BUNDLE_SCHEMA_VERSION = 3 as const;
+
+/** @deprecated Leggere ancora bundle v2 in parse. */
+export const USE_CASE_BUNDLE_SCHEMA_VERSION_V2 = 2 as const;
 
 export type UseCaseBundleSchemaVersion = typeof USE_CASE_BUNDLE_SCHEMA_VERSION;
 
@@ -105,6 +108,13 @@ export interface AIAgentCanonicalPhrase {
 }
 
 export interface UseCaseBundleV2Wrapper {
+  useCaseBundleSchemaVersion: 2 | UseCaseBundleSchemaVersion;
+  use_cases: unknown[];
+  categories?: unknown[];
+}
+
+export interface UseCaseBundleDocument {
   useCaseBundleSchemaVersion: UseCaseBundleSchemaVersion;
   use_cases: unknown[];
+  categories: unknown[];
 }

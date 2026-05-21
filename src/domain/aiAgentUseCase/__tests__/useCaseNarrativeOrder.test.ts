@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest';
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { applyNarrativeOrder } = require('../../../../backend/services/useCaseNarrativeOrder');
+import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import { applyNarrativeOrder } from '../useCaseNarrativeOrder';
 
 function row(
   id: string,
   label: string,
   parent_id: string | null,
   sort_order: number
-): { id: string; label: string; parent_id: string | null; sort_order: number } {
-  return { id, label, parent_id, sort_order };
+): AIAgentUseCase {
+  return {
+    id,
+    label,
+    parent_id,
+    sort_order,
+    refinement_prompt: '',
+    payoff: label,
+    dialogue: [{ turn_id: 't1', role: 'assistant', content: 'x', editable: true }],
+    notes: { behavior: '', tone: '' },
+    bubble_notes: {},
+  };
 }
 
 describe('applyNarrativeOrder', () => {
@@ -20,11 +29,11 @@ describe('applyNarrativeOrder', () => {
       row('c1', 'Child', 'r1', 0),
     ];
     const out = applyNarrativeOrder(input, ['r1', 'c1', 'r2']);
-    const byId = new Map(out.map((u: { id: string; sort_order: number }) => [u.id, u.sort_order]));
+    const byId = new Map(out.map((u) => [u.id, u.sort_order]));
     expect(byId.get('r1')).toBe(0);
     expect(byId.get('r2')).toBe(1);
     expect(byId.get('c1')).toBe(0);
-    expect(out.map((u: { id: string }) => u.id)).toEqual(['r1', 'c1', 'r2']);
+    expect(out.map((u) => u.id)).toEqual(['r1', 'c1', 'r2']);
   });
 
   it('throws when ids are missing', () => {

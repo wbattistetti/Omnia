@@ -33,7 +33,14 @@ describe('useCaseBundle v2', () => {
     const out = serializeAgentUseCaseBundle(parsed);
     const obj = JSON.parse(out) as { useCaseBundleSchemaVersion: number; use_cases: unknown[] };
     expect(obj.useCaseBundleSchemaVersion).toBe(USE_CASE_BUNDLE_SCHEMA_VERSION);
-    expect(getBundleSchemaVersionFromRaw(out)).toBe(2);
+    expect(getBundleSchemaVersionFromRaw(out)).toBe(USE_CASE_BUNDLE_SCHEMA_VERSION);
+    const withCats = serializeAgentUseCaseBundle(parsed, [
+      { id: 'cat_generale', label: 'Generale', sort_order: 0 },
+    ]);
+    const doc = JSON.parse(withCats) as {
+      categories: { id: string }[];
+    };
+    expect(doc.categories.length).toBe(1);
   });
 
   it('semantic compile maps cardiologica to prestazione', () => {

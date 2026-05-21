@@ -43,8 +43,10 @@ import type { AIAgentDesignApiError, AIAgentDesignApiSuccess, AIAgentDesignPaylo
 import type {
   AIAgentLogicalStep,
   AIAgentUseCase,
+  AIAgentUseCaseCategory,
   AIAgentUseCaseTurn,
 } from '@types/aiAgentUseCases';
+import { parseUseCaseCategoriesFromBundle } from '@domain/aiAgentUseCase/useCaseCategories';
 import type {
   UseCaseGeneratorWizardConversation,
   UseCaseGeneratorWizardConversationOutcome,
@@ -590,6 +592,76 @@ export async function reorderAIAgentUseCasesNarratively(
         ? body.use_case_ordering_note.trim()
         : undefined;
     return { useCases: parsed, useCaseOrderingNote };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface CategorizeAIAgentUseCasesParams {
+  useCases: AIAgentUseCase[];
+  logicalSteps: AIAgentLogicalStep[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+export interface CategorizeAIAgentUseCasesResult {
+  useCases: AIAgentUseCase[];
+  categories: AIAgentUseCaseCategory[];
+  useCaseCategorizationNote?: string;
+}
+
+/**
+ * Assegna categorie tematiche e ordine logico dentro ogni categoria (POST categorize_use_cases).
+ */
+export async function categorizeAIAgentUseCases(
+  params: CategorizeAIAgentUseCasesParams
+): Promise<CategorizeAIAgentUseCasesResult> {
+  const { useCases, logicalSteps, provider, model, outputLanguage } = params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'categorize_use_cases',
+      useCases,
+      logicalSteps,
+      provider: provider.toLowerCase(),
+      model,
+    };
+    if (typeof outputLanguage === 'string' && outputLanguage.trim().length > 0) {
+      bodyPayload.outputLanguage = outputLanguage.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | {
+          success: true;
+          use_cases: unknown;
+          categories: unknown;
+          use_case_categorization_note?: string;
+        }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const parsed = parseAgentUseCasesFromApi(body.use_cases);
+    if (parsed.length === 0) {
+      throw new Error('Risposta categorizzazione non valida: use_cases vuoti.');
+    }
+    const categories = parseUseCaseCategoriesFromBundle(body.categories);
+    const useCaseCategorizationNote =
+      typeof body.use_case_categorization_note === 'string' &&
+      body.use_case_categorization_note.trim()
+        ? body.use_case_categorization_note.trim()
+        : undefined;
+    return { useCases: parsed, categories, useCaseCategorizationNote };
   } finally {
     clearTimeout(timeout);
   }

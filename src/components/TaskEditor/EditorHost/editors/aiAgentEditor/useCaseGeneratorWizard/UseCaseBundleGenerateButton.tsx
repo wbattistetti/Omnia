@@ -17,6 +17,8 @@ export type UseCaseBundleGenerateButtonProps = {
   hasExistingUseCases?: boolean;
   /** Compatto: accanto alla textbox in riga. */
   layout?: 'inline' | 'block';
+  /** CTA empty state: pulsante più grande e leggibile. */
+  size?: 'default' | 'lg';
   className?: string;
 };
 
@@ -25,6 +27,7 @@ export function UseCaseBundleGenerateButton({
   onGenerate,
   hasExistingUseCases = false,
   layout = 'inline',
+  size = 'default',
   className = '',
 }: UseCaseBundleGenerateButtonProps): React.ReactElement {
   const { hasModel } = useAiBusyLabel();
@@ -47,10 +50,13 @@ export function UseCaseBundleGenerateButton({
     void onGenerate?.();
   };
 
-  const inlineClass =
-    'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-violet-500/45 bg-violet-600/25 px-3 py-2 text-xs font-semibold text-violet-50 transition-colors hover:bg-violet-600/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 sm:text-sm';
-  const blockClass =
-    'inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-500/45 bg-slate-900/90 px-3 py-2.5 text-xs font-semibold text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-violet-400/55 hover:bg-slate-800/95 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:opacity-45';
+  const iconSize = size === 'lg' ? 20 : 16;
+  const sizeClass =
+    size === 'lg'
+      ? 'gap-2.5 px-5 py-3 text-sm sm:text-base'
+      : 'gap-2 px-3 py-2 text-xs sm:text-sm';
+  const inlineClass = `inline-flex shrink-0 items-center justify-center rounded-lg border border-violet-500/45 bg-violet-600/25 font-semibold text-violet-50 transition-colors hover:bg-violet-600/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 ${sizeClass}`;
+  const blockClass = `inline-flex w-full max-w-md items-center justify-center rounded-xl border border-violet-500/50 bg-violet-600/30 font-semibold text-violet-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-violet-400/60 hover:bg-violet-600/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:opacity-45 ${sizeClass}`;
 
   return (
     <>
@@ -63,9 +69,9 @@ export function UseCaseBundleGenerateButton({
         className={`${layout === 'inline' ? inlineClass : blockClass} ${className}`.trim()}
       >
         {generateBusy ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+          <Loader2 size={iconSize} className="shrink-0 animate-spin" aria-hidden />
         ) : (
-          <Sparkles className="h-4 w-4 shrink-0" aria-hidden />
+          <Sparkles size={iconSize} className="shrink-0" aria-hidden />
         )}
         <span className="whitespace-nowrap">{generateBusy ? 'Generazione…' : label}</span>
         {!generateBusy ? (

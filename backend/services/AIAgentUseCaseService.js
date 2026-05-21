@@ -46,6 +46,22 @@ const ANALYZE_DEBUG_TURN_TIMEOUT_MS = 90000;
 const SPLIT_ROOT_USE_CASE_DRAFT_TIMEOUT_MS = 90000;
 const SPLIT_ROOT_USE_CASE_DRAFT_MAX_LABELS = 30;
 
+/**
+ * Regole universali catalogo use case: un pattern conversazionale per riga, non enumerazione
+ * per entità/attributo di dominio (valido per qualsiasi settore).
+ */
+const USE_CASE_CATALOG_ABSTRACTION_RULES = `CATALOG_ABSTRACTION (any domain — booking, retail, IT support, finance, healthcare, etc.):
+- Emit one use_case per **conversational pattern**: same user goal, same agent questions and order, same outcomes. Count **patterns**, not every catalog item in the task.
+- **Entity** (product, service, department, city, plan, ticket type, policy, module, SKU, …): express generically in "label" and "scenario.llm"; put varying words in bracket **slots** in dialogue. Use **one worked example** in natural language — the platform compiles surfaces to canonical slots and parametric grids cover other entities later.
+- **Attribute / choice** (first-time vs renewal, standard vs premium, visit type, priority, severity, channel, …): same rule — one use_case for the decision; do not spawn siblings per attribute value when the script is unchanged.
+- Emit a **separate** use_case only when the **conversation script or guardrails** change (extra questions, refusal, escalation, different outcome), not when only entity or attribute **values** change.
+- Before adding a row, ask: "If I replace the catalog noun with another item governed by the same rules, does the assistant dialogue change?" If **no** → do not add; merge into an existing pattern.
+- **Anti-pattern:** N use_cases whose labels only swap a proper noun ("… for X", "… for Y", "… for Z") with identical logic.
+- **Good pattern:** one row — generic label and scenario.llm ("Resolve <choice> for the requested <entity>"); dialogue with [entity] and [choice] slots (snake_case slot_id or mappable surfaces); ONE concrete instance in prose, not a list of every item from DESIGNER_TASK_DESCRIPTION.
+- "label" must not name a single catalog item unless the scenario truly applies only there by explicit business rule.
+- Prefer fewer generalized roots (and parent/child when flows fork) over exhaustively instantiating every noun in the task description.
+- **Never pad** with shallow duplicates — including **parameter variants** (same decision repeated per catalog noun or enum value).`;
+
 const UC_SYSTEM = `You are an expert conversational AI designer for OMNIA.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
@@ -53,7 +69,8 @@ When OUTPUT_LANGUAGE is set, write every human-readable string in that language.
 Never output "editable" (the platform injects it).
 Each use case must include one concise synthetic scenario ("scenario.llm", mirrored to "payoff") and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
 For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.
-The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. **Do not collapse to exactly four scenarios by habit** (a frequent shortcut); vary the count with real coverage.`;
+One use_case per conversational pattern; parameterize catalog **entities** and **attribute choices** with slots — do not enumerate separate use_cases per product, service, department, or enum value when the agent script is the same.
+The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. **Do not collapse to exactly four scenarios by habit** (a frequent shortcut); vary the count with real **pattern** coverage, not catalog enumeration.`;
 
 /** System prompt for annotate_assistant_message_for_json only — avoids UC_SYSTEM “design full use case” framing. */
 const ANNOTATE_ASSISTANT_FOR_JSON_SYSTEM = `You annotate existing assistant messages for OMNIA runtime JSON templating.
@@ -251,9 +268,9 @@ ${userDesc}
 ${ctx}${band}
 Produce JSON with exactly:
 1) "logical_steps" — array of { "id": string (snake_case), "description": string } — **6–14** ordered steps the agent follows (use **5–15** if needed; do **not** read this range as the number of use_cases). Start counts here from **six**, not four.
-2) "use_cases" — array. **No fixed count:** derive how many from DESIGNER_TASK_DESCRIPTION plus REQUEST_SCENARIO_BAND above. Typical non-trivial flows need **several distinct scenarios**; complex domains need **many**. **Never pad** with shallow duplicates. **Do not treat “four” as a batch size.** A **tiny** micro-task may need **2–3** scenarios; a broad task should **greatly exceed four** when coverage demands it. Each object:
+2) "use_cases" — array. **No fixed count:** derive how many **distinct conversational patterns** from DESIGNER_TASK_DESCRIPTION plus REQUEST_SCENARIO_BAND above — not one row per catalog item. Typical non-trivial flows need **several distinct patterns**; complex domains need **many patterns**, not **many entity instances**. **Never pad** with shallow duplicates or parameter variants (same script, different catalog noun). **Do not treat “four” as a batch size.** A **tiny** micro-task may need **2–3** scenarios; a broad task should **greatly exceed four** only when distinct **flows** demand it. Each object:
    - "id": string (unique among all use_cases)
-   - "label": string — short title for this scenario (shown in the UI tree).
+   - "label": string — short descriptive title for this scenario only (who/what/goal). Do NOT prefix with situation-type or category names (forbidden: "Chiarimento:", "Selezione:", "Ingresso:", etc.); thematic grouping is assigned later in separate categories.
    - "scenario": object with exactly:
      - "llm": string — minimal synthetic scenario (who, goal, constraints, outcome) in telegraphic form for designers and LLM routing (1–3 short lines; NOT the agent dialogue script).
      - "descrittivo": string — MUST equal "scenario.llm" exactly (platform mirror).
@@ -274,7 +291,9 @@ Content rules:
 - Every human-readable string must strictly relate to the DESIGNER_TASK_DESCRIPTION${ctx ? ' and stay consistent with RUNTIME_PROMPT_OR_SECTIONS when provided above' : ''}.
 - "scenario.llm" must make the scenario understandable without a multi-turn transcript.
 
-Coverage (not a four-item checklist): where relevant, span situation types such as success path, corrections/clarifications, ambiguity, refusals/guardrails — using **as many use_cases as appropriate** (multiple rows per type if needed, or parent/child structure). **Listing these themes does not mean “output exactly four use_cases”.**
+${USE_CASE_CATALOG_ABSTRACTION_RULES}
+
+Coverage (not a four-item checklist): where relevant, span **situation types** (success path, corrections/clarifications, ambiguity, refusals/guardrails) as **patterns** — using as many use_cases as **distinct flows** require (parent/child when a pattern has real branches). **Do not** interpret coverage as listing every service, product, department, or specialty from the task. **Listing themes does not mean “output exactly four use_cases”.**
 Return valid JSON only.`;
 }
 
@@ -315,7 +334,11 @@ Produce JSON with exactly:
    - "notes": { "behavior": string, "tone": string }
    - "bubble_notes": {}
 
-Pick ${n} **high-value** distinct scenarios to start coverage (ingresso, chiarimento, successo, …). Keep scenario.llm to 1–3 telegraphic lines.
+Pick ${n} **high-value distinct conversational patterns** (e.g. opening, clarification, success, guardrail — expressed in scenario.llm, not as "Tipo:" prefixes in labels). Do **not** spend this batch listing every catalog entity from the task — follow CATALOG_ABSTRACTION in the system message.
+
+${USE_CASE_CATALOG_ABSTRACTION_RULES}
+
+Keep scenario.llm to 1–3 telegraphic lines. Use-case "label" must describe the **pattern**, not a single catalog item name.
 
 CRITICAL: Every use_cases[i] MUST have non-empty dialogue[0].content (one full assistant sentence). Rows without a message are invalid.
 
@@ -509,8 +532,11 @@ Produce JSON with **exactly one** top-level key:
 "dialogue" (exactly one assistant turn), "notes", "bubble_notes".
 
 Rules:
-- Only **net-new** scenarios that expand coverage relative to ALREADY_DEFINED_USE_CASES.
-- How many: **as many as remain meaningful** — typically **1–14** added items depending on gaps; **never** output a fixed ritual count (e.g. always four). **Do not pad** with shallow variants.
+- Only **net-new** **patterns** that expand coverage relative to ALREADY_DEFINED_USE_CASES — not another catalog entity with the same script as an existing row.
+- How many: **as many as remain meaningful** — typically **1–14** added items depending on **flow** gaps; **never** output a fixed ritual count (e.g. always four). **Do not pad** with shallow variants or entity/attribute enumeration.
+
+${USE_CASE_CATALOG_ABSTRACTION_RULES}
+
 - Use **new** unique string ids among themselves; parent_id may reference another **new** id in this array or null.
 - Each assistant "dialogue" turn **content** must be non-empty substantive prose (label + payoff + message triplet for designers). **Never return a use case without dialogue.content.**
 ${chunked ? '- Include top-level boolean "coverage_complete" (required).\n' : ''}
@@ -758,6 +784,235 @@ async function reorderUseCasesNarratively({
       ? parsed.ordering_note_it.trim().slice(0, 500)
       : 'Ordine ragionevolmente cronologico per lettura designer; in conversazioni reali alcuni percorsi sono paralleli o saltabili.';
   return { use_cases: reordered, ordering_note_it: note };
+}
+
+const CATEGORIZE_USE_CASES_TIMEOUT_MS = 120000;
+
+const CATEGORIZE_SYSTEM = `You group design-time use cases into thematic categories for the OMNIA designer UI.
+Respond with a single valid JSON object only (no markdown fences, no commentary).
+Assign categories and ordering positions only. Do not rewrite scenario text or dialogue. Category names belong in "categories", not in use-case labels.`;
+
+/** Rimuove prefisso "Categoria: titolo" quando coincide con la categoria assegnata. */
+function stripCategoryPrefixFromLabel(label, categoryLabel) {
+  if (typeof label !== 'string' || !label.trim()) return label;
+  const trimmed = label.trim();
+  const m = /^([^:]{2,48}):\s*(.+)$/.exec(trimmed);
+  if (!m) return trimmed;
+  if (
+    categoryLabel &&
+    m[1].trim().toLowerCase() !== String(categoryLabel).trim().toLowerCase()
+  ) {
+    return trimmed;
+  }
+  const rest = m[2].trim();
+  return rest || trimmed;
+}
+
+/**
+ * @param {string} [outputLanguage]
+ * @param {object[]} useCases
+ * @param {object[]} logicalSteps
+ */
+function buildCategorizeUserMessage(outputLanguage, useCases, logicalSteps) {
+  const lang =
+    typeof outputLanguage === 'string' && outputLanguage.trim()
+      ? `OUTPUT_LANGUAGE (BCP 47): ${outputLanguage.trim()}\n`
+      : '';
+  const compact = flattenUseCasesDepthFirst(useCases).map((u) => ({
+    id: u.id,
+    label: typeof u.label === 'string' ? u.label.slice(0, 80) : '',
+    parent_id: u.parent_id ?? null,
+    scenario_llm: scenarioTextForLlm(u).slice(0, 280),
+  }));
+  return `${lang}Assign each use case to a **thematic category** so designers can scan the list (e.g. Ingresso, Disambiguazione, Successo, Errori / guardrail, Escalation — adapt to domain).
+
+Rules:
+- Emit **4–10** categories unless fewer than 4 use cases (then use 2–4).
+- Category labels: short Italian titles (max ~6 words), designer-facing, UPPERCASE style optional in label text.
+- "categories"[].description: 1–2 sentences in Italian explaining what belongs in this group (for designers), not a list of use cases.
+- "categories"[].id: unique strings "cat_" + snake_case slug.
+- "categories"[].sort_order: 0-based order of **categories** in logical reading flow (ingresso → … → chiusura).
+- "use_case_placements": **every** use case id exactly once with category_id and "position" (0-based narrative/logical order **within that category**; respect parent/child: parent before children in position order).
+- Do not invent use case ids.
+
+LOGICAL_STEPS (context):
+${JSON.stringify(logicalSteps || []).slice(0, 4000)}
+
+USE_CASES:
+${JSON.stringify(compact).slice(0, 14000)}
+
+Return JSON:
+{
+  "categories": [ { "id": "cat_...", "label": "...", "description": "...", "sort_order": 0 } ],
+  "use_case_placements": [ { "use_case_id": "<id>", "category_id": "cat_...", "position": 0 } ],
+  "categorization_note_it": "<optional 1 sentence>"
+}`;
+}
+
+/**
+ * @param {object[]} useCases
+ * @param {object} parsed model JSON
+ */
+function applyCategorizationFromModel(useCases, parsed) {
+  const rawCats = parsed.categories;
+  if (!Array.isArray(rawCats) || rawCats.length === 0) {
+    throw new Error('Categorize: missing categories array');
+  }
+  const placements = parsed.use_case_placements;
+  if (!Array.isArray(placements) || placements.length === 0) {
+    throw new Error('Categorize: missing use_case_placements array');
+  }
+  const categories = rawCats
+    .map((c, i) => {
+      if (!c || typeof c !== 'object') return null;
+      const id = typeof c.id === 'string' ? c.id.trim() : '';
+      const label = typeof c.label === 'string' ? c.label.trim() : '';
+      const sort_order =
+        typeof c.sort_order === 'number' && Number.isFinite(c.sort_order) ? c.sort_order : i;
+      const description =
+        typeof c.description === 'string' && c.description.trim()
+          ? c.description.trim().slice(0, 500)
+          : '';
+      if (!id || !label) return null;
+      return { id, label, sort_order, ...(description ? { description } : {}) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.sort_order - b.sort_order || a.label.localeCompare(b.label));
+
+  const byId = new Map(useCases.map((u) => [u.id, u]));
+  const catIds = new Set(categories.map((c) => c.id));
+  const placementByUc = new Map();
+  for (const p of placements) {
+    if (!p || typeof p !== 'object') continue;
+    const ucId = typeof p.use_case_id === 'string' ? p.use_case_id.trim() : '';
+    const catId = typeof p.category_id === 'string' ? p.category_id.trim() : '';
+    const position =
+      typeof p.position === 'number' && Number.isFinite(p.position) ? p.position : 0;
+    if (!ucId || !catId || !byId.has(ucId) || !catIds.has(catId)) continue;
+    placementByUc.set(ucId, { category_id: catId, position });
+  }
+
+  const catById = new Map(categories.map((c) => [c.id, c]));
+  let withCategory = useCases.map((uc) => {
+    const pl = placementByUc.get(uc.id);
+    if (!pl || !catIds.has(pl.category_id)) {
+      const { category_id: _drop, ...rest } = uc;
+      return rest;
+    }
+    const cat = catById.get(pl.category_id);
+    const label = cat
+      ? stripCategoryPrefixFromLabel(uc.label, cat.label)
+      : typeof uc.label === 'string'
+        ? uc.label
+        : '';
+    return { ...uc, category_id: pl.category_id, label };
+  });
+
+  const reorderedChunks = [];
+  const assigned = new Set();
+  for (const cat of categories) {
+    const ids = placements
+      .filter(
+        (p) =>
+          p &&
+          typeof p === 'object' &&
+          typeof p.category_id === 'string' &&
+          p.category_id.trim() === cat.id &&
+          typeof p.use_case_id === 'string' &&
+          byId.has(p.use_case_id.trim())
+      )
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((p) => p.use_case_id.trim());
+    const missing = withCategory
+      .filter((u) => u.category_id === cat.id && !ids.includes(u.id))
+      .map((u) => u.id);
+    const orderedIds = [...ids, ...missing];
+    if (orderedIds.length === 0) continue;
+    const subset = withCategory.filter((u) => orderedIds.includes(u.id));
+    try {
+      const reordered = applyNarrativeOrder(subset, orderedIds);
+      for (const u of reordered) {
+        reorderedChunks.push(u);
+        assigned.add(u.id);
+      }
+    } catch {
+      for (const id of orderedIds) {
+        const u = subset.find((x) => x.id === id);
+        if (u) {
+          reorderedChunks.push(u);
+          assigned.add(u.id);
+        }
+      }
+    }
+  }
+  const uncategorized = withCategory.filter((u) => {
+    const cid = typeof u.category_id === 'string' ? u.category_id.trim() : '';
+    return !cid || !catIds.has(cid);
+  });
+  for (const u of uncategorized) {
+    if (!assigned.has(u.id)) reorderedChunks.push(u);
+  }
+
+  const note =
+    typeof parsed.categorization_note_it === 'string' && parsed.categorization_note_it.trim()
+      ? parsed.categorization_note_it.trim().slice(0, 500)
+      : undefined;
+  return { categories, use_cases: reorderedChunks, categorization_note_it: note };
+}
+
+/**
+ * @param {object} params
+ */
+async function categorizeUseCases({
+  useCases,
+  logicalSteps,
+  outputLanguage,
+  provider = 'groq',
+  model,
+  purpose,
+  taskId = null,
+  taskLabel = null,
+  aiProviderService,
+}) {
+  if (!Array.isArray(useCases) || useCases.length === 0) {
+    return { categories: [], use_cases: [], categorization_note_it: 'Nessuno use case da categorizzare.' };
+  }
+  if (useCases.length === 1) {
+    const lone = { ...useCases[0] };
+    delete lone.category_id;
+    return {
+      categories: [],
+      use_cases: [lone],
+      categorization_note_it: 'Un solo use case: nessuna categoria.',
+    };
+  }
+  const messages = [
+    { role: 'system', content: CATEGORIZE_SYSTEM },
+    {
+      role: 'user',
+      content: buildCategorizeUserMessage(outputLanguage, useCases, logicalSteps || []),
+    },
+  ];
+  const response = await aiProviderService.callAI(provider, messages, {
+    model: model || undefined,
+    temperature: 0.35,
+    maxTokens: provider === 'openai' ? 4096 : 8192,
+    timeout: CATEGORIZE_USE_CASES_TIMEOUT_MS,
+    purpose: purpose || 'USE_CASE_CATEGORIZE',
+    taskId,
+    taskLabel,
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  const jsonStr = extractJsonString(content);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (e) {
+    const err = new Error(`Categorize returned non-JSON: ${e.message}`);
+    err.rawSnippet = jsonStr.slice(0, 500);
+    throw err;
+  }
+  return applyCategorizationFromModel(useCases, parsed);
 }
 
 async function generateUseCaseBundle({
@@ -2091,6 +2346,7 @@ module.exports = {
   generateUseCaseBundleInitialChunk,
   generateUseCaseBundleExtend,
   reorderUseCasesNarratively,
+  categorizeUseCases,
   USE_CASE_BUNDLE_CHUNK_SIZE,
   USE_CASE_BUNDLE_MAX_TOTAL,
   createUseCase,

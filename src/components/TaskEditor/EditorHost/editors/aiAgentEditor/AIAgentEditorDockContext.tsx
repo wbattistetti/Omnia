@@ -5,7 +5,11 @@
 import React from 'react';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type { ConversationalRule } from '@domain/conversationalRules/types';
-import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
+import type {
+  AIAgentLogicalStep,
+  AIAgentUseCase,
+  AIAgentUseCaseCategory,
+} from '@types/aiAgentUseCases';
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
@@ -72,6 +76,8 @@ export interface AIAgentEditorDockContextValue {
   logicalSteps: readonly AIAgentLogicalStep[];
   useCases: readonly AIAgentUseCase[];
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
+  useCaseCategories: readonly AIAgentUseCaseCategory[];
+  setUseCaseCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   conversationalRules: readonly ConversationalRule[];
   setConversationalRules: React.Dispatch<React.SetStateAction<ConversationalRule[]>>;
   /** Prompts step: business use cases vs error-handling rules (separate JSON). */
@@ -83,6 +89,7 @@ export interface AIAgentEditorDockContextValue {
   useCaseBundleGenerationCount: number | null;
   /** Pass di riordino narrativo dopo i batch chunked. */
   useCaseBundleGenerationOrdering: boolean;
+  useCaseBundleGenerationCategorizing: boolean;
   /** Propagazione stile frasi esempio (LLM); separato da bundle. */
   useCasePhraseStylePropagationBusy: boolean;
   /** Avanzamento batch (un use case per chiamata); null se non in corso. */

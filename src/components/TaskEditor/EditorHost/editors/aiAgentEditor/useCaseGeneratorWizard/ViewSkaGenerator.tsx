@@ -303,7 +303,8 @@ export function ViewSkaGenerator({
   const useCaseGenerateBusyLabel = generateBusy
     ? resolveUseCaseBundleGeneratingLabel(
         useCaseBundleGenerationCount,
-        useCaseBundleGenerationOrdering
+        useCaseBundleGenerationOrdering,
+        false
       )
     : LABEL_GENERATE_USE_CASES;
 

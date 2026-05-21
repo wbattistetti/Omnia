@@ -149,6 +149,9 @@ export function EditorUseCasesPanel() {
     useCaseBundleGenerationBusy,
     useCaseBundleGenerationCount,
     useCaseBundleGenerationOrdering,
+    useCaseBundleGenerationCategorizing,
+    useCaseCategories,
+    setUseCaseCategories,
     useCasePhraseStylePropagationBusy,
     useCasePhraseStyleBatchProgress,
     useCaseCreationMessage,
@@ -204,7 +207,19 @@ export function EditorUseCasesPanel() {
     approveLexiconSurface,
     revokeLexiconSurface,
     updateLexiconSlotId,
+    designDescription,
+    knowledgeBaseDocuments,
+    backendPlaceholders,
   } = useAIAgentEditorDock();
+
+  const emptyTutorGenerateContext = React.useMemo(
+    () => ({
+      hasDesignDescription: designDescription.trim().length > 0,
+      hasKbDocuments: knowledgeBaseDocuments.length > 0,
+      hasBackend: backendPlaceholders.length > 0,
+    }),
+    [designDescription, knowledgeBaseDocuments.length, backendPlaceholders.length]
+  );
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
@@ -242,12 +257,14 @@ export function EditorUseCasesPanel() {
   const useCaseComposerBlockingBusy =
     useCaseComposerBusy ||
     useCaseBundleGenerationBusy ||
+    useCaseBundleGenerationCategorizing ||
     useCasePhraseStylePropagationBusy;
 
   const bundleGenerateBusyLabel = useCaseBundleGenerationBusy
     ? resolveUseCaseBundleGeneratingLabel(
         useCaseBundleGenerationCount,
-        useCaseBundleGenerationOrdering
+        useCaseBundleGenerationOrdering,
+        useCaseBundleGenerationCategorizing
       )
     : undefined;
 
@@ -341,6 +358,21 @@ export function EditorUseCasesPanel() {
       bundleGenerateBusyLabel={bundleGenerateBusyLabel}
       useCaseBundleGenerationCount={useCaseBundleGenerationCount}
       useCaseBundleGenerationOrdering={useCaseBundleGenerationOrdering}
+      bundleGenerationCategorizing={useCaseBundleGenerationCategorizing}
+      emptyTutorGenerateContext={emptyTutorGenerateContext}
+      useCaseCategories={useCaseCategories}
+      onUseCaseCategoryLabelChange={(categoryId, label) => {
+        setUseCaseCategories((prev) =>
+          prev.map((c) => (c.id === categoryId ? { ...c, label } : c))
+        );
+      }}
+      onUseCaseCategoryDescriptionChange={(categoryId, description) => {
+        setUseCaseCategories((prev) =>
+          prev.map((c) =>
+            c.id === categoryId ? { ...c, description: description.trim() || undefined } : c
+          )
+        );
+      }}
       primaryGenerateOnRightOnly={useWizardShell}
       highlightIds={useCaseHighlightIds}
       onClearUseCaseHighlight={onClearUseCaseHighlight}

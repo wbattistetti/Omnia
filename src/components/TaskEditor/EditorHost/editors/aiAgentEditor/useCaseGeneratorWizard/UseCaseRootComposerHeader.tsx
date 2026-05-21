@@ -28,6 +28,7 @@ export type UseCaseRootComposerHeaderProps = {
   bundleGenerateBusy: boolean;
   bundleGenerationCount: number | null;
   bundleGenerationOrdering: boolean;
+  bundleGenerationCategorizing?: boolean;
   onGenerateUseCaseBundle?: () => void | Promise<void>;
   generating?: boolean;
   hasExistingUseCases: boolean;
@@ -50,6 +51,7 @@ export function UseCaseRootComposerHeader({
   bundleGenerateBusy,
   bundleGenerationCount,
   bundleGenerationOrdering,
+  bundleGenerationCategorizing = false,
   onGenerateUseCaseBundle,
   generating = false,
   hasExistingUseCases,
@@ -57,7 +59,8 @@ export function UseCaseRootComposerHeader({
   const bundleBusy = generating || bundleGenerateBusy;
   const progressMessage = formatUseCaseBundleProgressBanner(
     bundleGenerationCount,
-    bundleGenerationOrdering
+    bundleGenerationOrdering,
+    bundleGenerationCategorizing
   );
 
   if (bundleBusy) {

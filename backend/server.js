@@ -19,6 +19,7 @@ const {
   generateUseCaseBundleInitialChunk,
   generateUseCaseBundleExtend,
   reorderUseCasesNarratively,
+  categorizeUseCases,
   createUseCase,
   splitRootUseCaseDraft,
   regenerateUseCase,
@@ -6883,6 +6884,36 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         taskLabel: callMeta.taskLabel,
       });
       return sendKbMarkdownHttpResponse(res, markdown);
+    }
+
+    if (action === 'categorize_use_cases') {
+      const categorizeUseCasesInput = Array.isArray(body.useCases) ? body.useCases : [];
+      const categorizeLogicalSteps = Array.isArray(body.logicalSteps) ? body.logicalSteps : [];
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] categorize_use_cases`, {
+        provider,
+        model,
+        count: categorizeUseCasesInput.length,
+      });
+      const categorized = await categorizeUseCases({
+        useCases: categorizeUseCasesInput,
+        logicalSteps: categorizeLogicalSteps,
+        outputLanguage,
+        provider,
+        model,
+        purpose: callMeta.purpose || 'USE_CASE_CATEGORIZE',
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+        aiProviderService,
+      });
+      return res.json({
+        success: true,
+        use_cases: categorized.use_cases,
+        categories: categorized.categories,
+        ...(typeof categorized.categorization_note_it === 'string' &&
+        categorized.categorization_note_it.trim()
+          ? { use_case_categorization_note: categorized.categorization_note_it.trim() }
+          : {}),
+      });
     }
 
     if (action === 'reorder_use_cases_narratively') {

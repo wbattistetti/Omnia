@@ -1257,6 +1257,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
     useCaseBundleGenerationCount: c.useCaseBundleGenerationCount,
     useCaseBundleGenerationOrdering: c.useCaseBundleGenerationOrdering,
+    useCaseBundleGenerationCategorizing: c.useCaseBundleGenerationCategorizing,
+    useCaseCategories: c.useCaseCategories,
+    setUseCaseCategories: c.setUseCaseCategories,
     useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
     useCasePhraseStyleBatchProgress: c.useCasePhraseStyleBatchProgress,
     useCaseCreationMessage: c.useCaseCreationMessage,
@@ -1465,7 +1468,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
                   {c.useCaseBundleGenerationBusy || c.generating
                     ? resolveUseCaseBundleGeneratingLabel(
                         c.useCaseBundleGenerationCount,
-                        c.useCaseBundleGenerationOrdering
+                        c.useCaseBundleGenerationOrdering,
+                        c.useCaseBundleGenerationCategorizing
                       )
                     : LABEL_GENERATE_USE_CASES}
                 </button>

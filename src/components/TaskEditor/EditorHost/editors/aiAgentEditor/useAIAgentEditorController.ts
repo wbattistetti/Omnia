@@ -23,6 +23,7 @@ import {
   generateAIAgentDesign,
   generateAIAgentUseCases,
   reorderAIAgentUseCasesNarratively,
+  categorizeAIAgentUseCases,
   annotateAIAgentAssistantMessageForJsonApi,
   propagateExamplePhraseStyleApi,
   propagateCorrectionStyleApi,
@@ -35,8 +36,17 @@ import {
   polishDesignDescriptionApi,
 } from '@services/aiAgentDesignApi';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
-import type { AIAgentLogicalStep, AIAgentUseCase } from '@types/aiAgentUseCases';
-import { newAgentUseCaseTurnId, serializeLogicalSteps, serializeUseCases } from '@types/aiAgentUseCases';
+import type {
+  AIAgentLogicalStep,
+  AIAgentUseCase,
+  AIAgentUseCaseCategory,
+} from '@types/aiAgentUseCases';
+import {
+  newAgentUseCaseTurnId,
+  parseAgentUseCaseBundleWithCategories,
+  serializeLogicalSteps,
+  serializeUseCases,
+} from '@types/aiAgentUseCases';
 import {
   loadProjectSlotLexicon,
   saveProjectSlotLexicon,
@@ -302,6 +312,7 @@ export function useAIAgentEditorController({
   const designDescriptionWasSignificantRef = React.useRef(false);
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
+  const [useCaseCategories, setUseCaseCategories] = React.useState<AIAgentUseCaseCategory[]>([]);
   const [conversationalRules, setConversationalRules] = React.useState<ConversationalRule[]>([]);
   /** Ref: letto da setter senza dipendenze stale; default ordine dialogo (non alfabetico). */
   const useCaseSiblingSortModeRef = React.useRef<UseCaseSiblingSortMode>('logical');
@@ -322,6 +333,9 @@ export function useAIAgentEditorController({
   >(null);
   /** Pass finale di riordino narrativo dopo i batch. */
   const [useCaseBundleGenerationOrdering, setUseCaseBundleGenerationOrdering] =
+    React.useState(false);
+  /** Pass IA di categorizzazione tematica dopo riordino narrativo. */
+  const [useCaseBundleGenerationCategorizing, setUseCaseBundleGenerationCategorizing] =
     React.useState(false);
   /** Solo propagazione stile frasi esempio (LLM): indipendente da {@link useCaseBundleGenerationBusy}. */
   const [useCasePhraseStylePropagationBusy, setUseCasePhraseStylePropagationBusy] =
@@ -1095,7 +1109,9 @@ export function useAIAgentEditorController({
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
-    setUseCases(normalizeUseCaseSiblingOrder(b.useCases, 'logical'));
+    const loadedBundle = parseAgentUseCaseBundleWithCategories(b.agentUseCasesJson);
+    setUseCases(normalizeUseCaseSiblingOrder(loadedBundle.useCases, 'logical'));
+    setUseCaseCategories(loadedBundle.categories);
     setConversationalRules(b.conversationalRules);
     const storedStyle = String(b.agentUseCaseGlobalStyleId || '').trim();
     setUseCaseGlobalStyleIdState(
@@ -1158,7 +1174,7 @@ export function useAIAgentEditorController({
     if (!instanceId || !hydrated) return;
     const reason = persistReasonRef.current;
     persistReasonRef.current = 'direct';
-    const agentUseCasesJson = serializeUseCases(useCases);
+    const agentUseCasesJson = serializeUseCases(useCases, useCaseCategories);
     const agentConversationalRulesJson = serializeConversationalRules(conversationalRules);
     const taskBeforePersist = taskRepository.getTask(instanceId);
     let iaRuntimeForPersist = mergeConvaiAgentIdFromGlobalDefaults(
@@ -1293,6 +1309,7 @@ export function useAIAgentEditorController({
   const handleClearWizardOutput = React.useCallback(() => {
     setLogicalSteps([]);
     setUseCases([]);
+    setUseCaseCategories([]);
     setAgentRuntimeCompactJson('');
     setAgentUseCaseWizardStateJson('');
     setUseCaseComposerError(null);
@@ -1753,11 +1770,31 @@ export function useAIAgentEditorController({
           [...useCases, ...newOnes],
           useCaseSiblingSortModeRef.current
         );
-        setUseCases(merged);
+        let mergedFinal = merged;
+        if (mergedFinal.length >= 2) {
+          setUseCaseBundleGenerationCategorizing(true);
+          try {
+            const cat = await categorizeAIAgentUseCases({
+              useCases: mergedFinal,
+              logicalSteps,
+              provider,
+              model,
+              outputLanguage,
+              callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_CATEGORIZE),
+            });
+            mergedFinal = normalizeGeneratedUseCases(cat.useCases);
+            setUseCaseCategories(cat.categories);
+          } catch {
+            /* mantieni lista e categorie precedenti */
+          } finally {
+            setUseCaseBundleGenerationCategorizing(false);
+          }
+        }
+        setUseCases(mergedFinal);
         setDirty(true);
         const ids = newOnes.map((u) => u.id);
         return {
-          useCases: merged,
+          useCases: mergedFinal,
           mode: 'extend',
           addedCount: newOnes.length,
           highlightIds: ids,
@@ -1838,6 +1875,31 @@ export function useAIAgentEditorController({
           ? `${extendBatchWarning}${reorderNote}`
           : `Generati ${accumulated.length} scenari.${reorderNote} Salva e usa «Crea altri use case» se serve altro coverage.`;
       }
+      setUseCaseBundleGenerationOrdering(false);
+      if (normalized.length >= 2) {
+        setUseCaseBundleGenerationCategorizing(true);
+        try {
+          const cat = await categorizeAIAgentUseCases({
+            useCases: normalized,
+            logicalSteps: ls,
+            provider,
+            model,
+            outputLanguage,
+            callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_CATEGORIZE),
+          });
+          normalized = normalizeGeneratedUseCases(cat.useCases);
+          setUseCaseCategories(cat.categories);
+        } catch {
+          const catNote =
+            ' Categorizzazione non applicata; puoi riordinare manualmente sotto le intestazioni.';
+          extendBatchWarning = extendBatchWarning
+            ? `${extendBatchWarning}${catNote}`
+            : `Generati ${normalized.length} scenari.${catNote}`;
+          /* mantieni categorie precedenti se la categorizzazione fallisce */
+        } finally {
+          setUseCaseBundleGenerationCategorizing(false);
+        }
+      }
       setUseCases(normalized);
       setUseCaseBundleGenerationCount(normalized.length);
       setDirty(true);
@@ -1860,6 +1922,7 @@ export function useAIAgentEditorController({
       setUseCaseBundleGenerationBusy(false);
       setUseCaseBundleGenerationCount(null);
       setUseCaseBundleGenerationOrdering(false);
+      setUseCaseBundleGenerationCategorizing(false);
     }
   }, [
     hasAgentGeneration,
@@ -1872,6 +1935,7 @@ export function useAIAgentEditorController({
     useCaseGlobalStyleId,
     getDeferAgentMessages,
     useCases,
+    useCaseCategories,
     logicalSteps,
     knowledgeBaseDocuments,
     projectId,
@@ -2673,7 +2737,7 @@ export function useAIAgentEditorController({
     agentRuntimeCompactJson,
     hasAgentGeneration,
     agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
-    agentUseCasesJson: serializeUseCases(useCases),
+    agentUseCasesJson: serializeUseCases(useCases, useCaseCategories),
     agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     agentUseCaseWizardStateJson,
     agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(
@@ -2820,6 +2884,9 @@ export function useAIAgentEditorController({
     useCaseBundleGenerationBusy,
     useCaseBundleGenerationCount,
     useCaseBundleGenerationOrdering,
+    useCaseBundleGenerationCategorizing,
+    useCaseCategories,
+    setUseCaseCategories,
     useCasePhraseStylePropagationBusy,
     useCasePhraseStyleBatchProgress,
     useCaseCreationMessage,
@@ -2888,7 +2955,7 @@ export function useAIAgentEditorController({
     knowledgeBaseTaskContext,
     onMergeKbPromotedUseCases,
     regenerateKbPromotedUseCase,
-    agentUseCasesJson: serializeUseCases(useCases),
+    agentUseCasesJson: serializeUseCases(useCases, useCaseCategories),
     agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     compileUseCasePhrasesForCatalog,
     compilePhrasesBusy,

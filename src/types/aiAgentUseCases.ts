@@ -8,6 +8,7 @@ import type {
 import type { AgentMessageMotorPayload } from '../domain/aiAgentUseCase/splitAgentMessageTemplate';
 import { ensureUseCasePhrases } from '../domain/useCaseBundle/migrateUseCase';
 import {
+  parseAgentUseCaseBundleDocument,
   parseAgentUseCaseBundleJson,
   serializeAgentUseCaseBundle,
 } from '../domain/useCaseBundle/parseSerializeBundle';
@@ -30,6 +31,18 @@ export interface AIAgentLogicalStep {
   id: string;
   description: string;
 }
+
+/** Raggruppamento UI / lettura designer (ortogonale a parent_id). */
+export interface AIAgentUseCaseCategory {
+  id: string;
+  label: string;
+  sort_order: number;
+  /** Breve guida designer (1–2 frasi), opzionale — da IA o edit manuale. */
+  description?: string;
+}
+
+/** Categoria di fallback quando il bundle non ne definisce. */
+export const DEFAULT_USE_CASE_CATEGORY_ID = 'cat_generale';
 
 /** Scenario: testo canonico sintetico (`llm`); `descrittivo` e `payoff` sono mirror per compatibilità. */
 export interface AIAgentUseCaseScenario {
@@ -54,6 +67,8 @@ export interface AIAgentUseCase {
   label: string;
   parent_id: string | null;
   sort_order: number;
+  /** Id in {@link AIAgentUseCaseCategory}; assente o non valido = use case in lista piatta (radice). */
+  category_id?: string | null;
   refinement_prompt: string;
   /** Global style id (cortese / ironico / formale) for this use case contract. */
   style_id?: string;
@@ -258,6 +273,13 @@ export function parseAgentUseCasesJson(raw: string | undefined): AIAgentUseCase[
   return parseAgentUseCaseBundleJson(raw);
 }
 
+export function parseAgentUseCaseBundleWithCategories(raw: string | undefined): {
+  useCases: AIAgentUseCase[];
+  categories: AIAgentUseCaseCategory[];
+} {
+  return parseAgentUseCaseBundleDocument(raw);
+}
+
 /** Parse array grezzo use case (v1 o elemento di `use_cases` v2). */
 export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] {
   if (!Array.isArray(v)) return [];
@@ -276,6 +298,13 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
             ? rawParent.trim()
             : null;
       const sort_order = typeof o.sort_order === 'number' && Number.isFinite(o.sort_order) ? o.sort_order : 0;
+      const rawCategoryId = o.category_id;
+      const category_id =
+        rawCategoryId === null || rawCategoryId === undefined
+          ? null
+          : typeof rawCategoryId === 'string' && rawCategoryId.trim()
+            ? rawCategoryId.trim()
+            : null;
       const refinement_prompt =
         typeof o.refinement_prompt === 'string' ? o.refinement_prompt : '';
       const style_id =
@@ -392,6 +421,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
         label,
         parent_id,
         sort_order,
+        ...(category_id ? { category_id } : {}),
         refinement_prompt,
         ...(style_id ? { style_id } : {}),
         ...(scenario ? { scenario } : {}),
@@ -500,8 +530,11 @@ export function serializeLogicalSteps(steps: readonly AIAgentLogicalStep[]): str
   return JSON.stringify([...steps]);
 }
 
-export function serializeUseCases(cases: readonly AIAgentUseCase[]): string {
-  return serializeAgentUseCaseBundle(cases);
+export function serializeUseCases(
+  cases: readonly AIAgentUseCase[],
+  categories: readonly AIAgentUseCaseCategory[] = []
+): string {
+  return serializeAgentUseCaseBundle(cases, categories);
 }
 
 /** Normalize LLM/API arrays into typed logical steps. */

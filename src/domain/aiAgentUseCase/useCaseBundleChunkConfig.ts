@@ -30,12 +30,15 @@ export function formatGeneratingUseCasesLabel(count: number): string {
 }
 
 export const LABEL_ORDERING_USE_CASES = 'Ordinamento use case…';
+export const LABEL_CATEGORIZING_USE_CASES = 'Categorizzazione use case…';
 
 /** Testo pulsante durante generazione chunked o riordino finale. */
 export function resolveUseCaseBundleGeneratingLabel(
   count: number | null,
-  ordering: boolean
+  ordering: boolean,
+  categorizing = false
 ): string {
+  if (categorizing) return LABEL_CATEGORIZING_USE_CASES;
   if (ordering) return LABEL_ORDERING_USE_CASES;
   if (count != null && count >= 0) return formatGeneratingUseCasesLabel(count);
   return 'Generando use case…';
@@ -46,8 +49,12 @@ export function resolveUseCaseBundleGeneratingLabel(
  */
 export function formatUseCaseBundleProgressBanner(
   count: number | null,
-  ordering: boolean
+  ordering: boolean,
+  categorizing = false
 ): string {
+  if (categorizing) {
+    return 'Sto raggruppando gli use case in categorie leggibili… Ti avviso quando ho finito.';
+  }
   if (ordering) {
     return 'Sto riordinando gli use case per metterli in sequenza logica… Ti avviso quando ho finito.';
   }

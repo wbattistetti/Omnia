@@ -30,6 +30,7 @@ import {
   isUseCaseIncludedInConversations,
   type AIAgentLogicalStep,
   type AIAgentUseCase,
+  type AIAgentUseCaseCategory,
 } from '@types/aiAgentUseCases';
 import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
 import {
@@ -170,6 +171,11 @@ import { CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE } from './useCaseGenerator
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { UseCaseEmptyTutorPanel } from './useCaseGeneratorWizard/UseCaseEmptyTutorPanel';
 import { UseCaseRootComposerHeader } from './useCaseGeneratorWizard/UseCaseRootComposerHeader';
+import { UseCaseCategoryHeader } from './useCaseGeneratorWizard/UseCaseCategoryHeader';
+import {
+  displayUseCaseLabelForCategory,
+  resolveUseCaseListDisplayLayout,
+} from '@domain/aiAgentUseCase/useCaseCategories';
 import {
   BracketTokenHighlightedText,
   BracketTokenHighlightedTextarea,
@@ -248,6 +254,16 @@ export interface AIAgentUseCaseComposerProps {
   useCaseBundleGenerationCount?: number | null;
   /** Fase finale di riordino scenari. */
   useCaseBundleGenerationOrdering?: boolean;
+  bundleGenerationCategorizing?: boolean;
+  /** Contesto per messaggio dinamico nello stato vuoto (descrizione, KB, back-end). */
+  emptyTutorGenerateContext?: {
+    hasDesignDescription: boolean;
+    hasKbDocuments: boolean;
+    hasBackend: boolean;
+  };
+  useCaseCategories?: readonly AIAgentUseCaseCategory[];
+  onUseCaseCategoryLabelChange?: (categoryId: string, label: string) => void;
+  onUseCaseCategoryDescriptionChange?: (categoryId: string, description: string) => void;
   /**
    * @deprecated La generazione bundle è sempre nel pannello sinistro (textbox + CTA).
    * Mantenuto per compatibilità; non nasconde più il pulsante inline.
@@ -346,6 +362,15 @@ export function AIAgentUseCaseComposer({
   bundleGenerateBusyLabel,
   useCaseBundleGenerationCount = null,
   useCaseBundleGenerationOrdering = false,
+  bundleGenerationCategorizing = false,
+  emptyTutorGenerateContext = {
+    hasDesignDescription: false,
+    hasKbDocuments: false,
+    hasBackend: false,
+  },
+  useCaseCategories = [],
+  onUseCaseCategoryLabelChange,
+  onUseCaseCategoryDescriptionChange,
   primaryGenerateOnRightOnly = false,
   highlightIds = [],
   onClearUseCaseHighlight,
@@ -550,7 +575,75 @@ export function AIAgentUseCaseComposer({
     ordered.length === 0 && !isConversationalRulesCatalog;
 
   const bundleGenerateBusy =
-    Boolean(bundleGenerateBusyLabel) && busy && !rootChipBusy;
+    (Boolean(bundleGenerateBusyLabel) && busy && !rootChipBusy) || bundleGenerationCategorizing;
+
+  type UseCaseListRow =
+    | { kind: 'category'; category: AIAgentUseCaseCategory; count: number }
+    | {
+        kind: 'use_case';
+        useCase: AIAgentUseCase;
+        category: AIAgentUseCaseCategory | null;
+        groupCases: readonly AIAgentUseCase[];
+      };
+
+  const useCaseListLayout = React.useMemo(
+    () =>
+      isConversationalRulesCatalog
+        ? null
+        : resolveUseCaseListDisplayLayout(useCaseCategories, filteredOrdered),
+    [isConversationalRulesCatalog, useCaseCategories, filteredOrdered]
+  );
+
+  const useCaseListRows = React.useMemo((): UseCaseListRow[] => {
+    if (!useCaseListLayout) {
+      return filteredOrdered.map((u) => ({
+        kind: 'use_case' as const,
+        useCase: u,
+        category: null,
+        groupCases: filteredOrdered,
+      }));
+    }
+    const { uncategorized, categoryGroups } = useCaseListLayout;
+    const rows: UseCaseListRow[] = [];
+    for (const u of uncategorized) {
+      rows.push({
+        kind: 'use_case',
+        useCase: u,
+        category: null,
+        groupCases: uncategorized,
+      });
+    }
+    for (const g of categoryGroups) {
+      rows.push({ kind: 'category', category: g.category, count: g.cases.length });
+      for (const u of g.cases) {
+        rows.push({
+          kind: 'use_case',
+          useCase: u,
+          category: g.category,
+          groupCases: g.cases,
+        });
+      }
+    }
+    return rows;
+  }, [filteredOrdered, useCaseListLayout]);
+
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
+
+  const toggleCategoryExpanded = React.useCallback((categoryId: string) => {
+    setCollapsedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      return next;
+    });
+  }, []);
+
+  React.useEffect(() => {
+    if (!useCaseListLayout?.categoryGroups.length) return;
+    setCollapsedCategoryIds(new Set());
+  }, [useCaseListLayout?.categoryGroups.map((g) => g.category.id).join('|')]);
 
   React.useEffect(() => {
     if (rootBatchInProgressRef.current) return;
@@ -2528,6 +2621,7 @@ export function AIAgentUseCaseComposer({
                   bundleGenerateBusy={bundleGenerateBusy}
                   bundleGenerationCount={useCaseBundleGenerationCount}
                   bundleGenerationOrdering={useCaseBundleGenerationOrdering}
+                  bundleGenerationCategorizing={bundleGenerationCategorizing}
                   onGenerateUseCaseBundle={onGenerateUseCaseBundle}
                   generating={generating}
                   hasExistingUseCases={ordered.length > 0}
@@ -2566,17 +2660,18 @@ export function AIAgentUseCaseComposer({
                     }
                   }}
                   rootComposerLocked={rootComposerLocked}
-                  placeholder="Incolla o scrivi uno o più scenari (anche un paragrafo). INVIO: l’IA decide quanti use case creare."
                   showAnalyzeChip={showRootAnalyzeChip}
                   rootChipBusy={rootChipBusy}
                   rootChipLabel={rootChipLabel}
                   onAnalyzeClick={() => void handleCreateRoot()}
                   rootBatchWarning={rootBatchWarning}
+                  generateContext={emptyTutorGenerateContext}
                   onGenerateFromScratch={onGenerateUseCaseBundle}
                   generating={generating}
                   bundleGenerateBusy={bundleGenerateBusy}
                   bundleGenerationCount={useCaseBundleGenerationCount}
                   bundleGenerationOrdering={useCaseBundleGenerationOrdering}
+                  bundleGenerationCategorizing={bundleGenerationCategorizing}
                 />
               ) : ordered.length === 0 ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6">
@@ -2613,7 +2708,33 @@ export function AIAgentUseCaseComposer({
                     ». Pulisci la ricerca per vederli tutti.
                   </li>
                 ) : null}
-                {filteredOrdered.map((u, rowIndex) => {
+                {useCaseListRows.map((row, rowIndex) => {
+                  if (row.kind === 'category') {
+                    const expanded = !collapsedCategoryIds.has(row.category.id);
+                    return (
+                      <UseCaseCategoryHeader
+                        key={`cat-${row.category.id}`}
+                        category={row.category}
+                        useCaseCount={row.count}
+                        expanded={expanded}
+                        disabled={busy}
+                        onToggle={() => toggleCategoryExpanded(row.category.id)}
+                        onLabelChange={(categoryId, label) =>
+                          onUseCaseCategoryLabelChange?.(categoryId, label)
+                        }
+                        onDescriptionChange={(categoryId, description) =>
+                          onUseCaseCategoryDescriptionChange?.(categoryId, description)
+                        }
+                      />
+                    );
+                  }
+                  if (row.category && collapsedCategoryIds.has(row.category.id)) {
+                    return null;
+                  }
+                  const u = row.useCase;
+                  const listDisplayLabel = row.category
+                    ? displayUseCaseLabelForCategory(u, row.category)
+                    : u.label || u.id;
                   const rowBaseline = fieldBaselineByUseCaseId[u.id];
                   const active = u.id === effectiveSelectedId;
                   const editingTitle = editingTitleId === u.id;
@@ -2648,7 +2769,9 @@ export function AIAgentUseCaseComposer({
                       : primaryGenerateOnRightOnly && cardExpanded
                         ? `overflow-hidden rounded-md border ${UC_WIZARD_ROW_EXPANDED}`
                         : `rounded-md ${zebraRow}`;
-                  const nextInFiltered = filteredOrdered[rowIndex + 1];
+                  const nextRow = useCaseListRows[rowIndex + 1];
+                  const nextInFiltered =
+                    nextRow?.kind === 'use_case' ? nextRow.useCase : undefined;
                   const showSiblingGapSentinel =
                     nextInFiltered != null &&
                     (u.parent_id ?? null) === (nextInFiltered.parent_id ?? null);
@@ -2657,7 +2780,12 @@ export function AIAgentUseCaseComposer({
                     (u.parent_id ?? null) !== (nextInFiltered.parent_id ?? null);
                   return (
                     <React.Fragment key={u.id}>
-                    <li data-uc-row-id={u.id} className={`group/uc-row ${liSurface}`}>
+                    <li
+                      data-uc-row-id={u.id}
+                      className={`group/uc-row ${liSurface} ${
+                        row.category ? 'ml-8 mr-1 border-l-2 border-violet-500/40 pl-2' : ''
+                      }`}
+                    >
                       <UseCaseRowDnDWrapper
                         useCaseId={u.id}
                         parentId={u.parent_id ?? null}
@@ -2847,7 +2975,7 @@ export function AIAgentUseCaseComposer({
                                     <span className="text-slate-500">— messaggio vuoto</span>
                                   )
                                 ) : (
-                                  u.label || u.id
+                                  listDisplayLabel
                                 )}
                               </span>
                             </button>
