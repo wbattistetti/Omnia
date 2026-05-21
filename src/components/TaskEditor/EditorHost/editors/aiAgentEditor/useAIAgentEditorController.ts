@@ -2963,5 +2963,6 @@ export function useAIAgentEditorController({
     approveLexiconSurface,
     revokeLexiconSurface,
     updateLexiconSlotId,
+    markAgentEditorDirty: () => setDirty(true),
   };
 }

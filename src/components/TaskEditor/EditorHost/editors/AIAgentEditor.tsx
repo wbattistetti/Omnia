@@ -69,6 +69,7 @@ import {
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 import { parseElevenLabsImportRecapFromIaJson } from '@workspaces/elevenlabs/elevenLabsImportRecap';
+import { useAgentReviewChannel } from './aiAgentEditor/useAgentReviewChannel';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
@@ -85,6 +86,19 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     model,
     taskLabel: typeof task?.label === 'string' ? task.label : undefined,
     getDeferAgentMessages: () => deferAgentMessagesInUseCaseListRef.current,
+  });
+
+  const agentReviewChannel = useAgentReviewChannel({
+    projectId,
+    taskInstanceId: instanceId,
+    taskLabel: typeof task?.label === 'string' ? task.label : '',
+    designDescription: c.designDescription,
+    useCases: c.useCases,
+    useCaseCategories: c.useCaseCategories,
+    setDesignDescription: c.setDesignDescription,
+    setUseCases: c.setUseCases,
+    setUseCaseCategories: c.setUseCaseCategories,
+    setDirty: c.markAgentEditorDirty,
   });
 
   const onConfirmAdvanceWithoutEdits = React.useCallback(
@@ -1390,6 +1404,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       taskId: typeof c.instanceId === 'string' && c.instanceId ? c.instanceId : undefined,
       taskLabel: typeof task?.label === 'string' && task.label ? task.label : undefined,
     }),
+
+    agentReviewChannel,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

@@ -15,7 +15,8 @@
     "express": "^5.1.0",
     "mongodb": "^6.17.0",
     "opossum": "^9.0.0",
-    "redis": "^4.7.1"
+    "redis": "^4.7.1",
+    "vite-react-typescript-starter": "file:.."
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

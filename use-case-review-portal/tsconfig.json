@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@services/*": ["../src/services/*"],
+      "@utils/*": ["../src/utils/*"],
+      "@types/*": ["../src/types/*"],
+      "@context/*": ["../src/context/*"],
+      "@hooks/*": ["../src/hooks/*"],
+      "@domain/*": ["../src/domain/*"],
+      "@components/*": ["../src/components/*"],
+      "@responseEditor/*": ["../src/components/TaskEditor/ResponseEditor/*"],
+      "@taskEditor/*": ["../src/components/TaskEditor/*"]
+    }
+  },
+  "include": ["src"]
+}

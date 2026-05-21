@@ -391,6 +391,9 @@ export interface AIAgentEditorDockContextValue {
   useCasePropagatorModel: string;
   useCasePropagatorGlobalStyleContract: string;
   buildUseCasePropagatorCallMeta: (purpose: string) => AIAgentPropagatorCallMeta;
+
+  /** Canale review condiviso (file su server per web + Omnia). */
+  agentReviewChannel: import('./useAgentReviewChannel').UseAgentReviewChannelResult;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */
