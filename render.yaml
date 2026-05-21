@@ -7,7 +7,7 @@ services:
     name: omnia-review-portal
     runtime: node
     plan: free
-    buildCommand: npm run render:build
+    buildCommand: npm install && npm run render:build
     startCommand: node backend/server.js
     healthCheckPath: /api/ping
     envVars:
