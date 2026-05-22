@@ -376,6 +376,22 @@ class TaskRepository {
   }
 
   /**
+   * Review portal: load tasks into memory without DB persist. Returns dispose().
+   */
+  ingestEphemeralTasks(tasks: readonly Task[]): () => void {
+    const ids = tasks.map((t) => t.id);
+    for (const t of tasks) {
+      this.tasks.set(t.id, t);
+      this.pendingRemoteTaskDeletes.delete(t.id);
+    }
+    return () => {
+      for (const id of ids) {
+        this.tasks.delete(id);
+      }
+    };
+  }
+
+  /**
    * Get all Tasks
    */
   getAllTasks(): Task[] {

@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { useAiCallLog } from '../context/AiCallLogContext';
+import { useAiCallLogOptional } from '../context/AiCallLogContext';
 import type { AiCallRecord } from '../services/aiCallsApi';
 
 const WINDOW_MS = 15_000;
@@ -20,8 +20,11 @@ export interface LastCallCostInfo {
   remainingMs: number;
 }
 
+const EMPTY_LAST_BY_PURPOSE = new Map<string, AiCallRecord>();
+
 export function useLastCallCost(purpose: string | null | undefined): LastCallCostInfo | null {
-  const { lastByPurpose } = useAiCallLog();
+  const ctx = useAiCallLogOptional();
+  const lastByPurpose = ctx?.lastByPurpose ?? EMPTY_LAST_BY_PURPOSE;
   const [now, setNow] = React.useState<number>(() => Date.now());
 
   const record = purpose ? lastByPurpose.get(purpose) ?? null : null;

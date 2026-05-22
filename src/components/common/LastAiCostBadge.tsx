@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { useLastCallCost } from '@hooks/useLastCallCost';
-import { useAiCallLog } from '@context/AiCallLogContext';
+import { useAiCallLogOptional } from '@context/AiCallLogContext';
 import { formatCost } from '@domain/aiCost/formatCost';
 
 export interface LastAiCostBadgeProps {
@@ -19,7 +19,7 @@ export interface LastAiCostBadgeProps {
 
 export function LastAiCostBadge({ purpose, className }: LastAiCostBadgeProps): React.ReactElement | null {
   const info = useLastCallCost(purpose);
-  const { exchangeRate } = useAiCallLog();
+  const exchangeRate = useAiCallLogOptional()?.exchangeRate ?? null;
   if (!info) return null;
   const { record } = info;
   const text =

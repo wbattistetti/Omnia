@@ -8,7 +8,7 @@
 
 import React from 'react';
 
-import { useReviewStore } from './reviewStore';
+import { dedupeReviewCatalogItems, useReviewStore } from './reviewStore';
 
 import type { ReviewChannelListItem } from './reviewApi';
 
@@ -19,7 +19,11 @@ import { isReviewTokenError } from './reviewAuth';
 
 function ReviewHome() {
 
-  const catalog = useReviewStore((s) => s.catalog);
+  const catalogRaw = useReviewStore((s) => s.catalog);
+  const catalog = React.useMemo(
+    () => dedupeReviewCatalogItems(catalogRaw),
+    [catalogRaw]
+  );
 
   const loading = useReviewStore((s) => s.catalogLoading);
 

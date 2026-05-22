@@ -1431,6 +1431,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     }),
 
     agentReviewChannel,
+    reviewPortalMode: false,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

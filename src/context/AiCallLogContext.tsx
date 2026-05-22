@@ -111,8 +111,13 @@ export function AiCallLogProvider({ children }: { children: React.ReactNode }): 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+/** Returns null when rendered outside {@link AiCallLogProvider} (e.g. review portal). */
+export function useAiCallLogOptional(): AiCallLogContextValue | null {
+  return React.useContext(Ctx);
+}
+
 export function useAiCallLog(): AiCallLogContextValue {
-  const ctx = React.useContext(Ctx);
+  const ctx = useAiCallLogOptional();
   if (!ctx) {
     throw new Error('useAiCallLog must be used within <AiCallLogProvider>');
   }

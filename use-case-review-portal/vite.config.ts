@@ -52,13 +52,21 @@ export default defineConfig(({ mode }) => {
         '@hooks': path.resolve(root, 'src/hooks'),
         '@dock': path.resolve(root, 'src/dock'),
         '@config': path.resolve(root, 'config'),
+        '@components': path.resolve(root, 'src/components'),
+        '@ui': path.resolve(root, 'src/ui'),
+        '@features': path.resolve(root, 'src/features'),
+        '@lib': path.resolve(root, 'src/lib'),
+        '@taskEditor': path.resolve(root, 'src/components/TaskEditor'),
+        '@responseEditor': path.resolve(root, 'src/components/TaskEditor/ResponseEditor'),
+        '@TaskBuilderAIWizard': path.resolve(root, 'TaskBuilderAIWizard'),
+        '@diagnostics': path.resolve(root, 'src/diagnostics'),
+        '@flows': path.resolve(root, 'src/flows'),
+        '@workspaces': path.resolve(root, 'src/workspaces'),
+        '@reviewPortal': path.resolve(root, 'src/reviewPortal'),
         '@omnia/domain-core': path.resolve(root, 'packages/omnia-domain-core/src'),
-        '@omnia/domain-components': path.resolve(
-          root,
-          'packages/omnia-domain-components/src/index.ts'
-        ),
         '@domain/useCaseBundle/': `${path.resolve(root, 'packages/omnia-domain-core/src/usecase/bundle')}/`,
         '@domain/aiAgentUseCase/': `${path.resolve(root, 'packages/omnia-domain-core/src/usecase/logic')}/`,
+        '@domain/useCaseGeneratorWizard': path.resolve(root, 'src/domain/useCaseGeneratorWizard'),
         '@domain/agentReviewChannel/reviewDocument': path.resolve(
           root,
           'packages/omnia-domain-core/src/review/reviewDocument.ts'
@@ -70,6 +78,11 @@ export default defineConfig(({ mode }) => {
         '@domain/agentReviewChannel/reviewSnapshots': path.resolve(
           root,
           'packages/omnia-domain-core/src/review/reviewSnapshots.ts'
+        ),
+        '@domain': path.resolve(root, 'src/domain'),
+        '@omnia/domain-components': path.resolve(
+          root,
+          'packages/omnia-domain-components/src/index.ts'
         ),
       },
     },

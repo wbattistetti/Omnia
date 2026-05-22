@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { collectBackendRowPathsFromActiveFlow, formatBackendDisplayToken } from '@domain/agentPrompt';
 import type { WorkspaceState } from '../../../../../flows/FlowTypes';
 import { getActiveFlowCanvasId } from '../../../../../flows/activeFlowCanvas';
-import { useFlowWorkspace } from '../../../../../flows/FlowStore';
+import { useFlowWorkspaceOptional } from '../../../../../flows/FlowStore';
 import { BackendPathInsertContextMenu } from './BackendPathInsertContextMenu';
 import type { BackendPathSelectionAdapter } from './backendPathSelectionAdapter';
 
@@ -35,12 +35,21 @@ export function useBackendPathInsertMenu(
     y: 0,
   });
 
-  const { flows } = useFlowWorkspace();
+  const workspace = useFlowWorkspaceOptional();
+  const flows = workspace?.flows;
   const activeFlowId = getActiveFlowCanvasId();
+  const hasFlowWorkspace = workspace != null;
+  const menuEnabled = enabled && hasFlowWorkspace;
 
   const paths = useMemo(
-    () => collectBackendRowPathsFromActiveFlow(flows as WorkspaceState['flows'], activeFlowId),
-    [flows, activeFlowId]
+    () =>
+      hasFlowWorkspace
+        ? collectBackendRowPathsFromActiveFlow(
+            flows as WorkspaceState['flows'],
+            activeFlowId
+          )
+        : [],
+    [hasFlowWorkspace, flows, activeFlowId]
   );
 
   const closeMenu = useCallback(() => {
@@ -49,10 +58,10 @@ export function useBackendPathInsertMenu(
   }, []);
 
   useEffect(() => {
-    if (!enabled || readOnly) {
+    if (!menuEnabled || readOnly) {
       suppressBlurWhileMenuRef.current = false;
     }
-  }, [enabled, readOnly]);
+  }, [menuEnabled, readOnly]);
 
   const applyInsert = useCallback(
     (path: string) => {
@@ -72,17 +81,17 @@ export function useBackendPathInsertMenu(
 
   const onContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (!enabled || readOnly) return;
+      if (!menuEnabled || readOnly) return;
       suppressBlurWhileMenuRef.current = true;
       e.preventDefault();
       e.stopPropagation();
       setMenu({ open: true, x: e.clientX, y: e.clientY });
     },
-    [enabled, readOnly]
+    [menuEnabled, readOnly]
   );
 
   const backendPathMenu =
-    enabled && !readOnly ? (
+    menuEnabled && !readOnly ? (
       <BackendPathInsertContextMenu
         isOpen={menu.open}
         x={menu.x}
@@ -94,7 +103,7 @@ export function useBackendPathInsertMenu(
     ) : null;
 
   return {
-    onContextMenu: enabled && !readOnly ? onContextMenu : () => {},
+    onContextMenu: menuEnabled && !readOnly ? onContextMenu : () => {},
     backendPathMenu,
     suppressBlurWhileMenuRef,
   };

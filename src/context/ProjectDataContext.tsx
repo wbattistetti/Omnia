@@ -22,8 +22,10 @@ interface ProjectDataUpdateContextType {
   updateItem: (type: EntityType, categoryId: string, itemId: string, updates: Partial<ProjectEntityItem>) => Promise<void>;
 }
 
-const ProjectDataContext = createContext<ProjectDataContextType | undefined>(undefined);
-const ProjectDataUpdateContext = createContext<ProjectDataUpdateContextType | undefined>(undefined);
+export const ProjectDataContext = createContext<ProjectDataContextType | undefined>(undefined);
+export const ProjectDataUpdateContext = createContext<ProjectDataUpdateContextType | undefined>(
+  undefined
+);
 
 export const useProjectData = () => {
   const context = useContext(ProjectDataContext);

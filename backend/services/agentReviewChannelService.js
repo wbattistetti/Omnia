@@ -295,12 +295,28 @@ async function listAllReviewChannels(mongoClient, getProjectDbFn, dbProjectsName
     }
   }
 
-  entries.sort((a, b) => {
+  const byTask = new Map();
+  for (const row of entries) {
+    const key = `${row.projectId}:${row.taskInstanceId}`;
+    const prev = byTask.get(key);
+    if (!prev) {
+      byTask.set(key, row);
+      continue;
+    }
+    const prevTs = prev.updatedAt ? Date.parse(prev.updatedAt) : 0;
+    const nextTs = row.updatedAt ? Date.parse(row.updatedAt) : 0;
+    if (nextTs >= prevTs) {
+      byTask.set(key, row);
+    }
+  }
+
+  const deduped = [...byTask.values()];
+  deduped.sort((a, b) => {
     const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
     const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
     return tb - ta;
   });
-  return entries;
+  return deduped;
 }
 
 module.exports = {

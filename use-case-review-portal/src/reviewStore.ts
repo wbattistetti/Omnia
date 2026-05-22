@@ -61,6 +61,20 @@ interface ReviewState {
   setDescription: (text: string) => void;
   setStructuredSection: (sectionId: AgentStructuredSectionId, text: string) => void;
   setConversationStyleLearningNotes: (notes: string) => void;
+  replaceStructuredSections: (sections: AgentReviewStructuredSections) => void;
+  patchConversation: (
+    patch: Partial<
+      Pick<
+        AgentReviewConversationSnapshot,
+        | 'conversationalRules'
+        | 'styleAuto'
+        | 'styleSelections'
+        | 'globalStyleId'
+        | 'styleLearningNotes'
+        | 'deployStyleId'
+      >
+    >
+  ) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   updateUseCase: (id: string, patch: Partial<AIAgentUseCase>) => void;
@@ -70,6 +84,31 @@ interface ReviewState {
 
 function lsKey(projectId: string, taskId: string): string {
   return `${LS_PREFIX}${projectId}:${taskId}`;
+}
+
+/** One list row per task — backend may return multiple audience publishes for the same task. */
+export function dedupeReviewCatalogItems(
+  items: readonly ReviewChannelListItem[]
+): ReviewChannelListItem[] {
+  const byTask = new Map<string, ReviewChannelListItem>();
+  for (const item of items) {
+    const key = `${item.projectId}:${item.taskInstanceId}`;
+    const prev = byTask.get(key);
+    if (!prev) {
+      byTask.set(key, item);
+      continue;
+    }
+    const prevTs = prev.updatedAt ? Date.parse(prev.updatedAt) : 0;
+    const nextTs = item.updatedAt ? Date.parse(item.updatedAt) : 0;
+    if (nextTs >= prevTs) {
+      byTask.set(key, item);
+    }
+  }
+  return [...byTask.values()].sort((a, b) => {
+    const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+    const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+    return tb - ta;
+  });
 }
 
 function captureBaselines(useCases: readonly AIAgentUseCase[]): Record<string, { payoff: string }> {
@@ -106,7 +145,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         token: reviewAuthToken(),
         apiBase: reviewApiBase(),
       });
-      set({ catalog: items, catalogLoading: false });
+      set({ catalog: dedupeReviewCatalogItems(items), catalogLoading: false });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       let hint = '';
@@ -181,6 +220,20 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
             styleLearningNotes: notes,
             deployStyleId: null,
           },
+    })),
+
+  replaceStructuredSections: (sections) => set({ structuredSections: { ...sections } }),
+
+  patchConversation: (patch) =>
+    set((s) => ({
+      conversation: {
+        conversationalRules: patch.conversationalRules ?? s.conversation?.conversationalRules ?? [],
+        styleAuto: patch.styleAuto ?? s.conversation?.styleAuto ?? false,
+        styleSelections: patch.styleSelections ?? s.conversation?.styleSelections ?? {},
+        globalStyleId: patch.globalStyleId ?? s.conversation?.globalStyleId ?? '',
+        styleLearningNotes: patch.styleLearningNotes ?? s.conversation?.styleLearningNotes ?? '',
+        deployStyleId: patch.deployStyleId ?? s.conversation?.deployStyleId ?? null,
+      },
     })),
 
   setUseCases: (next) =>

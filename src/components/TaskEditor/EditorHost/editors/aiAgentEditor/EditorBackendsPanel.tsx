@@ -790,6 +790,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
 
   const patchManual = React.useCallback(
     (id: string, patch: Partial<ManualCatalogEntry>) => {
+      if (dockCtx?.reviewPortalMode) return;
       const prev = data?.backendCatalog?.manualEntries ?? [];
       const next = prev.map((e) => {
         if (e.id !== id) return e;
@@ -812,6 +813,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   );
 
   const removeManual = (id: string) => {
+    if (dockCtx?.reviewPortalMode) return;
     if (!data?.backendCatalog) return;
     void taskRepository.deleteTask(id, projectId);
     const manualEntriesNext = (data.backendCatalog.manualEntries ?? []).filter((e) => e.id !== id);
@@ -852,6 +854,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
 
   const addManualBackend = React.useCallback(
     (mode: ManualBackendCreationMode) => {
+    if (dockCtx?.reviewPortalMode) return;
     const id = generateSafeGuid();
     const now = new Date().toISOString();
     const entry: ManualCatalogEntry = {

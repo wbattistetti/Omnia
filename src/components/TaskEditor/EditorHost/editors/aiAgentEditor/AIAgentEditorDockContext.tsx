@@ -394,6 +394,9 @@ export interface AIAgentEditorDockContextValue {
 
   /** Canale review condiviso (file su server per web + Omnia). */
   agentReviewChannel: import('./useAgentReviewChannel').UseAgentReviewChannelResult;
+
+  /** Portal review: read-only KB/backend project mutations; IA actions disabled. */
+  reviewPortalMode: boolean;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

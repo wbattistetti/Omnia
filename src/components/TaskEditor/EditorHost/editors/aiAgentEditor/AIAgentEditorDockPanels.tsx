@@ -178,6 +178,7 @@ export function EditorUseCasesPanel() {
     showRightPanel,
     generating,
     onGenerateUseCaseBundle,
+    reviewPortalMode,
     useCaseGeneratorWizard,
     useCaseBundleFeedback,
     onDismissUseCaseBundleFeedback,
@@ -221,7 +222,7 @@ export function EditorUseCasesPanel() {
     [designDescription, knowledgeBaseDocuments.length, backendPlaceholders.length]
   );
 
-  const showGenerateCta = hasAgentGeneration && showRightPanel;
+  const showGenerateCta = hasAgentGeneration && showRightPanel && !reviewPortalMode;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
   const isErrorHandlingCatalog = useCaseCatalogMode === 'error_handling';
 
@@ -718,6 +719,7 @@ export function EditorKnowledgeBasePanel() {
     onMergeKbPromotedUseCases,
     regenerateKbPromotedUseCase,
     useCases,
+    reviewPortalMode,
   } = useAIAgentEditorDock();
 
   return (
@@ -732,7 +734,7 @@ export function EditorKnowledgeBasePanel() {
         onMergePromotedUseCases={onMergeKbPromotedUseCases}
         existingBundleUseCases={useCases}
         regeneratePromotedUseCase={regenerateKbPromotedUseCase}
-        disabled={generating}
+        disabled={generating || reviewPortalMode}
         onAddFiles={(files) => knowledgeBaseAddFiles(files)}
         onRemoveDocument={knowledgeBaseRemoveDocument}
         onReorderDocuments={knowledgeBaseReorderDocuments}

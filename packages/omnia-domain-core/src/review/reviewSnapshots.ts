@@ -46,6 +46,31 @@ export interface AgentReviewStructuredBackendPlaceholderSnapshot {
 export interface AgentReviewBackendSnapshot {
   catalogRows: AgentReviewBackendRowSnapshot[];
   structuredPlaceholders: AgentReviewStructuredBackendPlaceholderSnapshot[];
+  /** Full manual catalog rows bound to this agent at publish (portal hydrates EditorBackendsPanel). */
+  manualEntries?: AgentReviewManualBackendEntrySnapshot[];
+}
+
+/** Serializable subset of {@link ManualCatalogEntry} for review publish round-trip. */
+export interface AgentReviewManualBackendEntrySnapshot {
+  id: string;
+  label: string;
+  method?: string;
+  endpointUrl: string;
+  operationId?: string;
+  notes?: string;
+  frozenMeta: {
+    lastImportedAt: string | null;
+    specSourceUrl: string | null;
+    contentHash: string | null;
+    importState: 'none' | 'pending' | 'ok' | 'error';
+    lastError?: string;
+    structuralFingerprintAtLastOkImport?: string | null;
+  };
+  lastStructuralEditAt: string;
+  openApiFieldNames?: { inputs: string[]; outputs: string[] };
+  portalConnectionId?: string;
+  creationMode?: 'import' | 'emulate';
+  importSpecRevealed?: boolean;
 }
 
 export interface AgentReviewConversationalRuleSnapshot {
@@ -124,8 +149,26 @@ export function parseBackendSnapshot(raw: unknown): AgentReviewBackendSnapshot |
           typeof (p as AgentReviewStructuredBackendPlaceholderSnapshot).definitionId === 'string'
       )
     : [];
-  if (catalogRows.length === 0 && structuredPlaceholders.length === 0) return undefined;
-  return { catalogRows, structuredPlaceholders };
+  const manualEntries = Array.isArray(o.manualEntries)
+    ? o.manualEntries.filter(isManualBackendEntrySnapshot)
+    : undefined;
+  if (catalogRows.length === 0 && structuredPlaceholders.length === 0 && !manualEntries?.length) {
+    return undefined;
+  }
+  return {
+    catalogRows,
+    structuredPlaceholders,
+    ...(manualEntries?.length ? { manualEntries } : {}),
+  };
+}
+
+function isManualBackendEntrySnapshot(raw: unknown): raw is AgentReviewManualBackendEntrySnapshot {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== 'string' || typeof o.label !== 'string') return false;
+  if (typeof o.endpointUrl !== 'string') return false;
+  if (!o.frozenMeta || typeof o.frozenMeta !== 'object') return false;
+  return typeof o.lastStructuralEditAt === 'string';
 }
 
 function isConversationalRuleSnapshot(raw: unknown): raw is AgentReviewConversationalRuleSnapshot {

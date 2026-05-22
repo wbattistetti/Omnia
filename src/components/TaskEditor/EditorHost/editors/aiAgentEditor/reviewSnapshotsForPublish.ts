@@ -13,6 +13,7 @@ import type {
   AgentReviewConversationSnapshot,
   AgentReviewKbDocumentSnapshot,
   AgentReviewKnowledgeBaseSnapshot,
+  AgentReviewManualBackendEntrySnapshot,
 } from '@domain/agentReviewChannel/reviewSnapshots';
 import type { Task } from '@types/taskTypes';
 
@@ -80,8 +81,37 @@ function backendSnapshotFromProject(
     .filter((p) => p.id.trim() && p.definitionId.trim())
     .map((p) => ({ id: p.id.trim(), definitionId: p.definitionId.trim() }));
 
-  if (catalogRows.length === 0 && structuredPlaceholders.length === 0) return undefined;
-  return { catalogRows, structuredPlaceholders };
+  const boundManualIds = new Set<string>();
+  for (const row of catalogRows) {
+    for (const b of row.bindings) {
+      if (b.source === 'manual') boundManualIds.add(b.bindingId);
+    }
+  }
+  const manualEntries: AgentReviewManualBackendEntrySnapshot[] = manualBackendEntries
+    .filter((e) => boundManualIds.has(e.id))
+    .map((e) => ({
+      id: e.id,
+      label: e.label,
+      method: e.method,
+      endpointUrl: e.endpointUrl,
+      ...(e.operationId ? { operationId: e.operationId } : {}),
+      ...(e.notes ? { notes: e.notes } : {}),
+      frozenMeta: { ...e.frozenMeta },
+      lastStructuralEditAt: e.lastStructuralEditAt,
+      ...(e.openApiFieldNames ? { openApiFieldNames: e.openApiFieldNames } : {}),
+      ...(e.portalConnectionId ? { portalConnectionId: e.portalConnectionId } : {}),
+      ...(e.creationMode ? { creationMode: e.creationMode } : {}),
+      ...(e.importSpecRevealed != null ? { importSpecRevealed: e.importSpecRevealed } : {}),
+    }));
+
+  if (catalogRows.length === 0 && structuredPlaceholders.length === 0 && manualEntries.length === 0) {
+    return undefined;
+  }
+  return {
+    catalogRows,
+    structuredPlaceholders,
+    ...(manualEntries.length ? { manualEntries } : {}),
+  };
 }
 
 function conversationSnapshotFromState(params: {
