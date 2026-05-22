@@ -171,7 +171,6 @@ import { CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE } from './useCaseGenerator
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { UseCaseEmptyTutorPanel } from './useCaseGeneratorWizard/UseCaseEmptyTutorPanel';
 import { UseCaseRootComposerHeader } from './useCaseGeneratorWizard/UseCaseRootComposerHeader';
-import { UseCaseReviewPublishStrip } from './UseCaseReviewPublishStrip';
 import { UseCaseCategoryHeader } from './useCaseGeneratorWizard/UseCaseCategoryHeader';
 import {
   displayUseCaseLabelForCategory,
@@ -2583,7 +2582,6 @@ export function AIAgentUseCaseComposer({
           } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {!isReviewPortal ? <UseCaseReviewPublishStrip /> : null}
               {isReviewPortal && ordered.length === 0 ? (
                 <p className="px-3 py-10 text-center text-sm text-slate-500">
                   Nessun use case in questa review. Pubblica da Omnia.
@@ -2762,8 +2760,8 @@ export function AIAgentUseCaseComposer({
                     cardExpanded &&
                     (wizardShowScenario || wizardShowMessage);
                   /**
-                   * Esclusione conversazioni: niente opacity sulla card (pessima leggibilità
-                   * del titolo su header colorato). Stato chiaro da checkbox + voto/header.
+                   * Esclusione conversazioni: attenuazione titolo solo su voto verde + checkbox off
+                   * (vedi useCaseHeaderExcludedDimClass). Rosso/arancione restano in vista normale.
                    */
                   const includedInConv = isUseCaseIncludedInConversations(u);
                   const searchHighlight = highlightIdSet.has(u.id);

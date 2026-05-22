@@ -50,6 +50,7 @@ import { AIAgentWelcomeTutor } from './aiAgentEditor/constructionWizard/AIAgentW
 import { AIAgentConstructionWizardShell } from './aiAgentEditor/constructionWizard/AIAgentConstructionWizardShell';
 import { AddBackendDropdown } from './aiAgentEditor/AddBackendDropdown';
 import { AIAgentDeployMenu } from './aiAgentEditor/constructionWizard/AIAgentDeployMenu';
+import { AIAgentReviewToolbar } from './aiAgentEditor/constructionWizard/AIAgentReviewToolbar';
 import {
   AGENT_WIZARD_FIRST_STEP_INDEX,
   type AgentWizardStepIndex,
@@ -95,6 +96,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     designDescription: c.designDescription,
     useCases: c.useCases,
     useCaseCategories: c.useCaseCategories,
+    logicalSteps: c.logicalSteps,
     setDesignDescription: c.setDesignDescription,
     setUseCases: c.setUseCases,
     setUseCaseCategories: c.setUseCaseCategories,
@@ -1210,6 +1212,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     c.setAgentConversationDeployStyleId,
   ]);
 
+  const reviewPublishSlot: React.ReactNode = agentReviewChannel.canUseChannel ? (
+    <AIAgentReviewToolbar channel={agentReviewChannel} />
+  ) : null;
+
   const deploySlot: React.ReactNode = canCreateConversationalPrompt ? (
     <AIAgentDeployMenu
       voicesByPlatform={voicesByPlatform}
@@ -1554,6 +1560,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               taskId={instanceId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}
+              reviewPublishSlot={reviewPublishSlot}
               bypassGating={c.hasAgentGeneration}
               elevenLabsImportRecap={elevenLabsImportRecap}
               onDismissElevenLabsRecap={onDismissElevenLabsRecap}

@@ -13,6 +13,7 @@ import { useReviewStore } from './reviewStore';
 import type { ReviewChannelListItem } from './reviewApi';
 
 import { ReviewUseCaseWorkspace } from './ReviewUseCaseWorkspace';
+import { isReviewTokenError } from './reviewAuth';
 
 
 
@@ -27,6 +28,8 @@ function ReviewHome() {
   const loadCatalog = useReviewStore((s) => s.loadCatalog);
 
   const openSession = useReviewStore((s) => s.openSession);
+
+  const accessError = Boolean(error && isReviewTokenError(error));
 
 
 
@@ -96,11 +99,25 @@ function ReviewHome() {
 
 
 
-      {error ? <p className="mb-4 text-sm text-rose-300">{error}</p> : null}
+      {error && !accessError ? <p className="mb-4 text-sm text-rose-300">{error}</p> : null}
 
+      {accessError ? (
+        <div className="mb-4 rounded-lg border border-amber-600/50 bg-amber-950/40 p-4">
+          <p className="text-sm text-amber-100">
+            Non è possibile accedere alle review in questo momento. Verifica che Omnia sia avviato
+            (<code className="text-amber-200">npm run dev:beNew</code>) e riprova tra qualche secondo.
+          </p>
+          <button
+            type="button"
+            className="mt-3 rounded border border-amber-500/60 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-900/40"
+            onClick={() => void loadCatalog()}
+          >
+            Riprova
+          </button>
+        </div>
+      ) : null}
 
-
-      {catalog.length === 0 && !loading ? (
+      {catalog.length === 0 && !loading && !accessError ? (
 
         <p className="rounded-lg border border-dashed border-slate-600 p-8 text-center text-slate-500">
 

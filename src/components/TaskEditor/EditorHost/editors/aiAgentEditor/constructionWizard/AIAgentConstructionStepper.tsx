@@ -66,6 +66,8 @@ export interface AIAgentConstructionStepperProps {
    * o `undefined`, lo spazio non viene riservato.
    */
   readonly deploySlot?: React.ReactNode;
+  /** Menu «Pubblica for review» — tipicamente a sinistra di {@link deploySlot}. */
+  readonly reviewPublishSlot?: React.ReactNode;
   /**
    * Quando `true`, tutti gli step risultano cliccabili indipendentemente dallo stato di
    * completamento dei precedenti. Usato per i task legacy (`hasAgentGeneration === true`):
@@ -108,6 +110,7 @@ export function AIAgentConstructionStepper({
   knowledgeBaseActive = false,
   onToggleKnowledgeBase,
   deploySlot = null,
+  reviewPublishSlot = null,
   bypassGating = false,
 }: AIAgentConstructionStepperProps): React.ReactElement {
   /**
@@ -324,7 +327,12 @@ export function AIAgentConstructionStepper({
             </li>
           </>
         ) : null}
-        {deploySlot ? <li className="ml-auto">{deploySlot}</li> : null}
+        {reviewPublishSlot || deploySlot ? (
+          <li className="ml-auto flex shrink-0 items-center gap-2">
+            {reviewPublishSlot}
+            {deploySlot}
+          </li>
+        ) : null}
       </ol>
     </nav>
   );

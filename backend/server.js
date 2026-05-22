@@ -88,7 +88,13 @@ const {
   putReviewChannel,
   listAllReviewChannels,
   assertReviewToken,
+  reviewChannelDevAutoAuthMiddleware,
 } = require('./services/agentReviewChannelService');
+const {
+  publishReviewChannelEvent,
+  subscribeReviewChannelSse,
+  unsubscribeReviewChannelSse,
+} = require('./services/agentReviewChannelNotifyService');
 
 console.log('>>> SERVER.JS AVVIATO <<<');
 
@@ -172,6 +178,8 @@ app.use(cors());
 // Increase body size limits to allow large DDT payloads
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
+/** Dev: API review senza token nel browser (designer apre solo il portale). */
+app.use(reviewChannelDevAutoAuthMiddleware);
 
 /** Webhook BookFromAgenda: log dedicato (disabilita con OMNIA_TRACE_BOOKFROMAGENDA=0) */
 app.use(bookFromAgendaRuntimeTrace);
@@ -863,10 +871,12 @@ app.get('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel', async (
   try {
     const client = await getMongoClient();
     const projDb = await getProjectDb(client, projectId);
-    const row = await getReviewChannel(projDb, projectId, taskInstanceId);
+    const audience = req.query.audience;
+    const row = await getReviewChannel(projDb, projectId, taskInstanceId, audience);
     res.json({
       document: row.document,
       updatedAt: row.updatedAt,
+      reviewAudience: row.reviewAudience,
     });
   } catch (e) {
     console.error('[Projects.review-channel GET]', e?.message);
@@ -889,8 +899,20 @@ app.put('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel', async (
   try {
     const client = await getMongoClient();
     const projDb = await getProjectDb(client, projectId);
-    const result = await putReviewChannel(projDb, projectId, taskInstanceId, doc);
-    res.json({ ok: true, document: result.document, updatedAt: result.updatedAt });
+    const audience = req.query.audience || doc.reviewAudience;
+    const result = await putReviewChannel(projDb, projectId, taskInstanceId, doc, audience);
+    publishReviewChannelEvent(projectId, taskInstanceId, {
+      audience: result.reviewAudience,
+      updatedAt: result.updatedAt,
+      contentHash: result.document?.contentHash,
+      source: String(req.get('x-review-source') || 'omnia'),
+    });
+    res.json({
+      ok: true,
+      document: result.document,
+      updatedAt: result.updatedAt,
+      reviewAudience: result.reviewAudience,
+    });
   } catch (e) {
     const msg = String(e?.message || e);
     if (msg.includes('_required')) {
@@ -899,6 +921,44 @@ app.put('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel', async (
     console.error('[Projects.review-channel PUT]', msg);
     res.status(500).json({ error: msg });
   }
+});
+
+// GET SSE — push quando il canale review cambia (Omnia o portale esterno)
+app.get('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel/events', (req, res) => {
+  const projectId = req.params.pid;
+  const taskInstanceId = req.params.taskInstanceId;
+  if (!projectId || !taskInstanceId) {
+    return res.status(400).json({ error: 'projectId_and_taskInstanceId_required' });
+  }
+  if (!assertReviewToken(req)) {
+    return res.status(401).json({ error: 'review_token_invalid' });
+  }
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  subscribeReviewChannelSse(projectId, taskInstanceId, res);
+  req.on('close', () => unsubscribeReviewChannelSse(res));
+});
+
+// POST — webhook portale (Bolt): segnala salvataggio review → push SSE ai client Omnia
+app.post('/api/projects/:pid/agent-tasks/:taskInstanceId/review-channel/notify', (req, res) => {
+  const projectId = req.params.pid;
+  const taskInstanceId = req.params.taskInstanceId;
+  if (!projectId || !taskInstanceId) {
+    return res.status(400).json({ error: 'projectId_and_taskInstanceId_required' });
+  }
+  if (!assertReviewToken(req)) {
+    return res.status(401).json({ error: 'review_token_invalid' });
+  }
+  const body = req.body || {};
+  publishReviewChannelEvent(projectId, taskInstanceId, {
+    audience: body.audience,
+    updatedAt: body.updatedAt,
+    contentHash: body.contentHash,
+    source: String(body.source || 'portal'),
+  });
+  res.json({ ok: true });
 });
 
 // PUT /api/projects/:id/debugger-use-cases
@@ -9547,35 +9607,29 @@ if (require('fs').existsSync(reviewPortalDist)) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ✅ Add timeout to prevent blocking forever
-const INIT_TIMEOUT_MS = 10000; // 10 seconds max
-
-const initPromise = initializeMongoPool();
-const timeoutPromise = new Promise((_, reject) => {
-  setTimeout(() => {
-    reject(new Error('MongoDB initialization timeout after 10s'));
-  }, INIT_TIMEOUT_MS);
+// Avvia Express subito (evita 500 su proxy Vite mentre Mongo init impiega >10s).
+const PORT = process.env.PORT || 3100;
+app.listen(PORT, () => {
+  console.log(`[Server] ✅ Express server ready on port ${PORT}`);
+  logInfo('Express', { message: `Server ready on port ${PORT}` });
+  runStartupIaCatalogSync();
 });
 
-const PORT = process.env.PORT || 3100;
-
-Promise.race([initPromise, timeoutPromise])
+const INIT_TIMEOUT_MS = 30000;
+void Promise.race([
+  initializeMongoPool(),
+  new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('MongoDB initialization timeout after 30s')), INIT_TIMEOUT_MS);
+  }),
+])
   .then(() => {
-    console.log('[Server] MongoDB pool initialized, starting Express server...');
-    app.listen(PORT, () => {
-      console.log(`[Server] ✅ Express server ready on port ${PORT}`);
-      logInfo('Express', { message: `Server ready on port ${PORT}` });
-      runStartupIaCatalogSync();
-    });
+    console.log('[Server] ✅ MongoDB pool pre-initialized');
   })
   .catch((error) => {
-    console.error('[Server] ❌ Error during initialization:', error);
-    console.error('[Server] ⚠️ Starting Express server anyway (MongoDB will initialize on first request)...');
-    logError('Express', error, { message: 'Failed to start server' });
-    app.listen(PORT, () => {
-      console.log(`[Server] ✅ Express server ready on port ${PORT} (MongoDB pool will initialize on first request)`);
-      logInfo('Express', { message: `Server ready on port ${PORT} (MongoDB pool will initialize on first request)` });
-      runStartupIaCatalogSync();
-    });
+    console.warn(
+      '[Server] ⚠️ MongoDB pre-init incomplete (pool on first request):',
+      error?.message || error
+    );
+    logError('MongoDB.Startup', error, { message: 'Pre-init incomplete' });
   });
 

@@ -6,6 +6,13 @@ const crypto = require('crypto');
 
 const REVIEW_EXPORT_VERSION = 1;
 
+const REVIEW_AUDIENCES = ['customer', 'internal', 'auditing'];
+
+function normalizeAudience(value) {
+  const s = String(value || 'customer').trim().toLowerCase();
+  return REVIEW_AUDIENCES.includes(s) ? s : 'customer';
+}
+
 function stableStringify(value) {
   return JSON.stringify(value);
 }
@@ -13,6 +20,23 @@ function stableStringify(value) {
 function computeContentHash(payload) {
   const text = stableStringify(payload);
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/** Rimuove undefined/null ricorsivi (BSON/Mongo non accetta undefined). */
+function stripUndefinedDeep(value) {
+  if (value === undefined || value === null) return undefined;
+  if (Array.isArray(value)) {
+    return value.map(stripUndefinedDeep).filter((v) => v !== undefined);
+  }
+  if (typeof value === 'object' && !(value instanceof Date)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      const cleaned = stripUndefinedDeep(v);
+      if (cleaned !== undefined) out[k] = cleaned;
+    }
+    return out;
+  }
+  return value;
 }
 
 function normalizeDocument(body, projectId, taskInstanceId) {
@@ -36,7 +60,9 @@ function normalizeDocument(body, projectId, taskInstanceId) {
     useCaseBundle,
   };
   const now = new Date().toISOString();
-  return {
+  const audience = normalizeAudience(body.reviewAudience);
+  const logicalSteps = Array.isArray(body.agentLogicalSteps) ? body.agentLogicalSteps : undefined;
+  const out = {
     reviewExportVersion: REVIEW_EXPORT_VERSION,
     projectId: String(projectId || '').trim(),
     taskInstanceId: String(taskInstanceId || '').trim(),
@@ -45,35 +71,60 @@ function normalizeDocument(body, projectId, taskInstanceId) {
     useCaseBundle,
     updatedAt: now,
     contentHash: computeContentHash(payload),
+    reviewAudience: audience,
   };
+  if (logicalSteps && logicalSteps.length > 0) {
+    out.agentLogicalSteps = logicalSteps;
+  }
+  return out;
 }
 
-function readChannelFromMeta(meta, taskInstanceId) {
+/** Legge sotto-canale per audience; compat: entry piatta con `.document` = customer. */
+function readChannelFromMeta(meta, taskInstanceId, audience) {
+  const aud = normalizeAudience(audience);
   const channels = meta?.agentReviewChannels;
   if (!channels || typeof channels !== 'object') return null;
   const entry = channels[taskInstanceId];
   if (!entry || typeof entry !== 'object') return null;
-  const doc = entry.document;
-  if (!doc || typeof doc !== 'object') return null;
+
+  if (entry.document && typeof entry.document === 'object') {
+    if (aud !== 'customer') return null;
+    return {
+      document: entry.document,
+      updatedAt: entry.updatedAt || entry.document.updatedAt || null,
+      reviewAudience: 'customer',
+    };
+  }
+
+  const sub = entry[aud];
+  if (!sub || typeof sub !== 'object' || !sub.document) return null;
   return {
-    document: doc,
-    updatedAt: entry.updatedAt || doc.updatedAt || null,
+    document: sub.document,
+    updatedAt: sub.updatedAt || sub.document.updatedAt || null,
+    reviewAudience: aud,
   };
 }
 
-async function getReviewChannel(projDb, projectId, taskInstanceId) {
+async function getReviewChannel(projDb, projectId, taskInstanceId, audience) {
   const meta = await projDb.collection('project_meta').findOne({ _id: 'meta' });
-  const row = readChannelFromMeta(meta, taskInstanceId);
+  const row = readChannelFromMeta(meta, taskInstanceId, audience);
   if (!row) {
-    return { document: null, updatedAt: null };
+    return { document: null, updatedAt: null, reviewAudience: normalizeAudience(audience) };
   }
   return row;
 }
 
-async function putReviewChannel(projDb, projectId, taskInstanceId, body) {
-  const document = normalizeDocument(body, projectId, taskInstanceId);
+async function putReviewChannel(projDb, projectId, taskInstanceId, body, audience) {
+  const aud = normalizeAudience(audience || body.reviewAudience);
+  const document = stripUndefinedDeep(normalizeDocument(body, projectId, taskInstanceId));
+  document.reviewAudience = aud;
   const now = new Date();
-  const fieldKey = `agentReviewChannels.${taskInstanceId}`;
+  const taskKey = String(taskInstanceId || '').trim();
+  if (!taskKey) throw new Error('taskInstanceId_required');
+  if (taskKey.includes('.') || taskKey.includes('$')) {
+    throw new Error('taskInstanceId_invalid_for_storage');
+  }
+  const fieldKey = `agentReviewChannels.${taskKey}.${aud}`;
   await projDb.collection('project_meta').updateOne(
     { _id: 'meta' },
     {
@@ -92,7 +143,7 @@ async function putReviewChannel(projDb, projectId, taskInstanceId, body) {
     },
     { upsert: true }
   );
-  return { document, updatedAt: now.toISOString() };
+  return { document, updatedAt: now.toISOString(), reviewAudience: aud };
 }
 
 /** Id progetto stabile da riga catalogo Mongo. */
@@ -111,6 +162,33 @@ function assertReviewToken(req) {
   const query = typeof req.query?.token === 'string' ? req.query.token : '';
   const got = String(header || query || '').trim();
   return got === expected;
+}
+
+/** Dev locale: niente token dal browser → accetta con il segreto di backend/.env. */
+function reviewChannelDevAutoAuthEnabled() {
+  const expected = String(process.env.AGENT_REVIEW_CHANNEL_TOKEN || '').trim();
+  if (!expected) return false;
+  if (process.env.OMNIA_REVIEW_CHANNEL_STRICT_AUTH === '1') return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
+function isReviewChannelApiPath(pathname) {
+  const p = String(pathname || '');
+  return (
+    p === '/api/agent-review-channels' ||
+    p.includes('/review-channel')
+  );
+}
+
+/**
+ * Middleware Express: in dev inietta il token review se il client non lo invia.
+ */
+function reviewChannelDevAutoAuthMiddleware(req, _res, next) {
+  if (!reviewChannelDevAutoAuthEnabled()) return next();
+  if (!isReviewChannelApiPath(req.path)) return next();
+  if (assertReviewToken(req)) return next();
+  req.headers['x-review-token'] = process.env.AGENT_REVIEW_CHANNEL_TOKEN;
+  next();
 }
 
 /**
@@ -138,27 +216,42 @@ async function listAllReviewChannels(mongoClient, getProjectDbFn, dbProjectsName
       ).trim();
 
       for (const [taskInstanceId, entry] of Object.entries(channels)) {
-        if (!entry || typeof entry !== 'object' || !entry.document) continue;
-        const doc = entry.document;
-        const useCases = doc.useCaseBundle?.use_cases;
-        const useCaseCount = Array.isArray(useCases) ? useCases.length : 0;
-        const updatedAt =
-          entry.updatedAt instanceof Date
-            ? entry.updatedAt.toISOString()
-            : typeof entry.updatedAt === 'string'
-              ? entry.updatedAt
-              : typeof doc.updatedAt === 'string'
-                ? doc.updatedAt
-                : null;
+        if (!entry || typeof entry !== 'object') continue;
 
-        entries.push({
-          projectId,
-          projectLabel,
-          taskInstanceId: String(taskInstanceId).trim(),
-          taskLabel: String(doc.taskLabel || taskInstanceId).trim(),
-          updatedAt,
-          useCaseCount,
-        });
+        const pushRow = (doc, metaEntry, audience) => {
+          if (!doc || typeof doc !== 'object') return;
+          const useCases = doc.useCaseBundle?.use_cases;
+          const useCaseCount = Array.isArray(useCases) ? useCases.length : 0;
+          const updatedAt =
+            metaEntry?.updatedAt instanceof Date
+              ? metaEntry.updatedAt.toISOString()
+              : typeof metaEntry?.updatedAt === 'string'
+                ? metaEntry.updatedAt
+                : typeof doc.updatedAt === 'string'
+                  ? doc.updatedAt
+                  : null;
+          entries.push({
+            projectId,
+            projectLabel,
+            taskInstanceId: String(taskInstanceId).trim(),
+            taskLabel: String(doc.taskLabel || taskInstanceId).trim(),
+            updatedAt,
+            useCaseCount,
+            reviewAudience: audience,
+          });
+        };
+
+        if (entry.document && typeof entry.document === 'object') {
+          pushRow(entry.document, entry, 'customer');
+          continue;
+        }
+
+        for (const aud of REVIEW_AUDIENCES) {
+          const sub = entry[aud];
+          if (sub && typeof sub === 'object') {
+            pushRow(sub.document, sub, aud);
+          }
+        }
       }
     } catch {
       /* progetto assente o DB non raggiungibile */
@@ -178,5 +271,6 @@ module.exports = {
   putReviewChannel,
   listAllReviewChannels,
   assertReviewToken,
+  reviewChannelDevAutoAuthMiddleware,
   computeContentHash,
 };

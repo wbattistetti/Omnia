@@ -132,9 +132,20 @@ export function useCaseHeaderShellClass(active: boolean): string {
 }
 
 /**
+ * Attenuazione titolo quando il use case è escluso dalla checkbox «incluso».
+ * Solo voto verde (`up`): «spento» operativo. Rosso e da rivedere restano leggibili
+ * (il rosso già segnala scarto; l'arancione richiede ancora review).
+ */
+export function useCaseHeaderExcludedDimClass(
+  labelVote: 'up' | 'down' | 'review' | undefined,
+  included: boolean
+): string {
+  if (included || labelVote !== 'up') return '';
+  return ' opacity-[0.32] saturate-[0.45]';
+}
+
+/**
  * Colore titolo header: arancione (da validare), verde (validato), rosso (non validato).
- * Se il use case è escluso dalle conversazioni (`included === false`), la tonalità resta
- * riconoscibile ma molto attenuata.
  */
 export function useCaseHeaderTitleTextClass(
   labelVote: 'up' | 'down' | 'review' | undefined,
@@ -142,7 +153,7 @@ export function useCaseHeaderTitleTextClass(
   included = true
 ): string {
   const weight = active ? 'font-semibold' : 'font-medium';
-  const dim = included ? '' : ' opacity-[0.32] saturate-[0.45]';
+  const dim = useCaseHeaderExcludedDimClass(labelVote, included);
   if (labelVote === 'up') {
     return `${UC_WIZARD_BODY_MONO} ${weight} text-emerald-700 dark:text-emerald-300${dim}`;
   }

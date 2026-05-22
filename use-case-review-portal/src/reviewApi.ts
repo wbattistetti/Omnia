@@ -4,7 +4,8 @@
 
 import type { AgentReviewChannelDocument } from '@domain/agentReviewChannel/reviewDocument';
 import { parseAgentReviewDocument } from '@domain/agentReviewChannel/reviewDocument';
-import { reviewApiBase, reviewAuthToken } from './reviewConfig';
+import { reviewApiBase } from './reviewConfig';
+import { reviewAuthToken } from './reviewAuth';
 
 export interface ReviewChannelListItem {
   projectId: string;

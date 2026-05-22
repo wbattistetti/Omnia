@@ -3,7 +3,9 @@
  * letto/scritto da Omnia e dalla pagina web esterna.
  */
 
-import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
+import type { AIAgentLogicalStep, AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
+import type { AgentReviewAudience } from './reviewAudience';
+import { normalizeReviewAudience } from './reviewAudience';
 import { serializeAgentUseCaseBundle, parseAgentUseCaseBundleDocument } from '@domain/useCaseBundle/parseSerializeBundle';
 import { getScenarioText } from '@domain/aiAgentUseCase/scenarioText';
 
@@ -24,6 +26,10 @@ export interface AgentReviewChannelDocument {
   updatedAt: string;
   /** SHA-256 hex del payload canonico (per confronto rapido). */
   contentHash: string;
+  /** Destinatario review (customer / internal / auditing). */
+  reviewAudience?: AgentReviewAudience;
+  /** Passi logici narrativi del task (opzionale, estensione publish). */
+  agentLogicalSteps?: AIAgentLogicalStep[];
 }
 
 export interface BuildReviewDocumentParams {
@@ -33,6 +39,8 @@ export interface BuildReviewDocumentParams {
   agentDesignDescription: string;
   useCases: readonly AIAgentUseCase[];
   categories: readonly AIAgentUseCaseCategory[];
+  reviewAudience?: AgentReviewAudience;
+  logicalSteps?: readonly AIAgentLogicalStep[];
 }
 
 function stableStringify(value: unknown): string {
@@ -93,7 +101,7 @@ export function buildAgentReviewDocument(params: BuildReviewDocumentParams): Age
   };
   const agentDesignDescription = params.agentDesignDescription ?? '';
   const payload = canonicalReviewPayload({ agentDesignDescription, useCaseBundle });
-  return {
+  const doc: AgentReviewChannelDocument = {
     reviewExportVersion: AGENT_REVIEW_EXPORT_VERSION,
     projectId: params.projectId.trim(),
     taskInstanceId: params.taskInstanceId.trim(),
@@ -103,6 +111,13 @@ export function buildAgentReviewDocument(params: BuildReviewDocumentParams): Age
     updatedAt: new Date().toISOString(),
     contentHash: computeReviewContentHash(payload),
   };
+  if (params.reviewAudience) {
+    doc.reviewAudience = params.reviewAudience;
+  }
+  if (params.logicalSteps && params.logicalSteps.length > 0) {
+    doc.agentLogicalSteps = [...params.logicalSteps];
+  }
+  return doc;
 }
 
 export function parseAgentReviewDocument(raw: unknown): AgentReviewChannelDocument | null {
@@ -132,7 +147,18 @@ export function parseAgentReviewDocument(raw: unknown): AgentReviewChannelDocume
     typeof o.contentHash === 'string' && o.contentHash.trim()
       ? o.contentHash.trim()
       : computeReviewContentHash(payload);
-  return {
+  const logicalRaw = o.agentLogicalSteps;
+  const agentLogicalSteps = Array.isArray(logicalRaw)
+    ? logicalRaw.filter(
+        (s): s is AIAgentLogicalStep =>
+          s != null &&
+          typeof s === 'object' &&
+          typeof (s as AIAgentLogicalStep).id === 'string' &&
+          typeof (s as AIAgentLogicalStep).description === 'string'
+      )
+    : undefined;
+
+  const doc: AgentReviewChannelDocument = {
     reviewExportVersion: AGENT_REVIEW_EXPORT_VERSION,
     projectId,
     taskInstanceId,
@@ -141,7 +167,12 @@ export function parseAgentReviewDocument(raw: unknown): AgentReviewChannelDocume
     useCaseBundle,
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : new Date(0).toISOString(),
     contentHash,
+    reviewAudience: normalizeReviewAudience(o.reviewAudience),
   };
+  if (agentLogicalSteps && agentLogicalSteps.length > 0) {
+    doc.agentLogicalSteps = agentLogicalSteps;
+  }
+  return doc;
 }
 
 export interface ReviewChannelDiffSummary {

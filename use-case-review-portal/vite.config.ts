@@ -1,6 +1,10 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import {
+  resolveReviewChannelToken,
+  reviewChannelProxyOnProxyReq,
+} from '../config/resolveReviewChannelToken.mjs';
 
 const root = path.resolve(__dirname, '..');
 
@@ -14,21 +18,31 @@ export default defineConfig(({ mode }) => {
     env.VITE_BACKEND_URL?.trim() ||
     'http://127.0.0.1:3100';
 
+  const reviewToken = resolveReviewChannelToken(root, env);
+  const proxyOnProxyReq = reviewChannelProxyOnProxyReq(reviewToken);
+
   const proxyCommon = {
     target: expressTarget.replace(/\/$/, ''),
     changeOrigin: true,
     secure: false,
+    ...(proxyOnProxyReq ? { configure: (proxy) => proxy.on('proxyReq', proxyOnProxyReq) } : {}),
   };
+
+  const defineDevToken =
+    mode === 'development' && reviewToken
+      ? { 'import.meta.env.VITE_REVIEW_DEV_AUTO_TOKEN': JSON.stringify(reviewToken) }
+      : {};
 
   const rootNodeModules = path.resolve(root, 'node_modules');
 
   return {
     plugins: [react()],
+    define: defineDevToken,
     // In production the portal is served by Express under /review-portal/
     base: mode === 'production' ? '/review-portal/' : '/',
     resolve: {
       dedupe: ['react', 'react-dom', 'zustand'],
-      // Root Omnia deps first (Render: senza npm install alla root fallisce su src/*)
+      // Root Omnia deps first (npm install dalla root del monorepo)
       modules: [rootNodeModules, path.resolve(__dirname, 'node_modules')],
       alias: {
         '@services': path.resolve(root, 'src/services'),

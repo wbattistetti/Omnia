@@ -1,7 +1,13 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import monacoEditorPlugin from 'vite-plugin-monaco-editor';
 import path from 'path';
+import {
+  resolveReviewChannelToken,
+  reviewChannelProxyOnProxyReq,
+} from './config/resolveReviewChannelToken.mjs';
+
+const repoRoot = path.resolve(__dirname);
 
 // https://vitejs.dev/config/
 // Support both function and object exports from vite-plugin-monaco-editor
@@ -9,10 +15,24 @@ import path from 'path';
 const monacoAny: any = monacoEditorPlugin as any;
 const monacoPlugin = (typeof monacoAny === 'function' ? monacoAny({}) : monacoAny);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, repoRoot, '');
+  const reviewToken = resolveReviewChannelToken(repoRoot, env);
+  const proxyOnProxyReq = reviewChannelProxyOnProxyReq(reviewToken);
+  const reviewProxyExtra = proxyOnProxyReq
+    ? { configure: (proxy: { on: (ev: string, fn: typeof proxyOnProxyReq) => void }) => proxy.on('proxyReq', proxyOnProxyReq) }
+    : {};
+  const defineDevToken =
+    mode === 'development' && reviewToken
+      ? { 'import.meta.env.VITE_REVIEW_DEV_AUTO_TOKEN': JSON.stringify(reviewToken) }
+      : {};
+
+  return {
   plugins: [react(), monacoPlugin],
+  define: defineDevToken,
   resolve: {
     alias: {
+      '@lib': path.resolve(repoRoot, 'src/lib'),
       '@services': path.resolve(__dirname, 'src/services'),
       '@utils': path.resolve(__dirname, 'src/utils'),
       '@types': path.resolve(__dirname, 'src/types'),
@@ -99,7 +119,16 @@ export default defineConfig({
 
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
       '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/projects': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/agent-review-channels': {
+        target: 'http://localhost:3100',
+        changeOrigin: true,
+        ...reviewProxyExtra,
+      },
+      '/api/projects': {
+        target: 'http://localhost:3100',
+        changeOrigin: true,
+        ...reviewProxyExtra,
+      },
       '/api/constants': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/embeddings': { target: 'http://localhost:3100', changeOrigin: true },
       '/projects': { target: 'http://localhost:3100', changeOrigin: true },
@@ -132,4 +161,5 @@ export default defineConfig({
       '/api/runtime/bookfromagenda': { target: 'http://localhost:3100', changeOrigin: true },
     },
   },
+};
 });

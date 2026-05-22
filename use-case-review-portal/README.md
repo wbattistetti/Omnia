@@ -1,56 +1,43 @@
 # Omnia — Use case review portal
 
-Review esterna sul **canale condiviso** (Mongo). Nessun `projectId` / `taskId` da digitare.
+Review esterna sul **canale condiviso** (Mongo via Express). Nessun `projectId` / `taskId` da digitare.
 
-## Deploy su Render (PC spento)
+**Sviluppo locale:** [docs/REVIEW_PORTAL_LOCAL.md](../docs/REVIEW_PORTAL_LOCAL.md)  
+**Architettura review:** [docs/REVIEW_CHANNEL_BOLT_ARCHITECTURE.md](../docs/REVIEW_CHANNEL_BOLT_ARCHITECTURE.md)
 
-Guida: **[docs/RENDER_DEPLOY_REVIEW_PORTAL.md](../docs/RENDER_DEPLOY_REVIEW_PORTAL.md)** — URL: `https://<servizio>.onrender.com/review-portal`
-
-## Avvio
+## Avvio rapido
 
 ```bash
+# Root Omnia — terminale 1
+npm run dev:beNew
+
+# Root Omnia — terminale 2
+npm run review-portal:dev
+```
+
+Portale: **http://localhost:5174** — backend: **http://127.0.0.1:3100**
+
+```bash
+# oppure dalla cartella portale
 cd use-case-review-portal
 npm install
 npm run dev
 ```
 
-Backend Omnia su **`127.0.0.1:3100`** (obbligatorio mentre usi il portale):
+In locale **non serve incollare token**: basta `AGENT_REVIEW_CHANNEL_TOKEN` in `backend/.env` (il portale lo legge da solo).
 
-```bash
-# dalla root Omnia, in un terminale separato
-npm run be:express
-# oppure
-npm run dev:beNew
-```
+Se vedi errori di accesso, avvia `npm run dev:beNew` e riprova.
 
-Poi il portale: `npm run review-portal:dev` → `http://localhost:5174`.
+## Config (deploy / override)
 
-Se vedi **500** su `/api/agent-review-channels`, quasi sempre il proxy non raggiunge Express (backend spento o non ancora su :3100).
-
-## Config (solo deploy, non per il revisore)
-
-File `use-case-review-portal/.env` (opzionale):
-
-```env
-VITE_AGENT_REVIEW_CHANNEL_TOKEN=stesso-valore-di-AGENT_REVIEW_CHANNEL_TOKEN
-VITE_REVIEW_API_BASE=
-```
-
-`VITE_REVIEW_API_BASE` vuoto in dev → le chiamate passano dal **proxy Vite** (vedi `vite.config.ts`).
-
-`VITE_REVIEW_API_TARGET=http://127.0.0.1:3100` — dove inoltrare `/api/agent-review-channels` e `/api/projects/.../review-channel`.
-
-In Omnia (root `.env`):
+Opzionale root `.env` per il link «Apri review web» da Omnia:
 
 ```env
 VITE_USE_CASE_REVIEW_PORTAL_URL=http://localhost:5174
-VITE_AGENT_REVIEW_CHANNEL_TOKEN=...
-AGENT_REVIEW_CHANNEL_TOKEN=...
 ```
 
 ## Flusso
 
 1. Omnia → **Pubblica** sul task agente.
-2. Portale → home con **elenco** delle review pubblicate.
-3. Clic sulla riga → scegli **use case** nella colonna sinistra → modifica + autosave.
-4. Omnia → **Controlla** → **Importa** → salva progetto.
+2. Portale → **Aggiorna elenco** → apri review → modifica + autosave.
+3. Omnia → **Controlla** → **Importa**.

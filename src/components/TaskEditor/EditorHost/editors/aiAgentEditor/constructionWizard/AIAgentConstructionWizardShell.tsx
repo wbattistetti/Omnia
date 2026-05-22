@@ -72,6 +72,7 @@ export interface AIAgentConstructionWizardShellProps {
    * agnostico rispetto al contenuto (il dropdown «Deploy» vive lato parent).
    */
   readonly deploySlot?: React.ReactNode;
+  readonly reviewPublishSlot?: React.ReactNode;
   /**
    * Quando `true` il gating "step precedenti devono essere ✅" viene bypassato e tutti gli
    * step risultano cliccabili. Usato per i task legacy (`hasAgentGeneration === true`) che
@@ -124,6 +125,7 @@ export function AIAgentConstructionWizardShell({
   taskId,
   taskLabel,
   deploySlot = null,
+  reviewPublishSlot = null,
   bypassGating = false,
   elevenLabsImportRecap = null,
   onDismissElevenLabsRecap,
@@ -155,6 +157,7 @@ export function AIAgentConstructionWizardShell({
         knowledgeBaseActive={knowledgeBaseActive}
         onToggleKnowledgeBase={onToggleKnowledgeBase}
         deploySlot={deploySlot}
+        reviewPublishSlot={reviewPublishSlot}
         bypassGating={bypassGating}
       />
       {elevenLabsImportRecap && taskId && onDismissElevenLabsRecap ? (

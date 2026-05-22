@@ -3,15 +3,31 @@
  */
 
 import * as React from 'react';
-import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
+import type {
+  AIAgentLogicalStep,
+  AIAgentUseCase,
+  AIAgentUseCaseCategory,
+} from '@types/aiAgentUseCases';
+import type { AgentReviewAudience } from '@domain/agentReviewChannel/reviewAudience';
+import { REVIEW_PUBLISH_AUDIENCES } from '@domain/agentReviewChannel/reviewAudience';
 import {
   buildAgentReviewDocument,
-  summarizeReviewDiff,
   computeReviewContentHashAsync,
   canonicalReviewPayload,
   type AgentReviewChannelDocument,
 } from '@domain/agentReviewChannel/reviewDocument';
-import { fetchAgentReviewChannel, saveAgentReviewChannel } from '@services/agentReviewChannelApi';
+import {
+  fetchAgentReviewChannel,
+  saveAgentReviewChannel,
+  subscribeReviewChannelEvents,
+  REVIEW_CHANNEL_POLL_MS,
+} from '@services/agentReviewChannelApi';
+import {
+  fetchReviewAudiencePendingStatus,
+  hasAnyPendingImport,
+  type ReviewAudiencePendingStatus,
+} from './reviewChannelPending';
+import { reviewChannelClientToken } from '@lib/reviewChannelClientToken';
 
 export type ReviewChannelBanner =
   | { kind: 'idle' }
@@ -24,7 +40,7 @@ export type ReviewChannelBanner =
       remote: AgentReviewChannelDocument;
     }
   | { kind: 'in_sync'; remoteUpdatedAt: string | null }
-  | { kind: 'published'; at: string }
+  | { kind: 'published'; at: string; audience: AgentReviewAudience }
   | { kind: 'imported'; at: string };
 
 export interface UseAgentReviewChannelParams {
@@ -34,20 +50,11 @@ export interface UseAgentReviewChannelParams {
   designDescription: string;
   useCases: readonly AIAgentUseCase[];
   useCaseCategories: readonly AIAgentUseCaseCategory[];
+  logicalSteps?: readonly AIAgentLogicalStep[];
   setDesignDescription: (value: string) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setUseCaseCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   setDirty: (dirty: boolean) => void;
-}
-
-function reviewTokenFromEnv(): string {
-  try {
-    return String(
-      (import.meta.env as Record<string, string | undefined>).VITE_AGENT_REVIEW_CHANNEL_TOKEN ?? ''
-    ).trim();
-  } catch {
-    return '';
-  }
 }
 
 export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
@@ -58,6 +65,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
     designDescription,
     useCases,
     useCaseCategories,
+    logicalSteps = [],
     setDesignDescription,
     setUseCases,
     setUseCaseCategories,
@@ -66,6 +74,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
 
   const [banner, setBanner] = React.useState<ReviewChannelBanner>({ kind: 'idle' });
   const [busy, setBusy] = React.useState(false);
+  const [pendingStatuses, setPendingStatuses] = React.useState<ReviewAudiencePendingStatus[]>([]);
 
   const canUseChannel = Boolean(projectId?.trim() && taskInstanceId?.trim());
 
@@ -77,120 +86,156 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       agentDesignDescription: designDescription,
       useCases,
       categories: useCaseCategories,
+      logicalSteps,
     }),
-    [projectId, taskInstanceId, taskLabel, designDescription, useCases, useCaseCategories]
+    [
+      projectId,
+      taskInstanceId,
+      taskLabel,
+      designDescription,
+      useCases,
+      useCaseCategories,
+      logicalSteps,
+    ]
   );
 
-  const publishToChannel = React.useCallback(async () => {
-    if (!canUseChannel) {
-      setBanner({ kind: 'error', message: 'projectId o task mancante.' });
-      return;
-    }
-    setBusy(true);
-    setBanner({ kind: 'loading' });
-    try {
-      const doc = buildAgentReviewDocument(buildLocalParams());
-      const payload = canonicalReviewPayload(doc);
-      doc.contentHash = await computeReviewContentHashAsync(payload);
-      await saveAgentReviewChannel({
-        projectId: projectId!,
-        taskInstanceId: taskInstanceId!,
-        document: doc,
-        token: reviewTokenFromEnv(),
-      });
-      setBanner({ kind: 'published', at: new Date().toISOString() });
-    } catch (e) {
-      setBanner({
-        kind: 'error',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      setBusy(false);
-    }
+  const checkAllReviewChannels = React.useCallback(async () => {
+    if (!canUseChannel) return [];
+    const token = reviewChannelClientToken();
+    const local = buildLocalParams();
+    const pid = projectId!;
+    const tid = taskInstanceId!;
+    const results = await Promise.all(
+      REVIEW_PUBLISH_AUDIENCES.map((audience) =>
+        fetchReviewAudiencePendingStatus(audience, local, pid, tid, token)
+      )
+    );
+    setPendingStatuses(results);
+    return results;
   }, [canUseChannel, buildLocalParams, projectId, taskInstanceId]);
 
-  const checkChannelUpdate = React.useCallback(async () => {
-    if (!canUseChannel) {
-      setBanner({ kind: 'error', message: 'projectId o task mancante.' });
-      return;
-    }
-    setBusy(true);
-    setBanner({ kind: 'loading' });
-    try {
-      const { document: remote, updatedAt } = await fetchAgentReviewChannel({
-        projectId: projectId!,
-        taskInstanceId: taskInstanceId!,
-        token: reviewTokenFromEnv(),
-      });
-      if (!remote) {
-        setBanner({ kind: 'error', message: 'Nessun file sul canale. Pubblica da Omnia prima.' });
+  const publishToChannel = React.useCallback(
+    async (audience: AgentReviewAudience) => {
+      if (!canUseChannel) {
+        setBanner({ kind: 'error', message: 'projectId o task mancante.' });
         return;
       }
-      const localDoc = buildAgentReviewDocument(buildLocalParams());
-      const localPayload = canonicalReviewPayload(localDoc);
-      const localHash = await computeReviewContentHashAsync(localPayload);
-      if (localHash === remote.contentHash) {
-        setBanner({ kind: 'in_sync', remoteUpdatedAt: updatedAt });
-        return;
-      }
-      const diff = summarizeReviewDiff(buildLocalParams(), remote);
-      const parts: string[] = [];
-      if (diff.descriptionChanged) parts.push('descrizione');
-      if (diff.modifiedScenarioCount > 0) parts.push(`${diff.modifiedScenarioCount} scenario`);
-      if (diff.voteChanges > 0) parts.push(`${diff.voteChanges} voti`);
-      const summary =
-        parts.length > 0 ? `Differenze: ${parts.join(', ')}.` : 'Il canale ha una revisione più recente.';
-      setBanner({
-        kind: 'update_available',
-        remoteUpdatedAt: updatedAt,
-        summary,
-        remote,
-      });
-    } catch (e) {
-      setBanner({
-        kind: 'error',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      setBusy(false);
-    }
-  }, [canUseChannel, buildLocalParams, projectId, taskInstanceId]);
-
-  const importFromChannel = React.useCallback(async () => {
-    if (!canUseChannel) {
-      setBanner({ kind: 'error', message: 'projectId o task mancante.' });
-      return;
-    }
-    setBusy(true);
-    try {
-      let remote: AgentReviewChannelDocument | null =
-        banner.kind === 'update_available' ? banner.remote : null;
-      if (!remote) {
-        const fetched = await fetchAgentReviewChannel({
+      setBusy(true);
+      setBanner({ kind: 'loading' });
+      try {
+        const doc = buildAgentReviewDocument({
+          ...buildLocalParams(),
+          reviewAudience: audience,
+        });
+        const payload = canonicalReviewPayload(doc);
+        doc.contentHash = await computeReviewContentHashAsync(payload);
+        await saveAgentReviewChannel({
           projectId: projectId!,
           taskInstanceId: taskInstanceId!,
-          token: reviewTokenFromEnv(),
+          document: doc,
+          audience,
+          token: reviewChannelClientToken(),
         });
-        remote = fetched.document;
+        setBanner({ kind: 'published', at: new Date().toISOString(), audience });
+        await checkAllReviewChannels();
+      } catch (e) {
+        setBanner({
+          kind: 'error',
+          message: e instanceof Error ? e.message : String(e),
+        });
+      } finally {
+        setBusy(false);
       }
-      if (!remote) {
-        setBanner({ kind: 'error', message: 'Canale vuoto.' });
+    },
+    [canUseChannel, buildLocalParams, projectId, taskInstanceId, checkAllReviewChannels]
+  );
+
+  const importFromAudience = React.useCallback(
+    async (audience: AgentReviewAudience) => {
+      if (!canUseChannel) {
+        setBanner({ kind: 'error', message: 'projectId o task mancante.' });
         return;
       }
-      setDesignDescription(remote.agentDesignDescription);
-      setUseCases([...remote.useCaseBundle.use_cases]);
-      setUseCaseCategories([...remote.useCaseBundle.categories]);
-      setDirty(true);
-      setBanner({ kind: 'imported', at: new Date().toISOString() });
-    } catch (e) {
-      setBanner({
-        kind: 'error',
-        message: e instanceof Error ? e.message : String(e),
-      });
-    } finally {
-      setBusy(false);
+      setBusy(true);
+      try {
+        let remote: AgentReviewChannelDocument | null =
+          pendingStatuses.find((s) => s.audience === audience)?.remote ?? null;
+        if (!remote) {
+          const fetched = await fetchAgentReviewChannel({
+            projectId: projectId!,
+            taskInstanceId: taskInstanceId!,
+            audience,
+            token: reviewChannelClientToken(),
+          });
+          remote = fetched.document;
+        }
+        if (!remote) {
+          setBanner({ kind: 'error', message: 'Nessuna review da importare per questo canale.' });
+          return;
+        }
+        setDesignDescription(remote.agentDesignDescription);
+        setUseCases([...remote.useCaseBundle.use_cases]);
+        setUseCaseCategories([...remote.useCaseBundle.categories]);
+        setDirty(true);
+        setBanner({ kind: 'imported', at: new Date().toISOString() });
+        await checkAllReviewChannels();
+      } catch (e) {
+        setBanner({
+          kind: 'error',
+          message: e instanceof Error ? e.message : String(e),
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      canUseChannel,
+      pendingStatuses,
+      projectId,
+      taskInstanceId,
+      setDesignDescription,
+      setUseCases,
+      setUseCaseCategories,
+      setDirty,
+      checkAllReviewChannels,
+    ]
+  );
+
+  const anyPendingImport = hasAnyPendingImport(pendingStatuses);
+
+  React.useEffect(() => {
+    if (!canUseChannel) {
+      setPendingStatuses([]);
+      return;
     }
-  }, [banner, canUseChannel, projectId, taskInstanceId, setDesignDescription, setUseCases, setUseCaseCategories, setDirty]);
+    const t = window.setTimeout(() => {
+      void checkAllReviewChannels();
+    }, 400);
+    return () => clearTimeout(t);
+  }, [canUseChannel, projectId, taskInstanceId, checkAllReviewChannels]);
+
+  /** Poll di backup (editor aperto). */
+  React.useEffect(() => {
+    if (!canUseChannel) return;
+    const id = window.setInterval(() => {
+      void checkAllReviewChannels();
+    }, REVIEW_CHANNEL_POLL_MS);
+    return () => clearInterval(id);
+  }, [canUseChannel, projectId, taskInstanceId, checkAllReviewChannels]);
+
+  /** SSE: push da PUT Omnia o POST .../notify (portale Bolt). */
+  React.useEffect(() => {
+    if (!canUseChannel) return;
+    const token = reviewChannelClientToken();
+    return subscribeReviewChannelEvents({
+      projectId: projectId!,
+      taskInstanceId: taskInstanceId!,
+      token,
+      onUpdate: () => {
+        void checkAllReviewChannels();
+      },
+    });
+  }, [canUseChannel, projectId, taskInstanceId, checkAllReviewChannels]);
 
   /** Home portale (elenco review); deep link opzionale dopo Pubblica. */
   const reviewPortalUrl = React.useMemo(() => {
@@ -205,9 +250,11 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
     canUseChannel,
     busy,
     banner,
+    pendingStatuses,
+    anyPendingImport,
     publishToChannel,
-    checkChannelUpdate,
-    importFromChannel,
+    checkAllReviewChannels,
+    importFromAudience,
     reviewPortalUrl,
     dismissBanner: () => setBanner({ kind: 'idle' }),
   };

@@ -24,7 +24,7 @@ export function UseCaseReviewPublishStrip(): React.ReactElement {
         <button
           type="button"
           disabled={!ch.canUseChannel || ch.busy}
-          onClick={() => void ch.publishToChannel()}
+          onClick={() => void ch.publishToChannel('customer')}
           className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
           title="Pubblica use case e descrizione sul canale per la pagina review"
         >

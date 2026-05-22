@@ -84,10 +84,12 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       set({ catalog: items, catalogLoading: false });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const hint =
-        msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED') || msg.includes('500')
-          ? ' — Avvia il backend Omnia (npm run be:express o dev:beNew) sulla porta 3100.'
-          : '';
+      let hint = '';
+      if (msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED') || msg.includes('500')) {
+        hint = ' — Verifica che il backend sia online (npm run dev:beNew o npm run be:express).';
+      } else if (msg.includes('401') && msg.includes('review_token_invalid')) {
+        hint = ' — Avvia il backend Omnia (npm run dev:beNew) e riprova.';
+      }
       set({
         catalogLoading: false,
         catalogError: `${msg}${hint}`,

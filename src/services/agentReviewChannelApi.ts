@@ -3,6 +3,8 @@
  */
 
 import type { AgentReviewChannelDocument } from '@domain/agentReviewChannel/reviewDocument';
+import type { AgentReviewAudience } from '@domain/agentReviewChannel/reviewAudience';
+import { normalizeReviewAudience } from '@domain/agentReviewChannel/reviewAudience';
 
 export interface ReviewChannelFetchResult {
   document: AgentReviewChannelDocument | null;
@@ -25,15 +27,26 @@ export function resolveReviewChannelApiBase(): string {
   return '';
 }
 
+function reviewChannelPath(
+  projectId: string,
+  taskInstanceId: string,
+  audience?: AgentReviewAudience
+): string {
+  const base = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskInstanceId)}/review-channel`;
+  const aud = audience ? normalizeReviewAudience(audience) : '';
+  return aud ? `${base}?audience=${encodeURIComponent(aud)}` : base;
+}
+
 export async function fetchAgentReviewChannel(params: {
   projectId: string;
   taskInstanceId: string;
+  audience?: AgentReviewAudience;
   token?: string;
   apiBase?: string;
 }): Promise<ReviewChannelFetchResult> {
-  const { projectId, taskInstanceId, token, apiBase } = params;
+  const { projectId, taskInstanceId, audience, token, apiBase } = params;
   const base = (apiBase ?? resolveReviewChannelApiBase()).replace(/\/$/, '');
-  const path = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskInstanceId)}/review-channel`;
+  const path = reviewChannelPath(projectId, taskInstanceId, audience);
   const url = base ? `${base}${path}` : path;
   const res = await fetch(url, { headers: reviewHeaders(token) });
   if (!res.ok) {
@@ -56,21 +69,39 @@ export async function saveAgentReviewChannel(params: {
   projectId: string;
   taskInstanceId: string;
   document: AgentReviewChannelDocument;
+  audience?: AgentReviewAudience;
   token?: string;
   apiBase?: string;
 }): Promise<ReviewChannelFetchResult> {
-  const { projectId, taskInstanceId, document, token, apiBase } = params;
+  const { projectId, taskInstanceId, document, audience, token, apiBase } = params;
   const base = (apiBase ?? resolveReviewChannelApiBase()).replace(/\/$/, '');
-  const path = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskInstanceId)}/review-channel`;
+  const path = reviewChannelPath(
+    projectId,
+    taskInstanceId,
+    audience ?? document.reviewAudience
+  );
   const url = base ? `${base}${path}` : path;
+  const headers = reviewHeaders(token) as Record<string, string>;
+  headers['X-Review-Source'] = 'omnia';
   const res = await fetch(url, {
     method: 'PUT',
-    headers: reviewHeaders(token),
+    headers,
     body: JSON.stringify({ document }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`saveAgentReviewChannel: ${res.status} ${text}`);
+    let detail = text;
+    try {
+      const j = JSON.parse(text) as { error?: string };
+      if (j?.error) detail = j.error;
+    } catch {
+      /* raw text */
+    }
+    const hint =
+      res.status === 500 && !detail
+        ? ' — Verifica che Express (:3100) sia avviato (npm run dev:beNew).'
+        : '';
+    throw new Error(`saveAgentReviewChannel: ${res.status} ${detail}${hint}`);
   }
   const data = (await res.json()) as {
     document?: unknown;
@@ -82,4 +113,70 @@ export async function saveAgentReviewChannel(params: {
     document: parsed,
     updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : parsed?.updatedAt ?? null,
   };
+}
+
+/** Intervallo consigliato per poll di backup se SSE non disponibile. */
+export const REVIEW_CHANNEL_POLL_MS = 20_000;
+
+/**
+ * SSE: il server invia `review_channel_updated` dopo PUT o POST .../notify (portale).
+ * EventSource non supporta header custom → token in query.
+ */
+export function subscribeReviewChannelEvents(params: {
+  projectId: string;
+  taskInstanceId: string;
+  token?: string;
+  onUpdate: () => void;
+}): () => void {
+  if (typeof EventSource === 'undefined') return () => {};
+  const { projectId, taskInstanceId, token, onUpdate } = params;
+  const t = typeof token === 'string' ? token.trim() : '';
+  const qs = new URLSearchParams();
+  if (t) qs.set('token', t);
+  const q = qs.toString();
+  const base = resolveReviewChannelApiBase().replace(/\/$/, '');
+  const path = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskInstanceId)}/review-channel/events${q ? `?${q}` : ''}`;
+  const url = base ? `${base}${path}` : path;
+  const es = new EventSource(url);
+  const handler = () => onUpdate();
+  es.addEventListener('review_channel_updated', handler);
+  // Backend assente o connessione chiusa: evita reconnect EventSource → flood ECONNRESET nel proxy Vite
+  es.onerror = () => {
+    es.close();
+  };
+  return () => {
+    es.removeEventListener('review_channel_updated', handler);
+    es.close();
+  };
+}
+
+/**
+ * Webhook verso Omnia quando un portale esterno (es. Bolt) salva una review.
+ */
+export async function notifyReviewChannelFromPortal(params: {
+  projectId: string;
+  taskInstanceId: string;
+  audience: AgentReviewAudience;
+  updatedAt?: string;
+  contentHash?: string;
+  token?: string;
+}): Promise<void> {
+  const { projectId, taskInstanceId, audience, updatedAt, contentHash, token } = params;
+  const base = resolveReviewChannelApiBase().replace(/\/$/, '');
+  const path = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskInstanceId)}/review-channel/notify`;
+  const url = base ? `${base}${path}` : path;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: reviewHeaders(token),
+    body: JSON.stringify({
+      audience,
+      updatedAt,
+      contentHash,
+      source: 'portal',
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`notifyReviewChannelFromPortal: ${res.status} ${text}`);
+  }
 }

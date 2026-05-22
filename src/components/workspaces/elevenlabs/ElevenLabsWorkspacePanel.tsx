@@ -559,7 +559,6 @@ export function ElevenLabsWorkspacePanel({
               collectKbSnippets={collectKbSnippets}
               agentId={resolvedAgentId}
               projectData={projectData}
-              projectId={projectData?.id}
               updateProjectData={updateDataDirectly}
             />
           }
