@@ -6,6 +6,12 @@ import type React from 'react';
 import { create } from 'zustand';
 import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
 import type { AgentReviewStructuredSections } from '@domain/agentReviewChannel/reviewDocument';
+import type { AgentStructuredSectionId } from '@omnia/domain-core/task/sections/agentStructuredSectionIds';
+import type {
+  AgentReviewBackendSnapshot,
+  AgentReviewConversationSnapshot,
+  AgentReviewKnowledgeBaseSnapshot,
+} from '@domain/agentReviewChannel/reviewSnapshots';
 import {
   buildAgentReviewDocument,
   computeReviewContentHashAsync,
@@ -37,6 +43,9 @@ interface ReviewState {
   selectedUseCaseId: string | null;
   description: string;
   structuredSections: AgentReviewStructuredSections;
+  knowledgeBase: AgentReviewKnowledgeBaseSnapshot | null;
+  backends: AgentReviewBackendSnapshot | null;
+  conversation: AgentReviewConversationSnapshot | null;
   useCases: AIAgentUseCase[];
   categories: AIAgentUseCaseCategory[];
   baselinesByUseCaseId: Record<string, { payoff: string }>;
@@ -50,6 +59,8 @@ interface ReviewState {
   closeSession: () => void;
   setSelectedUseCaseId: (id: string | null) => void;
   setDescription: (text: string) => void;
+  setStructuredSection: (sectionId: AgentStructuredSectionId, text: string) => void;
+  setConversationStyleLearningNotes: (notes: string) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   updateUseCase: (id: string, patch: Partial<AIAgentUseCase>) => void;
@@ -77,6 +88,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   selectedUseCaseId: null,
   description: '',
   structuredSections: {},
+  knowledgeBase: null,
+  backends: null,
+  conversation: null,
   useCases: [],
   categories: [],
   baselinesByUseCaseId: {},
@@ -119,6 +133,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       selectedUseCaseId: null,
       description: '',
       structuredSections: {},
+      knowledgeBase: null,
+      backends: null,
+      conversation: null,
       useCases: [],
       categories: [],
       baselinesByUseCaseId: {},
@@ -136,6 +153,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       categories: [],
       description: '',
       structuredSections: {},
+      knowledgeBase: null,
+      backends: null,
+      conversation: null,
       status: '',
       channelLoaded: false,
     }),
@@ -143,6 +163,25 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   setSelectedUseCaseId: (id) => set({ selectedUseCaseId: id }),
 
   setDescription: (text) => set({ description: text }),
+
+  setStructuredSection: (sectionId, text) =>
+    set((s) => ({
+      structuredSections: { ...s.structuredSections, [sectionId]: text },
+    })),
+
+  setConversationStyleLearningNotes: (notes) =>
+    set((s) => ({
+      conversation: s.conversation
+        ? { ...s.conversation, styleLearningNotes: notes }
+        : {
+            conversationalRules: [],
+            styleAuto: false,
+            styleSelections: {},
+            globalStyleId: '',
+            styleLearningNotes: notes,
+            deployStyleId: null,
+          },
+    })),
 
   setUseCases: (next) =>
     set((s) => ({
@@ -175,6 +214,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         set({
           description: doc.agentDesignDescription,
           structuredSections: { ...(doc.agentStructuredSections ?? {}) },
+          knowledgeBase: doc.knowledgeBase ?? null,
+          backends: doc.backends ?? null,
+          conversation: doc.conversation ?? null,
           useCases,
           categories: [...doc.useCaseBundle.categories],
           baselinesByUseCaseId: captureBaselines(useCases),
@@ -198,6 +240,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
           set({
             description: parsed.agentDesignDescription,
             structuredSections: { ...(parsed.agentStructuredSections ?? {}) },
+            knowledgeBase: parsed.knowledgeBase ?? null,
+            backends: parsed.backends ?? null,
+            conversation: parsed.conversation ?? null,
             useCases,
             categories: [...parsed.useCaseBundle.categories],
             baselinesByUseCaseId: captureBaselines(useCases),
@@ -218,7 +263,15 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     const session = get().session;
     if (!session) return;
     if (!get().channelLoaded) return;
-    const { description, useCases, categories, structuredSections } = get();
+    const {
+      description,
+      useCases,
+      categories,
+      structuredSections,
+      knowledgeBase,
+      backends,
+      conversation,
+    } = get();
     set({ saving: true });
     try {
       let doc = buildAgentReviewDocument({
@@ -229,6 +282,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         useCases,
         categories,
         structuredSections,
+        ...(knowledgeBase ? { knowledgeBase } : {}),
+        ...(backends ? { backends } : {}),
+        ...(conversation ? { conversation } : {}),
       });
       const payload = canonicalReviewPayload(doc);
       doc = { ...doc, contentHash: await computeReviewContentHashAsync(payload) };

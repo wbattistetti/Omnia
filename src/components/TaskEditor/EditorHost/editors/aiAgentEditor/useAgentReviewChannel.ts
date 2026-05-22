@@ -30,6 +30,12 @@ import {
 } from './reviewChannelPending';
 import { reviewChannelClientToken } from '@lib/reviewChannelClientToken';
 import { structuredSectionsForReviewPublish } from './structuredSectionsForReviewPublish';
+import { buildReviewPublishSnapshots } from './reviewSnapshotsForPublish';
+import type { ManualCatalogEntry } from '@domain/backendCatalog';
+import type { BackendPlaceholderInstance } from '@domain/agentPrompt';
+import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
+import type { ConversationalRule } from '@domain/conversationalRules/types';
+import type { Task } from '@types/taskTypes';
 
 export type ReviewChannelBanner =
   | { kind: 'idle' }
@@ -60,6 +66,16 @@ export interface UseAgentReviewChannelParams {
   setUseCaseCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   setDirty: (dirty: boolean) => void;
   importReviewStructuredSections?: (sections: AgentReviewStructuredSections) => void;
+  agentKnowledgeBaseDocumentsJson?: string;
+  conversationalRules?: readonly ConversationalRule[];
+  conversationStyleAuto?: boolean;
+  conversationStyleSelections?: ConversationStyleSelections;
+  globalStyleId?: string;
+  styleLearningNotes?: string;
+  deployStyleId?: string | null;
+  backendPlaceholders?: readonly BackendPlaceholderInstance[];
+  projectTasks?: readonly Task[];
+  manualBackendEntries?: readonly ManualCatalogEntry[];
 }
 
 export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
@@ -78,6 +94,16 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
     setUseCaseCategories,
     setDirty,
     importReviewStructuredSections,
+    agentKnowledgeBaseDocumentsJson = '',
+    conversationalRules = [],
+    conversationStyleAuto = false,
+    conversationStyleSelections = {},
+    globalStyleId = '',
+    styleLearningNotes = '',
+    deployStyleId = null,
+    backendPlaceholders = [],
+    projectTasks = [],
+    manualBackendEntries = [],
   } = params;
 
   const [banner, setBanner] = React.useState<ReviewChannelBanner>({ kind: 'idle' });
@@ -87,19 +113,35 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
   const canUseChannel = Boolean(projectId?.trim() && taskInstanceId?.trim());
 
   const buildLocalParams = React.useCallback(
-    () => ({
-      projectId: projectId!.trim(),
-      taskInstanceId: taskInstanceId!.trim(),
-      taskLabel,
-      agentDesignDescription: designDescription,
-      useCases,
-      categories: useCaseCategories,
-      logicalSteps,
-      structuredSections: structuredSectionsForReviewPublish(
-        agentStructuredSectionsJson,
-        agentPrompt
-      ),
-    }),
+    () => {
+      const snapshots = buildReviewPublishSnapshots({
+        taskInstanceId: taskInstanceId!.trim(),
+        agentKnowledgeBaseDocumentsJson,
+        conversationalRules,
+        conversationStyleAuto,
+        conversationStyleSelections,
+        globalStyleId,
+        styleLearningNotes,
+        deployStyleId,
+        backendPlaceholders,
+        projectTasks,
+        manualBackendEntries,
+      });
+      return {
+        projectId: projectId!.trim(),
+        taskInstanceId: taskInstanceId!.trim(),
+        taskLabel,
+        agentDesignDescription: designDescription,
+        useCases,
+        categories: useCaseCategories,
+        logicalSteps,
+        structuredSections: structuredSectionsForReviewPublish(
+          agentStructuredSectionsJson,
+          agentPrompt
+        ),
+        ...snapshots,
+      };
+    },
     [
       projectId,
       taskInstanceId,
@@ -110,6 +152,16 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       logicalSteps,
       agentStructuredSectionsJson,
       agentPrompt,
+      agentKnowledgeBaseDocumentsJson,
+      conversationalRules,
+      conversationStyleAuto,
+      conversationStyleSelections,
+      globalStyleId,
+      styleLearningNotes,
+      deployStyleId,
+      backendPlaceholders,
+      projectTasks,
+      manualBackendEntries,
     ]
   );
 

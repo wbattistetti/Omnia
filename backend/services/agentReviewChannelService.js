@@ -90,6 +90,15 @@ function normalizeDocument(body, projectId, taskInstanceId) {
   if (agentStructuredSections && Object.keys(agentStructuredSections).length > 0) {
     out.agentStructuredSections = agentStructuredSections;
   }
+  if (body.knowledgeBase && typeof body.knowledgeBase === 'object') {
+    out.knowledgeBase = stripUndefinedDeep(body.knowledgeBase);
+  }
+  if (body.backends && typeof body.backends === 'object') {
+    out.backends = stripUndefinedDeep(body.backends);
+  }
+  if (body.conversation && typeof body.conversation === 'object') {
+    out.conversation = stripUndefinedDeep(body.conversation);
+  }
   return out;
 }
 

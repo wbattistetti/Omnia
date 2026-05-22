@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import type { EditorProps } from '../types';
-import { useProjectDataUpdate } from '@context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import { useAIProvider } from '@context/AIProviderContext';
 import { Bot, Loader2, Maximize2, Minimize2, Sparkles } from 'lucide-react';
 import { taskRepository } from '@services/TaskRepository';
@@ -75,6 +75,7 @@ import { useAgentReviewChannel } from './aiAgentEditor/useAgentReviewChannel';
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
   const pdUpdate = useProjectDataUpdate();
+  const { data: projectData } = useProjectData();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
   const { provider, model } = useAIProvider();
 
@@ -88,6 +89,11 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     taskLabel: typeof task?.label === 'string' ? task.label : undefined,
     getDeferAgentMessages: () => deferAgentMessagesInUseCaseListRef.current,
   });
+
+  const reviewPublishProjectTasks = React.useMemo(
+    () => taskRepository.getAllTasks(),
+    [c.instanceId, projectData?.backendCatalog?.catalogVersion]
+  );
 
   const agentReviewChannel = useAgentReviewChannel({
     projectId,
@@ -104,6 +110,16 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setUseCaseCategories: c.setUseCaseCategories,
     setDirty: c.markAgentEditorDirty,
     importReviewStructuredSections: c.importReviewStructuredSections,
+    agentKnowledgeBaseDocumentsJson: c.agentKnowledgeBaseDocumentsJson,
+    conversationalRules: c.conversationalRules,
+    conversationStyleAuto: c.agentConversationStyleAuto,
+    conversationStyleSelections: c.agentConversationStyleSelections,
+    globalStyleId: c.useCaseGlobalStyleId,
+    styleLearningNotes: c.agentUseCaseStyleLearningNotes,
+    deployStyleId: c.agentConversationDeployStyleId,
+    backendPlaceholders: c.backendPlaceholders,
+    projectTasks: reviewPublishProjectTasks,
+    manualBackendEntries: projectData?.backendCatalog?.manualEntries ?? [],
   });
 
   const onConfirmAdvanceWithoutEdits = React.useCallback(

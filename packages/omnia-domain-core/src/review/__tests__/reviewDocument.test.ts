@@ -72,4 +72,38 @@ describe('agentReviewChannel document', () => {
     const parsed = parseAgentReviewDocument(doc);
     expect(parsed?.agentStructuredSections?.context).toBe('Call center');
   });
+
+  it('round-trips publish snapshots', () => {
+    const doc = buildAgentReviewDocument({
+      projectId: 'p1',
+      taskInstanceId: 't1',
+      taskLabel: 'Agent',
+      agentDesignDescription: 'desc',
+      useCases: [minimalUc('a', 'scenario uno')],
+      categories: [],
+      knowledgeBase: {
+        documents: [
+          {
+            id: 'kb1',
+            name: 'doc.txt',
+            size: 10,
+            mimeType: 'text/plain',
+            addedAt: '2026-01-01T00:00:00.000Z',
+            parseStatus: 'ready',
+          },
+        ],
+      },
+      conversation: {
+        conversationalRules: [],
+        styleAuto: false,
+        styleSelections: {},
+        globalStyleId: 'cortese',
+        styleLearningNotes: 'note',
+        deployStyleId: null,
+      },
+    });
+    const parsed = parseAgentReviewDocument(doc);
+    expect(parsed?.knowledgeBase?.documents[0]?.name).toBe('doc.txt');
+    expect(parsed?.conversation?.globalStyleId).toBe('cortese');
+  });
 });

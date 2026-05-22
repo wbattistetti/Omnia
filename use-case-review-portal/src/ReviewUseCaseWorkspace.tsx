@@ -1,9 +1,17 @@
 /**
- * Workspace review: pannello use case condiviso (@omnia/domain-components).
+ * Workspace review: toolbar a 5 tab + pannelli condivisi (@omnia/domain-components).
  */
 
 import React from 'react';
-import { UseCaseReviewPanel, AgentReviewStructuredSectionsBlock } from '@omnia/domain-components';
+import {
+  UseCaseReviewPanel,
+  ReviewPortalStepper,
+  ReviewTaskPanel,
+  ReviewKnowledgeBasePanel,
+  ReviewBackendPanel,
+  ReviewConversationPanel,
+  type ReviewPortalStepId,
+} from '@omnia/domain-components';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { useReviewStore } from './reviewStore';
 
@@ -24,19 +32,28 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
   const description = useReviewStore((s) => s.description);
   const setDescription = useReviewStore((s) => s.setDescription);
   const structuredSections = useReviewStore((s) => s.structuredSections);
+  const setStructuredSection = useReviewStore((s) => s.setStructuredSection);
+  const knowledgeBase = useReviewStore((s) => s.knowledgeBase);
+  const backends = useReviewStore((s) => s.backends);
+  const conversation = useReviewStore((s) => s.conversation);
+  const setConversationStyleLearningNotes = useReviewStore(
+    (s) => s.setConversationStyleLearningNotes
+  );
 
+  const [activeStep, setActiveStep] = React.useState<ReviewPortalStepId>('task');
   const [composerError, setComposerError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!channelLoaded) return;
-    if (useCases.length === 0 && !description.trim()) return;
     const t = window.setTimeout(() => void saveToServer(), 800);
     return () => clearTimeout(t);
   }, [
     channelLoaded,
     description,
+    structuredSections,
     useCases,
     categories,
+    conversation,
     session.projectId,
     session.taskId,
     saveToServer,
@@ -60,6 +77,15 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
     [setCategories]
   );
 
+  const stepBadges: Partial<Record<ReviewPortalStepId, number>> = {
+    knowledge_base: knowledgeBase?.documents.length ?? 0,
+    backend: (backends?.catalogRows.length ?? 0) + (backends?.structuredPlaceholders.length ?? 0),
+    prompts: useCases.length,
+    conversation:
+      (conversation?.conversationalRules.length ?? 0) +
+      Object.keys(conversation?.styleSelections ?? {}).length,
+  };
+
   return (
     <div className="flex h-screen min-h-0 flex-col bg-slate-950 text-slate-100">
       <header className="shrink-0 border-b border-slate-800 px-4 py-2">
@@ -82,36 +108,55 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
             {status ? ` · ${status}` : ''}
           </p>
         </div>
-        <label className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-teal-400/90">
-          Descrizione task
-        </label>
-        <textarea
-          className="mt-0.5 w-full min-h-[56px] rounded border border-slate-700 bg-slate-900/80 px-2 py-1.5 text-sm text-slate-100"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
       </header>
 
-      <AgentReviewStructuredSectionsBlock
-        sections={structuredSections}
-        readOnly
-        className="shrink-0 px-4 pb-2"
-        panelClassName="max-h-[220px]"
+      <ReviewPortalStepper
+        activeStep={activeStep}
+        onSelectStep={setActiveStep}
+        badges={stepBadges}
       />
 
-      <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-        <UseCaseReviewPanel
-          useCases={useCases}
-          setUseCases={setUseCases as React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>}
-          useCaseCategories={categories}
-          onUseCaseCategoryLabelChange={onCategoryLabelChange}
-          onUseCaseCategoryDescriptionChange={onCategoryDescriptionChange}
-          error={composerError}
-          onDismissError={() => setComposerError(null)}
-          onSelectionChange={setSelectedUseCaseId}
-          controlledSelectionId={selectedUseCaseId}
-          composeEnabled
-        />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {activeStep === 'task' ? (
+          <ReviewTaskPanel
+            description={description}
+            onDescriptionChange={setDescription}
+            structuredSections={structuredSections}
+            onStructuredSectionChange={setStructuredSection}
+          />
+        ) : null}
+
+        {activeStep === 'knowledge_base' ? (
+          <ReviewKnowledgeBasePanel snapshot={knowledgeBase} />
+        ) : null}
+
+        {activeStep === 'backend' ? (
+          <ReviewBackendPanel snapshot={backends} />
+        ) : null}
+
+        {activeStep === 'prompts' ? (
+          <div className="flex h-full min-h-0 flex-col px-2 pb-2 pt-1">
+            <UseCaseReviewPanel
+              useCases={useCases}
+              setUseCases={setUseCases as React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>}
+              useCaseCategories={categories}
+              onUseCaseCategoryLabelChange={onCategoryLabelChange}
+              onUseCaseCategoryDescriptionChange={onCategoryDescriptionChange}
+              error={composerError}
+              onDismissError={() => setComposerError(null)}
+              onSelectionChange={setSelectedUseCaseId}
+              controlledSelectionId={selectedUseCaseId}
+              composeEnabled
+            />
+          </div>
+        ) : null}
+
+        {activeStep === 'conversation' ? (
+          <ReviewConversationPanel
+            snapshot={conversation}
+            onStyleLearningNotesChange={setConversationStyleLearningNotes}
+          />
+        ) : null}
       </div>
     </div>
   );

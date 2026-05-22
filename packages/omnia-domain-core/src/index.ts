@@ -16,3 +16,4 @@ export * from './task/sections/agentStructuredSectionIds';
 export * from './task/revision/effectiveFromRevisionMask';
 export * from './review/reviewDocument';
 export * from './review/reviewAudience';
+export * from './review/reviewSnapshots';

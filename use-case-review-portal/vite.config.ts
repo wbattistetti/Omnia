@@ -67,6 +67,10 @@ export default defineConfig(({ mode }) => {
           root,
           'packages/omnia-domain-core/src/review/reviewAudience.ts'
         ),
+        '@domain/agentReviewChannel/reviewSnapshots': path.resolve(
+          root,
+          'packages/omnia-domain-core/src/review/reviewSnapshots.ts'
+        ),
       },
     },
     server: {

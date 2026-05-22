@@ -12,6 +12,16 @@ import {
   AGENT_REVIEW_STRUCTURED_SECTION_IDS,
   type AgentStructuredSectionId,
 } from '../task/sections/agentStructuredSectionIds';
+import type {
+  AgentReviewBackendSnapshot,
+  AgentReviewConversationSnapshot,
+  AgentReviewKnowledgeBaseSnapshot,
+} from './reviewSnapshots';
+import {
+  parseBackendSnapshot,
+  parseConversationSnapshot,
+  parseKnowledgeBaseSnapshot,
+} from './reviewSnapshots';
 
 export type AgentReviewStructuredSections = Partial<
   Record<AgentStructuredSectionId, string>
@@ -56,6 +66,12 @@ export interface AgentReviewChannelDocument {
   agentLogicalSteps?: AIAgentLogicalStep[];
   /** Testo effettivo sezioni strutturate (Scopo, Sequenza, Contesto, Vincoli) per review read-only. */
   agentStructuredSections?: AgentReviewStructuredSections;
+  /** Snapshot documenti Knowledge Base al momento del publish. */
+  knowledgeBase?: AgentReviewKnowledgeBaseSnapshot;
+  /** Snapshot backend collegati al task al momento del publish. */
+  backends?: AgentReviewBackendSnapshot;
+  /** Snapshot stile conversazione e regole al momento del publish. */
+  conversation?: AgentReviewConversationSnapshot;
 }
 
 export interface BuildReviewDocumentParams {
@@ -68,6 +84,9 @@ export interface BuildReviewDocumentParams {
   reviewAudience?: AgentReviewAudience;
   logicalSteps?: readonly AIAgentLogicalStep[];
   structuredSections?: AgentReviewStructuredSections;
+  knowledgeBase?: AgentReviewKnowledgeBaseSnapshot;
+  backends?: AgentReviewBackendSnapshot;
+  conversation?: AgentReviewConversationSnapshot;
 }
 
 function stableStringify(value: unknown): string {
@@ -164,6 +183,15 @@ export function buildAgentReviewDocument(params: BuildReviewDocumentParams): Age
   if (params.logicalSteps && params.logicalSteps.length > 0) {
     doc.agentLogicalSteps = [...params.logicalSteps];
   }
+  if (params.knowledgeBase?.documents.length) {
+    doc.knowledgeBase = params.knowledgeBase;
+  }
+  if (params.backends) {
+    doc.backends = params.backends;
+  }
+  if (params.conversation) {
+    doc.conversation = params.conversation;
+  }
   return doc;
 }
 
@@ -226,6 +254,18 @@ export function parseAgentReviewDocument(raw: unknown): AgentReviewChannelDocume
   const structuredSections = parseStructuredSectionsField(o.agentStructuredSections);
   if (structuredSections) {
     doc.agentStructuredSections = structuredSections;
+  }
+  const knowledgeBase = parseKnowledgeBaseSnapshot(o.knowledgeBase);
+  if (knowledgeBase) {
+    doc.knowledgeBase = knowledgeBase;
+  }
+  const backends = parseBackendSnapshot(o.backends);
+  if (backends) {
+    doc.backends = backends;
+  }
+  const conversation = parseConversationSnapshot(o.conversation);
+  if (conversation) {
+    doc.conversation = conversation;
   }
   return doc;
 }
