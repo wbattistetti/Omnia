@@ -8,6 +8,8 @@ import {
 } from './config/resolveReviewChannelToken.mjs';
 
 const repoRoot = path.resolve(__dirname);
+const domainCoreBundleDir = path.resolve(repoRoot, 'packages/omnia-domain-core/src/usecase/bundle');
+const domainCoreLogicDir = path.resolve(repoRoot, 'packages/omnia-domain-core/src/usecase/logic');
 
 // https://vitejs.dev/config/
 // Support both function and object exports from vite-plugin-monaco-editor
@@ -43,6 +45,21 @@ export default defineConfig(({ mode }) => {
       '@ui': path.resolve(__dirname, 'src/ui'),
       '@features': path.resolve(__dirname, 'src/features'),
       '@config': path.resolve(__dirname, 'config'),
+      '@omnia/domain-core': path.resolve(repoRoot, 'packages/omnia-domain-core/src'),
+      '@omnia/domain-components': path.resolve(
+        repoRoot,
+        'packages/omnia-domain-components/src/index.ts'
+      ),
+      '@domain/useCaseBundle/': `${domainCoreBundleDir}/`,
+      '@domain/aiAgentUseCase/': `${domainCoreLogicDir}/`,
+      '@domain/agentReviewChannel/reviewDocument': path.resolve(
+        repoRoot,
+        'packages/omnia-domain-core/src/review/reviewDocument.ts'
+      ),
+      '@domain/agentReviewChannel/reviewAudience': path.resolve(
+        repoRoot,
+        'packages/omnia-domain-core/src/review/reviewAudience.ts'
+      ),
       '@domain': path.resolve(__dirname, 'src/domain'),
       '@diagnostics': path.resolve(__dirname, 'src/diagnostics'),
       /** Single resolution path for flow workspace context (avoids duplicate-module HMR bugs). */
@@ -69,6 +86,26 @@ export default defineConfig(({ mode }) => {
         '@ui': path.resolve(__dirname, 'src/ui'),
         '@features': path.resolve(__dirname, 'src/features'),
         '@config': path.resolve(__dirname, 'config'),
+        '@lib': path.resolve(repoRoot, 'src/lib'),
+        '@omnia/domain-core': path.resolve(repoRoot, 'packages/omnia-domain-core/src'),
+      '@omnia/domain-components': path.resolve(
+        repoRoot,
+        'packages/omnia-domain-components/src/index.ts'
+      ),
+        '@domain/useCaseBundle/': `${domainCoreBundleDir}/`,
+        '@domain/aiAgentUseCase/': `${domainCoreLogicDir}/`,
+        '@domain/agentReviewChannel/reviewDocument': path.resolve(
+          repoRoot,
+          'packages/omnia-domain-core/src/review/reviewDocument.ts'
+        ),
+        '@domain/agentReviewChannel/reviewAudience': path.resolve(
+          repoRoot,
+          'packages/omnia-domain-core/src/review/reviewAudience.ts'
+        ),
+        '@domain/useCaseGeneratorWizard': path.resolve(
+          __dirname,
+          'src/domain/useCaseGeneratorWizard'
+        ),
         '@domain': path.resolve(__dirname, 'src/domain'),
         '@diagnostics': path.resolve(__dirname, 'src/diagnostics'),
         '@flows': path.resolve(__dirname, 'src/flows'),
@@ -76,8 +113,8 @@ export default defineConfig(({ mode }) => {
         '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
         '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
         '@workspaces': path.resolve(__dirname, 'src/workspaces'),
-      }
-    }
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['lucide-react'],

@@ -1,23 +1,16 @@
 /**
- * Workspace review: stesso composer accordion di Omnia (wizard), senza IA.
+ * Workspace review: pannello use case condiviso (@omnia/domain-components).
  */
 
 import React from 'react';
-import { FontProvider } from '@context/FontContext';
-import { AIAgentUseCaseComposer } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentUseCaseComposer';
-import { ReviewOmniaProviders } from './ReviewOmniaProviders';
-import { DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/constants';
+import { UseCaseReviewPanel, AgentReviewStructuredSectionsBlock } from '@omnia/domain-components';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { useReviewStore } from './reviewStore';
-
-const noopAsync = async (): Promise<null> => null;
 
 export function ReviewUseCaseWorkspace(): React.ReactElement {
   const session = useReviewStore((s) => s.session)!;
   const useCases = useReviewStore((s) => s.useCases);
   const categories = useReviewStore((s) => s.categories);
-  const description = useReviewStore((s) => s.description);
-  const setDescription = useReviewStore((s) => s.setDescription);
   const setUseCases = useReviewStore((s) => s.setUseCases);
   const setCategories = useReviewStore((s) => s.setCategories);
   const selectedUseCaseId = useReviewStore((s) => s.selectedUseCaseId);
@@ -28,8 +21,10 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
   const saving = useReviewStore((s) => s.saving);
   const lastSavedAt = useReviewStore((s) => s.lastSavedAt);
   const closeSession = useReviewStore((s) => s.closeSession);
+  const description = useReviewStore((s) => s.description);
+  const setDescription = useReviewStore((s) => s.setDescription);
+  const structuredSections = useReviewStore((s) => s.structuredSections);
 
-  const [styleId, setStyleId] = React.useState(DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID);
   const [composerError, setComposerError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -65,8 +60,6 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
     [setCategories]
   );
 
-  const onCreateUseCase = React.useCallback(async (): Promise<string> => '', []);
-
   return (
     <div className="flex h-screen min-h-0 flex-col bg-slate-950 text-slate-100">
       <header className="shrink-0 border-b border-slate-800 px-4 py-2">
@@ -99,34 +92,26 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
         />
       </header>
 
+      <AgentReviewStructuredSectionsBlock
+        sections={structuredSections}
+        readOnly
+        className="shrink-0 px-4 pb-2"
+        panelClassName="max-h-[220px]"
+      />
+
       <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-        <ReviewOmniaProviders>
-          <FontProvider>
-            <AIAgentUseCaseComposer
-            logicalSteps={[]}
-            useCases={useCases}
-            setUseCases={setUseCases as React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>}
-            busy={false}
-            error={composerError}
-            onDismissError={() => setComposerError(null)}
-            onCreateUseCase={onCreateUseCase}
-            onRegenerateUseCase={noopAsync}
-            onRegenerateAgentMessage={noopAsync}
-            onAnnotateAgentMessageForJson={async () => false}
-            onDeleteUseCase={() => {}}
-            useCaseGlobalStyleId={styleId}
-            onUseCaseGlobalStyleIdChange={setStyleId}
-            useCaseCategories={categories}
-            onUseCaseCategoryLabelChange={onCategoryLabelChange}
-            onUseCaseCategoryDescriptionChange={onCategoryDescriptionChange}
-            primaryGenerateOnRightOnly
-            reviewOnlyMode
-            onSelectionChange={setSelectedUseCaseId}
-            controlledSelectionId={selectedUseCaseId}
-            composerCatalog="prompts"
-            />
-          </FontProvider>
-        </ReviewOmniaProviders>
+        <UseCaseReviewPanel
+          useCases={useCases}
+          setUseCases={setUseCases as React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>}
+          useCaseCategories={categories}
+          onUseCaseCategoryLabelChange={onCategoryLabelChange}
+          onUseCaseCategoryDescriptionChange={onCategoryDescriptionChange}
+          error={composerError}
+          onDismissError={() => setComposerError(null)}
+          onSelectionChange={setSelectedUseCaseId}
+          controlledSelectionId={selectedUseCaseId}
+          composeEnabled
+        />
       </div>
     </div>
   );

@@ -1,0 +1,70 @@
+/**
+ * Canonical IDs for structured AI Agent design sections (aligned with backend JSON keys).
+ * Order: Goal → operational steps → context → constraints → personality → tone.
+ */
+
+export const AGENT_STRUCTURED_SECTION_IDS = [
+  'goal',
+  'operational_sequence',
+  'context',
+  'constraints',
+  'personality',
+  'tone',
+  /** Optional few-shot / style examples (IR section). */
+  'examples',
+] as const;
+
+export type AgentStructuredSectionId = (typeof AGENT_STRUCTURED_SECTION_IDS)[number];
+
+/**
+ * Tabs shown in the Dockview strip (persisted IR still includes {@link AGENT_STRUCTURED_SECTION_IDS}
+ * — e.g. examples may exist in saved tasks but are edited only via exported flow, not a dock tab).
+ */
+export const AGENT_STRUCTURED_DOCK_TAB_IDS = AGENT_STRUCTURED_SECTION_IDS.filter(
+  (id): id is Exclude<AgentStructuredSectionId, 'examples'> => id !== 'examples'
+);
+
+/** Sezioni strutturate incluse nel documento review (read-only nel portale). */
+export const AGENT_REVIEW_STRUCTURED_SECTION_IDS = [
+  'goal',
+  'operational_sequence',
+  'context',
+  'constraints',
+] as const satisfies readonly AgentStructuredSectionId[];
+
+export type AgentReviewStructuredSectionId = (typeof AGENT_REVIEW_STRUCTURED_SECTION_IDS)[number];
+
+/** UI labels (Italian) for section tabs. */
+export const AGENT_STRUCTURED_SECTION_LABELS: Record<AgentStructuredSectionId, string> = {
+  goal: 'Scopo',
+  operational_sequence: 'Sequenza',
+  context: 'Contesto',
+  constraints: 'Vincoli',
+  personality: 'Personalità',
+  tone: 'Tono',
+  examples: 'Esempi',
+};
+
+/** Markdown H3 titles for the read-only composed agent prompt (English, stable). */
+export const AGENT_STRUCTURED_SECTION_PROMPT_HEADINGS: Record<AgentStructuredSectionId, string> = {
+  goal: 'Goal',
+  operational_sequence: 'Operational sequence',
+  context: 'Context',
+  constraints: 'Guardrails',
+  personality: 'Personality',
+  tone: 'Tone',
+  examples: 'Examples',
+};
+
+/** Tooltip for tab title (accessibility). */
+export const AGENT_STRUCTURED_SECTION_TAB_TITLE: Partial<Record<AgentStructuredSectionId, string>> = {
+  goal: 'Cosa deve ottenere l’agente a fine conversazione.',
+  operational_sequence:
+    'Ordine di domande, raccolta dati, conferme e correzioni.',
+  context:
+    'Contratto: tool, formato risposta API, fuso/tempo; vincoli misurabili (ConvAI: non solo testo narrativo).',
+  constraints: 'Must/must-not operativi (es. solo dati dal tool; conferme; niente invenzione).',
+  personality: 'Chi è l’agente: ruolo e atteggiamento.',
+  tone: 'Come parla: registro, brevità, chiarezza (prima riga Tone: …).',
+  examples: 'Esempi di turno (opzionale) per stile o formato.',
+};

@@ -4,22 +4,22 @@
 
 import type {
   AIAgentCanonicalPhrase,
-} from '../domain/useCaseBundle/schema';
-import type { AgentMessageMotorPayload } from '../domain/aiAgentUseCase/splitAgentMessageTemplate';
-import { ensureUseCasePhrases } from '../domain/useCaseBundle/migrateUseCase';
+} from '@domain/useCaseBundle/schema';
+import type { AgentMessageMotorPayload } from '@domain/aiAgentUseCase/splitAgentMessageTemplate';
+import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
 import {
   parseAgentUseCaseBundleDocument,
   parseAgentUseCaseBundleJson,
   serializeAgentUseCaseBundle,
-} from '../domain/useCaseBundle/parseSerializeBundle';
-import type { AIAgentUseCaseResponse } from '../domain/aiAgentUseCase/useCaseResponseTasks';
+} from '@domain/useCaseBundle/parseSerializeBundle';
+import type { AIAgentUseCaseResponse } from '@domain/aiAgentUseCase/useCaseResponseTasks';
 import {
   ensureUseCaseResponse,
   parseUseCaseResponseField,
-} from '../domain/aiAgentUseCase/useCaseResponseTasks';
-export type { AIAgentUseCaseResponse } from '../domain/aiAgentUseCase/useCaseResponseTasks';
+} from '@domain/aiAgentUseCase/useCaseResponseTasks';
+export type { AIAgentUseCaseResponse } from '@domain/aiAgentUseCase/useCaseResponseTasks';
 
-export type { AIAgentCanonicalPhrase, AIAgentPhraseParametricDimension, AIAgentPhraseParametricRow, AIAgentPhraseParametricConfig, AIAgentPhraseVariant, PhraseCompiledSnapshot, SlotSurfaceMapping } from '../domain/useCaseBundle/schema';
+export type { AIAgentCanonicalPhrase, AIAgentPhraseParametricDimension, AIAgentPhraseParametricRow, AIAgentPhraseParametricConfig, AIAgentPhraseVariant, PhraseCompiledSnapshot, SlotSurfaceMapping } from '@domain/useCaseBundle/schema';
 
 /** Last IA-synced motor JSON for an assistant turn; compare source_content to detect stale edits. */
 export interface AIAgentAssistantMotorSnapshot {
@@ -487,9 +487,9 @@ function parsePhrasesField(raw: unknown): AIAgentCanonicalPhrase[] {
   return out;
 }
 
-function parseMappings(raw: unknown): import('../domain/useCaseBundle/schema').SlotSurfaceMapping[] {
+function parseMappings(raw: unknown): import('@domain/useCaseBundle/schema').SlotSurfaceMapping[] {
   if (!Array.isArray(raw)) return [];
-  const out: import('../domain/useCaseBundle/schema').SlotSurfaceMapping[] = [];
+  const out: import('@domain/useCaseBundle/schema').SlotSurfaceMapping[] = [];
   for (const m of raw) {
     if (!m || typeof m !== 'object') continue;
     const mo = m as Record<string, unknown>;
@@ -508,7 +508,7 @@ function parseMappings(raw: unknown): import('../domain/useCaseBundle/schema').S
 
 function parseCompiledField(
   o: Record<string, unknown>
-): import('../domain/useCaseBundle/schema').PhraseCompiledSnapshot | undefined {
+): import('@domain/useCaseBundle/schema').PhraseCompiledSnapshot | undefined {
   const tokenizedText = typeof o.tokenizedText === 'string' ? o.tokenizedText : '';
   if (!tokenizedText.trim()) return undefined;
   const tokens = Array.isArray(o.tokens)

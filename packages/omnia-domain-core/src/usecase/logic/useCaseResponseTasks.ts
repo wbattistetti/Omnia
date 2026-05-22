@@ -8,9 +8,11 @@ import {
   getAssistantExample,
   type AIAgentUseCase,
 } from '@types/aiAgentUseCases';
-import type { TaskSequenceRow } from '@responseEditor/taskSequence/TaskSequenceEditor';
-import { isMessageLikeEscalationTask } from '@responseEditor/utils/escalationHelpers';
-import { getScalarParameterValue } from '@responseEditor/utils/taskUiText';
+import {
+  getScalarParameterValue,
+  isMessageLikeEscalationTask,
+  type TaskSequenceRow,
+} from './taskSequenceRow';
 
 export interface AIAgentUseCaseResponse {
   tasks: TaskSequenceRow[];

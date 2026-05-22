@@ -331,11 +331,6 @@ export interface AIAgentUseCaseComposerProps {
   onInspectCompiled?: (useCaseId: string) => void;
   /** `conversational_rules`: catalogo error handling (no IA create/regenerate). */
   composerCatalog?: 'prompts' | 'conversational_rules';
-  /**
-   * Portale review esterno: stessa UI accordion wizard, senza IA né publish.
-   * Richiede `primaryGenerateOnRightOnly={true}`.
-   */
-  reviewOnlyMode?: boolean;
 }
 
 export function AIAgentUseCaseComposer({
@@ -389,9 +384,7 @@ export function AIAgentUseCaseComposer({
   projectSlotLexicon = emptyProjectSlotLexicon(),
   onInspectCompiled,
   composerCatalog = 'prompts',
-  reviewOnlyMode = false,
 }: AIAgentUseCaseComposerProps) {
-  const isReviewPortal = reviewOnlyMode === true;
   const isConversationalRulesCatalog = composerCatalog === 'conversational_rules';
   const patchUseCaseResponseTasks = usePatchUseCaseResponseTasks(setUseCases);
 
@@ -520,7 +513,7 @@ export function AIAgentUseCaseComposer({
 
   const messageSpellLang = resolveAiAgentOutputLanguage().tag;
 
-  const useCaseDragEnabled = !busy && !wizardSearchSeed && !isReviewPortal;
+  const useCaseDragEnabled = !busy && !wizardSearchSeed;
 
   const commitUseCaseSiblingReorder = React.useCallback(
     (draggedId: string, targetId: string, position: 'before' | 'after') => {
@@ -579,7 +572,7 @@ export function AIAgentUseCaseComposer({
     (rootChipBusy || rootDraftLabel.trim().length > 0);
 
   const showUseCaseEmptyTutor =
-    ordered.length === 0 && !isConversationalRulesCatalog && !isReviewPortal;
+    ordered.length === 0 && !isConversationalRulesCatalog;
 
   const bundleGenerateBusy =
     (Boolean(bundleGenerateBusyLabel) && busy && !rootChipBusy) || bundleGenerationCategorizing;
@@ -2582,12 +2575,7 @@ export function AIAgentUseCaseComposer({
           } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {isReviewPortal && ordered.length === 0 ? (
-                <p className="px-3 py-10 text-center text-sm text-slate-500">
-                  Nessun use case in questa review. Pubblica da Omnia.
-                </p>
-              ) : null}
-              {!isReviewPortal && !showUseCaseEmptyTutor ? (
+              {!showUseCaseEmptyTutor ? (
                 <UseCaseRootComposerHeader
                   rootDraftRef={rootDraftRef}
                   rootDraftLabel={rootDraftLabel}
@@ -2639,7 +2627,7 @@ export function AIAgentUseCaseComposer({
                   hasExistingUseCases={ordered.length > 0}
                 />
               ) : null}
-              {!isReviewPortal && showUseCaseEmptyTutor ? (
+              {showUseCaseEmptyTutor ? (
                 <UseCaseEmptyTutorPanel
                   rootDraftRef={rootDraftRef}
                   rootDraftLabel={rootDraftLabel}
@@ -3059,7 +3047,7 @@ export function AIAgentUseCaseComposer({
                                   <Plus size={12} aria-hidden />
                                 </button>
                               ) : null}
-                              {!isReviewPortal && onGeneralizeUseCaseMeta ? (
+                              {onGeneralizeUseCaseMeta ? (
                                 <span
                                   className="relative inline-flex shrink-0 flex-col items-center"
                                   {...{ 'data-uc-generalize-popover-root': u.id }}
@@ -3111,8 +3099,7 @@ export function AIAgentUseCaseComposer({
                                   ) : null}
                                 </span>
                               ) : null}
-                              {!isReviewPortal ? (
-                                <button
+                              <button
                                   type="button"
                                   title="Elimina questo scenario e i figli"
                                   aria-label="Elimina scenario"
@@ -3125,7 +3112,6 @@ export function AIAgentUseCaseComposer({
                                 >
                                   <Trash2 size={14} aria-hidden />
                                 </button>
-                              ) : null}
                               <UseCaseRowDragHandle
                                 aria-label={
                                   useCaseDragEnabled
@@ -3215,7 +3201,7 @@ export function AIAgentUseCaseComposer({
                                     }}
                                   />
                                   <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-                                    {!isReviewPortal && onPolishUseCaseScenario ? (
+                                    {onPolishUseCaseScenario ? (
                                       <button
                                         type="button"
                                         title={
@@ -3279,7 +3265,7 @@ export function AIAgentUseCaseComposer({
                                     beginPayoffEdit(u.id, getScenarioText(u))
                                   }
                                   onPolishClick={
-                                    !isReviewPortal && onPolishUseCaseScenario
+                                    onPolishUseCaseScenario
                                       ? () => void invokePolishUseCaseScenario(u.id)
                                       : undefined
                                   }
@@ -3798,7 +3784,7 @@ export function AIAgentUseCaseComposer({
                           }}
                         />
                         <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-                          {!isReviewPortal && onPolishUseCaseScenario ? (
+                          {onPolishUseCaseScenario ? (
                             <button
                               type="button"
                               title={
@@ -3878,7 +3864,7 @@ export function AIAgentUseCaseComposer({
                                 outerBtnClass={UC_SCENARIO_VOTE_BTN}
                                 onVote={(choice) => toggleDesignerFieldVote(selected.id, 'payoff', choice)}
                               />
-                              {!isReviewPortal && onPolishUseCaseScenario ? (
+                              {onPolishUseCaseScenario ? (
                                 <button
                                   type="button"
                                   disabled={
@@ -3915,7 +3901,7 @@ export function AIAgentUseCaseComposer({
                               </button>
                             </span>
                           </div>
-                          {!isReviewPortal && scenarioDirty ? (
+                          {scenarioDirty ? (
                             <button
                               type="button"
                               disabled={busy}
@@ -4248,7 +4234,7 @@ export function AIAgentUseCaseComposer({
                           </button>
                         </>
                       ) : null}
-                      {!isReviewPortal && agentMessageEmpty ? (
+                      {agentMessageEmpty ? (
                         <button
                           type="button"
                           disabled={busy}

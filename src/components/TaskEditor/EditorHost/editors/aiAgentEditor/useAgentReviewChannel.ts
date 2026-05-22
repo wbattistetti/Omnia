@@ -15,6 +15,7 @@ import {
   computeReviewContentHashAsync,
   canonicalReviewPayload,
   type AgentReviewChannelDocument,
+  type AgentReviewStructuredSections,
 } from '@domain/agentReviewChannel/reviewDocument';
 import {
   fetchAgentReviewChannel,
@@ -28,6 +29,7 @@ import {
   type ReviewAudiencePendingStatus,
 } from './reviewChannelPending';
 import { reviewChannelClientToken } from '@lib/reviewChannelClientToken';
+import { structuredSectionsForReviewPublish } from './structuredSectionsForReviewPublish';
 
 export type ReviewChannelBanner =
   | { kind: 'idle' }
@@ -51,10 +53,13 @@ export interface UseAgentReviewChannelParams {
   useCases: readonly AIAgentUseCase[];
   useCaseCategories: readonly AIAgentUseCaseCategory[];
   logicalSteps?: readonly AIAgentLogicalStep[];
+  agentStructuredSectionsJson?: string;
+  agentPrompt?: string;
   setDesignDescription: (value: string) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setUseCaseCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   setDirty: (dirty: boolean) => void;
+  importReviewStructuredSections?: (sections: AgentReviewStructuredSections) => void;
 }
 
 export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
@@ -66,10 +71,13 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
     useCases,
     useCaseCategories,
     logicalSteps = [],
+    agentStructuredSectionsJson = '',
+    agentPrompt = '',
     setDesignDescription,
     setUseCases,
     setUseCaseCategories,
     setDirty,
+    importReviewStructuredSections,
   } = params;
 
   const [banner, setBanner] = React.useState<ReviewChannelBanner>({ kind: 'idle' });
@@ -87,6 +95,10 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       useCases,
       categories: useCaseCategories,
       logicalSteps,
+      structuredSections: structuredSectionsForReviewPublish(
+        agentStructuredSectionsJson,
+        agentPrompt
+      ),
     }),
     [
       projectId,
@@ -96,6 +108,8 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       useCases,
       useCaseCategories,
       logicalSteps,
+      agentStructuredSectionsJson,
+      agentPrompt,
     ]
   );
 
@@ -176,6 +190,9 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
         setDesignDescription(remote.agentDesignDescription);
         setUseCases([...remote.useCaseBundle.use_cases]);
         setUseCaseCategories([...remote.useCaseBundle.categories]);
+        if (remote.agentStructuredSections && importReviewStructuredSections) {
+          importReviewStructuredSections(remote.agentStructuredSections);
+        }
         setDirty(true);
         setBanner({ kind: 'imported', at: new Date().toISOString() });
         await checkAllReviewChannels();
@@ -197,6 +214,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       setUseCases,
       setUseCaseCategories,
       setDirty,
+      importReviewStructuredSections,
       checkAllReviewChannels,
     ]
   );

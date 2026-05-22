@@ -1,0 +1,17 @@
+{
+  "name": "@omnia/domain-components",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared review/design UI panels for Omnia and the use-case review portal.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./usecase/*": "./src/usecase/*",
+    "./task/*": "./src/task/*"
+  },
+  "peerDependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "lucide-react": "^0.344.0"
+  }
+}

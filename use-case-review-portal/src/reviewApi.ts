@@ -1,61 +1,47 @@
 /**
- * Client HTTP per il canale review (proxy Vite → Express :3100).
+ * Re-export del client HTTP unificato (@services/agentReviewChannelApi).
  */
 
-import type { AgentReviewChannelDocument } from '@domain/agentReviewChannel/reviewDocument';
-import { parseAgentReviewDocument } from '@domain/agentReviewChannel/reviewDocument';
+export {
+  fetchAgentReviewChannel,
+  listReviewChannels,
+  saveAgentReviewChannel,
+  type ReviewChannelListItem,
+} from '@services/agentReviewChannelApi';
+
+export type { AgentReviewChannelDocument } from '@domain/agentReviewChannel/reviewDocument';
+
+import { fetchAgentReviewChannel, saveAgentReviewChannel } from '@services/agentReviewChannelApi';
 import { reviewApiBase } from './reviewConfig';
 import { reviewAuthToken } from './reviewAuth';
 
-export interface ReviewChannelListItem {
-  projectId: string;
-  projectLabel: string;
-  taskInstanceId: string;
-  taskLabel: string;
-  updatedAt: string | null;
-  useCaseCount: number;
+function portalApiBase(): string {
+  return reviewApiBase();
 }
 
-function headers(): HeadersInit {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = reviewAuthToken();
-  if (token) h['X-Review-Token'] = token;
-  return h;
+/** @deprecated Prefer `fetchAgentReviewChannel` from `@services/agentReviewChannelApi`. */
+export async function loadReviewChannel(projectId: string, taskId: string) {
+  const { document } = await fetchAgentReviewChannel({
+    projectId,
+    taskInstanceId: taskId,
+    token: reviewAuthToken(),
+    apiBase: portalApiBase(),
+  });
+  return document;
 }
 
-function apiUrl(path: string): string {
-  const base = reviewApiBase();
-  return base ? `${base}${path}` : path;
-}
-
-export async function listReviewChannels(): Promise<ReviewChannelListItem[]> {
-  const res = await fetch(apiUrl('/api/agent-review-channels'), { headers: headers() });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { items?: ReviewChannelListItem[] };
-  return Array.isArray(data.items) ? data.items : [];
-}
-
-export async function loadReviewChannel(
-  projectId: string,
-  taskId: string
-): Promise<AgentReviewChannelDocument | null> {
-  const path = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskId)}/review-channel`;
-  const res = await fetch(apiUrl(path), { headers: headers() });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { document?: unknown };
-  return data.document ? parseAgentReviewDocument(data.document) : null;
-}
-
+/** @deprecated Prefer `saveAgentReviewChannel` from `@services/agentReviewChannelApi`. */
 export async function saveReviewChannel(
   projectId: string,
   taskId: string,
-  document: AgentReviewChannelDocument
+  document: import('@domain/agentReviewChannel/reviewDocument').AgentReviewChannelDocument
 ): Promise<void> {
-  const path = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskId)}/review-channel`;
-  const res = await fetch(apiUrl(path), {
-    method: 'PUT',
-    headers: headers(),
-    body: JSON.stringify({ document }),
+  await saveAgentReviewChannel({
+    projectId,
+    taskInstanceId: taskId,
+    document,
+    token: reviewAuthToken(),
+    apiBase: portalApiBase(),
+    source: 'portal',
   });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 }

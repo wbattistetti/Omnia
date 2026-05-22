@@ -4,7 +4,7 @@
 
 import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
 import { parseAgentUseCasesJsonLegacyArray } from '@types/aiAgentUseCases';
-import { parseUseCaseCategoriesFromBundle } from '@domain/aiAgentUseCase/useCaseCategories';
+import { parseUseCaseCategoriesFromBundle } from '../logic/useCaseCategories';
 import {
   USE_CASE_BUNDLE_SCHEMA_VERSION,
   USE_CASE_BUNDLE_SCHEMA_VERSION_V2,
@@ -12,7 +12,7 @@ import {
   type UseCaseBundleV2Wrapper,
 } from './schema';
 import { ensureUseCasePhrases } from './migrateUseCase';
-import { ensureUseCaseResponse } from '../aiAgentUseCase/useCaseResponseTasks';
+import { ensureUseCaseResponse } from '../logic/useCaseResponseTasks';
 
 export function isUseCaseBundleV2Wrapper(value: unknown): value is UseCaseBundleV2Wrapper {
   if (!value || typeof value !== 'object') return false;

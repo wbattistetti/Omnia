@@ -40,15 +40,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -359,15 +359,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -527,10 +527,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -538,16 +538,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -910,10 +910,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -921,16 +921,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -1097,15 +1097,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -1273,10 +1273,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -1284,9 +1284,9 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
@@ -1631,10 +1631,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -1642,16 +1642,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2027,15 +2027,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2243,15 +2243,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2445,15 +2445,15 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
-            "eleven_flash_v2": "Done!",
             "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2620,11 +2620,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_flash_v2": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
@@ -2634,11 +2634,11 @@
           "language": "en",
           "progress": {},
           "message": {
-            "eleven_turbo_v2_5": "",
-            "eleven_flash_v2": "",
             "eleven_multilingual_v2": "",
-            "eleven_v2_5_flash": "",
+            "eleven_flash_v2": "",
+            "eleven_turbo_v2_5": "",
             "eleven_v2_flash": "",
+            "eleven_v2_5_flash": "",
             "eleven_turbo_v2": "",
             "eleven_flash_v2_5": ""
           },
@@ -2771,10 +2771,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -2782,16 +2782,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -2958,10 +2958,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -2969,16 +2969,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3166,10 +3166,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -3177,16 +3177,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3340,10 +3340,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -3351,16 +3351,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3610,10 +3610,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
@@ -3621,16 +3621,16 @@
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_flash": 1,
-            "eleven_flash_v2": 1,
             "eleven_v2_5_flash": 1,
+            "eleven_flash_v2": 1,
+            "eleven_v2_flash": 1,
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_v2_flash": "Done!",
+            "eleven_v2_5_flash": "Done!",
             "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_v2_flash": "Done!",
             "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -3771,6 +3771,140 @@
       }
     },
     {
+      "voice_id": "iLelOQ6m5mpSeNH8fRob",
+      "name": "Maria - Anxious, Serious and Urgent",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
+      "language": "pt",
+      "gender": "female",
+      "category": "professional",
+      "accent": "european",
+      "age_group": "middle_aged",
+      "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
+      "voice_description": null,
+      "style": null,
+      "provider": "elevenlabs",
+      "tags": [
+        "european",
+        "narrative_story"
+      ],
+      "tts_family": "ElevenLabs",
+      "expressive_tags": [],
+      "raw": {
+        "voice_id": "iLelOQ6m5mpSeNH8fRob",
+        "name": "Maria - Anxious, Serious and Urgent",
+        "samples": null,
+        "category": "professional",
+        "fine_tuning": {
+          "is_allowed_to_fine_tune": true,
+          "state": {
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
+          },
+          "verification_failures": [],
+          "verification_attempts_count": 0,
+          "manual_verification_requested": false,
+          "language": "pt",
+          "progress": {},
+          "message": {
+            "eleven_turbo_v2_5": "",
+            "eleven_v2_5_flash": "",
+            "eleven_multilingual_v2": "",
+            "eleven_flash_v2_5": ""
+          },
+          "dataset_duration_seconds": null,
+          "verification_attempts": null,
+          "slice_ids": null,
+          "manual_verification": null,
+          "max_verification_attempts": 0,
+          "next_max_verification_attempts_reset_unix_ms": 0
+        },
+        "labels": {
+          "use_case": "narrative_story",
+          "gender": "female",
+          "accent": "european",
+          "age": "middle_aged",
+          "language": "pt",
+          "descriptive": "calm"
+        },
+        "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
+        "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
+        "available_for_tiers": [],
+        "settings": null,
+        "sharing": {
+          "status": "copied",
+          "history_item_sample_id": null,
+          "date_unix": 1776440230,
+          "whitelisted_emails": [],
+          "public_owner_id": "cd7e9982c847258eda1ec2d8bfd396b5e7f3af4ac0d02b1b2f70149a2a2ec2be",
+          "original_voice_id": "iLelOQ6m5mpSeNH8fRob",
+          "financial_rewards_enabled": false,
+          "free_users_allowed": false,
+          "live_moderation_enabled": false,
+          "rate": 1,
+          "fiat_rate": null,
+          "notice_period": 730,
+          "disable_at_unix": null,
+          "voice_mixing_allowed": false,
+          "featured": false,
+          "category": "professional",
+          "reader_app_enabled": true,
+          "image_url": "",
+          "ban_reason": null,
+          "liked_by_count": 0,
+          "cloned_by_count": 0,
+          "name": "Maria - Anxious, Serious and Urgent",
+          "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
+          "labels": {
+            "use_case": "narrative_story",
+            "gender": "female",
+            "descriptive": "calm",
+            "age": "middle_aged",
+            "language": "pt",
+            "accent": "european",
+            "locale": "pt-PT"
+          },
+          "review_status": "not_requested",
+          "review_message": null,
+          "enabled_in_library": false,
+          "instagram_username": null,
+          "twitter_username": null,
+          "youtube_username": null,
+          "tiktok_username": null,
+          "moderation_check": null,
+          "reader_restricted_on": null
+        },
+        "high_quality_base_model_ids": [
+          "eleven_turbo_v2_5",
+          "eleven_v2_5_flash",
+          "eleven_flash_v2_5",
+          "eleven_multilingual_v2"
+        ],
+        "verified_languages": [],
+        "collection_ids": [],
+        "safety_control": null,
+        "voice_verification": {
+          "requires_verification": false,
+          "is_verified": false,
+          "verification_failures": [],
+          "verification_attempts_count": 0,
+          "language": null,
+          "verification_attempts": null
+        },
+        "permission_on_resource": "viewer",
+        "is_owner": false,
+        "is_legacy": false,
+        "is_mixed": false,
+        "favorited_at_unix": null,
+        "created_at_unix": 1776440230,
+        "is_bookmarked": false,
+        "recording_quality": null,
+        "labelling_status": null,
+        "recording_quality_reason": null
+      }
+    },
+    {
       "voice_id": "JfznbVXrGXYh0gZo9Lcp",
       "name": "Antonio - Natural, Balanced and Calm",
       "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/ce9b70089f524a4d8a519bbfcd0bd217/voices/JfznbVXrGXYh0gZo9Lcp/d0693720-4116-47d5-a76c-769441c5a55f.mp3",
@@ -3901,140 +4035,6 @@
         "is_mixed": false,
         "favorited_at_unix": null,
         "created_at_unix": 1776692175,
-        "is_bookmarked": false,
-        "recording_quality": null,
-        "labelling_status": null,
-        "recording_quality_reason": null
-      }
-    },
-    {
-      "voice_id": "iLelOQ6m5mpSeNH8fRob",
-      "name": "Maria - Anxious, Serious and Urgent",
-      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
-      "language": "pt",
-      "gender": "female",
-      "category": "professional",
-      "accent": "european",
-      "age_group": "middle_aged",
-      "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
-      "voice_description": null,
-      "style": null,
-      "provider": "elevenlabs",
-      "tags": [
-        "european",
-        "narrative_story"
-      ],
-      "tts_family": "ElevenLabs",
-      "expressive_tags": [],
-      "raw": {
-        "voice_id": "iLelOQ6m5mpSeNH8fRob",
-        "name": "Maria - Anxious, Serious and Urgent",
-        "samples": null,
-        "category": "professional",
-        "fine_tuning": {
-          "is_allowed_to_fine_tune": true,
-          "state": {
-            "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
-          },
-          "verification_failures": [],
-          "verification_attempts_count": 0,
-          "manual_verification_requested": false,
-          "language": "pt",
-          "progress": {},
-          "message": {
-            "eleven_turbo_v2_5": "",
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": "",
-            "eleven_flash_v2_5": ""
-          },
-          "dataset_duration_seconds": null,
-          "verification_attempts": null,
-          "slice_ids": null,
-          "manual_verification": null,
-          "max_verification_attempts": 0,
-          "next_max_verification_attempts_reset_unix_ms": 0
-        },
-        "labels": {
-          "use_case": "narrative_story",
-          "gender": "female",
-          "accent": "european",
-          "age": "middle_aged",
-          "language": "pt",
-          "descriptive": "calm"
-        },
-        "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
-        "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
-        "available_for_tiers": [],
-        "settings": null,
-        "sharing": {
-          "status": "copied",
-          "history_item_sample_id": null,
-          "date_unix": 1776440230,
-          "whitelisted_emails": [],
-          "public_owner_id": "cd7e9982c847258eda1ec2d8bfd396b5e7f3af4ac0d02b1b2f70149a2a2ec2be",
-          "original_voice_id": "iLelOQ6m5mpSeNH8fRob",
-          "financial_rewards_enabled": false,
-          "free_users_allowed": false,
-          "live_moderation_enabled": false,
-          "rate": 1,
-          "fiat_rate": null,
-          "notice_period": 730,
-          "disable_at_unix": null,
-          "voice_mixing_allowed": false,
-          "featured": false,
-          "category": "professional",
-          "reader_app_enabled": true,
-          "image_url": "",
-          "ban_reason": null,
-          "liked_by_count": 0,
-          "cloned_by_count": 0,
-          "name": "Maria - Anxious, Serious and Urgent",
-          "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
-          "labels": {
-            "use_case": "narrative_story",
-            "gender": "female",
-            "descriptive": "calm",
-            "age": "middle_aged",
-            "language": "pt",
-            "accent": "european",
-            "locale": "pt-PT"
-          },
-          "review_status": "not_requested",
-          "review_message": null,
-          "enabled_in_library": false,
-          "instagram_username": null,
-          "twitter_username": null,
-          "youtube_username": null,
-          "tiktok_username": null,
-          "moderation_check": null,
-          "reader_restricted_on": null
-        },
-        "high_quality_base_model_ids": [
-          "eleven_turbo_v2_5",
-          "eleven_v2_5_flash",
-          "eleven_flash_v2_5",
-          "eleven_multilingual_v2"
-        ],
-        "verified_languages": [],
-        "collection_ids": [],
-        "safety_control": null,
-        "voice_verification": {
-          "requires_verification": false,
-          "is_verified": false,
-          "verification_failures": [],
-          "verification_attempts_count": 0,
-          "language": null,
-          "verification_attempts": null
-        },
-        "permission_on_resource": "viewer",
-        "is_owner": false,
-        "is_legacy": false,
-        "is_mixed": false,
-        "favorited_at_unix": null,
-        "created_at_unix": 1776440230,
         "is_bookmarked": false,
         "recording_quality": null,
         "labelling_status": null,
@@ -9410,12 +9410,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-22T18:11:14.003Z",
-    "lastLanguagesSync": "2026-05-22T18:11:08.233Z",
-    "lastModelsSync": "2026-05-22T18:11:14.003Z",
+    "updatedAt": "2026-05-22T21:12:25.401Z",
+    "lastLanguagesSync": "2026-05-22T21:12:20.298Z",
+    "lastModelsSync": "2026-05-22T21:12:25.401Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-22T18:11:08.168Z",
+      "at": "2026-05-22T21:12:20.237Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

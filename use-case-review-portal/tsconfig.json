@@ -15,10 +15,18 @@
       "@types/*": ["../src/types/*"],
       "@context/*": ["../src/context/*"],
       "@hooks/*": ["../src/hooks/*"],
-      "@domain/*": ["../src/domain/*"],
-      "@components/*": ["../src/components/*"],
-      "@responseEditor/*": ["../src/components/TaskEditor/ResponseEditor/*"],
-      "@taskEditor/*": ["../src/components/TaskEditor/*"]
+      "@domain/agentReviewChannel/reviewDocument": [
+        "../packages/omnia-domain-core/src/review/reviewDocument.ts"
+      ],
+      "@domain/agentReviewChannel/reviewAudience": [
+        "../packages/omnia-domain-core/src/review/reviewAudience.ts"
+      ],
+      "@domain/useCaseBundle/*": ["../packages/omnia-domain-core/src/usecase/bundle/*"],
+      "@domain/aiAgentUseCase/*": ["../packages/omnia-domain-core/src/usecase/logic/*"],
+      "@omnia/domain-core": ["../packages/omnia-domain-core/src/index.ts"],
+      "@omnia/domain-core/*": ["../packages/omnia-domain-core/src/*"],
+      "@omnia/domain-components": ["../packages/omnia-domain-components/src/index.ts"],
+      "@omnia/domain-components/*": ["../packages/omnia-domain-components/src/*"]
     }
   },
   "include": ["src"]

@@ -2,8 +2,8 @@
  * Compilazione semantica design-time: bracket letterali → slot_id via lessico + inferenza.
  */
 
-import { autoTokenizeAnnotated } from '../useCaseGeneratorWizard/tokenTypeInference';
-import { extractTokenNames } from '../useCaseGeneratorWizard/tokenizedText';
+import { autoTokenizeAnnotated } from '@domain/useCaseGeneratorWizard/tokenTypeInference';
+import { extractTokenNames } from '@domain/useCaseGeneratorWizard/tokenizedText';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type {
   AIAgentCanonicalPhrase,

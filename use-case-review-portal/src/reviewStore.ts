@@ -5,13 +5,20 @@
 import type React from 'react';
 import { create } from 'zustand';
 import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
-import type { AgentReviewChannelDocument } from '@domain/agentReviewChannel/reviewDocument';
+import type { AgentReviewStructuredSections } from '@domain/agentReviewChannel/reviewDocument';
 import {
   buildAgentReviewDocument,
   computeReviewContentHashAsync,
   canonicalReviewPayload,
 } from '@domain/agentReviewChannel/reviewDocument';
-import { loadReviewChannel, saveReviewChannel, type ReviewChannelListItem } from './reviewApi';
+import {
+  fetchAgentReviewChannel,
+  listReviewChannels,
+  saveAgentReviewChannel,
+  type ReviewChannelListItem,
+} from '@services/agentReviewChannelApi';
+import { reviewApiBase } from './reviewConfig';
+import { reviewAuthToken } from './reviewAuth';
 
 const LS_PREFIX = 'omnia-review-draft:';
 
@@ -29,6 +36,7 @@ interface ReviewState {
   session: ReviewSession | null;
   selectedUseCaseId: string | null;
   description: string;
+  structuredSections: AgentReviewStructuredSections;
   useCases: AIAgentUseCase[];
   categories: AIAgentUseCaseCategory[];
   baselinesByUseCaseId: Record<string, { payoff: string }>;
@@ -68,6 +76,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   session: null,
   selectedUseCaseId: null,
   description: '',
+  structuredSections: {},
   useCases: [],
   categories: [],
   baselinesByUseCaseId: {},
@@ -79,8 +88,10 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   loadCatalog: async () => {
     set({ catalogLoading: true, catalogError: null });
     try {
-      const { listReviewChannels } = await import('./reviewApi');
-      const items = await listReviewChannels();
+      const items = await listReviewChannels({
+        token: reviewAuthToken(),
+        apiBase: reviewApiBase(),
+      });
       set({ catalog: items, catalogLoading: false });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -107,6 +118,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       },
       selectedUseCaseId: null,
       description: '',
+      structuredSections: {},
       useCases: [],
       categories: [],
       baselinesByUseCaseId: {},
@@ -123,6 +135,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       useCases: [],
       categories: [],
       description: '',
+      structuredSections: {},
       status: '',
       channelLoaded: false,
     }),
@@ -151,11 +164,17 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     if (!session) return;
     set({ status: 'Caricamento…' });
     try {
-      const doc = await loadReviewChannel(session.projectId, session.taskId);
+      const { document: doc } = await fetchAgentReviewChannel({
+        projectId: session.projectId,
+        taskInstanceId: session.taskId,
+        token: reviewAuthToken(),
+        apiBase: reviewApiBase(),
+      });
       if (doc) {
         const useCases = [...doc.useCaseBundle.use_cases];
         set({
           description: doc.agentDesignDescription,
+          structuredSections: { ...(doc.agentStructuredSections ?? {}) },
           useCases,
           categories: [...doc.useCaseBundle.categories],
           baselinesByUseCaseId: captureBaselines(useCases),
@@ -178,6 +197,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
           const useCases = [...parsed.useCaseBundle.use_cases];
           set({
             description: parsed.agentDesignDescription,
+            structuredSections: { ...(parsed.agentStructuredSections ?? {}) },
             useCases,
             categories: [...parsed.useCaseBundle.categories],
             baselinesByUseCaseId: captureBaselines(useCases),
@@ -198,7 +218,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     const session = get().session;
     if (!session) return;
     if (!get().channelLoaded) return;
-    const { description, useCases, categories } = get();
+    const { description, useCases, categories, structuredSections } = get();
     set({ saving: true });
     try {
       let doc = buildAgentReviewDocument({
@@ -208,10 +228,18 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         agentDesignDescription: description,
         useCases,
         categories,
+        structuredSections,
       });
       const payload = canonicalReviewPayload(doc);
       doc = { ...doc, contentHash: await computeReviewContentHashAsync(payload) };
-      await saveReviewChannel(session.projectId, session.taskId, doc);
+      await saveAgentReviewChannel({
+        projectId: session.projectId,
+        taskInstanceId: session.taskId,
+        document: doc,
+        token: reviewAuthToken(),
+        apiBase: reviewApiBase(),
+        source: 'portal',
+      });
       try {
         localStorage.setItem(lsKey(session.projectId, session.taskId), JSON.stringify(doc));
       } catch {

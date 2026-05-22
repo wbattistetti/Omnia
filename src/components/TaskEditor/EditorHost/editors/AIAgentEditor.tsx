@@ -97,10 +97,13 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCases: c.useCases,
     useCaseCategories: c.useCaseCategories,
     logicalSteps: c.logicalSteps,
+    agentStructuredSectionsJson: c.agentStructuredSectionsJson,
+    agentPrompt: c.agentPrompt,
     setDesignDescription: c.setDesignDescription,
     setUseCases: c.setUseCases,
     setUseCaseCategories: c.setUseCaseCategories,
     setDirty: c.markAgentEditorDirty,
+    importReviewStructuredSections: c.importReviewStructuredSections,
   });
 
   const onConfirmAdvanceWithoutEdits = React.useCallback(

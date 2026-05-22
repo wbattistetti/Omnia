@@ -51,18 +51,22 @@ export default defineConfig(({ mode }) => {
         '@context': path.resolve(root, 'src/context'),
         '@hooks': path.resolve(root, 'src/hooks'),
         '@dock': path.resolve(root, 'src/dock'),
-        '@components': path.resolve(root, 'src/components'),
-        '@ui': path.resolve(root, 'src/ui'),
-        '@features': path.resolve(root, 'src/features'),
         '@config': path.resolve(root, 'config'),
-        '@domain': path.resolve(root, 'src/domain'),
-        '@diagnostics': path.resolve(root, 'src/diagnostics'),
-        '@flows': path.resolve(root, 'src/flows'),
-        '@taskEditor': path.resolve(root, 'src/components/TaskEditor'),
-        '@responseEditor': path.resolve(root, 'src/components/TaskEditor/ResponseEditor'),
-        '@TaskBuilderAIWizard': path.resolve(root, 'TaskBuilderAIWizard'),
-        '@wizard': path.resolve(root, 'src/wizard'),
-        '@workspaces': path.resolve(root, 'src/workspaces'),
+        '@omnia/domain-core': path.resolve(root, 'packages/omnia-domain-core/src'),
+        '@omnia/domain-components': path.resolve(
+          root,
+          'packages/omnia-domain-components/src/index.ts'
+        ),
+        '@domain/useCaseBundle/': `${path.resolve(root, 'packages/omnia-domain-core/src/usecase/bundle')}/`,
+        '@domain/aiAgentUseCase/': `${path.resolve(root, 'packages/omnia-domain-core/src/usecase/logic')}/`,
+        '@domain/agentReviewChannel/reviewDocument': path.resolve(
+          root,
+          'packages/omnia-domain-core/src/review/reviewDocument.ts'
+        ),
+        '@domain/agentReviewChannel/reviewAudience': path.resolve(
+          root,
+          'packages/omnia-domain-core/src/review/reviewAudience.ts'
+        ),
       },
     },
     server: {

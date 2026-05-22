@@ -1,0 +1,16 @@
+{
+  "name": "@omnia/domain-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure TypeScript domain logic shared by Omnia and the review portal.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./usecase/bundle/*": "./src/usecase/bundle/*",
+    "./usecase/logic/*": "./src/usecase/logic/*",
+    "./usecase/tree/*": "./src/usecase/tree/*",
+    "./task/sections/*": "./src/task/sections/*",
+    "./task/revision/*": "./src/task/revision/*",
+    "./review/*": "./src/review/*"
+  }
+}

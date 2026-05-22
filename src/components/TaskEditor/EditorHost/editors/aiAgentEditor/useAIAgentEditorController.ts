@@ -156,6 +156,8 @@ import { revisionStateToPersisted } from './revisionStateToPersisted';
 import { isStructuredSectionsOtEnabled } from './structuredOtFlag';
 import { useStructuredAgentSectionsRevision } from './useStructuredAgentSectionsRevision';
 import { effectiveBySectionFromPersistedStructured } from './structuredSectionsRevisionReducer';
+import { persistedSectionsFromReviewImport } from './structuredSectionsFromReviewImport';
+import type { AgentReviewStructuredSections } from '@domain/agentReviewChannel/reviewDocument';
 import type { OtOp } from './otTypes';
 import type { IaSectionDiffPair } from './AIAgentStructuredSectionsPanel';
 import {
@@ -2825,6 +2827,14 @@ export function useAIAgentEditorController({
       ? structuredDesignDirty || descriptionDirty
       : descriptionDirty || canOfferFirstGenerate;
 
+  const importReviewStructuredSections = React.useCallback(
+    (sections: AgentReviewStructuredSections) => {
+      loadFromPersisted(persistedSectionsFromReviewImport(sections));
+      setDirty(true);
+    },
+    [loadFromPersisted]
+  );
+
   return {
     instanceId,
     /** Helper esposto per altri hook locali (es. `useAIAgentConversationActions`) che hanno
@@ -2838,9 +2848,11 @@ export function useAIAgentEditorController({
     onPolishDesignDescription: handlePolishDesignDescription,
     onDismissDesignDescriptionPolishOffer,
     agentPrompt,
+    agentStructuredSectionsJson,
     structuredSectionsState: structuredRev.sectionsState,
     composedRuntimeMarkdown: structuredRev.composedRuntimeMarkdown,
     structuredDesignDirty,
+    importReviewStructuredSections,
     applyRevisionOps,
     applyOtCommit,
     undoSection,

@@ -8,6 +8,13 @@ const REVIEW_EXPORT_VERSION = 1;
 
 const REVIEW_AUDIENCES = ['customer', 'internal', 'auditing'];
 
+const REVIEW_STRUCTURED_SECTION_IDS = [
+  'goal',
+  'operational_sequence',
+  'context',
+  'constraints',
+];
+
 function normalizeAudience(value) {
   const s = String(value || 'customer').trim().toLowerCase();
   return REVIEW_AUDIENCES.includes(s) ? s : 'customer';
@@ -55,10 +62,14 @@ function normalizeDocument(body, projectId, taskInstanceId) {
     categories: Array.isArray(bundle.categories) ? bundle.categories : [],
     use_cases: bundle.use_cases,
   };
+  const agentStructuredSections = parseStructuredSectionsField(body.agentStructuredSections);
   const payload = {
     agentDesignDescription: agentDesignDescription.trim(),
     useCaseBundle,
   };
+  if (agentStructuredSections && Object.keys(agentStructuredSections).length > 0) {
+    payload.agentStructuredSections = agentStructuredSections;
+  }
   const now = new Date().toISOString();
   const audience = normalizeAudience(body.reviewAudience);
   const logicalSteps = Array.isArray(body.agentLogicalSteps) ? body.agentLogicalSteps : undefined;
@@ -76,7 +87,24 @@ function normalizeDocument(body, projectId, taskInstanceId) {
   if (logicalSteps && logicalSteps.length > 0) {
     out.agentLogicalSteps = logicalSteps;
   }
+  if (agentStructuredSections && Object.keys(agentStructuredSections).length > 0) {
+    out.agentStructuredSections = agentStructuredSections;
+  }
   return out;
+}
+
+function parseStructuredSectionsField(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out = {};
+  let hasAny = false;
+  for (const id of REVIEW_STRUCTURED_SECTION_IDS) {
+    const v = raw[id];
+    if (typeof v === 'string' && v.trim()) {
+      out[id] = v;
+      hasAny = true;
+    }
+  }
+  return hasAny ? out : undefined;
 }
 
 /** Legge sotto-canale per audience; compat: entry piatta con `.document` = customer. */

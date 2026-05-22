@@ -26,15 +26,15 @@
 
 import { extractTokenNames } from './tokenizedText';
 import { autoTokenizeAnnotated, type AutoTokenizeBracket } from './tokenTypeInference';
-import { ensureUseCasePhrases } from '../useCaseBundle/migrateUseCase';
-import { compilePhraseVariant } from '../useCaseBundle/semanticCompile';
-import { buildParametricWhenClause } from '../useCaseBundle/parametricPhraseHelpers';
-import { emptyProjectSlotLexicon, type ProjectSlotLexicon } from '../useCaseBundle/projectSlotLexicon';
-import type { AIAgentPhraseVariant } from '../useCaseBundle/schema';
+import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
+import { compilePhraseVariant } from '@domain/useCaseBundle/semanticCompile';
+import { buildParametricWhenClause } from '@domain/useCaseBundle/parametricPhraseHelpers';
+import { emptyProjectSlotLexicon, type ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import type { AIAgentPhraseVariant } from '@domain/useCaseBundle/schema';
 import {
   buildUseCaseStyleTokenJsonFields,
   projectScenarioLlmText,
-} from '../useCaseBundle/styleTokenProjection';
+} from '@domain/useCaseBundle/styleTokenProjection';
 import {
   getAssistantExample,
   isUseCaseIncludedInConversations,

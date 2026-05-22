@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { mergeCreateUseCaseWithDraft } = require(
-  '../../../../backend/services/mergeCreateUseCaseDraft.js'
+  '../../../../../../backend/services/mergeCreateUseCaseDraft.js'
 ) as {
   mergeCreateUseCaseWithDraft: (
     normalized: Record<string, unknown>,

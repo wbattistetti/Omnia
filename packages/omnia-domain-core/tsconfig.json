@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@types/*": ["../../src/types/*"],
+      "@domain/useCaseBundle/*": ["./src/usecase/bundle/*"],
+      "@domain/aiAgentUseCase/*": ["./src/usecase/logic/*"],
+      "@domain/useCaseGeneratorWizard/*": ["../../src/domain/useCaseGeneratorWizard/*"],
+      "@domain/agentReviewChannel/*": ["./src/review/*"],
+      "@responseEditor/*": ["../../src/components/TaskEditor/ResponseEditor/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

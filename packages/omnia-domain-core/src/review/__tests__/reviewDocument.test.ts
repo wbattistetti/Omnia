@@ -54,4 +54,22 @@ describe('agentReviewChannel document', () => {
     const diff = summarizeReviewDiff(local, remote);
     expect(diff.modifiedScenarioCount).toBeGreaterThan(0);
   });
+
+  it('round-trips structured sections', () => {
+    const doc = buildAgentReviewDocument({
+      projectId: 'p1',
+      taskInstanceId: 't1',
+      taskLabel: 'Agent',
+      agentDesignDescription: 'desc',
+      useCases: [minimalUc('a', 'scenario uno')],
+      categories: [],
+      structuredSections: {
+        goal: 'Aiutare il cliente',
+        context: 'Call center',
+      },
+    });
+    expect(doc.agentStructuredSections?.goal).toBe('Aiutare il cliente');
+    const parsed = parseAgentReviewDocument(doc);
+    expect(parsed?.agentStructuredSections?.context).toBe('Call center');
+  });
 });

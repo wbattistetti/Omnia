@@ -11,6 +11,15 @@ export interface ReviewChannelFetchResult {
   updatedAt: string | null;
 }
 
+export interface ReviewChannelListItem {
+  projectId: string;
+  projectLabel: string;
+  taskInstanceId: string;
+  taskLabel: string;
+  updatedAt: string | null;
+  useCaseCount: number;
+}
+
 function reviewHeaders(token?: string): HeadersInit {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
   const t = typeof token === 'string' ? token.trim() : '';
@@ -35,6 +44,22 @@ function reviewChannelPath(
   const base = `/api/projects/${encodeURIComponent(projectId)}/agent-tasks/${encodeURIComponent(taskInstanceId)}/review-channel`;
   const aud = audience ? normalizeReviewAudience(audience) : '';
   return aud ? `${base}?audience=${encodeURIComponent(aud)}` : base;
+}
+
+export async function listReviewChannels(params?: {
+  token?: string;
+  apiBase?: string;
+}): Promise<ReviewChannelListItem[]> {
+  const base = (params?.apiBase ?? resolveReviewChannelApiBase()).replace(/\/$/, '');
+  const path = '/api/agent-review-channels';
+  const url = base ? `${base}${path}` : path;
+  const res = await fetch(url, { headers: reviewHeaders(params?.token) });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`listReviewChannels: ${res.status} ${text}`);
+  }
+  const data = (await res.json()) as { items?: ReviewChannelListItem[] };
+  return Array.isArray(data.items) ? data.items : [];
 }
 
 export async function fetchAgentReviewChannel(params: {
@@ -72,8 +97,10 @@ export async function saveAgentReviewChannel(params: {
   audience?: AgentReviewAudience;
   token?: string;
   apiBase?: string;
+  /** HTTP header `X-Review-Source` (default `omnia`). */
+  source?: 'omnia' | 'portal';
 }): Promise<ReviewChannelFetchResult> {
-  const { projectId, taskInstanceId, document, audience, token, apiBase } = params;
+  const { projectId, taskInstanceId, document, audience, token, apiBase, source = 'omnia' } = params;
   const base = (apiBase ?? resolveReviewChannelApiBase()).replace(/\/$/, '');
   const path = reviewChannelPath(
     projectId,
@@ -82,7 +109,7 @@ export async function saveAgentReviewChannel(params: {
   );
   const url = base ? `${base}${path}` : path;
   const headers = reviewHeaders(token) as Record<string, string>;
-  headers['X-Review-Source'] = 'omnia';
+  headers['X-Review-Source'] = source;
   const res = await fetch(url, {
     method: 'PUT',
     headers,
