@@ -67,10 +67,20 @@ Respond with a single valid JSON object only (no markdown fences, no commentary)
 Every id and turn_id in the JSON must be a string value (quoted), never a number.
 When OUTPUT_LANGUAGE is set, write every human-readable string in that language.
 Never output "editable" (the platform injects it).
-Each use case must include one concise synthetic scenario ("scenario.llm", mirrored to "payoff") and a single assistant "dialogue" turn — the virtual agent output example only; **assistant content must never be empty** (at least one sentence).
-For assistant "content", mark only the **variable semantic fragment** with brackets. In Italian, keep **articles, prepositions, and fixed function words outside** the brackets (e.g. write \`alle [14]\` not \`[alle 14]\`, \`al [mattino]\` not \`[al mattino]\`). Plain text outside brackets is fixed script; bracket inners are runtime-filled slots.
-One use_case per conversational pattern; parameterize catalog **entities** and **attribute choices** with slots — do not enumerate separate use_cases per product, service, department, or enum value when the agent script is the same.
-The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. **Do not collapse to exactly four scenarios by habit** (a frequent shortcut); vary the count with real **pattern** coverage, not catalog enumeration.`;
+
+Each use case must include:
+- one concise synthetic scenario ("scenario.llm", mirrored to "payoff")
+- a single assistant "dialogue" turn (the virtual agent output example only; content must never be empty)
+
+For assistant "content":
+- mark only the variable semantic fragment with brackets
+- in Italian, keep articles, prepositions, and fixed function words outside the brackets (e.g., \`alle [14]\`, not \`[alle 14]\`)
+- plain text outside brackets is fixed script; bracket inners are runtime-filled slots
+- **assistant messages must be extremely concise, in the style of a real call-center agent: 1–2 short sentences, direct, no explanations, no introductory phrases, no redundancy**
+
+One use_case per conversational pattern; parameterize catalog entities and attribute choices with slots — do not enumerate separate use_cases per product, service, department, or enum value when the agent script is the same.
+
+The user message may give a numeric band for how many "use_cases" to emit — follow it when it fits the task. Do not collapse to exactly four scenarios by habit; vary the count with real pattern coverage, not catalog enumeration.`;
 
 /** System prompt for annotate_assistant_message_for_json only — avoids UC_SYSTEM “design full use case” framing. */
 const ANNOTATE_ASSISTANT_FOR_JSON_SYSTEM = `You annotate existing assistant messages for OMNIA runtime JSON templating.

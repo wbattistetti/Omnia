@@ -266,11 +266,6 @@ export interface AIAgentUseCaseComposerProps {
   useCaseCategories?: readonly AIAgentUseCaseCategory[];
   onUseCaseCategoryLabelChange?: (categoryId: string, label: string) => void;
   onUseCaseCategoryDescriptionChange?: (categoryId: string, description: string) => void;
-  /**
-   * @deprecated La generazione bundle è sempre nel pannello sinistro (textbox + CTA).
-   * Mantenuto per compatibilità; non nasconde più il pulsante inline.
-   */
-  primaryGenerateOnRightOnly?: boolean;
   /** Id da evidenziare dopo generazione / «creane altri». */
   highlightIds?: readonly string[];
   /** Rimuove l’evidenziazione quando l’use case è confermato (edit o cerchio). */
@@ -373,7 +368,6 @@ export function AIAgentUseCaseComposer({
   useCaseCategories = [],
   onUseCaseCategoryLabelChange,
   onUseCaseCategoryDescriptionChange,
-  primaryGenerateOnRightOnly = false,
   highlightIds = [],
   onClearUseCaseHighlight,
   assistantPhraseStyleNewIds = [],
@@ -426,6 +420,8 @@ export function AIAgentUseCaseComposer({
   );
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
   const dock = useOptionalAIAgentEditorDock();
+  /** Portale review: stile globale / runtime catalog nel composer (in Omnia wizard sono nel pannello DX). */
+  const showComposerClassicChrome = dock?.reviewPortalMode === true;
   /** `dock` dal parent è un oggetto nuovo a ogni render: non va nelle deps dell'effect anteprima. */
   const dockRef = React.useRef(dock);
   dockRef.current = dock;
@@ -439,12 +435,12 @@ export function AIAgentUseCaseComposer({
   const correctionsDismissedToolbar = listToolbarCtx?.correctionsDismissed ?? false;
   /**
    * Etichette campo «Scenario» / «Messaggio agente»: in modalità wizard
-   * (`primaryGenerateOnRightOnly`) usiamo **icone-only** colorate con il **colore del font**
+   * (layout accordion inline) usiamo **icone-only** colorate con il **colore del font**
    * usato in `UC_PILL_SCENARIO` (violetto) e `UC_PILL_AGENT_MSG` (emerald), così le righe
    * dello use case respirano e l'identità del campo resta riconoscibile a colpo d'occhio.
    * In modalità classica restano le pill testuali (più spazio orizzontale disponibile).
    */
-  const scenarioFieldLabel: React.ReactNode = primaryGenerateOnRightOnly ? (
+  const scenarioFieldLabel: React.ReactNode = (
     <span
       title="Scenario"
       aria-label="Scenario"
@@ -452,10 +448,8 @@ export function AIAgentUseCaseComposer({
     >
       <BookOpen size={15} aria-hidden />
     </span>
-  ) : (
-    <span className={UC_PILL_SCENARIO}>Scenario</span>
   );
-  const agentMsgFieldLabel: React.ReactNode = primaryGenerateOnRightOnly ? (
+  const agentMsgFieldLabel: React.ReactNode = (
     <span
       title="Messaggio agente"
       aria-label="Messaggio agente"
@@ -463,24 +457,19 @@ export function AIAgentUseCaseComposer({
     >
       <MessageSquareText size={15} aria-hidden />
     </span>
-  ) : (
-    <span className={UC_PILL_AGENT_MSG}>Messaggio agente</span>
   );
-  const wizardShowScenario =
-    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showScenario : true;
-  const wizardShowMessage =
-    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.showMessage : true;
-  const wizardAccordionHeaderMode =
-    primaryGenerateOnRightOnly && listToolbarCtx
-      ? listToolbarCtx.listAccordionHeaderMode
-      : 'label';
+  const wizardShowScenario = listToolbarCtx ? listToolbarCtx.showScenario : true;
+  const wizardShowMessage = listToolbarCtx ? listToolbarCtx.showMessage : true;
+  const wizardAccordionHeaderMode = listToolbarCtx
+    ? listToolbarCtx.listAccordionHeaderMode
+    : 'label';
   /**
    * Seed di ricerca dalla toolbar wizard. Gli highlight col chip giallo sui messaggi
-   * agente sono attivi solo nella vista wizard (`primaryGenerateOnRightOnly`) — è
+   * agente sono attivi solo nella vista wizard (layout accordion inline) — è
    * lì che vive la search box, e fuori dalla wizard non ha senso evidenziare nulla.
    */
   const wizardSearchSeed =
-    primaryGenerateOnRightOnly && listToolbarCtx ? listToolbarCtx.searchSeed : '';
+    listToolbarCtx?.searchSeed ?? '';
 
   /**
    * Lista filtrata dal seed di ricerca: mostra solo gli use case il cui messaggio
@@ -891,13 +880,6 @@ export function AIAgentUseCaseComposer({
     onSelectionChange?.(effectiveSelectedId);
   }, [effectiveSelectedId, onSelectionChange, isLiftedSelection]);
 
-  React.useEffect(() => {
-    if (!primaryGenerateOnRightOnly) {
-      setPayoffEditUseCaseId(null);
-      setAgentMsgEditUseCaseId(null);
-    }
-  }, [effectiveSelectedId, primaryGenerateOnRightOnly]);
-
   useUseCaseFieldBaselineSync(ordered, useCases, setFieldBaselineByUseCaseId);
 
   /**
@@ -906,10 +888,10 @@ export function AIAgentUseCaseComposer({
    * rispetto all'ultima baseline IA. Include **bozze** aperte nelle textarea (scenario /
    * messaggio agente): finché l'utente non preme ✓ il `useCases` resta al valore
    * committato e il conteggio sarebbe zero — il callout DX non comparirebbe mai durante
-   * l'edit. Solo nella vista wizard (`primaryGenerateOnRightOnly`): fuori wizard no-op.
+   * l'edit. Solo nella vista wizard (layout accordion inline): fuori wizard no-op.
    */
   React.useEffect(() => {
-    if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
+    if (!listToolbarCtx) return;
     const items = ordered.map((u) => {
       const ast = u.dialogue.find((t) => t.role === 'assistant');
       const committedAgent = ast?.content ?? '';
@@ -927,7 +909,6 @@ export function AIAgentUseCaseComposer({
     });
     listToolbarCtx.setPendingCorrectionsCount(countSubstantialEditsAcrossUseCases(items));
   }, [
-    primaryGenerateOnRightOnly,
     listToolbarCtx,
     ordered,
     useCases,
@@ -956,7 +937,7 @@ export function AIAgentUseCaseComposer({
    * che li espone via `useCaseComposerError`.
    */
   React.useEffect(() => {
-    if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
+    if (!listToolbarCtx) return;
     /**
      * Handler **async**: il context wrappa la chiamata e gestisce il busy flag
      * (`triggerConsolidateCorrections` setta `correctionsBusy` true → false a
@@ -1058,7 +1039,6 @@ export function AIAgentUseCaseComposer({
       listToolbarCtx.registerConsolidateCorrectionsHandler(null);
     };
   }, [
-    primaryGenerateOnRightOnly,
     listToolbarCtx,
     ordered,
     fieldBaselineByUseCaseId,
@@ -1080,7 +1060,7 @@ export function AIAgentUseCaseComposer({
    * aggiorna invece solo su dati committati.
    */
   React.useEffect(() => {
-    if (!primaryGenerateOnRightOnly || !setCorrectionPreviewState) return;
+    if (!setCorrectionPreviewState) return;
 
     const dockNow = dockRef.current;
     if (!dockNow) {
@@ -1208,7 +1188,6 @@ export function AIAgentUseCaseComposer({
 
     return () => abort.abort();
   }, [
-    primaryGenerateOnRightOnly,
     setCorrectionPreviewState,
     pendingCorrectionsCountToolbar,
     correctionsDismissedToolbar,
@@ -1284,14 +1263,13 @@ export function AIAgentUseCaseComposer({
   }, []);
 
   React.useEffect(() => {
-    if (!primaryGenerateOnRightOnly || !listToolbarCtx) return;
+    if (!listToolbarCtx) return;
     listToolbarCtx.registerHandlers({
       expandAll: expandAllWizardCards,
       collapseAll: collapseAllWizardCards,
     });
     return () => listToolbarCtx.registerHandlers(null);
   }, [
-    primaryGenerateOnRightOnly,
     listToolbarCtx,
     expandAllWizardCards,
     collapseAllWizardCards,
@@ -1299,14 +1277,14 @@ export function AIAgentUseCaseComposer({
 
   /** Filtro ricerca / lente Slot Mapping: espandi solo i match visibili. */
   React.useEffect(() => {
-    if (!primaryGenerateOnRightOnly || !wizardSearchSeed.trim()) return;
+    if (!wizardSearchSeed.trim()) return;
     const openIds = filteredOrdered.map((u) => u.id);
     if (openIds.length === 0) return;
     const { expandedById, mode } = expandOnlyUseCaseCards(openIds, orderedIds);
     accordionFoldModeRef.current = mode;
     setCardExpandedById(expandedById);
     setAccordionFoldMode(mode);
-  }, [primaryGenerateOnRightOnly, wizardSearchSeed, filteredOrdered, orderedIds]);
+  }, [wizardSearchSeed, filteredOrdered, orderedIds]);
 
   const commitTitleEdit = React.useCallback(
     (useCaseId: string) => {
@@ -1576,12 +1554,10 @@ export function AIAgentUseCaseComposer({
         )
       );
       clearNewHighlightOnDesignerAction(useCaseId);
-      if (primaryGenerateOnRightOnly) {
-        commitCardExpansion(useCaseId, false, 'programmatic');
-        listToolbarCtx?.notifyCardToggle();
-      }
+      commitCardExpansion(useCaseId, false, 'programmatic');
+      listToolbarCtx?.notifyCardToggle();
     },
-    [setUseCases, clearNewHighlightOnDesignerAction, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
+    [setUseCases, clearNewHighlightOnDesignerAction, listToolbarCtx, commitCardExpansion]
   );
 
   const [parametricCartesianErrorById, setParametricCartesianErrorById] = React.useState<
@@ -1717,11 +1693,8 @@ export function AIAgentUseCaseComposer({
    */
   const getActiveAgentTextarea = React.useCallback((): HTMLTextAreaElement | null => {
     if (!agentMsgEditUseCaseId) return null;
-    if (!primaryGenerateOnRightOnly) {
-      return agentTextareaRef.current;
-    }
     return agentTextareaRefsById.current.get(agentMsgEditUseCaseId) ?? null;
-  }, [agentMsgEditUseCaseId, primaryGenerateOnRightOnly]);
+  }, [agentMsgEditUseCaseId]);
   /** Live assistant text per use case (Annotate JSON / focus safety). */
   const liveAgentContentByIdRef = React.useRef<Record<string, string>>({});
   /** Turn in modifica nel wizard (commit messaggio). */
@@ -1828,12 +1801,10 @@ export function AIAgentUseCaseComposer({
     (useCaseId: string, choice: DesignerFieldVote) => {
       setUseCases((prev) => applyUseCaseHeaderVoteToggle(prev, useCaseId, choice));
       clearNewHighlightOnDesignerAction(useCaseId);
-      if (primaryGenerateOnRightOnly) {
-        commitCardExpansion(useCaseId, false, 'programmatic');
-        listToolbarCtx?.notifyCardToggle();
-      }
+      commitCardExpansion(useCaseId, false, 'programmatic');
+      listToolbarCtx?.notifyCardToggle();
     },
-    [setUseCases, clearNewHighlightOnDesignerAction, primaryGenerateOnRightOnly, listToolbarCtx, commitCardExpansion]
+    [setUseCases, clearNewHighlightOnDesignerAction, listToolbarCtx, commitCardExpansion]
   );
 
   const beginPayoffEdit = React.useCallback((useCaseId: string, current: string) => {
@@ -2372,10 +2343,8 @@ export function AIAgentUseCaseComposer({
   ]);
 
   React.useLayoutEffect(() => {
-    if (!primaryGenerateOnRightOnly) return;
     syncWizardTextareaHeights();
   }, [
-    primaryGenerateOnRightOnly,
     syncWizardTextareaHeights,
     wizardShowScenario,
     wizardShowMessage,
@@ -2432,7 +2401,7 @@ export function AIAgentUseCaseComposer({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
-      {!primaryGenerateOnRightOnly && showStyleLearningNotesPanel ? (
+      {showComposerClassicChrome && showStyleLearningNotesPanel ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL} space-y-1.5`}>
           <div className="flex items-start justify-between gap-2">
             <label
@@ -2473,7 +2442,7 @@ export function AIAgentUseCaseComposer({
             aria-label="Note stile use case"
           />
         </div>
-      ) : !primaryGenerateOnRightOnly ? (
+      ) : showComposerClassicChrome ? (
         <div className="shrink-0 px-1">
           <button
             type="button"
@@ -2484,7 +2453,7 @@ export function AIAgentUseCaseComposer({
           </button>
         </div>
       ) : null}
-      {!primaryGenerateOnRightOnly ? (
+      {showComposerClassicChrome ? (
         <div className={`rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}>
           <div className="flex items-center gap-2">
             <label htmlFor="ai-agent-global-use-case-style" className="text-slate-300 whitespace-nowrap">
@@ -2508,7 +2477,7 @@ export function AIAgentUseCaseComposer({
         </div>
       ) : null}
 
-      {ordered.length > 0 && !primaryGenerateOnRightOnly ? (
+      {ordered.length > 0 && showComposerClassicChrome ? (
         <div
           className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-xs ${USE_CASE_PANEL_SHELL}`}
         >
@@ -2576,9 +2545,7 @@ export function AIAgentUseCaseComposer({
       >
         <div
           className={`${
-            ordered.length === 0 || primaryGenerateOnRightOnly
-              ? 'w-full'
-              : 'w-full sm:w-[44%]'
+            'w-full'
           } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -2749,11 +2716,9 @@ export function AIAgentUseCaseComposer({
                   const descriptionTooltip = String(u.notes?.behavior || '').trim();
                   const rowAssistant = u.dialogue.find((t) => t.role === 'assistant');
                   const cardExpanded =
-                    !primaryGenerateOnRightOnly || cardExpandedById[u.id] === true;
+                    cardExpandedById[u.id] === true;
                   const showWizardBody =
-                    primaryGenerateOnRightOnly &&
-                    cardExpanded &&
-                    (wizardShowScenario || wizardShowMessage);
+                    cardExpanded && (wizardShowScenario || wizardShowMessage);
                   /**
                    * Esclusione conversazioni: attenuazione titolo solo su voto verde + checkbox off
                    * (vedi useCaseHeaderExcludedDimClass). Rosso/arancione restano in vista normale.
@@ -2762,18 +2727,13 @@ export function AIAgentUseCaseComposer({
                   const searchHighlight = highlightIdSet.has(u.id);
                   const reviewHighlight = useCaseHasDesignerReviewVote(u);
                   const stripeStable = u.id.split('').reduce((h, ch) => h + ch.charCodeAt(0), 0);
-                  const zebraRow = primaryGenerateOnRightOnly
-                    ? stripeStable % 2 === 0
-                      ? UC_LIST_ZEBRA_WIZARD_EVEN
-                      : UC_LIST_ZEBRA_WIZARD_ODD
-                    : stripeStable % 2 === 0
-                      ? UC_LIST_ZEBRA_CLASSIC_EVEN
-                      : UC_LIST_ZEBRA_CLASSIC_ODD;
+                  const zebraRow =
+                    stripeStable % 2 === 0 ? UC_LIST_ZEBRA_WIZARD_EVEN : UC_LIST_ZEBRA_WIZARD_ODD;
                   const liSurface = searchHighlight
                     ? 'overflow-hidden rounded-md border border-amber-500/55 bg-amber-50/90 ring-2 ring-amber-300/50 dark:bg-amber-950/20 dark:ring-amber-400/40'
                     : reviewHighlight
                       ? `overflow-hidden rounded-md ${UC_ROW_REVIEW_EDGE}`
-                      : primaryGenerateOnRightOnly && cardExpanded
+                      : cardExpanded
                         ? `overflow-hidden rounded-md border ${UC_WIZARD_ROW_EXPANDED}`
                         : `rounded-md ${zebraRow}`;
                   const nextRow = useCaseListRows[rowIndex + 1];
@@ -2801,7 +2761,7 @@ export function AIAgentUseCaseComposer({
                       >
                       <UseCaseRowHeader
                         onDoubleClick={(e) => {
-                          if (!primaryGenerateOnRightOnly || busy) return;
+                          if (busy) return;
                           const el = e.target as HTMLElement;
                           if (el.closest('input')) return;
                           if (el.closest('[data-uc-chevron]')) return;
@@ -2849,30 +2809,28 @@ export function AIAgentUseCaseComposer({
                             className="h-3.5 w-3.5 cursor-pointer accent-violet-500"
                           />
                         </div>
-                        {primaryGenerateOnRightOnly ? (
-                          <button
-                            type="button"
-                            data-uc-chevron
-                            className="mt-[1px] shrink-0 rounded p-0.5 text-slate-700/80 hover:bg-black/10 hover:text-slate-900 dark:text-slate-200/90 dark:hover:bg-white/10"
-                            title={cardExpanded ? 'Collassa' : 'Espandi'}
-                            aria-expanded={cardExpanded}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const wasCollapsed = !cardExpandedById[u.id];
-                              toggleCardExpansion(u.id, 'chevron');
-                              listToolbarCtx?.notifyCardToggle();
-                              if (wasCollapsed) {
-                                scheduleScrollExpandedUseCaseCardIntoView(u.id);
-                              }
-                            }}
-                          >
-                            {cardExpanded ? (
-                              <ChevronDown size={14} aria-hidden />
-                            ) : (
-                              <ChevronRight size={14} aria-hidden />
-                            )}
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          data-uc-chevron
+                          className="mt-[1px] shrink-0 rounded p-0.5 text-slate-700/80 hover:bg-black/10 hover:text-slate-900 dark:text-slate-200/90 dark:hover:bg-white/10"
+                          title={cardExpanded ? 'Collassa' : 'Espandi'}
+                          aria-expanded={cardExpanded}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const wasCollapsed = !cardExpandedById[u.id];
+                            toggleCardExpansion(u.id, 'chevron');
+                            listToolbarCtx?.notifyCardToggle();
+                            if (wasCollapsed) {
+                              scheduleScrollExpandedUseCaseCardIntoView(u.id);
+                            }
+                          }}
+                        >
+                          {cardExpanded ? (
+                            <ChevronDown size={14} aria-hidden />
+                          ) : (
+                            <ChevronRight size={14} aria-hidden />
+                          )}
+                        </button>
                         {searchHighlight ? (
                           <span
                             className="mt-[2px] shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide bg-sky-500/25 text-sky-200 ring-1 ring-sky-400/40"
@@ -2940,32 +2898,25 @@ export function AIAgentUseCaseComposer({
                               type="button"
                               title={descriptionTooltip || undefined}
                               className={`min-w-0 max-w-full text-left text-sm leading-snug ${
-                                primaryGenerateOnRightOnly
-                                  ? wizardAccordionHeaderMode === 'message'
-                                    ? `${useCaseHeaderTitleTextClass(
-                                        u.designer_agent_message_vote,
-                                        active,
-                                        includedInConv
-                                      )} ${UC_WIZARD_AGENT_MESSAGE_TEXT}`
-                                    : useCaseHeaderTitleTextClass(
-                                        u.designer_label_vote,
-                                        active,
-                                        includedInConv
-                                      )
-                                  : fieldTextClass(
+                                wizardAccordionHeaderMode === 'message'
+                                  ? `${useCaseHeaderTitleTextClass(
+                                      u.designer_agent_message_vote,
+                                      active,
+                                      includedInConv
+                                    )} ${UC_WIZARD_AGENT_MESSAGE_TEXT}`
+                                  : useCaseHeaderTitleTextClass(
                                       u.designer_label_vote,
-                                      u.label ?? '',
-                                      fieldBaselineByUseCaseId[u.id]?.label
+                                      active,
+                                      includedInConv
                                     )
-                              } ${active && !primaryGenerateOnRightOnly ? 'font-semibold' : ''}`}
+                              }`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                               }}
                             >
                               <span className="min-w-0 break-words whitespace-normal">
-                                {primaryGenerateOnRightOnly &&
-                                wizardAccordionHeaderMode === 'message' ? (
+                                {wizardAccordionHeaderMode === 'message' ? (
                                   rowAssistant?.content?.trim() ? (
                                     wizardSearchSeed.trim() ? (
                                       <SeedHighlightedText
@@ -2991,15 +2942,9 @@ export function AIAgentUseCaseComposer({
                                 deployRowStatsByUseCaseId.get(u.id) ??
                                 getUseCaseDeployRowStats(u, projectSlotLexicon)
                               }
-                              onInspectCompiled={
-                                primaryGenerateOnRightOnly
-                                  ? undefined
-                                  : onInspectCompiled
-                                    ? () => onInspectCompiled(u.id)
-                                    : undefined
-                              }
+                              onInspectCompiled={undefined}
                             />
-                            {primaryGenerateOnRightOnly && phraseStyleNewSet.has(u.id) ? (
+                            {phraseStyleNewSet.has(u.id) ? (
                               <span
                                 className="shrink-0 rounded bg-emerald-600/40 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-100"
                                 title="Messaggio esempio aggiornato con il nuovo stile"
@@ -3039,21 +2984,6 @@ export function AIAgentUseCaseComposer({
                               >
                                 <Pencil size={12} aria-hidden />
                               </button>
-                              {!primaryGenerateOnRightOnly ? (
-                                <button
-                                  type="button"
-                                  title="Aggiungi figlio"
-                                  className="shrink-0 rounded p-0.5 text-slate-400 hover:text-violet-200"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedId(u.id);
-                                    setCreatingChildParentId(u.id);
-                                    setChildDraftLabel('');
-                                  }}
-                                >
-                                  <Plus size={12} aria-hidden />
-                                </button>
-                              ) : null}
                               {onGeneralizeUseCaseMeta ? (
                                 <span
                                   className="relative inline-flex shrink-0 flex-col items-center"
@@ -3286,8 +3216,7 @@ export function AIAgentUseCaseComposer({
                           ) : null}
                           {wizardShowMessage ? (
                             <div className={UC_WIZARD_AGENT_MESSAGE_PANEL}>
-                              {primaryGenerateOnRightOnly ? (
-                                rowAssistant ? (
+                              {rowAssistant ? (
                                 <UseCaseResponseEditor
                                   useCase={u}
                                   onPatchResponseTasks={patchUseCaseResponseTasks}
@@ -3302,10 +3231,8 @@ export function AIAgentUseCaseComposer({
                                   }
                                   onMessageCommitted={() => {
                                     clearNewHighlightOnDesignerAction(u.id);
-                                    if (primaryGenerateOnRightOnly) {
-                                      commitCardExpansion(u.id, false, 'programmatic');
-                                      listToolbarCtx?.notifyCardToggle();
-                                    }
+                                    commitCardExpansion(u.id, false, 'programmatic');
+                                    listToolbarCtx?.notifyCardToggle();
                                   }}
                                   onAssistantPhraseDraftChange={onAssistantPhraseDraftChange}
                                   parametricCartesianFeedback={
@@ -3316,7 +3243,7 @@ export function AIAgentUseCaseComposer({
                                   showTokenizedAgentMessage={showTokenizedAgentMessage}
                                   tokenizedByUseCaseId={tokenizedByUseCaseId}
                                 />
-                                ) : (
+                              ) : (
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="text-xs text-slate-500">
                                     Nessun turno assistente. Aggiungi un messaggio vuoto per iniziare.
@@ -3329,395 +3256,6 @@ export function AIAgentUseCaseComposer({
                                   >
                                     Aggiungi messaggio agente (vuoto)
                                   </button>
-                                </div>
-                                )
-                              ) : rowAssistant ? (
-                                (() => {
-                                  /**
-                                   * «Mostra Tokens» (Passo 1/3) sostituisce la frase canonica con la
-                                   * versione tokenizzata in giallo, e in tale modalità la riga è
-                                   * read-only: la matita di edit è nascosta. Se non c'è una versione
-                                   * tokenizzata per questo use case (`assistant_example_tokenized`
-                                   * vuoto), si torna al rendering canonico anche col toggle ON —
-                                   * altrimenti il designer si ritroverebbe con una bubble vuota.
-                                   */
-                                  const tokenizedForRow =
-                                    showTokenizedAgentMessage && tokenizedByUseCaseId
-                                      ? tokenizedByUseCaseId[u.id] ?? ''
-                                      : '';
-                                  if (tokenizedForRow.trim().length > 0) {
-                                    return (
-                                      <>
-                                        {isPrimaryPhraseParametricEnabled(u) ? (
-                                          <PhraseParametricEditor
-                                            useCase={u}
-                                            busy={busy}
-                                            cartesianFeedback={parametricCartesianErrorById[u.id] ?? null}
-                                            onAddCatalogDimension={(ck) =>
-                                              handleAddParametricCatalogDimension(u.id, ck)
-                                            }
-                                            onAddFreeDimension={() =>
-                                              handleAddParametricFreeDimension(u.id)
-                                            }
-                                            onRemoveDimension={(dimId) =>
-                                              handleRemoveParametricDimension(u.id, dimId)
-                                            }
-                                            onPatchDimensionLabel={(dimId, label) =>
-                                              handlePatchParametricDimensionLabel(u.id, dimId, label)
-                                            }
-                                            onAddRow={() => handleAddParametricRow(u.id)}
-                                            onPatchCell={(rowId, dimId, v) =>
-                                              handlePatchParametricCell(u.id, rowId, dimId, v)
-                                            }
-                                            onPatchPrompt={(rowId, prompt) =>
-                                              handlePatchParametricPrompt(u.id, rowId, prompt)
-                                            }
-                                            onExpandCartesian={() =>
-                                              handleExpandParametricCartesian(u.id)
-                                            }
-                                          />
-                                        ) : null}
-                                        <div className="flex w-full min-w-0 rounded px-0.5 py-0">
-                                          <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
-                                            {agentMsgFieldLabel}
-                                            <div
-                                              className={`min-w-0 flex-1 font-mono text-sm leading-snug ${UC_WIZARD_AGENT_MESSAGE_TEXT}`}
-                                            >
-                                              <TokenizedHighlightedText
-                                                text={tokenizedForRow}
-                                                inlineFlow
-                                                className="inline min-w-0 whitespace-pre-wrap align-baseline"
-                                              />
-                                              <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                                                <VoteThumbPair
-                                                  vote={u.designer_agent_message_vote}
-                                                  disabled={busy}
-                                                  outerBtnClass={UC_AGENT_VOTE_BTN}
-                                                  onVote={(choice) =>
-                                                    toggleDesignerFieldVote(u.id, 'agentMessage', choice)
-                                                  }
-                                                />
-                                                <button
-                                                  type="button"
-                                                  disabled={busy}
-                                                  aria-pressed={isPrimaryPhraseParametricEnabled(u)}
-                                                  title={
-                                                    isPrimaryPhraseParametricEnabled(u)
-                                                      ? 'Disattiva messaggio parametrico'
-                                                      : 'Rendi il messaggio parametrico'
-                                                  }
-                                                  className={`${UC_AGENT_ROW_EDIT_BTN} ${
-                                                    isPrimaryPhraseParametricEnabled(u)
-                                                      ? 'text-emerald-400'
-                                                      : ''
-                                                  }`}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleTogglePrimaryParametric(
-                                                      u.id,
-                                                      !isPrimaryPhraseParametricEnabled(u)
-                                                    );
-                                                  }}
-                                                >
-                                                  <Variable size={12} aria-hidden />
-                                                </button>
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </>
-                                    );
-                                  }
-                                  return (
-                                <>
-                                  {rowAssistant && isPrimaryPhraseParametricEnabled(u) ? (
-                                    <PhraseParametricEditor
-                                      useCase={u}
-                                      busy={busy}
-                                      cartesianFeedback={parametricCartesianErrorById[u.id] ?? null}
-                                      onAddCatalogDimension={(ck) =>
-                                        handleAddParametricCatalogDimension(u.id, ck)
-                                      }
-                                      onAddFreeDimension={() =>
-                                        handleAddParametricFreeDimension(u.id)
-                                      }
-                                      onRemoveDimension={(dimId) =>
-                                        handleRemoveParametricDimension(u.id, dimId)
-                                      }
-                                      onPatchDimensionLabel={(dimId, label) =>
-                                        handlePatchParametricDimensionLabel(u.id, dimId, label)
-                                      }
-                                      onAddRow={() => handleAddParametricRow(u.id)}
-                                      onPatchCell={(rowId, dimId, v) =>
-                                        handlePatchParametricCell(u.id, rowId, dimId, v)
-                                      }
-                                      onPatchPrompt={(rowId, prompt) =>
-                                        handlePatchParametricPrompt(u.id, rowId, prompt)
-                                      }
-                                      onExpandCartesian={() =>
-                                        handleExpandParametricCartesian(u.id)
-                                      }
-                                    />
-                                  ) : null}
-                                  {agentMsgEditUseCaseId === u.id ? (
-                                    <AgentMessageStyleExamplesWrap
-                                      useCase={u}
-                                      text={agentMsgEditDraft}
-                                      styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(u))}
-                                      onPatchUseCase={(updater) => handlePatchUseCase(u.id, updater)}
-                                      disabled={busy}
-                                      iconSize={12}
-                                      toolbarAlwaysVisible
-                                    >
-                                      {({ toolbarButton, panel, error }) => (
-                                    <div className="w-full space-y-2">
-                                    <div className="flex flex-wrap items-start gap-2">
-                                      {agentMsgFieldLabel}
-                                      <div className="flex min-w-0 flex-1 flex-col">
-                                        <BracketTokenHighlightedTextarea
-                                        ref={(el) => {
-                                          if (el) agentTextareaRefsById.current.set(u.id, el);
-                                          else agentTextareaRefsById.current.delete(u.id);
-                                        }}
-                                        value={agentMsgEditDraft}
-                                        onChange={(e) => {
-                                          const v = e.target.value;
-                                          setAgentMsgEditDraft(v);
-                                          liveAgentContentByIdRef.current[u.id] = v;
-                                          onAssistantPhraseDraftChange?.(u.id, v);
-                                          requestAnimationFrame(() => {
-                                            syncWizardTextareaHeights();
-                                            syncAgentMsgSelection();
-                                          });
-                                        }}
-                                        disabled={busy}
-                                        rows={2}
-                                        autoFocus
-                                        spellCheck
-                                        lang={messageSpellLang}
-                                        aria-label="Messaggio agente"
-                                        placeholder="Testo esempio per il messaggio agente…"
-                                        containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
-                                        onMouseDown={markAgentMsgPointerSelectingMouse}
-                                        onTouchStart={markAgentMsgPointerSelectingTouch}
-                                        onMouseUp={syncAgentMsgSelection}
-                                        onSelect={syncAgentMsgSelection}
-                                        onKeyUp={syncAgentMsgSelection}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Escape') {
-                                            e.preventDefault();
-                                            cancelAgentMsgEdit();
-                                          }
-                                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                            e.preventDefault();
-                                            commitAgentMsgEdit();
-                                          }
-                                        }}
-                                        onScroll={queueRecalcAgentMsgTokenAnchor}
-                                      />
-                                        {agentMsgTokenPopoverActionVisible !== 'none' && !busy ? (
-                                          <AgentMessageSelectionTokenPopover
-                                            action={agentMsgTokenPopoverActionVisible}
-                                            disabled={busy}
-                                            onSemanticToken={handleWrapAgentToken}
-                                            onStyleToken={handleWrapStyleAgentToken}
-                                            onUntokenize={handleUnwrapAgentTokenAtSelection}
-                                            fixedAnchor={agentMsgTokenAnchor}
-                                            activeStyleToken={agentMsgActiveStyleToken}
-                                            onStyleTokenVariantsChange={
-                                              agentMsgActiveStyleToken
-                                                ? (variants) =>
-                                                    handlePatchAgentStyleTokenVariants(
-                                                      agentMsgActiveStyleToken.styleTokenId,
-                                                      variants
-                                                    )
-                                                : undefined
-                                            }
-                                            onClose={dismissAgentMsgTokenPopover}
-                                          />
-                                        ) : null}
-                                      </div>
-                                      <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-                                        {toolbarButton}
-                                        <button
-                                          type="button"
-                                          title="Conferma"
-                                          disabled={busy}
-                                          className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
-                                          onClick={() => commitAgentMsgEdit()}
-                                        >
-                                          <Check size={14} aria-hidden />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          title="Annulla"
-                                          disabled={busy}
-                                          className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
-                                          onClick={() => cancelAgentMsgEdit()}
-                                        >
-                                          <X size={14} aria-hidden />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={busy}
-                                          aria-pressed={isPrimaryPhraseParametricEnabled(u)}
-                                          title={
-                                            isPrimaryPhraseParametricEnabled(u)
-                                              ? 'Disattiva messaggio parametrico'
-                                              : 'Rendi il messaggio parametrico'
-                                          }
-                                          className={`${UC_AGENT_ROW_EDIT_BTN} opacity-100 ${
-                                            isPrimaryPhraseParametricEnabled(u) ? 'text-emerald-400' : ''
-                                          }`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleTogglePrimaryParametric(
-                                              u.id,
-                                              !isPrimaryPhraseParametricEnabled(u)
-                                            );
-                                          }}
-                                        >
-                                          <Variable size={12} aria-hidden />
-                                        </button>
-                                      </div>
-                                    </div>
-                                    {error ? (
-                                      <p className="text-xs text-rose-300/90">{error}</p>
-                                    ) : null}
-                                    {panel}
-                                    </div>
-                                      )}
-                                    </AgentMessageStyleExamplesWrap>
-                                  ) : (
-                                    <AgentMessageStyleExamplesWrap
-                                      useCase={u}
-                                      text={rowAssistant.content}
-                                      styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(u))}
-                                      onPatchUseCase={(updater) => handlePatchUseCase(u.id, updater)}
-                                      disabled={busy}
-                                      iconSize={12}
-                                    >
-                                      {({ toolbarButton, panel, error }) => (
-                                    <div className="w-full">
-                                    <div
-                                      className="group/agentmsg-row flex w-full min-w-0 cursor-pointer rounded px-0.5 py-0"
-                                      onDoubleClick={(e) => {
-                                        if (busy || !rowAssistant) return;
-                                        if ((e.target as HTMLElement).closest('button')) return;
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        beginAgentMsgEdit(
-                                          u.id,
-                                          rowAssistant.turn_id,
-                                          rowAssistant.content
-                                        );
-                                      }}
-                                    >
-                                      <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
-                                        {agentMsgFieldLabel}
-                                        <div
-                                          className={`min-w-0 flex-1 font-mono text-sm leading-snug ${
-                                            primaryGenerateOnRightOnly
-                                              ? UC_WIZARD_AGENT_MESSAGE_TEXT
-                                              : fieldTextClass(
-                                                  u.designer_agent_message_vote,
-                                                  rowAssistant.content,
-                                                  rowBaseline?.assistantContent
-                                                )
-                                          }`}
-                                        >
-                                          {rowAssistant.content.trim() ? (
-                                            wizardSearchSeed.trim() ? (
-                                              <span className="inline min-w-0 whitespace-pre-wrap align-baseline">
-                                                <SeedHighlightedText
-                                                  text={rowAssistant.content}
-                                                  seed={wizardSearchSeed}
-                                                />
-                                              </span>
-                                            ) : (
-                                              <BracketTokenHighlightedText
-                                                text={rowAssistant.content}
-                                                className="inline min-w-0 whitespace-pre-wrap align-baseline"
-                                              />
-                                            )
-                                          ) : (
-                                            <span className="inline whitespace-pre-wrap text-slate-500">
-                                              — passa il mouse e usa la matita a destra
-                                            </span>
-                                          )}
-                                          <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                                            <VoteThumbPair
-                                              vote={u.designer_agent_message_vote}
-                                              disabled={busy}
-                                              outerBtnClass={UC_AGENT_VOTE_BTN}
-                                              onVote={(choice) =>
-                                                toggleDesignerFieldVote(u.id, 'agentMessage', choice)
-                                              }
-                                            />
-                                            <button
-                                              type="button"
-                                              disabled={busy}
-                                              title="Modifica messaggio"
-                                              className={UC_AGENT_ROW_EDIT_BTN}
-                                              onClick={() =>
-                                                beginAgentMsgEdit(u.id, rowAssistant.turn_id, rowAssistant.content)
-                                              }
-                                            >
-                                              <Pencil size={12} aria-hidden />
-                                            </button>
-                                            <button
-                                              type="button"
-                                              disabled={busy}
-                                              aria-pressed={isPrimaryPhraseParametricEnabled(u)}
-                                              title={
-                                                isPrimaryPhraseParametricEnabled(u)
-                                                  ? 'Disattiva messaggio parametrico'
-                                                  : 'Rendi il messaggio parametrico'
-                                              }
-                                              className={`${UC_AGENT_ROW_EDIT_BTN} ${
-                                                isPrimaryPhraseParametricEnabled(u)
-                                                  ? 'text-emerald-400'
-                                                  : ''
-                                              }`}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleTogglePrimaryParametric(
-                                                  u.id,
-                                                  !isPrimaryPhraseParametricEnabled(u)
-                                                );
-                                              }}
-                                            >
-                                              <Variable size={12} aria-hidden />
-                                            </button>
-                                            {toolbarButton}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {panel}
-                                    </div>
-                                      )}
-                                    </AgentMessageStyleExamplesWrap>
-                                  )}
-                                </>
-                                  );
-                                })()
-                              ) : (
-                                <div className="flex flex-wrap items-center gap-2">
-                                  {agentMsgFieldLabel}
-                                  <div className="min-w-0 flex-1 space-y-2">
-                                    <p className="text-xs text-slate-500">
-                                      Nessun turno assistente. Aggiungi un messaggio vuoto per iniziare.
-                                    </p>
-                                    <button
-                                      type="button"
-                                      disabled={busy}
-                                      onClick={() => ensureAssistantTurnFor(u.id)}
-                                      className="text-xs text-emerald-300 underline disabled:opacity-50"
-                                    >
-                                      Aggiungi messaggio agente (vuoto)
-                                    </button>
-                                  </div>
                                 </div>
                               )}
                             </div>
@@ -3759,524 +3297,6 @@ export function AIAgentUseCaseComposer({
           </div>
         </div>
 
-        {ordered.length > 0 && !primaryGenerateOnRightOnly ? (
-            <div className="flex flex-1 min-h-0 flex-col overflow-hidden self-stretch">
-              {selected ? (
-                <div className="flex flex-1 min-h-0 flex-col overflow-auto gap-3 px-0.5 py-1 min-h-0">
-                  <div className={`relative rounded-lg ${UC_SCENARIO_PANEL_SURFACE}`}>
-                    {payoffEditUseCaseId === selected.id ? (
-                      <div className="flex flex-wrap items-start gap-2">
-                        {scenarioFieldLabel}
-                        <textarea
-                          ref={payoffTextareaRef}
-                          value={payoffEditDraft}
-                          onChange={(e) => {
-                            setPayoffEditDraft(e.target.value);
-                            requestAnimationFrame(() => syncDetailTextareaHeights());
-                          }}
-                          disabled={busy}
-                          rows={2}
-                          autoFocus
-                          placeholder="Descrizione sintetica dello scenario…"
-                          className={`${UC_CLASSIC_TEXTAREA_SCENARIO} min-h-[52px]`}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              e.preventDefault();
-                              cancelPayoffEdit();
-                            }
-                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                              e.preventDefault();
-                              commitPayoffEdit();
-                            }
-                          }}
-                        />
-                        <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-                          {onPolishUseCaseScenario ? (
-                            <button
-                              type="button"
-                              title={
-                                polishScenarioPendingUseCaseId === selected.id
-                                  ? LABEL_POLISH_USE_CASE_SCENARIO_PENDING
-                                  : TOOLTIP_POLISH_USE_CASE_SCENARIO
-                              }
-                              aria-label={LABEL_POLISH_USE_CASE_SCENARIO}
-                              disabled={
-                                busy ||
-                                polishScenarioPendingUseCaseId === selected.id ||
-                                payoffEditDraft.trim().length < 8
-                              }
-                              className="rounded p-0.5 text-sky-300 hover:bg-slate-800/90 disabled:opacity-40"
-                              onClick={() => void invokePolishUseCaseScenario(selected.id)}
-                            >
-                              {polishScenarioPendingUseCaseId === selected.id ? (
-                                <Loader2 size={14} className="animate-spin" aria-hidden />
-                              ) : (
-                                <Wand2 size={14} aria-hidden />
-                              )}
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            title="Conferma"
-                            disabled={busy}
-                            className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
-                            onClick={() => commitPayoffEdit()}
-                          >
-                            <Check size={14} aria-hidden />
-                          </button>
-                          <button
-                            type="button"
-                            title="Annulla"
-                            disabled={busy}
-                            className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
-                            onClick={() => cancelPayoffEdit()}
-                          >
-                            <X size={14} aria-hidden />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div
-                        className="group/payoff-row flex w-full min-w-0 cursor-pointer"
-                        onDoubleClick={(e) => {
-                          if (busy) return;
-                          if ((e.target as HTMLElement).closest('button')) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          beginPayoffEdit(selected.id, getScenarioText(selected));
-                        }}
-                      >
-                        <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
-                          {scenarioFieldLabel}
-                          <div
-                            className={`min-w-0 flex-1 text-sm leading-snug ${UC_SCENARIO_BODY_TEXT} ${fieldTextClass(
-                              selected.designer_payoff_vote,
-                              getScenarioText(selected),
-                              fieldBaselineByUseCaseId[selected.id]?.payoff
-                            )}`}
-                          >
-                            <span className="inline whitespace-pre-wrap align-baseline">
-                              {getScenarioText(selected).trim() ? (
-                                getScenarioText(selected)
-                              ) : (
-                                <span className="text-slate-500">
-                                  — passa il mouse sulla riga e usa la matita a destra
-                                </span>
-                              )}
-                            </span>
-                            <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                              <VoteThumbPair
-                                vote={selected.designer_payoff_vote}
-                                disabled={busy || polishScenarioPendingUseCaseId === selected.id}
-                                outerBtnClass={UC_SCENARIO_VOTE_BTN}
-                                onVote={(choice) => toggleDesignerFieldVote(selected.id, 'payoff', choice)}
-                              />
-                              {onPolishUseCaseScenario ? (
-                                <button
-                                  type="button"
-                                  disabled={
-                                    busy ||
-                                    polishScenarioPendingUseCaseId === selected.id ||
-                                    resolveScenarioTextForPolish(selected.id).length < 8
-                                  }
-                                  title={
-                                    polishScenarioPendingUseCaseId === selected.id
-                                      ? LABEL_POLISH_USE_CASE_SCENARIO_PENDING
-                                      : TOOLTIP_POLISH_USE_CASE_SCENARIO
-                                  }
-                                  aria-label={LABEL_POLISH_USE_CASE_SCENARIO}
-                                  className={UC_SCENARIO_ROW_EDIT_BTN}
-                                  onClick={() => void invokePolishUseCaseScenario(selected.id)}
-                                >
-                                  {polishScenarioPendingUseCaseId === selected.id ? (
-                                    <Loader2 size={12} className="animate-spin" aria-hidden />
-                                  ) : (
-                                    <Wand2 size={12} aria-hidden />
-                                  )}
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                disabled={busy || polishScenarioPendingUseCaseId === selected.id}
-                                title="Modifica scenario"
-                                className={UC_SCENARIO_ROW_EDIT_BTN}
-                                onClick={() =>
-                                  beginPayoffEdit(selected.id, getScenarioText(selected))
-                                }
-                              >
-                                <Pencil size={12} aria-hidden />
-                              </button>
-                            </span>
-                          </div>
-                          {scenarioDirty ? (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void handleScenarioRegenerateClick()}
-                              title={LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
-                              className="inline-flex shrink-0 items-center gap-1 self-start rounded-md border border-violet-500/50 bg-violet-900/40 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-violet-100 hover:bg-violet-800/50 disabled:opacity-40"
-                            >
-                              {busy ? (
-                                <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
-                              ) : (
-                                <RefreshCw size={12} className="shrink-0" aria-hidden />
-                              )}
-                              {LABEL_REGENERATE_USE_CASE_FOR_SCENARIO}
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-lg ring-1 ring-emerald-600/40 bg-emerald-950/20 px-2 py-1">
-                    {assistantTurn && isPrimaryPhraseParametricEnabled(selected) ? (
-                      <PhraseParametricEditor
-                        useCase={selected}
-                        busy={busy}
-                        cartesianFeedback={parametricCartesianErrorById[selected.id] ?? null}
-                        onAddCatalogDimension={(ck) =>
-                          handleAddParametricCatalogDimension(selected.id, ck)
-                        }
-                        onAddFreeDimension={() =>
-                          handleAddParametricFreeDimension(selected.id)
-                        }
-                        onRemoveDimension={(dimId) =>
-                          handleRemoveParametricDimension(selected.id, dimId)
-                        }
-                        onPatchDimensionLabel={(dimId, label) =>
-                          handlePatchParametricDimensionLabel(selected.id, dimId, label)
-                        }
-                        onAddRow={() => handleAddParametricRow(selected.id)}
-                        onPatchCell={(rowId, dimId, v) =>
-                          handlePatchParametricCell(selected.id, rowId, dimId, v)
-                        }
-                        onPatchPrompt={(rowId, prompt) =>
-                          handlePatchParametricPrompt(selected.id, rowId, prompt)
-                        }
-                        onExpandCartesian={() =>
-                          handleExpandParametricCartesian(selected.id)
-                        }
-                      />
-                    ) : null}
-                    {assistantTurn ? (
-                      agentMsgEditUseCaseId === selected.id ? (
-                        <AgentMessageStyleExamplesWrap
-                          useCase={selected}
-                          text={agentMsgEditDraft}
-                          styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(selected))}
-                          onPatchUseCase={(updater) => handlePatchUseCase(selected.id, updater)}
-                          disabled={busy}
-                          iconSize={12}
-                          toolbarAlwaysVisible
-                        >
-                          {({ toolbarButton, panel, error }) => (
-                        <div className="w-full space-y-2">
-                        <div className="flex flex-wrap items-start gap-2">
-                          {agentMsgFieldLabel}
-                          <div className="flex min-w-0 flex-1 flex-col">
-                          <BracketTokenHighlightedTextarea
-                            ref={agentTextareaRef}
-                            value={agentMsgEditDraft}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              liveAgentContentRef.current = v;
-                              setAgentMsgEditDraft(v);
-                              onAssistantPhraseDraftChange?.(selected.id, v);
-                              requestAnimationFrame(() => {
-                                syncDetailTextareaHeights();
-                                syncAgentMsgSelection();
-                              });
-                            }}
-                            onMouseDown={markAgentMsgPointerSelectingMouse}
-                            onTouchStart={markAgentMsgPointerSelectingTouch}
-                            onMouseUp={syncAgentMsgSelection}
-                            onSelect={syncAgentMsgSelection}
-                            onKeyUp={syncAgentMsgSelection}
-                            disabled={busy}
-                            rows={2}
-                            autoFocus
-                            spellCheck
-                            lang={messageSpellLang}
-                            aria-label="Messaggio agente"
-                            placeholder="Seleziona testo: al rilascio del mouse compare Tokenizza o Rimuovi token; oppure usa i pulsanti Token / Senza quadre."
-                            containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px]`}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') {
-                                e.preventDefault();
-                                cancelAgentMsgEdit();
-                              }
-                              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                e.preventDefault();
-                                commitAgentMsgEdit();
-                              }
-                            }}
-                            onScroll={queueRecalcAgentMsgTokenAnchor}
-                          />
-                            {agentMsgTokenPopoverActionVisible !== 'none' && !busy ? (
-                              <AgentMessageSelectionTokenPopover
-                                action={agentMsgTokenPopoverActionVisible}
-                                disabled={busy}
-                                onSemanticToken={handleWrapAgentToken}
-                                onStyleToken={handleWrapStyleAgentToken}
-                                onUntokenize={handleUnwrapAgentTokenAtSelection}
-                                fixedAnchor={agentMsgTokenAnchor}
-                                activeStyleToken={agentMsgActiveStyleToken}
-                                onStyleTokenVariantsChange={
-                                  agentMsgActiveStyleToken
-                                    ? (variants) =>
-                                        handlePatchAgentStyleTokenVariants(
-                                          agentMsgActiveStyleToken.styleTokenId,
-                                          variants
-                                        )
-                                    : undefined
-                                }
-                                onClose={dismissAgentMsgTokenPopover}
-                              />
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-                            {toolbarButton}
-                            <button
-                              type="button"
-                              title="Conferma"
-                              disabled={busy}
-                              className="rounded p-0.5 text-emerald-400 hover:bg-slate-800/90 disabled:opacity-40"
-                              onClick={() => commitAgentMsgEdit()}
-                            >
-                              <Check size={14} aria-hidden />
-                            </button>
-                            <button
-                              type="button"
-                              title="Annulla"
-                              disabled={busy}
-                              className="rounded p-0.5 text-slate-400 hover:bg-slate-800/90 disabled:opacity-40"
-                              onClick={() => cancelAgentMsgEdit()}
-                            >
-                              <X size={14} aria-hidden />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              aria-pressed={isPrimaryPhraseParametricEnabled(selected)}
-                              title={
-                                isPrimaryPhraseParametricEnabled(selected)
-                                  ? 'Disattiva messaggio parametrico'
-                                  : 'Rendi il messaggio parametrico'
-                              }
-                              className={`${UC_AGENT_ROW_EDIT_BTN} ${
-                                isPrimaryPhraseParametricEnabled(selected) ? 'text-emerald-400' : ''
-                              }`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleTogglePrimaryParametric(
-                                  selected.id,
-                                  !isPrimaryPhraseParametricEnabled(selected)
-                                );
-                              }}
-                            >
-                              <Variable size={12} aria-hidden />
-                            </button>
-                          </div>
-                        </div>
-                        {error ? (
-                          <p className="text-xs text-rose-300/90">{error}</p>
-                        ) : null}
-                        {panel}
-                        </div>
-                          )}
-                        </AgentMessageStyleExamplesWrap>
-                      ) : (
-                        <AgentMessageStyleExamplesWrap
-                          useCase={selected}
-                          text={assistantTurn.content}
-                          styleTokens={getPrimaryPhraseStyleTokens(ensureUseCasePhrases(selected))}
-                          onPatchUseCase={(updater) => handlePatchUseCase(selected.id, updater)}
-                          disabled={busy}
-                          iconSize={12}
-                        >
-                          {({ toolbarButton, panel, error }) => (
-                        <div className="w-full">
-                        <div
-                          className="group/agentmsg-row flex w-full min-w-0 cursor-pointer"
-                          onDoubleClick={(e) => {
-                            if (busy) return;
-                            if ((e.target as HTMLElement).closest('button')) return;
-                            e.preventDefault();
-                            e.stopPropagation();
-                            beginAgentMsgEdit(
-                              selected.id,
-                              assistantTurn.turn_id,
-                              assistantTurn.content
-                            );
-                          }}
-                        >
-                          <div className="flex min-w-0 flex-wrap items-end gap-x-1 gap-y-1">
-                            {agentMsgFieldLabel}
-                            <div
-                              className={`min-w-0 flex-1 font-mono text-sm leading-snug ${fieldTextClass(
-                                selected.designer_agent_message_vote,
-                                assistantTurn.content,
-                                fieldBaselineByUseCaseId[selected.id]?.assistantContent
-                              )}`}
-                            >
-                              {assistantTurn.content.trim() ? (
-                                <BracketTokenHighlightedText
-                                  text={assistantTurn.content}
-                                  className="inline min-w-0 whitespace-pre-wrap align-baseline"
-                                />
-                              ) : (
-                                <span className="inline whitespace-pre-wrap text-slate-500">
-                                  — passa il mouse sulla riga e usa la matita a destra
-                                </span>
-                              )}
-                              <span className="ms-1 inline-flex shrink-0 items-center gap-0.5 align-baseline">
-                                <VoteThumbPair
-                                  vote={selected.designer_agent_message_vote}
-                                  disabled={busy}
-                                  outerBtnClass={UC_AGENT_VOTE_BTN}
-                                  onVote={(choice) =>
-                                    toggleDesignerFieldVote(selected.id, 'agentMessage', choice)
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  title="Modifica messaggio"
-                                  className={UC_AGENT_ROW_EDIT_BTN}
-                                  onClick={() =>
-                                    beginAgentMsgEdit(selected.id, assistantTurn.turn_id, assistantTurn.content)
-                                  }
-                                >
-                                  <Pencil size={12} aria-hidden />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  aria-pressed={isPrimaryPhraseParametricEnabled(selected)}
-                                  title={
-                                    isPrimaryPhraseParametricEnabled(selected)
-                                      ? 'Disattiva messaggio parametrico'
-                                      : 'Rendi il messaggio parametrico'
-                                  }
-                                  className={`${UC_AGENT_ROW_EDIT_BTN} ${
-                                    isPrimaryPhraseParametricEnabled(selected) ? 'text-emerald-400' : ''
-                                  }`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTogglePrimaryParametric(
-                                      selected.id,
-                                      !isPrimaryPhraseParametricEnabled(selected)
-                                    );
-                                  }}
-                                >
-                                  <Variable size={12} aria-hidden />
-                                </button>
-                                {toolbarButton}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        {panel}
-                        </div>
-                          )}
-                        </AgentMessageStyleExamplesWrap>
-                      )
-                    ) : (
-                      <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
-                        {agentMsgFieldLabel}
-                        <div className="min-w-0 flex-1 space-y-2 py-0.5">
-                          <p className="text-xs text-slate-500">
-                            Nessun turno assistente. Rigenera per crearne uno con l&apos;IA oppure aggiungi manualmente un
-                            turno vuoto.
-                          </p>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => ensureAssistantTurn()}
-                            className="text-xs text-emerald-300 underline disabled:opacity-50"
-                          >
-                            Aggiungi messaggio agente (vuoto)
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1 border-t border-emerald-800/40 pt-1.5">
-                      {assistantTurn && !agentMessageEmpty ? (
-                        <>
-                          <button
-                            type="button"
-                            disabled={
-                              busy ||
-                              !canWrapAgentToken ||
-                              (Boolean(selected) && agentMsgEditUseCaseId !== selected.id)
-                            }
-                            title={
-                              selected && agentMsgEditUseCaseId !== selected.id
-                                ? 'Apri la modifica con la matita per selezionare il testo e usare Token'
-                                : 'Avvolge il testo selezionato tra quadre [ ] come slot runtime'
-                            }
-                            onClick={() => handleWrapAgentToken()}
-                            className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
-                          >
-                            <Brackets size={12} className="shrink-0 opacity-90" aria-hidden />
-                            {LABEL_AGENT_MSG_WRAP_TOKEN}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={
-                              busy ||
-                              !canStripAgentTokens ||
-                              (Boolean(selected) && agentMsgEditUseCaseId !== selected.id)
-                            }
-                            onClick={() => handleStripAgentTokens()}
-                            title={
-                              selected && agentMsgEditUseCaseId !== selected.id
-                                ? 'Apri la modifica con la matita per usare questa azione sul testo'
-                                : 'Rimuove tutte le quadre [ ], lasciando solo il testo interno'
-                            }
-                            className="inline-flex items-center gap-0.5 rounded-md border border-emerald-600/45 bg-emerald-950/45 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-100/95 hover:bg-emerald-900/55 disabled:opacity-40"
-                          >
-                            {LABEL_AGENT_MSG_STRIP_TOKENS}
-                          </button>
-                        </>
-                      ) : null}
-                      {agentMessageEmpty ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            void (async () => {
-                              const next = await onRegenerateAgentMessage(selected.id);
-                              if (typeof next === 'string') {
-                                setFieldBaselineByUseCaseId((prev) => {
-                                  const cur = prev[selected.id];
-                                  if (!cur) return prev;
-                                  return {
-                                    ...prev,
-                                    [selected.id]: { ...cur, assistantContent: next },
-                                  };
-                                });
-                              }
-                            })();
-                          }}
-                          title={LABEL_REGENERATE_AGENT_EXAMPLE}
-                          className="inline-flex items-center gap-1 rounded-md border border-emerald-600/50 bg-emerald-950/60 px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-emerald-50 hover:bg-emerald-900/70 disabled:opacity-40"
-                        >
-                          {busy ? (
-                            <Loader2 className="animate-spin shrink-0" size={12} aria-hidden />
-                          ) : (
-                            <RefreshCw size={12} className="shrink-0" aria-hidden />
-                          )}
-                          {LABEL_REGENERATE_AGENT_EXAMPLE}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-        ) : null}
       </div>
     </div>
   );

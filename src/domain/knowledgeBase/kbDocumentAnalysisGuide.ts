@@ -2,12 +2,16 @@
  * Copy for the KB document analysis tab guide and confirmation UI.
  */
 
-export const KB_ANALYSIS_GUIDE_INTRO =
-  'Se hai già qualche idea su come sono strutturati i dati in questo documento, puoi iniziare a scriverla qui.\n' +
-  'In alternativa, se preferisci, posso proporre io una prima analisi e poi la rivediamo insieme.';
+export const KB_ANALYSIS_GUIDE_DRAFT =
+  'Se hai già un\'idea su come potrebbero essere strutturati i dati nel documento, scrivila qui sotto: la userò come base per affinare l\'analisi.';
 
-export const KB_ANALYSIS_LINK_SCRivo_IO = 'Scrivo io';
-export const KB_ANALYSIS_LINK_GUARDA_TU = 'Guardi tu';
+export const KB_ANALYSIS_GUIDE_PROPOSE_PREFIX =
+  'Se invece preferisci partire da zero, ';
+
+export const KB_ANALYSIS_GUIDE_CLICK_HERE = 'clicca qui';
+
+export const KB_ANALYSIS_GUIDE_PROPOSE_SUFFIX =
+  ' e ti propongo io una prima analisi che poi rivediamo insieme.';
 
 export const KB_ANALYSIS_AGREE_PROMPT = "Sei d'accordo?";
 export const KB_ANALYSIS_AGREE_YES = 'Sì';

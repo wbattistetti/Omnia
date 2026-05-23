@@ -18,9 +18,10 @@ import {
 } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import {
   KB_ANALYSIS_FINALIZE_BUTTON,
-  KB_ANALYSIS_GUIDE_INTRO,
-  KB_ANALYSIS_LINK_GUARDA_TU,
-  KB_ANALYSIS_LINK_SCRivo_IO,
+  KB_ANALYSIS_GUIDE_CLICK_HERE,
+  KB_ANALYSIS_GUIDE_DRAFT,
+  KB_ANALYSIS_GUIDE_PROPOSE_PREFIX,
+  KB_ANALYSIS_GUIDE_PROPOSE_SUFFIX,
 } from '@domain/knowledgeBase/kbDocumentAnalysisGuide';
 import {
   allReviewItemsConfirmed,
@@ -172,10 +173,6 @@ export function KbDocumentAnalysisTab({
     },
     []
   );
-
-  const onScrivoIo = React.useCallback(() => {
-    focusEditor();
-  }, [focusEditor]);
 
   const onGuardiTu = React.useCallback(async () => {
     if (!canPropose || !projectId?.trim() || !repoId) return;
@@ -424,20 +421,10 @@ export function KbDocumentAnalysisTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
-      <div className="shrink-0 text-sm leading-relaxed text-slate-300">
-        <p className="whitespace-pre-line">{KB_ANALYSIS_GUIDE_INTRO}</p>
-        <p className="mt-2">
-          <button
-            type="button"
-            disabled={!canEdit || inReview}
-            onClick={onScrivoIo}
-            className="font-medium text-violet-200 underline decoration-violet-500/50 underline-offset-2 hover:text-violet-50 disabled:opacity-50"
-          >
-            {KB_ANALYSIS_LINK_SCRivo_IO}
-          </button>
-          <span className="mx-2 text-slate-500" aria-hidden>
-            •
-          </span>
+      <div className="shrink-0 space-y-2 text-sm leading-relaxed text-slate-300">
+        <p>{KB_ANALYSIS_GUIDE_DRAFT}</p>
+        <p>
+          {KB_ANALYSIS_GUIDE_PROPOSE_PREFIX}
           <button
             type="button"
             disabled={!canPropose}
@@ -445,10 +432,11 @@ export function KbDocumentAnalysisTab({
             className="font-medium text-violet-200 underline decoration-violet-500/50 underline-offset-2 hover:text-violet-50 disabled:opacity-50"
           >
             {busy && !inReview ? (
-              <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin align-text-bottom" aria-hidden />
+              <Loader2 className="mr-0.5 inline h-3.5 w-3.5 animate-spin align-text-bottom" aria-hidden />
             ) : null}
-            {KB_ANALYSIS_LINK_GUARDA_TU}
+            {KB_ANALYSIS_GUIDE_CLICK_HERE}
           </button>
+          {KB_ANALYSIS_GUIDE_PROPOSE_SUFFIX}
         </p>
       </div>
 

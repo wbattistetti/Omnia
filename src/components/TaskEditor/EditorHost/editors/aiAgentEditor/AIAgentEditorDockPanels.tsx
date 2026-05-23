@@ -376,7 +376,6 @@ export function EditorUseCasesPanel() {
           )
         );
       }}
-      primaryGenerateOnRightOnly={useWizardShell}
       highlightIds={useCaseHighlightIds}
       onClearUseCaseHighlight={onClearUseCaseHighlight}
       assistantPhraseStyleNewIds={assistantPhraseStyleNewIds}
@@ -701,7 +700,9 @@ export function EditorUseCasesPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+      <UseCaseWizardListToolbarProvider>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+      </UseCaseWizardListToolbarProvider>
     </div>
   );
 }
