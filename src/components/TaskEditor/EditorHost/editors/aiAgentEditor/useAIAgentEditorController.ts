@@ -861,57 +861,6 @@ export function useAIAgentEditorController({
     [designDescription, structuredRev.composedRuntimeMarkdown, proposedFields, useCases]
   );
 
-  const onMergeKbPromotedUseCases = React.useCallback((incoming: AIAgentUseCase[]) => {
-    if (incoming.length === 0) return;
-    setUseCasesUser((prev) => {
-      const have = new Set(prev.map((u) => u.id));
-      const novel = incoming.filter((u) => !have.has(u.id));
-      if (novel.length === 0) return prev;
-      return normalizeUseCaseSiblingOrder(
-        [...prev, ...novel],
-        useCaseSiblingSortModeRef.current
-      );
-    });
-    setDirty(true);
-  }, [setUseCasesUser]);
-
-  const regenerateKbPromotedUseCase = React.useCallback(
-    async (skeleton: AIAgentUseCase): Promise<AIAgentUseCase | null> => {
-      try {
-        const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-        const next = await regenerateAIAgentUseCaseApi({
-          useCase: skeleton,
-          allUseCases: [...useCases, skeleton],
-          logicalSteps,
-          provider,
-          model,
-          outputLanguage,
-          globalStyleContract,
-          globalStyleId: useCaseGlobalStyleId,
-          callMeta: buildCallMeta('KB_PROMOTE_USE_CASE'),
-        });
-        return {
-          ...next,
-          id: skeleton.id,
-          parent_id: skeleton.parent_id,
-          sort_order: skeleton.sort_order,
-          bubble_notes: { ...skeleton.bubble_notes, ...next.bubble_notes },
-        };
-      } catch {
-        return null;
-      }
-    },
-    [
-      useCases,
-      logicalSteps,
-      provider,
-      model,
-      globalStyleContract,
-      useCaseGlobalStyleId,
-      buildCallMeta,
-    ]
-  );
-
   const compileUseCasePhrasesForCatalog = React.useCallback(() => {
     setCompilePhrasesBusy(true);
     try {
@@ -2965,8 +2914,6 @@ export function useAIAgentEditorController({
     knowledgeBaseUpdateDocument,
     knowledgeBaseReorderDocuments,
     knowledgeBaseTaskContext,
-    onMergeKbPromotedUseCases,
-    regenerateKbPromotedUseCase,
     agentUseCasesJson: serializeUseCases(useCases, useCaseCategories),
     agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     compileUseCasePhrasesForCatalog,

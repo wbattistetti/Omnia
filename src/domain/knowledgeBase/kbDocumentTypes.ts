@@ -3,28 +3,7 @@
  */
 
 import type { KbExtractedVariable } from '@workspaces/elevenlabs/parseKbDocument';
-import type {
-  KbChatMessage,
-  KbDocumentStructure,
-  KbSemanticAnalysisStatus,
-} from './kbRuleTypes';
-import { linkKbRuleHierarchy } from './kbRuleHierarchy';
-import { normalizeKbRules } from './kbRuleTypes';
-import type { KbInducedRule } from './kbRuleTypes';
-import type { KbAnalysisPhase, KbPromotionStatus } from './kbAnalysisSession';
-import { normalizeKbPromotedDrafts, type KbPromotedUseCaseDraft } from './kbPromotedUseCaseDraft';
 
-export type {
-  KbChatMessage,
-  KbDocumentStructure,
-  KbInducedRule,
-  KbRuleValidation,
-  KbRuleStatus,
-  KbRuleConfidence,
-  KbSemanticAnalysisStatus,
-} from './kbRuleTypes';
-export type { KbAnalysisPhase, KbPromotionStatus } from './kbAnalysisSession';
-export type { KbPromotedUseCaseDraft } from './kbPromotedUseCaseDraft';
 export { KB_DOCUMENT_ACCEPT } from './kbFileKinds';
 export {
   detectKbFileFormat,
@@ -55,25 +34,10 @@ export type StagedKbDocument = KbStagedFileBase & {
   markdownSnippet: string;
   /** Project repository blob id (persisted). */
   repositoryDocumentId?: string;
-  structure?: KbDocumentStructure | null;
-  /** Data kinds detected on first Analyze (pills in dock). */
-  dataTypes: readonly string[];
-  rules: readonly KbInducedRule[];
-  /** True after guided chat session started (rules may appear from chat). */
-  chatStarted: boolean;
-  semanticStatus: KbSemanticAnalysisStatus;
-  semanticError?: string;
-  analysisNote?: string;
-  chatMessages: readonly KbChatMessage[];
-  /** Guided analysis workflow (per document). */
-  analysisPhase: KbAnalysisPhase;
-  consentGiven: boolean;
-  currentRuleId: string | null;
-  kbAnalysisComplete: boolean;
-  noActionableRules?: boolean;
-  designerSignOffNoUseCases?: boolean;
-  promotionStatus: KbPromotionStatus;
-  promotedDrafts: readonly KbPromotedUseCaseDraft[];
+  /** Analisi markdown del documento — unica fonte di verità (tab Analisi del documento). */
+  documentAnalysisMarkdown: string;
+  /** Ultima versione proposta/concordata dall'agente (base esplicita per il diff). */
+  agentAnalysisBaselineMarkdown: string;
 };
 
 export type PersistedKbDocument = Omit<StagedKbDocument, 'file'>;
@@ -112,42 +76,32 @@ export function emptyKbDocument(
     variableDictionary: {},
     howToUseText: '',
     markdownSnippet: '',
-    dataTypes: [],
-    rules: [],
-    chatStarted: false,
-    semanticStatus: 'idle',
-    chatMessages: [],
-    analysisPhase: 'idle',
-    consentGiven: false,
-    currentRuleId: null,
-    kbAnalysisComplete: false,
-    promotionStatus: 'idle',
-    promotedDrafts: [],
+    documentAnalysisMarkdown: '',
+    agentAnalysisBaselineMarkdown: '',
   };
 }
 
 export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
+  const raw = p as PersistedKbDocument & {
+    documentAnalysisMarkdown?: unknown;
+    agentAnalysisBaselineMarkdown?: unknown;
+  };
   return {
     ...p,
     file: new File([], p.name, { type: p.mimeType }),
-    dataTypes: Array.isArray(p.dataTypes)
-      ? p.dataTypes.map((t) => String(t).trim()).filter(Boolean)
-      : [],
-    rules: linkKbRuleHierarchy(normalizeKbRules(p.rules)),
-    chatStarted: Boolean(p.chatStarted),
-    chatMessages: Array.isArray(p.chatMessages) ? p.chatMessages : [],
-    semanticStatus: p.semanticStatus ?? 'idle',
-    analysisPhase: p.analysisPhase ?? (p.chatStarted && p.rules?.length ? 'phase_b' : 'idle'),
-    consentGiven: Boolean(p.consentGiven),
-    currentRuleId:
-      typeof p.currentRuleId === 'string' && p.currentRuleId.trim()
-        ? p.currentRuleId.trim()
-        : null,
-    kbAnalysisComplete: Boolean(p.kbAnalysisComplete),
-    noActionableRules: p.noActionableRules === true,
-    designerSignOffNoUseCases: p.designerSignOffNoUseCases === true,
-    promotionStatus: p.promotionStatus ?? 'idle',
-    promotedDrafts: normalizeKbPromotedDrafts(p.promotedDrafts),
+    variables: Array.isArray(p.variables) ? p.variables : [],
+    variableDictionary:
+      p.variableDictionary && typeof p.variableDictionary === 'object'
+        ? p.variableDictionary
+        : {},
+    howToUseText: typeof p.howToUseText === 'string' ? p.howToUseText : '',
+    markdownSnippet: typeof p.markdownSnippet === 'string' ? p.markdownSnippet : '',
+    documentAnalysisMarkdown:
+      typeof raw.documentAnalysisMarkdown === 'string' ? raw.documentAnalysisMarkdown : '',
+    agentAnalysisBaselineMarkdown:
+      typeof raw.agentAnalysisBaselineMarkdown === 'string'
+        ? raw.agentAnalysisBaselineMarkdown
+        : '',
   };
 }
 
@@ -161,26 +115,13 @@ export type KbDocumentPatch = Partial<
     StagedKbDocument,
     | 'howToUseText'
     | 'markdownSnippet'
-    | 'structure'
-    | 'dataTypes'
-    | 'rules'
-    | 'chatStarted'
-    | 'semanticStatus'
-    | 'semanticError'
-    | 'analysisNote'
-    | 'chatMessages'
+    | 'documentAnalysisMarkdown'
+    | 'agentAnalysisBaselineMarkdown'
     | 'repositoryDocumentId'
     | 'parseStatus'
+    | 'parseError'
     | 'variables'
     | 'variableDictionary'
     | 'format'
-    | 'analysisPhase'
-    | 'consentGiven'
-    | 'currentRuleId'
-    | 'kbAnalysisComplete'
-    | 'noActionableRules'
-    | 'designerSignOffNoUseCases'
-    | 'promotionStatus'
-    | 'promotedDrafts'
   >
 >;

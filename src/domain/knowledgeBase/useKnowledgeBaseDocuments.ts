@@ -1,5 +1,5 @@
 /**
- * In-memory KB list: upload to project repository, tabular parse, semantic state on each doc.
+ * In-memory KB list: upload to project repository, tabular parse, document analysis markdown.
  */
 
 import React from 'react';
@@ -15,7 +15,6 @@ import {
   type PersistedKbDocument,
   type StagedKbDocument,
 } from './kbDocumentTypes';
-import { mergeKbDocumentPatch } from './kbAnalysisSession';
 
 export type KbDocumentPatcher =
   | KbDocumentPatch
@@ -81,7 +80,7 @@ export function useKnowledgeBaseDocuments(
         prev.map((d) => {
           if (d.id !== docId) return d;
           const resolved = typeof patch === 'function' ? patch(d) : patch;
-          return mergeKbDocumentPatch(d, resolved);
+          return { ...d, ...resolved };
         })
       );
       markDirty();

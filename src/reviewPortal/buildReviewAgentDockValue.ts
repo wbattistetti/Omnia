@@ -211,8 +211,6 @@ export function buildReviewAgentDockValue(
     knowledgeBaseRemoveDocument: live.knowledgeBaseRemoveDocument,
     knowledgeBaseUpdateDocument: live.knowledgeBaseUpdateDocument,
     knowledgeBaseReorderDocuments: live.knowledgeBaseReorderDocuments,
-    onMergeKbPromotedUseCases: reviewNoop,
-    regenerateKbPromotedUseCase: async () => null,
     onDismissUseCaseBundleFeedback: reviewNoop,
     onClearUseCaseHighlight: reviewNoop,
     onPropagateExamplePhraseStyle: () => reviewIaDisabledAsync('Propaga stile frasi'),

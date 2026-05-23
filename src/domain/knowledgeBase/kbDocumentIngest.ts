@@ -13,7 +13,6 @@ import {
   type KbStagedFileBase,
   type StagedKbDocument,
 } from './kbDocumentTypes';
-import { patchKbConsentIfReady } from './kbAnalysisSession';
 
 export type KbDocumentListUpdater = (
   updater: (prev: StagedKbDocument[]) => StagedKbDocument[]
@@ -72,7 +71,7 @@ export async function ingestKbFileToRepository(
           parseStatus: d.parseStatus === 'parsing' ? ('ready' as const) : d.parseStatus,
           parseError: d.parseStatus === 'error' ? d.parseError : undefined,
         };
-        return patchKbConsentIfReady(next);
+        return next;
       })
     );
   } catch (err) {
@@ -104,7 +103,7 @@ export async function ingestKbTabularParse(
           variableDictionary: result.variableDictionary,
           parseError: d.parseStatus === 'error' ? d.parseError : undefined,
         };
-        return patchKbConsentIfReady(next);
+        return next;
       })
     );
   } catch (err) {

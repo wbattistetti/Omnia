@@ -896,9 +896,6 @@ export function EditorKnowledgeBasePanel() {
     knowledgeBaseReorderDocuments,
     knowledgeBaseCallMeta,
     knowledgeBaseTaskContext,
-    onMergeKbPromotedUseCases,
-    regenerateKbPromotedUseCase,
-    useCases,
   } = useAIAgentEditorDock();
 
   return (
@@ -909,16 +906,12 @@ export function EditorKnowledgeBasePanel() {
         projectId={projectId}
         callMeta={knowledgeBaseCallMeta}
         taskContext={knowledgeBaseTaskContext}
-        existingUseCaseCount={useCases.length}
-        onMergePromotedUseCases={onMergeKbPromotedUseCases}
-        existingBundleUseCases={useCases}
-        regeneratePromotedUseCase={regenerateKbPromotedUseCase}
         disabled={generating}
         onAddFiles={(files) => knowledgeBaseAddFiles(files)}
         onRemoveDocument={knowledgeBaseRemoveDocument}
         onReorderDocuments={knowledgeBaseReorderDocuments}
         onUpdateDocument={knowledgeBaseUpdateDocument}
-        footerHint="Metadati e regole sul task; i file sono nel repository progetto."
+        footerHint="I file sono nel repository progetto; l'analisi markdown resta sul task."
       />
     </div>
   );

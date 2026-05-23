@@ -14,8 +14,9 @@ export interface AgentReviewKbDocumentSnapshot {
   format?: string;
   howToUseText?: string;
   markdownSnippet?: string;
+  documentAnalysisMarkdown?: string;
+  agentAnalysisBaselineMarkdown?: string;
   repositoryDocumentId?: string;
-  dataTypes?: readonly string[];
 }
 
 export interface AgentReviewKnowledgeBaseSnapshot {

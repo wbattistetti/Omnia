@@ -40,6 +40,16 @@ export const AI_CALL_PURPOSE = {
   USE_CASE_COMPLETE_CORRECTION_PREVIEW: 'USE_CASE_COMPLETE_CORRECTION_PREVIEW',
   TRAINING_PHRASES_GENERATE: 'TRAINING_PHRASES_GENERATE',
   TEXT_TRANSLATE: 'TEXT_TRANSLATE',
+  /** Raffinamento analisi markdown documento KB (tab Analisi del documento). */
+  KB_REFINE_DOCUMENT_ANALYSIS: 'KB_REFINE_DOCUMENT_ANALYSIS',
+  /** Prima proposta analisi documento KB (Guardi tu). */
+  KB_PROPOSE_DOCUMENT_ANALYSIS: 'KB_PROPOSE_DOCUMENT_ANALYSIS',
+  /** Estrazione osservazioni dal diff utente/agente. */
+  KB_REVIEW_DOCUMENT_ANALYSIS_OBSERVATIONS: 'KB_REVIEW_DOCUMENT_ANALYSIS_OBSERVATIONS',
+  /** Analisi finale concordata dopo conferma osservazioni. */
+  KB_FINALIZE_DOCUMENT_ANALYSIS: 'KB_FINALIZE_DOCUMENT_ANALYSIS',
+  /** Risposta aggiornata dopo chiarimento utente su un'osservazione. */
+  KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION: 'KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION',
 } as const;
 
 export type AiCallPurposeId = (typeof AI_CALL_PURPOSE)[keyof typeof AI_CALL_PURPOSE];
@@ -69,6 +79,13 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
     'Anteprima correzione: sintesi stile e prime bozze (max 3 messaggi)',
   [AI_CALL_PURPOSE.TRAINING_PHRASES_GENERATE]: 'Generazione training phrases intent',
   [AI_CALL_PURPOSE.TEXT_TRANSLATE]: 'Traduzione testo',
+  [AI_CALL_PURPOSE.KB_REFINE_DOCUMENT_ANALYSIS]: 'Raffinamento analisi documento KB',
+  [AI_CALL_PURPOSE.KB_PROPOSE_DOCUMENT_ANALYSIS]: 'Prima proposta analisi documento KB',
+  [AI_CALL_PURPOSE.KB_REVIEW_DOCUMENT_ANALYSIS_OBSERVATIONS]:
+    'Revisione osservazioni analisi documento KB',
+  [AI_CALL_PURPOSE.KB_FINALIZE_DOCUMENT_ANALYSIS]: 'Analisi documento KB concordata',
+  [AI_CALL_PURPOSE.KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION]:
+    'Chiarimento risposta su osservazione analisi KB',
 });
 
 /** Human-readable label for a known purpose id; falls back to the id itself when unknown. */

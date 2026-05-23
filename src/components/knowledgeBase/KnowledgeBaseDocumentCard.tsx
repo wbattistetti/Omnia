@@ -22,8 +22,6 @@ export function KnowledgeBaseDocumentCard({
   onSelect,
   onRemove,
 }: KnowledgeBaseDocumentCardProps): React.ReactElement {
-  const ruleCount = doc.rules.filter((r) => r.included && !r.deleted).length;
-
   return (
     <div
       className={
@@ -47,11 +45,6 @@ export function KnowledgeBaseDocumentCard({
         <span className="min-w-0 whitespace-nowrap font-medium text-slate-100" title={doc.name}>
           {doc.name}
         </span>
-        {ruleCount > 0 ? (
-          <span className="shrink-0 rounded bg-violet-950/80 px-1.5 py-0.5 text-violet-300">
-            {ruleCount}
-          </span>
-        ) : null}
       </button>
       {onRemove ? (
         <button

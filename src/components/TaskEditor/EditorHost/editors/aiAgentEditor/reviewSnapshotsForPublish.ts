@@ -45,8 +45,13 @@ function kbDocumentsFromJson(json: string): AgentReviewKnowledgeBaseSnapshot | u
     ...(d.format ? { format: d.format } : {}),
     ...(d.howToUseText?.trim() ? { howToUseText: d.howToUseText } : {}),
     ...(d.markdownSnippet?.trim() ? { markdownSnippet: d.markdownSnippet } : {}),
+    ...(d.documentAnalysisMarkdown?.trim()
+      ? { documentAnalysisMarkdown: d.documentAnalysisMarkdown }
+      : {}),
+    ...(d.agentAnalysisBaselineMarkdown?.trim()
+      ? { agentAnalysisBaselineMarkdown: d.agentAnalysisBaselineMarkdown }
+      : {}),
     ...(d.repositoryDocumentId ? { repositoryDocumentId: d.repositoryDocumentId } : {}),
-    ...(d.dataTypes?.length ? { dataTypes: [...d.dataTypes] } : {}),
   }));
   return { documents };
 }

@@ -53,11 +53,12 @@ const {
 } = require('./services/ElevenLabsKbPromptService');
 const kbDocumentRepository = require('./services/kbDocumentRepository');
 const {
-  analyzeSemantic,
-  reanalyzeRules,
-  startChatSession,
-  chatAboutDocument,
-} = require('./services/KbSemanticAnalysisService');
+  proposeDocumentAnalysis,
+  refineDocumentAnalysis,
+  reviewAnalysisObservations,
+  clarifyObservationResponse,
+  finalizeDocumentAnalysis,
+} = require('./services/kbDocumentAnalysisService');
 const {
   assertAiCallContract,
   aiCallContractErrorResponse,
@@ -6800,65 +6801,22 @@ app.post('/design/ai-agent-generate', async (req, res) => {
     const globalStyleIdNorm =
       typeof globalStyleId === 'string' && globalStyleId.trim() ? globalStyleId.trim() : undefined;
 
-    if (action === 'kb_analyze_semantic') {
+    if (action === 'kb_propose_document_analysis') {
       const {
         projectId,
         repositoryDocumentId,
         documentName,
-        variables,
-        sampleText,
-        analysisIntent,
+        documentSampleText,
         agentTaskSummary,
         taskVariables,
         existingUseCaseSummaries,
       } = body;
-      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_ANALYZE_SEMANTIC' });
-      const result = await analyzeSemantic({
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_PROPOSE_DOCUMENT_ANALYSIS' });
+      const result = await proposeDocumentAnalysis({
         projectId: typeof projectId === 'string' ? projectId : '',
         repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
         documentName: typeof documentName === 'string' ? documentName : 'document',
-        variables: Array.isArray(variables) ? variables : [],
-        analysisIntent: typeof analysisIntent === 'string' ? analysisIntent : '',
-        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
-        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
-        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
-          ? existingUseCaseSummaries
-          : [],
-        provider,
-        model,
-        aiProviderService,
-        purpose: callMeta.purpose,
-        taskId: callMeta.taskId,
-        taskLabel: callMeta.taskLabel,
-        sampleTextOverride: typeof sampleText === 'string' ? sampleText : undefined,
-      });
-      return res.json({ success: true, ...result });
-    }
-
-    if (action === 'kb_reanalyze_rules') {
-      const {
-        projectId,
-        repositoryDocumentId,
-        documentName,
-        variables,
-        structureJson,
-        rules,
-        dataTypes,
-        analysisIntent,
-        agentTaskSummary,
-        taskVariables,
-        existingUseCaseSummaries,
-      } = body;
-      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_REANALYZE_RULES' });
-      const result = await reanalyzeRules({
-        projectId: typeof projectId === 'string' ? projectId : '',
-        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
-        documentName: typeof documentName === 'string' ? documentName : 'document',
-        variables: Array.isArray(variables) ? variables : [],
-        structureJson: typeof structureJson === 'string' ? structureJson : '',
-        rules: Array.isArray(rules) ? rules : [],
-        dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
-        analysisIntent: typeof analysisIntent === 'string' ? analysisIntent : '',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
         agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
         taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
         existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
@@ -6874,23 +6832,26 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       return res.json({ success: true, ...result });
     }
 
-    if (action === 'kb_chat_start') {
+    if (action === 'kb_review_document_analysis_observations') {
       const {
         projectId,
         repositoryDocumentId,
         documentName,
-        variables,
-        structureJson,
-        dataTypes,
+        documentSampleText,
+        agentBaselineMarkdown,
+        userDraftMarkdown,
       } = body;
-      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_CHAT_START' });
-      const result = await startChatSession({
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'KB_REVIEW_DOCUMENT_ANALYSIS_OBSERVATIONS',
+      });
+      const result = await reviewAnalysisObservations({
         projectId: typeof projectId === 'string' ? projectId : '',
         repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
         documentName: typeof documentName === 'string' ? documentName : 'document',
-        variables: Array.isArray(variables) ? variables : [],
-        structureJson: typeof structureJson === 'string' ? structureJson : '',
-        dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
         provider,
         model,
         aiProviderService,
@@ -6901,39 +6862,99 @@ app.post('/design/ai-agent-generate', async (req, res) => {
       return res.json({ success: true, ...result });
     }
 
-    if (action === 'kb_chat') {
+    if (action === 'kb_clarify_document_analysis_observation') {
       const {
         projectId,
         repositoryDocumentId,
         documentName,
-        variables,
-        structureJson,
-        rules,
-        dataTypes,
-        messages,
-        userMessage,
-        agentTaskSummary,
-        taskVariables,
-        existingUseCaseSummaries,
-        currentRuleId,
+        documentSampleText,
+        userText,
+        previousInterpretation,
+        userCorrection,
       } = body;
-      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_CHAT' });
-      const result = await chatAboutDocument({
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION',
+      });
+      const result = await clarifyObservationResponse({
         projectId: typeof projectId === 'string' ? projectId : '',
         repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
         documentName: typeof documentName === 'string' ? documentName : 'document',
-        variables: Array.isArray(variables) ? variables : [],
-        structureJson: typeof structureJson === 'string' ? structureJson : '',
-        rules: Array.isArray(rules) ? rules : [],
-        dataTypes: Array.isArray(dataTypes) ? dataTypes : [],
-        messages: Array.isArray(messages) ? messages : [],
-        userMessage: typeof userMessage === 'string' ? userMessage : '',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        userText: typeof userText === 'string' ? userText : '',
+        previousInterpretation:
+          typeof previousInterpretation === 'string' ? previousInterpretation : '',
+        userCorrection: typeof userCorrection === 'string' ? userCorrection : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_finalize_document_analysis') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        documentSampleText,
+        agentBaselineMarkdown,
+        userDraftMarkdown,
+        observations,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_FINALIZE_DOCUMENT_ANALYSIS' });
+      const result = await finalizeDocumentAnalysis({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
+        observations: Array.isArray(observations) ? observations : [],
         agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
         taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
         existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
           ? existingUseCaseSummaries
           : [],
-        currentRuleId: typeof currentRuleId === 'string' ? currentRuleId : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_refine_document_analysis') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        draftMarkdown,
+        documentSampleText,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_REFINE_DOCUMENT_ANALYSIS' });
+      const result = await refineDocumentAnalysis({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        draftMarkdown: typeof draftMarkdown === 'string' ? draftMarkdown : '',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
         provider,
         model,
         aiProviderService,

@@ -1,5 +1,5 @@
 /**
- * Build agent task context payload for KB semantic analysis API calls.
+ * Build agent task context payload for KB document analysis API calls.
  */
 
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';

@@ -18,19 +18,8 @@ const sample: PersistedKbDocument[] = [
     variableDictionary: {},
     howToUseText: '',
     markdownSnippet: '',
-    dataTypes: ['Medici', 'Prestazioni'],
-    rules: [],
-    chatStarted: false,
-    semanticStatus: 'idle',
-    chatMessages: [],
-    analysisPhase: 'idle',
-    consentGiven: false,
-    currentRuleId: null,
-    kbAnalysisComplete: false,
-    noActionableRules: false,
-    designerSignOffNoUseCases: false,
-    promotionStatus: 'idle',
-    promotedDrafts: [],
+    documentAnalysisMarkdown: '## Analisi\n- voce 1',
+    agentAnalysisBaselineMarkdown: '',
   },
 ];
 
@@ -42,5 +31,14 @@ describe('serializeKbDocuments', () => {
 
   it('returns empty array for invalid json', () => {
     expect(parseAgentKnowledgeBaseDocumentsJson('not-json')).toEqual([]);
+  });
+
+  it('migrates legacy rows without analysis fields to empty strings', () => {
+    const legacy = [
+      { ...sample[0], documentAnalysisMarkdown: undefined, agentAnalysisBaselineMarkdown: undefined },
+    ] as unknown[];
+    const parsed = parseAgentKnowledgeBaseDocumentsJson(JSON.stringify(legacy));
+    expect(parsed[0]?.documentAnalysisMarkdown).toBe('');
+    expect(parsed[0]?.agentAnalysisBaselineMarkdown).toBe('');
   });
 });

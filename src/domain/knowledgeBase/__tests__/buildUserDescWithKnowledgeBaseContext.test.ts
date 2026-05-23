@@ -25,18 +25,10 @@ function stubDoc(overrides: Partial<StagedKbDocument> = {}): StagedKbDocument {
     variableDictionary: {},
     howToUseText: '',
     markdownSnippet: '',
-    dataTypes: [],
-    rules: [],
-    chatStarted: false,
-    semanticStatus: 'idle',
-    analysisPhase: 'idle',
-    consentGiven: false,
-    currentRuleId: null,
-    kbAnalysisComplete: false,
-    promotionStatus: 'idle',
-    promotedDrafts: [],
+    documentAnalysisMarkdown: '',
+    agentAnalysisBaselineMarkdown: '',
     ...overrides,
-  } as StagedKbDocument;
+  };
 }
 
 describe('kbDocumentsEligibleForUseCaseContext', () => {

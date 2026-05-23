@@ -35,18 +35,9 @@ export function stagedKbDocumentsFromReviewSnapshot(
     variableDictionary: {},
     howToUseText: doc.howToUseText ?? '',
     markdownSnippet: doc.markdownSnippet ?? '',
+    documentAnalysisMarkdown: doc.documentAnalysisMarkdown ?? '',
+    agentAnalysisBaselineMarkdown: doc.agentAnalysisBaselineMarkdown ?? '',
     repositoryDocumentId: doc.repositoryDocumentId,
-    dataTypes: doc.dataTypes ?? [],
-    rules: [],
-    chatStarted: false,
-    semanticStatus: 'idle',
-    chatMessages: [],
-    analysisPhase: 'idle',
-    consentGiven: false,
-    currentRuleId: null,
-    kbAnalysisComplete: false,
-    promotionStatus: 'idle',
-    promotedDrafts: [],
   }));
 }
 
@@ -62,8 +53,13 @@ function stagedDocToReviewSnapshot(doc: StagedKbDocument): AgentReviewKbDocument
     ...(doc.format ? { format: doc.format } : {}),
     ...(doc.howToUseText?.trim() ? { howToUseText: doc.howToUseText } : {}),
     ...(doc.markdownSnippet?.trim() ? { markdownSnippet: doc.markdownSnippet } : {}),
+    ...(doc.documentAnalysisMarkdown?.trim()
+      ? { documentAnalysisMarkdown: doc.documentAnalysisMarkdown }
+      : {}),
+    ...(doc.agentAnalysisBaselineMarkdown?.trim()
+      ? { agentAnalysisBaselineMarkdown: doc.agentAnalysisBaselineMarkdown }
+      : {}),
     ...(doc.repositoryDocumentId ? { repositoryDocumentId: doc.repositoryDocumentId } : {}),
-    ...(doc.dataTypes?.length ? { dataTypes: [...doc.dataTypes] } : {}),
   };
 }
 
