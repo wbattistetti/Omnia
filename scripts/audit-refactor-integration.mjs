@@ -269,16 +269,44 @@ function checkDomainComponentsIntegration() {
   );
 
   addEntry({
-    id: 'domain-components.use-case-review-panel',
-    name: 'UseCaseReviewPanel (@omnia/domain-components)',
-    packagePath: rel(path.join(packageDir, 'usecase/UseCaseReviewPanel.tsx')),
+    id: 'domain-components.portal-stepper-only',
+    name: 'Portal uses @omnia/domain-components for stepper only (no fork panels)',
+    packagePath: rel(path.join(packageDir, 'review/ReviewPortalStepper.tsx')),
     status: portalDirect.length > 0 ? STATUS.INTEGRATED : STATUS.MISSING,
     consumers: portalDirect,
     evidence:
       portalDirect.length > 0
-        ? 'Portal imports @omnia/domain-components directly'
+        ? 'Portal imports ReviewPortalStepper from @omnia/domain-components'
         : 'Portal does not import domain-components',
     blocking: portalDirect.length === 0,
+  });
+
+  const forkSymbols = [
+    'ReviewTaskPanel',
+    'ReviewKnowledgeBasePanel',
+    'ReviewBackendPanel',
+    'ReviewConversationPanel',
+    'UseCaseReviewPanel',
+    'ReviewPortalBackendPanel',
+    'ReviewPortalConversationPanel',
+  ];
+  const portalForkViolations = [];
+  for (const file of walkFiles(path.join(REPO_ROOT, 'use-case-review-portal/src'))) {
+    const content = readText(file);
+    for (const sym of forkSymbols) {
+      if (content.includes(sym)) portalForkViolations.push(`${rel(file)}: ${sym}`);
+    }
+  }
+  addEntry({
+    id: 'domain-components.no-fork-panels-in-portal',
+    name: 'No legacy Review* fork panels in portal src',
+    status: portalForkViolations.length === 0 ? STATUS.INTEGRATED : STATUS.LEGACY_DUPLICATE,
+    consumers: portalForkViolations.slice(0, 10),
+    evidence:
+      portalForkViolations.length === 0
+        ? 'Portal mounts Editor*Panel from Omnia AIAgentEditorDockPanels'
+        : `${portalForkViolations.length} fork symbol(s) still referenced`,
+    blocking: portalForkViolations.length > 0,
   });
 
   const minimalDir = path.join(
@@ -304,7 +332,7 @@ function checkDomainComponentsIntegration() {
   const composerContent = fs.existsSync(composerPath) ? readText(composerPath) : '';
   const composerUsesReviewPanel =
     composerContent.includes('UseCaseReviewPanel') ||
-    composerContent.includes('@omnia/domain-components') ||
+    composerContent.includes('ReviewTaskPanel') ||
     composerContent.includes('./minimal');
   addEntry({
     id: 'domain-components.composer-not-review-panel',
@@ -316,39 +344,34 @@ function checkDomainComponentsIntegration() {
       : 'Composer is full wizard; portal alone uses domain-components',
     blocking: composerUsesReviewPanel,
   });
-  const structuredConsumers = [];
-  for (const root of searchRoots) {
-    for (const file of walkFiles(root)) {
-      const content = readText(file);
-      if (
-        /AgentReviewStructuredSectionsBlock|TaskStructuredViewerPanel/.test(content) &&
-        !file.includes('AgentReviewStructuredSectionsBlock.tsx') &&
-        !file.includes('TaskStructuredViewerPanel.tsx')
-      ) {
-        structuredConsumers.push(rel(file));
-      }
-    }
-  }
+  const workspacePath = path.join(REPO_ROOT, 'use-case-review-portal/src/ReviewUseCaseWorkspace.tsx');
+  const workspaceContent = fs.existsSync(workspacePath) ? readText(workspacePath) : '';
+  const usesOmniaEditorPanels =
+    workspaceContent.includes('EditorUnifiedDescriptionPanel') &&
+    workspaceContent.includes('EditorUseCasesPanel') &&
+    workspaceContent.includes('EditorKnowledgeBasePanel');
   addEntry({
-    id: 'domain-components.task-structured-viewer',
-    name: 'Structured sections block (AgentReviewStructuredSectionsBlock)',
-    packagePath: rel(path.join(packageDir, 'task/AgentReviewStructuredSectionsBlock.tsx')),
-    status: structuredConsumers.length > 0 ? STATUS.INTEGRATED : STATUS.PARKED,
-    consumers: structuredConsumers,
-    evidence:
-      structuredConsumers.length > 0
-        ? 'Imported outside package'
-        : 'Exported from package but not wired in Omnia or portal yet',
+    id: 'portal.omnia-editor-panels',
+    name: 'Review workspace mounts Omnia Editor*Panel bodies',
+    status: usesOmniaEditorPanels ? STATUS.INTEGRATED : STATUS.MISSING,
+    consumers: usesOmniaEditorPanels ? [rel(workspacePath)] : [],
+    evidence: usesOmniaEditorPanels
+      ? 'ReviewUseCaseWorkspace imports AIAgentEditorDockPanels'
+      : 'Workspace missing Editor*Panel imports',
+    blocking: !usesOmniaEditorPanels,
   });
 }
 
 function checkPortalDecoupling() {
   const portalSrc = path.join(REPO_ROOT, 'use-case-review-portal/src');
   const forbidden = [
-    { pattern: '@components/', label: '@components' },
-    { pattern: 'AIAgentUseCaseComposer', label: 'AIAgentUseCaseComposer' },
-    { pattern: '@responseEditor/', label: '@responseEditor' },
-    { pattern: 'ReviewOmniaProviders', label: 'ReviewOmniaProviders' },
+    { pattern: 'ReviewTaskPanel', label: 'ReviewTaskPanel fork' },
+    { pattern: 'ReviewKnowledgeBasePanel', label: 'ReviewKnowledgeBasePanel fork' },
+    { pattern: 'ReviewBackendPanel', label: 'ReviewBackendPanel fork' },
+    { pattern: 'ReviewConversationPanel', label: 'ReviewConversationPanel fork' },
+    { pattern: 'UseCaseReviewPanel', label: 'UseCaseReviewPanel fork' },
+    { pattern: 'ReviewPortalBackendPanel', label: 'ReviewPortalBackendPanel wrapper' },
+    { pattern: 'ReviewPortalConversationPanel', label: 'ReviewPortalConversationPanel wrapper' },
   ];
 
   /** @type {string[]} */
@@ -356,12 +379,8 @@ function checkPortalDecoupling() {
   for (const file of walkFiles(portalSrc)) {
     const content = readText(file);
     for (const f of forbidden) {
-      const fromRe = new RegExp(
-        `from\\s+['"]${f.pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
-        'g'
-      );
-      if (fromRe.test(content)) {
-        violations.push(`${rel(file)} imports ${f.label}`);
+      if (content.includes(f.pattern)) {
+        violations.push(`${rel(file)} references ${f.label}`);
       }
     }
   }
@@ -374,20 +393,21 @@ function checkPortalDecoupling() {
     consumers: uniqueViolations.slice(0, 10),
     evidence:
       uniqueViolations.length === 0
-        ? 'Portal src does not import composer/ResponseEditor/@components'
-        : `${uniqueViolations.length} forbidden import(s) in portal`,
+        ? 'Portal src does not reference legacy Review* fork panels'
+        : `${uniqueViolations.length} forbidden fork reference(s) in portal`,
     blocking: uniqueViolations.length > 0,
   });
 
-  const appMain = readText(path.join(portalSrc, 'main.tsx'));
+  const workspaceMain = readText(path.join(portalSrc, 'ReviewUseCaseWorkspace.tsx'));
   addEntry({
-    id: 'portal.no-review-providers',
-    name: 'ReviewOmniaProviders not mounted in portal main',
-    status: appMain.includes('ReviewOmniaProviders') ? STATUS.MISSING : STATUS.INTEGRATED,
-    consumers: ['use-case-review-portal/src/main.tsx'],
-    evidence: appMain.includes('ReviewOmniaProviders')
-      ? 'ReviewOmniaProviders still mounted'
-      : 'Portal boots without Omnia context providers',
+    id: 'portal.omnia-providers',
+    name: 'ReviewOmniaProviders mounted in workspace',
+    status: workspaceMain.includes('ReviewOmniaProviders') ? STATUS.INTEGRATED : STATUS.MISSING,
+    consumers: ['use-case-review-portal/src/ReviewUseCaseWorkspace.tsx'],
+    evidence: workspaceMain.includes('ReviewOmniaProviders')
+      ? 'Workspace wraps Omnia panels with minimal providers'
+      : 'ReviewOmniaProviders missing from workspace',
+    blocking: !workspaceMain.includes('ReviewOmniaProviders'),
   });
 }
 

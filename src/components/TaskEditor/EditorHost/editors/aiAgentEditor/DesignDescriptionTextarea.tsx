@@ -3,6 +3,8 @@
  */
 
 import React from 'react';
+import { MissingDesignerLlmModelAlert } from '@components/settings/designerLlm/MissingDesignerLlmModelAlert';
+import { isDesignerLlmMissingModelMessage } from '@components/settings/designerLlm/designerLlmMessages';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { DesignDescriptionPolishOffer } from './DesignDescriptionPolishOffer';
 import { AgentDescriptionMarkdownEditor } from './AgentDescriptionMarkdownEditor';
@@ -30,6 +32,19 @@ export function DesignDescriptionTextarea({
   return (
     <div className={containerClassName}>
       <div className="relative flex min-h-0 flex-1 flex-col">
+        {isDesignerLlmMissingModelMessage(editorCtx.useCaseComposerError) ? (
+          <MissingDesignerLlmModelAlert
+            onModelSelected={editorCtx.onClearUseCaseComposerError}
+            publishedSnapshot={editorCtx.reviewDesignerLlm}
+          />
+        ) : editorCtx.useCaseComposerError ? (
+          <div
+            className="mb-2 shrink-0 rounded-md border border-red-500/40 bg-red-950/50 px-3 py-2 text-xs text-red-200"
+            role="alert"
+          >
+            {editorCtx.useCaseComposerError}
+          </div>
+        ) : null}
         <AgentDescriptionMarkdownEditor
           value={editorCtx.designDescription}
           onChange={editorCtx.setDesignDescription}

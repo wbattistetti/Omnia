@@ -8,9 +8,9 @@ export default {
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
-    path.join(omniaRoot, 'src/components/TaskEditor/EditorHost/editors/aiAgentEditor/**/*.{ts,tsx}'),
+    path.join(omniaRoot, 'src/components/**/*.{ts,tsx}'),
     path.join(omniaRoot, 'src/context/**/*.{ts,tsx}'),
-    path.join(omniaRoot, 'src/components/TaskEditor/ResponseEditor/**/*.{ts,tsx}'),
+    path.join(omniaRoot, 'packages/omnia-domain-components/src/**/*.{ts,tsx}'),
   ],
   theme: { extend: {} },
   plugins: [],

@@ -26,6 +26,7 @@ import {
   reviewIaDisabledAsync,
   reviewNoop,
 } from './reviewAgentDockStubs';
+import type { ReviewAgentIaDockSlice } from './useReviewAgentIaDockSlice';
 
 export interface ReviewAgentDockLiveInput {
   projectId: string;
@@ -57,6 +58,9 @@ export interface ReviewAgentDockLiveInput {
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
   onComposerIaError: (message: string) => void;
+  backends: import('@domain/agentReviewChannel/reviewSnapshots').AgentReviewBackendSnapshot | null;
+  designerLlm: import('@domain/agentReviewChannel/reviewDocument').AgentReviewDesignerLlmSnapshot | null;
+  ia: ReviewAgentIaDockSlice;
 }
 
 export function conversationalRulesFromReviewSnapshot(
@@ -145,12 +149,11 @@ export function buildReviewAgentDockValue(
 
   return {
     ...staticSlice,
+    ...live.ia,
     instanceId: live.taskInstanceId,
     hasAgentGeneration: true,
     designDescription: live.designDescription,
     setDesignDescription: live.setDesignDescription,
-    onPolishDesignDescription: () => reviewIaDisabledAsync('Polish descrizione'),
-    onDismissDesignDescriptionPolishOffer: reviewNoop,
     composedRuntimeMarkdown: live.structuredRevision.composedRuntimeMarkdown,
     structuredSectionsState: live.structuredRevision.sectionsState,
     onApplyRevisionOps: live.structuredRevision.applyRevisionOps,
@@ -167,15 +170,9 @@ export function buildReviewAgentDockValue(
     setConversationalRules: live.setConversationalRules,
     useCaseComposerError: live.useCaseComposerError,
     onClearUseCaseComposerError: live.onClearUseCaseComposerError,
-    onGenerateUseCaseBundle: () => {
-      live.onComposerIaError('Generazione bundle use case non disponibile nel portale review.');
-    },
     onCreateUseCase: handleCreateUseCase,
     onSplitRootUseCaseDraft: async (draftText) => parseRootUseCaseDraftSegmentsFallback(draftText),
     onRootUseCaseBatchCreated: reviewNoop,
-    onRegenerateUseCase: () => reviewIaDisabledAsync('Rigenera use case'),
-    onGeneralizeUseCaseMeta: () => reviewIaDisabledAsync('Generalizza meta'),
-    onPolishUseCaseScenario: () => reviewIaDisabledAsync('Polish scenario'),
     onRegenerateAgentMessage: () => reviewIaDisabledAsync('Rigenera messaggio agente'),
     onAnnotateAgentMessageForJson: () => reviewIaDisabledAsync('Annota messaggio JSON'),
     onDeleteUseCase: (useCaseId) => {
@@ -244,14 +241,12 @@ export function buildReviewAgentDockValue(
     approveLexiconSurface: reviewNoop,
     revokeLexiconSurface: reviewNoop,
     updateLexiconSlotId: reviewNoop,
-    buildUseCasePropagatorCallMeta: (purpose) => ({
-      purpose,
-      taskId: live.taskInstanceId,
-    }),
     agentReviewChannel: createReviewAgentReviewChannelStub(),
     onUpdateProposedField: reviewNoop,
     onRemoveProposedField: reviewNoop,
     appendProposedFields: reviewNoop,
     onProposedLabelBlur: reviewNoop,
+    reviewBackendSnapshot: live.backends,
+    reviewDesignerLlm: live.designerLlm,
   };
 }

@@ -397,6 +397,12 @@ export interface AIAgentEditorDockContextValue {
 
   /** Portal review: read-only KB/backend project mutations; IA actions disabled. */
   reviewPortalMode: boolean;
+
+  /** Modello LLM pubblicato da Omnia (portale review — picker inline nel banner). */
+  reviewDesignerLlm?: import('@domain/agentReviewChannel/reviewDocument').AgentReviewDesignerLlmSnapshot | null;
+
+  /** Snapshot backend pubblicato (solo portale review — righe grafo/agent). */
+  reviewBackendSnapshot?: import('@domain/agentReviewChannel/reviewSnapshots').AgentReviewBackendSnapshot | null;
 }
 
 /** Exported for {@link useAgentStructuredDockSlice} (unified dock + legacy nested dock). */

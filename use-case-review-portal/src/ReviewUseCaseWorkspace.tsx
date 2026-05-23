@@ -7,16 +7,114 @@ import { FontProvider } from '@context/FontContext';
 import { ReviewPortalStepper, type ReviewPortalStepId } from '@omnia/domain-components';
 import { AIAgentEditorDockProvider } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentEditorDockContext';
 import {
+  EditorConversationPanel,
+  EditorBackendsTabPanel,
   EditorKnowledgeBasePanel,
   EditorUnifiedDescriptionPanel,
   EditorUseCasesPanel,
 } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentEditorDockPanels';
-import { ReviewPortalConversationPanel } from '@reviewPortal/ReviewPortalConversationPanel';
+import type { AgentReviewBackendSnapshot } from '@domain/agentReviewChannel/reviewSnapshots';
 import { ReviewSnapshotProjectProvider } from '@reviewPortal/ReviewSnapshotProjectProvider';
 import { useReviewStore } from './reviewStore';
+import { DesignerLlmSetupOpenButton } from '@components/settings/designerLlm/DesignerLlmSetupOpenButton';
+import { DesignerLlmSetupOverlay } from '@components/settings/designerLlm/DesignerLlmSetupHost';
 import { ReviewOmniaProviders } from './ReviewOmniaProviders';
 import { useReviewAgentDockBridge } from './useReviewAgentDockBridge';
-import { ReviewPortalBackendPanel } from './ReviewPortalBackendPanel';
+
+interface ReviewUseCaseWorkspaceInnerProps {
+  session: NonNullable<ReturnType<typeof useReviewStore.getState>['session']>;
+  backends: AgentReviewBackendSnapshot | null;
+  activeStep: ReviewPortalStepId;
+  setActiveStep: (step: ReviewPortalStepId) => void;
+  stepBadges: Partial<Record<ReviewPortalStepId, number>>;
+  composerError: string | null;
+  setComposerError: (message: string | null) => void;
+  closeSession: () => void;
+  lastSavedAt: string | null;
+  saving: boolean;
+  status: string | null;
+  designerLlm: import('@domain/agentReviewChannel/reviewDocument').AgentReviewDesignerLlmSnapshot | null;
+}
+
+/** Must render under {@link ReviewOmniaProviders} — bridge calls `useAIProvider`. */
+function ReviewUseCaseWorkspaceInner({
+  session,
+  backends,
+  activeStep,
+  setActiveStep,
+  stepBadges,
+  composerError,
+  setComposerError,
+  closeSession,
+  lastSavedAt,
+  saving,
+  status,
+  designerLlm,
+}: ReviewUseCaseWorkspaceInnerProps): React.ReactElement {
+  const dockValue = useReviewAgentDockBridge({
+    activeStep,
+    composerError,
+    setComposerError,
+  });
+
+  return (
+    <ReviewSnapshotProjectProvider
+      projectId={session.projectId}
+      taskInstanceId={session.taskId}
+      taskLabel={session.taskLabel}
+      backendSnapshot={backends}
+    >
+      <FontProvider>
+        <AIAgentEditorDockProvider value={dockValue}>
+          <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-slate-950 text-slate-100">
+            <header className="shrink-0 border-b border-slate-800 px-4 py-2">
+              <button
+                type="button"
+                onClick={closeSession}
+                className="text-xs text-violet-400 hover:text-violet-300"
+              >
+                ← Tutte le review
+              </button>
+              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <h1 className="text-sm font-bold text-slate-100">{session.taskLabel}</h1>
+                  <p className="text-xs text-slate-500">{session.projectLabel}</p>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Salvataggio automatico
+                  {lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('it-IT')}` : ''}
+                  {saving ? ' · …' : ''}
+                  {status ? ` · ${status}` : ''}
+                </p>
+              </div>
+              <div
+                id="review-designer-llm-picker"
+                className="mt-2 border-t border-slate-800/80 pt-2"
+              >
+                <DesignerLlmSetupOpenButton publishedSnapshot={designerLlm} />
+              </div>
+            </header>
+
+            <ReviewPortalStepper
+              activeStep={activeStep}
+              onSelectStep={setActiveStep}
+              badges={stepBadges}
+            />
+
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {activeStep === 'task' ? <EditorUnifiedDescriptionPanel /> : null}
+              {activeStep === 'knowledge_base' ? <EditorKnowledgeBasePanel /> : null}
+              {activeStep === 'backend' ? <EditorBackendsTabPanel /> : null}
+              {activeStep === 'prompts' ? <EditorUseCasesPanel /> : null}
+              {activeStep === 'conversation' ? <EditorConversationPanel /> : null}
+            </div>
+            <DesignerLlmSetupOverlay scope="contained" />
+          </div>
+        </AIAgentEditorDockProvider>
+      </FontProvider>
+    </ReviewSnapshotProjectProvider>
+  );
+}
 
 export function ReviewUseCaseWorkspace(): React.ReactElement {
   const session = useReviewStore((s) => s.session)!;
@@ -33,15 +131,10 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
   const backends = useReviewStore((s) => s.backends);
   const conversation = useReviewStore((s) => s.conversation);
   const categories = useReviewStore((s) => s.categories);
+  const designerLlm = useReviewStore((s) => s.designerLlm);
 
   const [activeStep, setActiveStep] = React.useState<ReviewPortalStepId>('task');
   const [composerError, setComposerError] = React.useState<string | null>(null);
-
-  const dockValue = useReviewAgentDockBridge({
-    activeStep,
-    composerError,
-    setComposerError,
-  });
 
   React.useEffect(() => {
     if (!channelLoaded) return;
@@ -69,57 +162,21 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
   };
 
   return (
-    <ReviewOmniaProviders>
-      <ReviewSnapshotProjectProvider
-        projectId={session.projectId}
-        taskInstanceId={session.taskId}
-        taskLabel={session.taskLabel}
-        backendSnapshot={backends}
-      >
-        <FontProvider>
-          <AIAgentEditorDockProvider value={dockValue}>
-          <div className="flex h-screen min-h-0 flex-col bg-slate-950 text-slate-100">
-            <header className="shrink-0 border-b border-slate-800 px-4 py-2">
-              <button
-                type="button"
-                onClick={closeSession}
-                className="text-xs text-violet-400 hover:text-violet-300"
-              >
-                ← Tutte le review
-              </button>
-              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
-                <div>
-                  <h1 className="text-sm font-bold text-slate-100">{session.taskLabel}</h1>
-                  <p className="text-xs text-slate-500">{session.projectLabel}</p>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Salvataggio automatico
-                  {lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('it-IT')}` : ''}
-                  {saving ? ' · …' : ''}
-                  {status ? ` · ${status}` : ''}
-                </p>
-              </div>
-            </header>
-
-            <ReviewPortalStepper
-              activeStep={activeStep}
-              onSelectStep={setActiveStep}
-              badges={stepBadges}
-            />
-
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {activeStep === 'task' ? <EditorUnifiedDescriptionPanel /> : null}
-              {activeStep === 'knowledge_base' ? <EditorKnowledgeBasePanel /> : null}
-              {activeStep === 'backend' ? (
-                <ReviewPortalBackendPanel backendSnapshot={backends} />
-              ) : null}
-              {activeStep === 'prompts' ? <EditorUseCasesPanel /> : null}
-              {activeStep === 'conversation' ? <ReviewPortalConversationPanel /> : null}
-            </div>
-          </div>
-          </AIAgentEditorDockProvider>
-        </FontProvider>
-      </ReviewSnapshotProjectProvider>
+    <ReviewOmniaProviders designerLlm={designerLlm}>
+      <ReviewUseCaseWorkspaceInner
+        session={session}
+        backends={backends}
+        activeStep={activeStep}
+        setActiveStep={setActiveStep}
+        stepBadges={stepBadges}
+        composerError={composerError}
+        setComposerError={setComposerError}
+        closeSession={closeSession}
+        lastSavedAt={lastSavedAt}
+        saving={saving}
+        status={status}
+        designerLlm={designerLlm}
+      />
     </ReviewOmniaProviders>
   );
 }

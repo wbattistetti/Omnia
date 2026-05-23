@@ -110,11 +110,3 @@ export function buildReviewSnapshotProjectContext(params: {
 
   return { projectData, ephemeralTasks };
 }
-
-/** Catalog rows from graph/tools (not shown in EditorBackendsPanel manual list). */
-export function derivedBackendRowsFromSnapshot(
-  snapshot: AgentReviewBackendSnapshot | null | undefined
-) {
-  if (!snapshot?.catalogRows?.length) return [];
-  return snapshot.catalogRows.filter((row) => row.sources.graph || row.sources.tools);
-}

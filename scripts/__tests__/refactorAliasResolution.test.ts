@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { getScenarioText } from '@domain/aiAgentUseCase/scenarioText';
 import { summarizeUseCaseActionLabel } from '@omnia/domain-core/usecase/logic/useCaseActionSummary';
 import { parseAgentReviewDocument } from '@domain/agentReviewChannel/reviewDocument';
-import { UseCaseReviewPanel } from '@omnia/domain-components';
+import { ReviewPortalStepper } from '@omnia/domain-components';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -35,7 +35,7 @@ describe('refactor alias resolution', () => {
 
   it('@omnia/domain-components resolves to package index', async () => {
     const direct = await import('../../packages/omnia-domain-components/src/index.ts');
-    expect(UseCaseReviewPanel).toBe(direct.UseCaseReviewPanel);
+    expect(ReviewPortalStepper).toBe(direct.ReviewPortalStepper);
   });
 
   it('vite.config maps @domain/useCaseBundle to packages/omnia-domain-core', () => {

@@ -43,9 +43,6 @@ export function createReviewAgentReviewChannelStub(): AIAgentEditorDockContextVa
 /** Fields that do not depend on review store / structured revision hook. */
 export function createReviewAgentDockStaticSlice(): Pick<
   AIAgentEditorDockContextValue,
-  | 'designDescriptionPolishBaseline'
-  | 'showDesignDescriptionPolishOffer'
-  | 'designDescriptionPolishBusy'
   | 'structuredDesignDirty'
   | 'structuredOtEnabled'
   | 'iaRevisionDiffBySection'
@@ -57,11 +54,6 @@ export function createReviewAgentDockStaticSlice(): Pick<
   | 'outputVariableMappings'
   | 'logicalSteps'
   | 'useCaseCatalogMode'
-  | 'useCaseComposerBusy'
-  | 'useCaseBundleGenerationBusy'
-  | 'useCaseBundleGenerationCount'
-  | 'useCaseBundleGenerationOrdering'
-  | 'useCaseBundleGenerationCategorizing'
   | 'useCasePhraseStylePropagationBusy'
   | 'useCasePhraseStyleBatchProgress'
   | 'useCaseCreationMessage'
@@ -106,9 +98,6 @@ export function createReviewAgentDockStaticSlice(): Pick<
   | 'reviewPortalMode'
 > {
   return {
-    designDescriptionPolishBaseline: '',
-    showDesignDescriptionPolishOffer: false,
-    designDescriptionPolishBusy: false,
     structuredDesignDirty: false,
     structuredOtEnabled: false,
     iaRevisionDiffBySection: null,
@@ -120,11 +109,6 @@ export function createReviewAgentDockStaticSlice(): Pick<
     outputVariableMappings: {},
     logicalSteps: [],
     useCaseCatalogMode: 'prompts',
-    useCaseComposerBusy: false,
-    useCaseBundleGenerationBusy: false,
-    useCaseBundleGenerationCount: null,
-    useCaseBundleGenerationOrdering: false,
-    useCaseBundleGenerationCategorizing: false,
     useCasePhraseStylePropagationBusy: false,
     useCasePhraseStyleBatchProgress: null,
     useCaseCreationMessage: null,

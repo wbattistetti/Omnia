@@ -92,6 +92,10 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api/agent-review-channels': proxyCommon,
         '/api/projects': proxyCommon,
+        /** Stesse rotte LLM dell'app Omnia (polish, bundle use case, …). */
+        '/design': proxyCommon,
+        '/api/ai-calls': proxyCommon,
+        '/api/ia-catalog': proxyCommon,
       },
     },
   };

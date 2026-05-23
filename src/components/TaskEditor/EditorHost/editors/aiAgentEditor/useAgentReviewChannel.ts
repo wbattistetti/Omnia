@@ -36,6 +36,7 @@ import type { BackendPlaceholderInstance } from '@domain/agentPrompt';
 import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { Task } from '@types/taskTypes';
+import type { AgentReviewDesignerLlmSnapshot } from '@domain/agentReviewChannel/reviewDocument';
 
 export type ReviewChannelBanner =
   | { kind: 'idle' }
@@ -76,6 +77,8 @@ export interface UseAgentReviewChannelParams {
   backendPlaceholders?: readonly BackendPlaceholderInstance[];
   projectTasks?: readonly Task[];
   manualBackendEntries?: readonly ManualCatalogEntry[];
+  /** Modello LLM designer attivo in Omnia (incluso nel publish verso il portale). */
+  designerLlm?: AgentReviewDesignerLlmSnapshot | null;
 }
 
 export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
@@ -104,6 +107,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
     backendPlaceholders = [],
     projectTasks = [],
     manualBackendEntries = [],
+    designerLlm = null,
   } = params;
 
   const [banner, setBanner] = React.useState<ReviewChannelBanner>({ kind: 'idle' });
@@ -140,6 +144,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
           agentPrompt
         ),
         ...snapshots,
+        ...(designerLlm?.model?.trim() ? { designerLlm } : {}),
       };
     },
     [
@@ -162,6 +167,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       backendPlaceholders,
       projectTasks,
       manualBackendEntries,
+      designerLlm,
     ]
   );
 

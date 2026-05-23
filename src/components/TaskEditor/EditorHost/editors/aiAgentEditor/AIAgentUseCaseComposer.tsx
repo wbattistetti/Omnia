@@ -3,6 +3,8 @@
  */
 
 import React from 'react';
+import { MissingDesignerLlmModelAlert } from '@components/settings/designerLlm/MissingDesignerLlmModelAlert';
+import { isDesignerLlmMissingModelMessage } from '@components/settings/designerLlm/designerLlmMessages';
 import {
   BookOpen,
   Brackets,
@@ -2550,7 +2552,12 @@ export function AIAgentUseCaseComposer({
         </div>
       ) : null}
 
-      {error ? (
+      {isDesignerLlmMissingModelMessage(error) ? (
+        <MissingDesignerLlmModelAlert
+          onModelSelected={onDismissError}
+          publishedSnapshot={dock?.reviewDesignerLlm}
+        />
+      ) : error ? (
         <div className="rounded-lg border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200 flex justify-between gap-2">
           <span className="min-w-0 break-words">{error}</span>
           <button

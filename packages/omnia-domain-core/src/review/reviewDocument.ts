@@ -45,6 +45,23 @@ export function pickReviewStructuredSections(
 
 export const AGENT_REVIEW_EXPORT_VERSION = 1 as const;
 
+/** Modello LLM designer pubblicato da Omnia (motore per polish / bundle nel portale). */
+export interface AgentReviewDesignerLlmSnapshot {
+  provider: 'groq' | 'openai';
+  model: string;
+}
+
+export function parseDesignerLlmSnapshot(
+  raw: unknown
+): AgentReviewDesignerLlmSnapshot | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const provider = o.provider === 'openai' || o.provider === 'groq' ? o.provider : null;
+  const model = typeof o.model === 'string' ? o.model.trim() : '';
+  if (!provider || !model) return undefined;
+  return { provider, model };
+}
+
 export interface AgentReviewChannelDocument {
   reviewExportVersion: typeof AGENT_REVIEW_EXPORT_VERSION;
   projectId: string;
@@ -72,6 +89,8 @@ export interface AgentReviewChannelDocument {
   backends?: AgentReviewBackendSnapshot;
   /** Snapshot stile conversazione e regole al momento del publish. */
   conversation?: AgentReviewConversationSnapshot;
+  /** Modello LLM designer usato in Omnia al publish (portale review lo applica al load). */
+  designerLlm?: AgentReviewDesignerLlmSnapshot;
 }
 
 export interface BuildReviewDocumentParams {
@@ -87,6 +106,7 @@ export interface BuildReviewDocumentParams {
   knowledgeBase?: AgentReviewKnowledgeBaseSnapshot;
   backends?: AgentReviewBackendSnapshot;
   conversation?: AgentReviewConversationSnapshot;
+  designerLlm?: AgentReviewDesignerLlmSnapshot;
 }
 
 function stableStringify(value: unknown): string {
@@ -192,6 +212,12 @@ export function buildAgentReviewDocument(params: BuildReviewDocumentParams): Age
   if (params.conversation) {
     doc.conversation = params.conversation;
   }
+  if (params.designerLlm?.model?.trim()) {
+    doc.designerLlm = {
+      provider: params.designerLlm.provider,
+      model: params.designerLlm.model.trim(),
+    };
+  }
   return doc;
 }
 
@@ -266,6 +292,10 @@ export function parseAgentReviewDocument(raw: unknown): AgentReviewChannelDocume
   const conversation = parseConversationSnapshot(o.conversation);
   if (conversation) {
     doc.conversation = conversation;
+  }
+  const designerLlm = parseDesignerLlmSnapshot(o.designerLlm);
+  if (designerLlm) {
+    doc.designerLlm = designerLlm;
   }
   return doc;
 }

@@ -39,7 +39,7 @@
     "test:wizard": "vitest run src/wizard/__tests__",
     "test:integration": "node scripts/test-wizard-integration.js",
     "test:refactoring": "vitest run tests/unit/TaskRepository.refactored.test.ts tests/unit/buildTaskTree.refactored.test.ts tests/integration/ResponseEditor.integration.test.ts tests/regression/ResponseEditorRegression.test.ts",
-    "test:refactor-audit": "node scripts/audit-refactor-integration.mjs && vitest run scripts/__tests__/refactorAliasResolution.test.ts packages/omnia-domain-components/src",
+    "test:refactor-audit": "node scripts/guard-no-review-ui-forks.mjs && node scripts/audit-refactor-integration.mjs && vitest run scripts/__tests__/refactorAliasResolution.test.ts packages/omnia-domain-components/src",
     "verify:refactor": "npm run test:refactor-audit && npm run test:run -- packages/omnia-domain-core && npm run review-portal:build",
     "test:e2e": "vitest run tests/e2e",
     "test:diagnostic-bridge": "vitest run tests/integration/bookFromAgenda.queryConstraintsShape.test.ts tests/integration/notifyApiServerToolDiagnostic.test.ts src/features/debugger/ui/__tests__/FlowBackendCallInvocationsPanel.diagnostic.test.tsx",

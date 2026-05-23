@@ -7,6 +7,9 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { AIProviderProvider } from '@context/AIProviderContext';
+import { AiCallLogProvider } from '@context/AiCallLogContext';
+import type { AgentReviewDesignerLlmSnapshot } from '@domain/agentReviewChannel/reviewDocument';
+import { DesignerLlmSetupHost } from '@components/settings/designerLlm/DesignerLlmSetupHost';
 import {
   ProjectTranslationsContext,
   type ProjectTranslationsContextType,
@@ -74,13 +77,23 @@ function ReviewPortalTranslationsProvider({
 
 export interface ReviewOmniaProvidersProps {
   children: React.ReactNode;
+  designerLlm?: AgentReviewDesignerLlmSnapshot | null;
 }
 
-export function ReviewOmniaProviders({ children }: ReviewOmniaProvidersProps): React.ReactElement {
+export function ReviewOmniaProviders({
+  children,
+  designerLlm = null,
+}: ReviewOmniaProvidersProps): React.ReactElement {
   return (
     <DndProvider backend={HTML5Backend}>
       <ReviewPortalTranslationsProvider>
-        <AIProviderProvider>{children}</AIProviderProvider>
+        <AIProviderProvider>
+          <AiCallLogProvider>
+            <DesignerLlmSetupHost defaultPublishedSnapshot={designerLlm}>
+              {children}
+            </DesignerLlmSetupHost>
+          </AiCallLogProvider>
+        </AIProviderProvider>
       </ReviewPortalTranslationsProvider>
     </DndProvider>
   );

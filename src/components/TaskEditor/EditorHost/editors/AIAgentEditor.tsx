@@ -120,6 +120,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     backendPlaceholders: c.backendPlaceholders,
     projectTasks: reviewPublishProjectTasks,
     manualBackendEntries: projectData?.backendCatalog?.manualEntries ?? [],
+    designerLlm:
+      model?.trim() && (provider === 'openai' || provider === 'groq')
+        ? { provider, model: model.trim() }
+        : null,
   });
 
   const onConfirmAdvanceWithoutEdits = React.useCallback(
@@ -1432,6 +1436,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
     agentReviewChannel,
     reviewPortalMode: false,
+    reviewBackendSnapshot: null,
   };
 
   const dockLayoutKey = `${c.instanceId ?? 'no-id'}-${c.hasAgentGeneration}-${showRightPanel}`;

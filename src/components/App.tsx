@@ -31,6 +31,7 @@ import { ApplyEditorChrome } from '@components/settings/ApplyEditorChrome';
 import { ConvaiProvisionPayloadModal } from '@components/DialogueEngine/ConvaiProvisionPayloadModal';
 import { AiAgentHighFrequencyDialog } from './common/AiAgentHighFrequencyDialog';
 import { AiAgentGenerateConfirmDialog } from './common/AiAgentGenerateConfirmDialog';
+import { DesignerLlmSetupHost, DesignerLlmSetupOverlay } from '@components/settings/designerLlm/DesignerLlmSetupHost';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -159,6 +160,8 @@ function AppInner() {
       <AiAgentHighFrequencyDialog />
 
       <AiAgentGenerateConfirmDialog />
+
+      <DesignerLlmSetupOverlay scope="viewport" />
     </GlobalTestPanelProvider>
   );
 }
@@ -171,6 +174,7 @@ export default function App() {
         <ProjectTranslationsProvider>
           <AIProviderProvider>
             <AiCallLogProvider>
+            <DesignerLlmSetupHost>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
                   <TaskTreeProvider>
@@ -190,6 +194,7 @@ export default function App() {
                   </TaskTreeProvider>
               </SpeechRecognitionProvider>
             </DndProvider>
+            </DesignerLlmSetupHost>
             </AiCallLogProvider>
         </AIProviderProvider>
         </ProjectTranslationsProvider>

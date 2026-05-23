@@ -41,6 +41,8 @@ import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { DesignDescriptionTextarea } from './DesignDescriptionTextarea';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
 import { KnowledgeBaseViewer } from '@components/knowledgeBase/KnowledgeBaseViewer';
+import { EditorBackendsPanel } from './EditorBackendsPanel';
+import { derivedBackendRowsFromSnapshot } from '@domain/agentReviewChannel/reviewSnapshots';
 
 /**
  * Wizard step 1 — un singolo Dockview (single-pane) le cui tab sono:
@@ -222,7 +224,7 @@ export function EditorUseCasesPanel() {
     [designDescription, knowledgeBaseDocuments.length, backendPlaceholders.length]
   );
 
-  const showGenerateCta = hasAgentGeneration && showRightPanel && !reviewPortalMode;
+  const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
   const isErrorHandlingCatalog = useCaseCatalogMode === 'error_handling';
 
@@ -700,6 +702,184 @@ export function EditorUseCasesPanel() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
+    </div>
+  );
+}
+
+/** Tab Backend — catalogo manuale + righe derivate da snapshot (portale review). */
+export function EditorBackendsTabPanel(): React.ReactElement {
+  const { reviewBackendSnapshot } = useAIAgentEditorDock();
+  const snapshot = reviewBackendSnapshot ?? null;
+  const hasManual =
+    (snapshot?.manualEntries?.length ?? 0) > 0 ||
+    snapshot?.catalogRows.some((r) => r.sources.manual) === true;
+  const derivedRows = derivedBackendRowsFromSnapshot(snapshot);
+  const hasDerived = derivedRows.length > 0;
+
+  if (!hasManual && !hasDerived) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500">
+        Nessun backend collegato a questo task nella review. Configura backend in Omnia e ripubblica.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden border-l-4 border-violet-500/50 bg-violet-950/20">
+      {hasManual ? (
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <EditorBackendsPanel {...({} as React.ComponentProps<typeof EditorBackendsPanel>)} />
+        </div>
+      ) : null}
+      {hasDerived ? (
+        <section className="shrink-0 border-t border-slate-800/80 px-2 py-3">
+          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Dal grafo e dagli agent
+          </h2>
+          <ul className="space-y-2">
+            {derivedRows.map((row) => (
+              <li
+                key={row.key}
+                className="rounded-lg border border-slate-700/80 bg-slate-900/50 px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-medium text-slate-100">{row.label}</span>
+                  <span className="font-mono text-[10px] text-violet-300/90">
+                    {row.method} {row.pathnameDisplay}
+                  </span>
+                </div>
+                <div className="mt-2 flex gap-1">
+                  {row.sources.graph ? (
+                    <span className="rounded bg-slate-700/80 px-1 py-0.5 text-[9px] text-slate-300">
+                      Grafo
+                    </span>
+                  ) : null}
+                  {row.sources.tools ? (
+                    <span className="rounded bg-violet-900/50 px-1 py-0.5 text-[9px] text-violet-200">
+                      Agent
+                    </span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+/** Tab Conversation — stile conversazione + regole (catalogo error_handling). */
+export function EditorConversationPanel(): React.ReactElement {
+  const {
+    instanceId,
+    conversationalRules,
+    setConversationalRules,
+    agentConversationStyleAuto,
+    setAgentConversationStyleAuto,
+    agentConversationStyleSelections,
+    setAgentConversationStyleSelections,
+    agentUseCaseStyleLearningNotes,
+    setAgentUseCaseStyleLearningNotes,
+    useCaseComposerBusy,
+    useCaseComposerError,
+    onClearUseCaseComposerError,
+    onCreateConversationalRule,
+    onDeleteConversationalRule,
+    useCaseGlobalStyleId,
+    setUseCaseGlobalStyleId,
+  } = useAIAgentEditorDock();
+
+  const ruleUseCases = React.useMemo(
+    () => conversationalRulesToUseCases(conversationalRules),
+    [conversationalRules]
+  );
+
+  const setRuleUseCases = React.useCallback(
+    (action: React.SetStateAction<typeof ruleUseCases>) => {
+      setConversationalRules((prevRules) => {
+        const prevAsUseCases = conversationalRulesToUseCases(prevRules);
+        const nextAsUseCases =
+          typeof action === 'function' ? action(prevAsUseCases) : action;
+        const byId = new Map(prevRules.map((r) => [r.id, r]));
+        return nextAsUseCases.map((uc, index) => {
+          const prev = byId.get(uc.id);
+          const assistantTurn = uc.dialogue?.find((t) => t.role === 'assistant');
+          return {
+            id: uc.id,
+            libraryRuleId: prev?.libraryRuleId ?? null,
+            label: uc.label,
+            scenario: uc.payoff ?? uc.scenario?.llm ?? '',
+            exampleMessage: assistantTurn?.content ?? '',
+            sort_order: index,
+            enabled: uc.included_in_conversations !== false,
+          };
+        });
+      });
+    },
+    [setConversationalRules]
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-4">
+        <section className="rounded-lg border border-slate-700/80 bg-slate-900/40 p-3">
+          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-emerald-400/90">
+            Stile conversazione
+          </h2>
+          <ConversationStyleEditor
+            selections={agentConversationStyleSelections}
+            onSelectionsChange={setAgentConversationStyleSelections}
+            auto={agentConversationStyleAuto}
+            onAutoChange={setAgentConversationStyleAuto}
+          />
+          <label className="mt-3 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Note stile (apprendimento)
+          </label>
+          <textarea
+            className="mt-1 w-full min-h-[72px] rounded border border-slate-600 bg-slate-950/80 px-2 py-1.5 text-sm text-slate-100"
+            value={agentUseCaseStyleLearningNotes}
+            onChange={(e) => setAgentUseCaseStyleLearningNotes(e.target.value)}
+            placeholder="Note per la prossima generazione…"
+          />
+        </section>
+
+        {ruleUseCases.length > 0 ? (
+          <section className="min-h-[240px] flex flex-col rounded-lg border border-slate-700/60 overflow-hidden">
+            <h2 className="shrink-0 border-b border-slate-800 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Regole conversazionali
+            </h2>
+            <div className="min-h-0 flex-1">
+              <AIAgentUseCaseComposer
+                editorTaskInstanceId={instanceId}
+                logicalSteps={[]}
+                useCases={ruleUseCases}
+                setUseCases={setRuleUseCases}
+                busy={useCaseComposerBusy}
+                error={useCaseComposerError}
+                onDismissError={onClearUseCaseComposerError}
+                onCreateUseCase={async (params) =>
+                  onCreateConversationalRule({
+                    label: params.label,
+                    parentId: params.parentId,
+                    creationScope: params.creationScope,
+                  })
+                }
+                onDeleteUseCase={(id) => onDeleteConversationalRule(id)}
+                useCaseGlobalStyleId={useCaseGlobalStyleId}
+                onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
+                useCaseStyleLearningNotes={agentUseCaseStyleLearningNotes}
+                onUseCaseStyleLearningNotesChange={setAgentUseCaseStyleLearningNotes}
+                composerCatalog="error_handling"
+              />
+            </div>
+          </section>
+        ) : (
+          <p className="text-center text-sm text-slate-500">
+            Nessuna regola conversazionale in questa review.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

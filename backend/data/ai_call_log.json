@@ -1,6 +1,23 @@
 {
   "records": [
     {
+      "id": "12d87da2-266c-4f5d-b78c-89c6fb6d8d25",
+      "ts": "2026-05-23T03:48:52.240Z",
+      "providerId": "openai",
+      "modelId": "gpt-5.1",
+      "purpose": "AGENT_POLISH_DESIGN_DESCRIPTION",
+      "inputTokens": 683,
+      "outputTokens": 930,
+      "totalTokens": 1613,
+      "costUsd": 0.01015375,
+      "costEur": 0.00875700015,
+      "durationMs": 9039,
+      "pricingFound": true,
+      "error": null,
+      "taskId": "g_2468b70ef7c21dd7ac10aa63c75e8a61-tf04u0fm7",
+      "taskLabel": "Identificazione prestazione"
+    },
+    {
       "id": "dcc6cc6b-5246-4e25-8c1f-8bc83158a321",
       "ts": "2026-05-21T12:15:39.504Z",
       "providerId": "openai",
@@ -8482,26 +8499,9 @@
       "error": null,
       "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778681911289-nq5mw1",
       "taskLabel": "patrick"
-    },
-    {
-      "id": "5547fe17-1d89-424f-8da2-3f9b895ac03a",
-      "ts": "2026-05-14T02:11:36.803Z",
-      "providerId": "openai",
-      "modelId": "gpt-5.1",
-      "purpose": "USE_CASE_COMPLETE_CORRECTION_PREVIEW",
-      "inputTokens": 980,
-      "outputTokens": 474,
-      "totalTokens": 1454,
-      "costUsd": 0.005965,
-      "costEur": 0.00508176245,
-      "durationMs": 4745,
-      "pricingFound": true,
-      "error": null,
-      "taskId": "g_e10699dc6a884c61d9f51c8e82ed634b-1778681911289-nq5mw1",
-      "taskLabel": "patrick"
     }
   ],
   "meta": {
-    "updatedAt": "2026-05-21T12:15:39.504Z"
+    "updatedAt": "2026-05-23T03:48:52.240Z"
   }
 }

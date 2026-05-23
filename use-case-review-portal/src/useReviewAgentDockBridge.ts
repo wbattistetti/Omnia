@@ -17,6 +17,7 @@ import {
   conversationalRulesFromReviewSnapshot,
 } from '@reviewPortal/buildReviewAgentDockValue';
 import { stagedKbDocumentsFromReviewSnapshot } from '@reviewPortal/mapReviewKbSnapshot';
+import { useReviewAgentIaDockSlice } from '@reviewPortal/useReviewAgentIaDockSlice';
 import { useReviewStore } from './reviewStore';
 
 function structuredSectionsEqual(
@@ -47,6 +48,7 @@ export function useReviewAgentDockBridge({
   const replaceStructuredSections = useReviewStore((s) => s.replaceStructuredSections);
   const knowledgeBase = useReviewStore((s) => s.knowledgeBase);
   const backends = useReviewStore((s) => s.backends);
+  const designerLlm = useReviewStore((s) => s.designerLlm);
   const conversation = useReviewStore((s) => s.conversation);
   const patchConversation = useReviewStore((s) => s.patchConversation);
   const useCases = useReviewStore((s) => s.useCases);
@@ -169,6 +171,24 @@ export function useReviewAgentDockBridge({
     [backends]
   );
 
+  const ia = useReviewAgentIaDockSlice({
+    projectId: session.projectId,
+    taskInstanceId: session.taskId,
+    taskLabel: session.taskLabel,
+    designDescription: description,
+    setDesignDescription: setDescription,
+    useCases,
+    setUseCases,
+    structuredRevision,
+    knowledgeBaseDocuments,
+    useCaseGlobalStyleId: globalStyleId,
+    agentUseCaseStyleLearningNotes: styleLearningNotes,
+    channelLoaded,
+    useCaseComposerError: composerError,
+    onClearUseCaseComposerError: () => setComposerError(null),
+    onComposerIaError: setComposerError,
+  });
+
   return React.useMemo(
     () =>
       buildReviewAgentDockValue({
@@ -197,6 +217,9 @@ export function useReviewAgentDockBridge({
         useCaseComposerError: composerError,
         onClearUseCaseComposerError: () => setComposerError(null),
         onComposerIaError: setComposerError,
+        backends,
+        designerLlm,
+        ia,
       }),
     [
       session.projectId,
@@ -218,6 +241,9 @@ export function useReviewAgentDockBridge({
       useCaseCatalogMode,
       composerError,
       setComposerError,
+      backends,
+      designerLlm,
+      ia,
     ]
   );
 }

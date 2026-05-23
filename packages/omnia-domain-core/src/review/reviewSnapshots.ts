@@ -238,3 +238,11 @@ export function hasReviewSnapshotContent(params: {
       params.conversation?.styleLearningNotes?.trim()
   );
 }
+
+/** Catalog rows from graph/tools (read-only; not in manual backend accordion). */
+export function derivedBackendRowsFromSnapshot(
+  snapshot: AgentReviewBackendSnapshot | null | undefined
+): AgentReviewBackendRowSnapshot[] {
+  if (!snapshot?.catalogRows?.length) return [];
+  return snapshot.catalogRows.filter((row) => row.sources.graph || row.sources.tools);
+}

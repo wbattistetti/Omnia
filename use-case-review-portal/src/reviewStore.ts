@@ -16,6 +16,7 @@ import {
   buildAgentReviewDocument,
   computeReviewContentHashAsync,
   canonicalReviewPayload,
+  type AgentReviewDesignerLlmSnapshot,
 } from '@domain/agentReviewChannel/reviewDocument';
 import {
   fetchAgentReviewChannel,
@@ -27,6 +28,20 @@ import { reviewApiBase } from './reviewConfig';
 import { reviewAuthToken } from './reviewAuth';
 
 const LS_PREFIX = 'omnia-review-draft:';
+
+function designerLlmFromBrowser(): AgentReviewDesignerLlmSnapshot | undefined {
+  try {
+    const raw = localStorage.getItem('omnia.omniaTutor.v1');
+    const model =
+      raw && typeof JSON.parse(raw)?.model === 'string' ? String(JSON.parse(raw).model).trim() : '';
+    if (!model) return undefined;
+    const prov = localStorage.getItem('omnia.aiProvider');
+    if (prov !== 'openai' && prov !== 'groq') return undefined;
+    return { provider: prov, model };
+  } catch {
+    return undefined;
+  }
+}
 
 export interface ReviewSession {
   projectId: string;
@@ -46,6 +61,8 @@ interface ReviewState {
   knowledgeBase: AgentReviewKnowledgeBaseSnapshot | null;
   backends: AgentReviewBackendSnapshot | null;
   conversation: AgentReviewConversationSnapshot | null;
+  /** Modello LLM designer da Omnia (publish) o scelto nel portale. */
+  designerLlm: AgentReviewDesignerLlmSnapshot | null;
   useCases: AIAgentUseCase[];
   categories: AIAgentUseCaseCategory[];
   baselinesByUseCaseId: Record<string, { payoff: string }>;
@@ -130,6 +147,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   knowledgeBase: null,
   backends: null,
   conversation: null,
+  designerLlm: null,
   useCases: [],
   categories: [],
   baselinesByUseCaseId: {},
@@ -195,6 +213,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       knowledgeBase: null,
       backends: null,
       conversation: null,
+      designerLlm: null,
       status: '',
       channelLoaded: false,
     }),
@@ -270,6 +289,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
           knowledgeBase: doc.knowledgeBase ?? null,
           backends: doc.backends ?? null,
           conversation: doc.conversation ?? null,
+          designerLlm: doc.designerLlm ?? null,
           useCases,
           categories: [...doc.useCaseBundle.categories],
           baselinesByUseCaseId: captureBaselines(useCases),
@@ -296,6 +316,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
             knowledgeBase: parsed.knowledgeBase ?? null,
             backends: parsed.backends ?? null,
             conversation: parsed.conversation ?? null,
+            designerLlm: parsed.designerLlm ?? null,
             useCases,
             categories: [...parsed.useCaseBundle.categories],
             baselinesByUseCaseId: captureBaselines(useCases),
@@ -325,6 +346,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       backends,
       conversation,
     } = get();
+    const designerLlm = designerLlmFromBrowser() ?? get().designerLlm ?? undefined;
     set({ saving: true });
     try {
       let doc = buildAgentReviewDocument({
@@ -338,6 +360,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         ...(knowledgeBase ? { knowledgeBase } : {}),
         ...(backends ? { backends } : {}),
         ...(conversation ? { conversation } : {}),
+        ...(designerLlm ? { designerLlm } : {}),
       });
       const payload = canonicalReviewPayload(doc);
       doc = { ...doc, contentHash: await computeReviewContentHashAsync(payload) };
