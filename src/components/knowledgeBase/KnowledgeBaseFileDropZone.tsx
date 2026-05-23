@@ -63,10 +63,13 @@ export const KnowledgeBaseFileDropZone = React.forwardRef<
 
   const onDragOver = React.useCallback(
     (e: React.DragEvent) => {
-      if (disabled) return;
       if (!e.dataTransfer.types.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
+      if (disabled) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
       e.dataTransfer.dropEffect = 'copy';
       setDragOver(true);
     },
@@ -81,11 +84,11 @@ export const KnowledgeBaseFileDropZone = React.forwardRef<
 
   const onDrop = React.useCallback(
     (e: React.DragEvent) => {
-      if (disabled) return;
       if (!e.dataTransfer.types.includes('Files')) return;
       e.preventDefault();
       e.stopPropagation();
       setDragOver(false);
+      if (disabled) return;
       emitFiles(extractFiles(e.dataTransfer));
     },
     [disabled, emitFiles]

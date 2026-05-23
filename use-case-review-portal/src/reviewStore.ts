@@ -92,6 +92,7 @@ interface ReviewState {
       >
     >
   ) => void;
+  setKnowledgeBase: (snapshot: AgentReviewKnowledgeBaseSnapshot | null) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   updateUseCase: (id: string, patch: Partial<AIAgentUseCase>) => void;
@@ -254,6 +255,8 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         deployStyleId: patch.deployStyleId ?? s.conversation?.deployStyleId ?? null,
       },
     })),
+
+  setKnowledgeBase: (snapshot) => set({ knowledgeBase: snapshot }),
 
   setUseCases: (next) =>
     set((s) => ({

@@ -1,8 +1,11 @@
 /**
- * Maps review-channel KB snapshots to {@link StagedKbDocument} for {@link KnowledgeBaseViewer}.
+ * Maps review-channel KB snapshots ↔ {@link StagedKbDocument} for the review portal.
  */
 
-import type { AgentReviewKnowledgeBaseSnapshot } from '@domain/agentReviewChannel/reviewSnapshots';
+import type {
+  AgentReviewKnowledgeBaseSnapshot,
+  AgentReviewKbDocumentSnapshot,
+} from '@domain/agentReviewChannel/reviewSnapshots';
 import type { StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
 
 function emptyFile(name: string, mimeType: string): File {
@@ -13,7 +16,7 @@ function emptyFile(name: string, mimeType: string): File {
   }
 }
 
-/** Read-only staged documents for the review portal (no binary file on disk). */
+/** Staged documents from review snapshot (repository id preserved for re-fetch). */
 export function stagedKbDocumentsFromReviewSnapshot(
   snapshot: AgentReviewKnowledgeBaseSnapshot | null | undefined
 ): readonly StagedKbDocument[] {
@@ -45,4 +48,36 @@ export function stagedKbDocumentsFromReviewSnapshot(
     promotionStatus: 'idle',
     promotedDrafts: [],
   }));
+}
+
+function stagedDocToReviewSnapshot(doc: StagedKbDocument): AgentReviewKbDocumentSnapshot {
+  return {
+    id: doc.id,
+    name: doc.name,
+    size: doc.size,
+    mimeType: doc.mimeType,
+    addedAt: doc.addedAt,
+    parseStatus: doc.parseStatus,
+    ...(doc.parseError ? { parseError: doc.parseError } : {}),
+    ...(doc.format ? { format: doc.format } : {}),
+    ...(doc.howToUseText?.trim() ? { howToUseText: doc.howToUseText } : {}),
+    ...(doc.markdownSnippet?.trim() ? { markdownSnippet: doc.markdownSnippet } : {}),
+    ...(doc.repositoryDocumentId ? { repositoryDocumentId: doc.repositoryDocumentId } : {}),
+    ...(doc.dataTypes?.length ? { dataTypes: [...doc.dataTypes] } : {}),
+  };
+}
+
+/** Persisted review snapshot from live staged docs (portal autosave). */
+export function reviewKbSnapshotFromStagedDocuments(
+  documents: readonly StagedKbDocument[]
+): AgentReviewKnowledgeBaseSnapshot | null {
+  if (documents.length === 0) return null;
+  return { documents: documents.map(stagedDocToReviewSnapshot) };
+}
+
+export function reviewKbSnapshotsEqual(
+  a: AgentReviewKnowledgeBaseSnapshot | null | undefined,
+  b: AgentReviewKnowledgeBaseSnapshot | null | undefined
+): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }

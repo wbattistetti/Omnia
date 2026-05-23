@@ -899,7 +899,6 @@ export function EditorKnowledgeBasePanel() {
     onMergeKbPromotedUseCases,
     regenerateKbPromotedUseCase,
     useCases,
-    reviewPortalMode,
   } = useAIAgentEditorDock();
 
   return (
@@ -914,7 +913,7 @@ export function EditorKnowledgeBasePanel() {
         onMergePromotedUseCases={onMergeKbPromotedUseCases}
         existingBundleUseCases={useCases}
         regeneratePromotedUseCase={regenerateKbPromotedUseCase}
-        disabled={generating || reviewPortalMode}
+        disabled={generating}
         onAddFiles={(files) => knowledgeBaseAddFiles(files)}
         onRemoveDocument={knowledgeBaseRemoveDocument}
         onReorderDocuments={knowledgeBaseReorderDocuments}

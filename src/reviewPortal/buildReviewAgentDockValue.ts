@@ -12,7 +12,7 @@ import type { AgentReviewConversationSnapshot } from '@domain/agentReviewChannel
 import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import type { BackendPlaceholderInstance } from '@domain/agentPrompt';
-import type { StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
+import type { StagedKbDocument, KbDocumentPatch } from '@domain/knowledgeBase/kbDocumentTypes';
 import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
 import {
   createBlankUseCaseInList,
@@ -41,6 +41,10 @@ export interface ReviewAgentDockLiveInput {
   setConversationalRules: React.Dispatch<React.SetStateAction<ConversationalRule[]>>;
   structuredRevision: UseStructuredAgentSectionsRevisionResult;
   knowledgeBaseDocuments: readonly StagedKbDocument[];
+  knowledgeBaseAddFiles: (files: readonly File[]) => void;
+  knowledgeBaseRemoveDocument: (docId: string) => void;
+  knowledgeBaseUpdateDocument: (docId: string, patch: KbDocumentPatch) => void;
+  knowledgeBaseReorderDocuments: (next: readonly StagedKbDocument[]) => void;
   backendPlaceholders: readonly BackendPlaceholderInstance[];
   useCaseGlobalStyleId: string;
   setUseCaseGlobalStyleId: (styleId: string) => void;
@@ -203,10 +207,10 @@ export function buildReviewAgentDockValue(
     setAgentInterfaceInput: reviewNoop as React.Dispatch<React.SetStateAction<never[]>>,
     setAgentInterfaceOutput: reviewNoop as React.Dispatch<React.SetStateAction<never[]>>,
     knowledgeBaseDocuments: live.knowledgeBaseDocuments,
-    knowledgeBaseAddFiles: reviewNoop,
-    knowledgeBaseRemoveDocument: reviewNoop,
-    knowledgeBaseUpdateDocument: reviewNoop,
-    knowledgeBaseReorderDocuments: reviewNoop,
+    knowledgeBaseAddFiles: live.knowledgeBaseAddFiles,
+    knowledgeBaseRemoveDocument: live.knowledgeBaseRemoveDocument,
+    knowledgeBaseUpdateDocument: live.knowledgeBaseUpdateDocument,
+    knowledgeBaseReorderDocuments: live.knowledgeBaseReorderDocuments,
     onMergeKbPromotedUseCases: reviewNoop,
     regenerateKbPromotedUseCase: async () => null,
     onDismissUseCaseBundleFeedback: reviewNoop,

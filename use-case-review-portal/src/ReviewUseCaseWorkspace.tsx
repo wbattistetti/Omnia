@@ -147,6 +147,7 @@ export function ReviewUseCaseWorkspace(): React.ReactElement {
     useCases,
     categories,
     conversation,
+    knowledgeBase,
     session.projectId,
     session.taskId,
     saveToServer,

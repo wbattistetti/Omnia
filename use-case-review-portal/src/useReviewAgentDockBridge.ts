@@ -16,7 +16,7 @@ import {
   conversationStyleSelectionsFromSnapshot,
   conversationalRulesFromReviewSnapshot,
 } from '@reviewPortal/buildReviewAgentDockValue';
-import { stagedKbDocumentsFromReviewSnapshot } from '@reviewPortal/mapReviewKbSnapshot';
+import { useReviewKnowledgeBaseDocuments } from '@reviewPortal/useReviewKnowledgeBaseDocuments';
 import { useReviewAgentIaDockSlice } from '@reviewPortal/useReviewAgentIaDockSlice';
 import { useReviewStore } from './reviewStore';
 
@@ -47,6 +47,7 @@ export function useReviewAgentDockBridge({
   const structuredSections = useReviewStore((s) => s.structuredSections);
   const replaceStructuredSections = useReviewStore((s) => s.replaceStructuredSections);
   const knowledgeBase = useReviewStore((s) => s.knowledgeBase);
+  const setKnowledgeBase = useReviewStore((s) => s.setKnowledgeBase);
   const backends = useReviewStore((s) => s.backends);
   const designerLlm = useReviewStore((s) => s.designerLlm);
   const conversation = useReviewStore((s) => s.conversation);
@@ -161,10 +162,15 @@ export function useReviewAgentDockBridge({
   const useCaseCatalogMode: UseCaseCatalogMode =
     activeStep === 'conversation' ? 'error_handling' : 'prompts';
 
-  const knowledgeBaseDocuments = React.useMemo(
-    () => stagedKbDocumentsFromReviewSnapshot(knowledgeBase),
-    [knowledgeBase]
-  );
+  const sessionKey = `${session.projectId}:${session.taskId}`;
+
+  const kb = useReviewKnowledgeBaseDocuments({
+    projectId: session.projectId,
+    channelLoaded,
+    sessionKey,
+    knowledgeBaseSnapshot: knowledgeBase,
+    setKnowledgeBaseSnapshot: setKnowledgeBase,
+  });
 
   const backendPlaceholders = React.useMemo(
     () => backendPlaceholdersFromReviewSnapshot(backends),
@@ -180,7 +186,7 @@ export function useReviewAgentDockBridge({
     useCases,
     setUseCases,
     structuredRevision,
-    knowledgeBaseDocuments,
+    knowledgeBaseDocuments: kb.documents,
     useCaseGlobalStyleId: globalStyleId,
     agentUseCaseStyleLearningNotes: styleLearningNotes,
     channelLoaded,
@@ -203,7 +209,11 @@ export function useReviewAgentDockBridge({
         conversationalRules,
         setConversationalRules,
         structuredRevision,
-        knowledgeBaseDocuments,
+        knowledgeBaseDocuments: kb.documents,
+        knowledgeBaseAddFiles: kb.addFiles,
+        knowledgeBaseRemoveDocument: kb.removeDocument,
+        knowledgeBaseUpdateDocument: kb.updateDocument,
+        knowledgeBaseReorderDocuments: kb.reorderDocuments,
         backendPlaceholders,
         useCaseGlobalStyleId: globalStyleId,
         setUseCaseGlobalStyleId: setGlobalStyleId,
@@ -232,7 +242,11 @@ export function useReviewAgentDockBridge({
       setCategories,
       conversationalRules,
       structuredRevision,
-      knowledgeBaseDocuments,
+      kb.documents,
+      kb.addFiles,
+      kb.removeDocument,
+      kb.updateDocument,
+      kb.reorderDocuments,
       backendPlaceholders,
       globalStyleId,
       styleLearningNotes,
