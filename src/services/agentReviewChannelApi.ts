@@ -5,6 +5,12 @@
 import type { AgentReviewChannelDocument } from '@domain/agentReviewChannel/reviewDocument';
 import type { AgentReviewAudience } from '@domain/agentReviewChannel/reviewAudience';
 import { normalizeReviewAudience } from '@domain/agentReviewChannel/reviewAudience';
+import {
+  isExpressBackendPaused,
+  markExpressBackendAvailable,
+  markExpressBackendUnavailable,
+  parseExpressApiErrorBody,
+} from '@services/expressBackendReachability';
 
 export interface ReviewChannelFetchResult {
   document: AgentReviewChannelDocument | null;
@@ -69,6 +75,9 @@ export async function fetchAgentReviewChannel(params: {
   token?: string;
   apiBase?: string;
 }): Promise<ReviewChannelFetchResult> {
+  if (isExpressBackendPaused()) {
+    throw new Error(parseExpressApiErrorBody(503, ''));
+  }
   const { projectId, taskInstanceId, audience, token, apiBase } = params;
   const base = (apiBase ?? resolveReviewChannelApiBase()).replace(/\/$/, '');
   const path = reviewChannelPath(projectId, taskInstanceId, audience);
@@ -76,8 +85,10 @@ export async function fetchAgentReviewChannel(params: {
   const res = await fetch(url, { headers: reviewHeaders(token) });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`fetchAgentReviewChannel: ${res.status} ${text}`);
+    markExpressBackendUnavailable(res.status);
+    throw new Error(parseExpressApiErrorBody(res.status, text));
   }
+  markExpressBackendAvailable();
   const data = (await res.json()) as {
     document?: unknown;
     updatedAt?: string | null;
@@ -117,19 +128,11 @@ export async function saveAgentReviewChannel(params: {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    let detail = text;
-    try {
-      const j = JSON.parse(text) as { error?: string };
-      if (j?.error) detail = j.error;
-    } catch {
-      /* raw text */
-    }
-    const hint =
-      res.status === 500 && !detail
-        ? ' — Verifica che Express (:3100) sia avviato (npm run dev:beNew).'
-        : '';
-    throw new Error(`saveAgentReviewChannel: ${res.status} ${detail}${hint}`);
+    markExpressBackendUnavailable(res.status);
+    const detail = parseExpressApiErrorBody(res.status, text);
+    throw new Error(`saveAgentReviewChannel: ${detail}`);
   }
+  markExpressBackendAvailable();
   const data = (await res.json()) as {
     document?: unknown;
     updatedAt?: string | null;
@@ -156,6 +159,7 @@ export function subscribeReviewChannelEvents(params: {
   onUpdate: () => void;
 }): () => void {
   if (typeof EventSource === 'undefined') return () => {};
+  if (isExpressBackendPaused()) return () => {};
   const { projectId, taskInstanceId, token, onUpdate } = params;
   const t = typeof token === 'string' ? token.trim() : '';
   const qs = new URLSearchParams();
@@ -169,6 +173,7 @@ export function subscribeReviewChannelEvents(params: {
   es.addEventListener('review_channel_updated', handler);
   // Backend assente o connessione chiusa: evita reconnect EventSource → flood ECONNRESET nel proxy Vite
   es.onerror = () => {
+    markExpressBackendUnavailable(503);
     es.close();
   };
   return () => {

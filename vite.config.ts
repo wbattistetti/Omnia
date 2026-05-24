@@ -6,6 +6,7 @@ import {
   resolveReviewChannelToken,
   reviewChannelProxyOnProxyReq,
 } from './config/resolveReviewChannelToken.mjs';
+import { expressProxyConfig } from './config/expressProxy.mjs';
 
 const repoRoot = path.resolve(__dirname);
 const domainCoreBundleDir = path.resolve(repoRoot, 'packages/omnia-domain-core/src/usecase/bundle');
@@ -21,9 +22,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const reviewToken = resolveReviewChannelToken(repoRoot, env);
   const proxyOnProxyReq = reviewChannelProxyOnProxyReq(reviewToken);
-  const reviewProxyExtra = proxyOnProxyReq
-    ? { configure: (proxy: { on: (ev: string, fn: typeof proxyOnProxyReq) => void }) => proxy.on('proxyReq', proxyOnProxyReq) }
-    : {};
+  const expressProxy = () => expressProxyConfig();
+  const expressReviewProxy = () =>
+    expressProxyConfig(proxyOnProxyReq ? { onProxyReq: proxyOnProxyReq } : {});
   const defineDevToken =
     mode === 'development' && reviewToken
       ? { 'import.meta.env.VITE_REVIEW_DEV_AUTO_TOKEN': JSON.stringify(reviewToken) }
@@ -69,6 +70,7 @@ export default defineConfig(({ mode }) => {
       '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
       '@wizard': path.resolve(__dirname, 'src/wizard'),
       '@workspaces': path.resolve(__dirname, 'src/workspaces'),
+      '@reviewPortal': path.resolve(__dirname, 'src/reviewPortal'),
     }
   },
   test: {
@@ -113,6 +115,7 @@ export default defineConfig(({ mode }) => {
         '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
         '@TaskBuilderAIWizard': path.resolve(__dirname, 'TaskBuilderAIWizard'),
         '@workspaces': path.resolve(__dirname, 'src/workspaces'),
+        '@reviewPortal': path.resolve(__dirname, 'src/reviewPortal'),
       },
     },
   },
@@ -124,51 +127,43 @@ export default defineConfig(({ mode }) => {
       '/ai': { target: 'http://localhost:8000', changeOrigin: true },
       // FastAPI endpoints
       '/step1': { target: 'http://localhost:8000', changeOrigin: true },
-      '/step2': { target: 'http://localhost:3100', changeOrigin: true },
-      '/design': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/analyze-field': { target: 'http://localhost:3100', changeOrigin: true },
+      '/step2': expressProxy(),
+      '/design': expressProxy(),
+      '/api/analyze-field': expressProxy(),
       '/step3': { target: 'http://localhost:8000', changeOrigin: true },
       '/step3b': { target: 'http://localhost:8000', changeOrigin: true },
       '/step4': { target: 'http://localhost:8000', changeOrigin: true },
 
       // Express-only runtime routes (Node :3100) — BEFORE catch-all /api/runtime → VB
-      '/api/runtime/ai-agent': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/runtime/scheduling': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/runtime/bookfromagenda': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/runtime/ai-agent': expressProxy(),
+      '/api/runtime/scheduling': expressProxy(),
+      '/api/runtime/bookfromagenda': expressProxy(),
       // VB.NET ApiServer endpoints (porta 5000) - MUST come BEFORE Node.js and FastAPI
       '/api/grammar': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/nlp': { target: 'http://localhost:5000', changeOrigin: true },
       '/api/runtime': { target: 'http://localhost:5000', changeOrigin: true },
       /** Backend Call «Test API» proxy — Express :3100 (stesso contratto VB; dev:beNew non avvia ApiServer :5000). */
-      '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/designer': expressProxy(),
       /**
        * ConvAI agents/tools (workspace, catalog) — Express :3100 con `dev:beNew` e backend/.env.
        * ApiServer :5000 espone le stesse route se avviato; per dev senza VB usare 3100.
        */
-      '/elevenlabs/agents': { target: 'http://localhost:3100', changeOrigin: true },
-      '/elevenlabs/tools': { target: 'http://localhost:3100', changeOrigin: true },
+      '/elevenlabs/agents': expressProxy(),
+      '/elevenlabs/tools': expressProxy(),
       '/elevenlabs/createAgent': { target: 'http://localhost:5000', changeOrigin: true },
       '/elevenlabs/startAgent': { target: 'http://localhost:5000', changeOrigin: true },
       '/elevenlabs/sendUserTurn': { target: 'http://localhost:5000', changeOrigin: true },
       '/elevenlabs/agentTurn': { target: 'http://localhost:5000', changeOrigin: true },
       '/elevenlabs/endConversation': { target: 'http://localhost:5000', changeOrigin: true },
-      '/elevenlabs': { target: 'http://localhost:3100', changeOrigin: true },
+      '/elevenlabs': expressProxy(),
 
       // Node.js backend endpoints (MongoDB) - MUST come BEFORE generic /api
-      '/api/factory': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/agent-review-channels': {
-        target: 'http://localhost:3100',
-        changeOrigin: true,
-        ...reviewProxyExtra,
-      },
-      '/api/projects': {
-        target: 'http://localhost:3100',
-        changeOrigin: true,
-        ...reviewProxyExtra,
-      },
-      '/api/constants': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/embeddings': { target: 'http://localhost:3100', changeOrigin: true },
-      '/projects': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/factory': expressProxy(),
+      '/api/agent-review-channels': expressReviewProxy(),
+      '/api/projects': expressReviewProxy(),
+      '/api/constants': expressProxy(),
+      '/api/embeddings': expressProxy(),
+      '/projects': expressProxy(),
 
       // OpenAPI proxy (Read API) — same FastAPI as below; explicit for clarity
       '/api/openapi-proxy': { target: 'http://localhost:8000', changeOrigin: true },
@@ -176,13 +171,13 @@ export default defineConfig(({ mode }) => {
       '/api/auth/portal': { target: 'http://localhost:8000', changeOrigin: true },
 
       // Express IA catalog (Postgres + sync) — before catch-all /api
-      '/api/ia-catalog': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/ia-catalog': expressProxy(),
 
       // Express AI cost tracker — before catch-all /api → FastAPI
-      '/api/ai-calls': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/ai-calls': expressProxy(),
 
       /** Dev tunnel ngrok (Express) — before catch-all /api → FastAPI */
-      '/api/dev-tunnel': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/dev-tunnel': expressProxy(),
 
       // FastAPI namespaced endpoints (other /api routes) - MUST come LAST
       '/api': { target: 'http://localhost:8000', changeOrigin: true },
@@ -190,12 +185,13 @@ export default defineConfig(({ mode }) => {
   },
   preview: {
     proxy: {
-      '/api/designer': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/dev-tunnel': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/ai-calls': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/runtime/ai-agent': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/runtime/scheduling': { target: 'http://localhost:3100', changeOrigin: true },
-      '/api/runtime/bookfromagenda': { target: 'http://localhost:3100', changeOrigin: true },
+      '/design': expressProxy(),
+      '/api/designer': expressProxy(),
+      '/api/dev-tunnel': expressProxy(),
+      '/api/ai-calls': expressProxy(),
+      '/api/runtime/ai-agent': expressProxy(),
+      '/api/runtime/scheduling': expressProxy(),
+      '/api/runtime/bookfromagenda': expressProxy(),
     },
   },
 };

@@ -139,7 +139,10 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       r?.agentConstructionPhase,
       persistedHasGen
     ),
-    agentWizardCurrentStep: resolveAgentWizardCurrentStep(r?.agentWizardCurrentStep),
+    agentWizardCurrentStep: resolveAgentWizardCurrentStep(
+      r?.agentWizardCurrentStep,
+      r?.agentWizardStepOrderVersion
+    ),
     /**
      * Backward-compat: per task gi\u00e0 generati (`agentDesignHasGeneration === true`)
      * forziamo `tutorAcknowledged = true` cos\u00ec se per qualche motivo torniamo in fase

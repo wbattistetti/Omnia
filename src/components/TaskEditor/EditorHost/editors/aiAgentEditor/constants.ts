@@ -9,16 +9,11 @@ export const LABEL_GENERATE_USE_CASES = 'Genera use case';
 /** Empty tutor: titolo accanto alla mascotte (una riga). */
 export const LABEL_EMPTY_USE_CASE_TUTOR_HEADLINE =
   'Generiamo gli use case per guidare l’agente!';
-/** Empty tutor: percorso A — incolla lista già pronta. */
-export const LABEL_EMPTY_USE_CASE_PASTE_SECTION =
-  'Hai già una lista? Incollala qui e la riorganizziamo!';
-/** Placeholder textarea stato vuoto use case. */
+/** Link inline nello stato vuoto use case (due occorrenze nel paragrafo intro). */
+export const LABEL_EMPTY_USE_CASE_CLICK_HERE = 'clicca qui';
+/** Placeholder textarea quando l’utente sceglie «incolla lista». */
 export const PLACEHOLDER_EMPTY_USE_CASE_DRAFT =
   'Incolla o scrivi qui uno o più scenari e ti aiuto a riorganizzarli.';
-/** Empty tutor: separatore tra incolla e genera da zero. */
-export const LABEL_EMPTY_USE_CASE_OR_DIVIDER = 'oppure';
-/** Prefisso CTA percorso B (il pulsante è il target del click). */
-export const LABEL_EMPTY_USE_CASE_CLICK_HERE = 'Clicca qui';
 /** CTA accanto alla textbox quando la lista ha già use case (iniziativa IA). */
 export const LABEL_GENERATE_MORE_USE_CASES = 'Crea altri use case';
 /** Guida sotto la textbox con lista già popolata (aggiunta da input utente). */

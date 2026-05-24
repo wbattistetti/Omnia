@@ -9,7 +9,7 @@ import {
 const root = path.resolve(__dirname, '..');
 
 /**
- * Proxy verso Express Omnia (:3100). Solo route review — niente FastAPI :8000.
+ * Proxy verso Express Omnia (:3100) e FastAPI (:8000) per Read API backend.
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, __dirname, '');
@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => {
     env.VITE_REVIEW_API_TARGET?.trim() ||
     env.VITE_BACKEND_URL?.trim() ||
     'http://127.0.0.1:3100';
+  const fastApiTarget =
+    env.VITE_REVIEW_FASTAPI_TARGET?.trim() ||
+    env.VITE_FASTAPI_URL?.trim() ||
+    'http://127.0.0.1:8000';
 
   const reviewToken = resolveReviewChannelToken(root, env);
   const proxyOnProxyReq = reviewChannelProxyOnProxyReq(reviewToken);
@@ -26,6 +30,12 @@ export default defineConfig(({ mode }) => {
     changeOrigin: true,
     secure: false,
     ...(proxyOnProxyReq ? { configure: (proxy) => proxy.on('proxyReq', proxyOnProxyReq) } : {}),
+  };
+
+  const fastApiProxy = {
+    target: fastApiTarget.replace(/\/$/, ''),
+    changeOrigin: true,
+    secure: false,
   };
 
   const defineDevToken =
@@ -96,6 +106,10 @@ export default defineConfig(({ mode }) => {
         '/design': proxyCommon,
         '/api/ai-calls': proxyCommon,
         '/api/ia-catalog': proxyCommon,
+        /** Read API OpenAPI (Recupera specifiche backend) — FastAPI */
+        '/api/openapi-proxy': fastApiProxy,
+        /** OAuth verso portali protetti — FastAPI */
+        '/api/auth/portal': fastApiProxy,
       },
     },
   };

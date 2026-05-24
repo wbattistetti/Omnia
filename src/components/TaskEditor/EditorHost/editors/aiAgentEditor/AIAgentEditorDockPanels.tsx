@@ -42,7 +42,7 @@ import { DesignDescriptionTextarea } from './DesignDescriptionTextarea';
 import { ProjectDerivedBackendsSection } from '@components/BackendCatalog/ProjectDerivedBackendsSection';
 import { KnowledgeBaseViewer } from '@components/knowledgeBase/KnowledgeBaseViewer';
 import { EditorBackendsPanel } from './EditorBackendsPanel';
-import { derivedBackendRowsFromSnapshot } from '@domain/agentReviewChannel/reviewSnapshots';
+import { tutorIdProps, UI_IDS } from './activeTutor/uiIds';
 
 /**
  * Wizard step 1 — un singolo Dockview (single-pane) le cui tab sono:
@@ -117,7 +117,10 @@ export function EditorDatiPanel() {
   } = useAIAgentEditorDock();
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-slate-100/95 dark:bg-slate-950/80">
+    <div
+      {...tutorIdProps(UI_IDS.datiPanel)}
+      className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-slate-100/95 dark:bg-slate-950/80"
+    >
       <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
         {proposedFields.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">
@@ -138,7 +141,11 @@ export function EditorDatiPanel() {
   );
 }
 
-export function EditorUseCasesPanel() {
+export function EditorUseCasesPanel({
+  forcedCatalogMode,
+}: {
+  forcedCatalogMode?: 'prompts' | 'error_handling';
+} = {}) {
   const {
     instanceId,
     logicalSteps,
@@ -170,6 +177,8 @@ export function EditorUseCasesPanel() {
     onAnnotateAgentMessageForJson,
     onDeleteUseCase,
     onDeleteConversationalRule,
+    onUseCaseInvalidationNoteChange,
+    onUseCaseInvalidationStateChange,
     useCaseGlobalStyleId,
     setUseCaseGlobalStyleId,
     agentUseCaseStyleLearningNotes,
@@ -180,7 +189,6 @@ export function EditorUseCasesPanel() {
     showRightPanel,
     generating,
     onGenerateUseCaseBundle,
-    reviewPortalMode,
     useCaseGeneratorWizard,
     useCaseBundleFeedback,
     onDismissUseCaseBundleFeedback,
@@ -226,7 +234,9 @@ export function EditorUseCasesPanel() {
 
   const showGenerateCta = hasAgentGeneration && showRightPanel;
   const useWizardShell = Boolean(hasAgentGeneration && showRightPanel && useCaseGeneratorWizard);
-  const isErrorHandlingCatalog = useCaseCatalogMode === 'error_handling';
+  const isErrorHandlingCatalog =
+    forcedCatalogMode === 'error_handling' ||
+    (forcedCatalogMode == null && useCaseCatalogMode === 'error_handling');
 
   const catalogUseCases = React.useMemo(
     () =>
@@ -348,6 +358,8 @@ export function EditorUseCasesPanel() {
         isErrorHandlingCatalog ? async () => false : onAnnotateAgentMessageForJson
       }
       onDeleteUseCase={catalogOnDelete}
+      onUseCaseInvalidationNoteChange={onUseCaseInvalidationNoteChange}
+      onUseCaseInvalidationStateChange={onUseCaseInvalidationStateChange}
       useCaseGlobalStyleId={useCaseGlobalStyleId}
       onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
       useCaseStyleLearningNotes={agentUseCaseStyleLearningNotes}
@@ -355,7 +367,7 @@ export function EditorUseCasesPanel() {
       previewStyleId={previewStyleId}
       onPreviewStyleIdChange={setPreviewStyleId}
       onGenerateUseCaseBundle={
-        isErrorHandlingCatalog ? undefined : showGenerateCta ? onGenerateUseCaseBundle : undefined
+        isErrorHandlingCatalog ? undefined : onGenerateUseCaseBundle
       }
       generating={generating}
       bundleGenerateBusyLabel={bundleGenerateBusyLabel}
@@ -707,65 +719,11 @@ export function EditorUseCasesPanel() {
   );
 }
 
-/** Tab Backend — catalogo manuale + righe derivate da snapshot (portale review). */
+/** Tab Backend — stesso pannello del wizard Omnia (EditorBackendsPanel). */
 export function EditorBackendsTabPanel(): React.ReactElement {
-  const { reviewBackendSnapshot } = useAIAgentEditorDock();
-  const snapshot = reviewBackendSnapshot ?? null;
-  const hasManual =
-    (snapshot?.manualEntries?.length ?? 0) > 0 ||
-    snapshot?.catalogRows.some((r) => r.sources.manual) === true;
-  const derivedRows = derivedBackendRowsFromSnapshot(snapshot);
-  const hasDerived = derivedRows.length > 0;
-
-  if (!hasManual && !hasDerived) {
-    return (
-      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500">
-        Nessun backend collegato a questo task nella review. Configura backend in Omnia e ripubblica.
-      </div>
-    );
-  }
-
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden border-l-4 border-violet-500/50 bg-violet-950/20">
-      {hasManual ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <EditorBackendsPanel {...({} as React.ComponentProps<typeof EditorBackendsPanel>)} />
-        </div>
-      ) : null}
-      {hasDerived ? (
-        <section className="shrink-0 border-t border-slate-800/80 px-2 py-3">
-          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Dal grafo e dagli agent
-          </h2>
-          <ul className="space-y-2">
-            {derivedRows.map((row) => (
-              <li
-                key={row.key}
-                className="rounded-lg border border-slate-700/80 bg-slate-900/50 px-3 py-2.5"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium text-slate-100">{row.label}</span>
-                  <span className="font-mono text-[10px] text-violet-300/90">
-                    {row.method} {row.pathnameDisplay}
-                  </span>
-                </div>
-                <div className="mt-2 flex gap-1">
-                  {row.sources.graph ? (
-                    <span className="rounded bg-slate-700/80 px-1 py-0.5 text-[9px] text-slate-300">
-                      Grafo
-                    </span>
-                  ) : null}
-                  {row.sources.tools ? (
-                    <span className="rounded bg-violet-900/50 px-1 py-0.5 text-[9px] text-violet-200">
-                      Agent
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
+      <EditorBackendsPanel {...({} as React.ComponentProps<typeof EditorBackendsPanel>)} />
     </div>
   );
 }
@@ -871,7 +829,7 @@ export function EditorConversationPanel(): React.ReactElement {
                 onUseCaseGlobalStyleIdChange={setUseCaseGlobalStyleId}
                 useCaseStyleLearningNotes={agentUseCaseStyleLearningNotes}
                 onUseCaseStyleLearningNotesChange={setAgentUseCaseStyleLearningNotes}
-                composerCatalog="error_handling"
+                composerCatalog="conversational_rules"
               />
             </div>
           </section>
@@ -881,6 +839,15 @@ export function EditorConversationPanel(): React.ReactElement {
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Wizard passo Error Handling — regole conversazionali trasversali. */
+export function EditorErrorHandlingPanel() {
+  return (
+    <div {...tutorIdProps(UI_IDS.errorHandlingEditor)} className="h-full min-h-0 flex flex-col overflow-hidden">
+      <EditorUseCasesPanel forcedCatalogMode="error_handling" />
     </div>
   );
 }
@@ -900,7 +867,10 @@ export function EditorKnowledgeBasePanel() {
   } = useAIAgentEditorDock();
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-violet-950/20 border-l-4 border-violet-500/50">
+    <div
+      {...tutorIdProps(UI_IDS.knowledgeBasePanel)}
+      className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-violet-950/20 border-l-4 border-violet-500/50"
+    >
       <KnowledgeBaseViewer
         className="min-h-0 flex-1"
         documents={knowledgeBaseDocuments}
@@ -913,6 +883,8 @@ export function EditorKnowledgeBasePanel() {
         onReorderDocuments={knowledgeBaseReorderDocuments}
         onUpdateDocument={knowledgeBaseUpdateDocument}
         footerHint="I file sono nel repository progetto; l'analisi markdown resta sul task."
+        tutorDocumentListId={UI_IDS.kbDocumentList}
+        tutorAnalysisResultId={UI_IDS.kbAnalysisResult}
       />
     </div>
   );

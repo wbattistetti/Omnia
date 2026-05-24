@@ -30,7 +30,7 @@ describe('isAgentConstructionPhase', () => {
 });
 
 describe('isAgentWizardStepIndex', () => {
-  it('accetta interi nel range [0..4]', () => {
+  it('accetta interi nel range [0..6]', () => {
     for (let i = 0; i < AGENT_WIZARD_STEP_COUNT; i++) {
       expect(isAgentWizardStepIndex(i)).toBe(true);
     }
@@ -38,7 +38,7 @@ describe('isAgentWizardStepIndex', () => {
 
   it('rifiuta indici fuori range, decimali, stringhe, undefined', () => {
     expect(isAgentWizardStepIndex(-1)).toBe(false);
-    expect(isAgentWizardStepIndex(5)).toBe(false);
+    expect(isAgentWizardStepIndex(7)).toBe(false);
     expect(isAgentWizardStepIndex(2.5)).toBe(false);
     expect(isAgentWizardStepIndex('2')).toBe(false);
     expect(isAgentWizardStepIndex(undefined)).toBe(false);
@@ -67,12 +67,15 @@ describe('resolveAgentConstructionPhase — backward-compat', () => {
 });
 
 describe('resolveAgentWizardCurrentStep', () => {
-  it('rispetta indici validi', () => {
-    expect(resolveAgentWizardCurrentStep(0)).toBe(0);
-    expect(resolveAgentWizardCurrentStep(2)).toBe(2);
-    expect(resolveAgentWizardCurrentStep(AGENT_WIZARD_LAST_STEP_INDEX)).toBe(
-      AGENT_WIZARD_LAST_STEP_INDEX
-    );
+  it('migra indici legacy 5-step verso ordine 7-step', () => {
+    expect(resolveAgentWizardCurrentStep(1)).toBe(3);
+    expect(resolveAgentWizardCurrentStep(3)).toBe(5);
+    expect(resolveAgentWizardCurrentStep(4)).toBe(6);
+  });
+
+  it('rispetta indici validi con versione 2', () => {
+    expect(resolveAgentWizardCurrentStep(4, 2)).toBe(4);
+    expect(resolveAgentWizardCurrentStep(6, 2)).toBe(6);
   });
 
   it('fallback al primo step su input invalidi', () => {

@@ -90,6 +90,13 @@ export interface AIAgentUseCase {
   designer_acknowledged?: boolean;
   /** Validazione manuale: su / giù / da approfondire (`review`). */
   designer_label_vote?: 'up' | 'down' | 'review';
+  /**
+   * Nota designer quando lo scenario è invalidato (`designer_label_vote === 'down'`).
+   * Sincronizzata anche come documento KB (`invalidated_use_case_note`).
+   */
+  invalidationNote?: string;
+  /** Id documento KB collegato a {@link invalidationNote}. */
+  invalidationKbDocumentId?: string;
   designer_payoff_vote?: 'up' | 'down' | 'review';
   designer_agent_message_vote?: 'up' | 'down' | 'review';
   /**
@@ -188,6 +195,11 @@ export function getAssistantExample(useCase: AIAgentUseCase): string {
  */
 export function isUseCaseIncludedInConversations(useCase: AIAgentUseCase): boolean {
   return useCase?.included_in_conversations !== false;
+}
+
+/** True quando lo scenario è marcato «non valido» (pollice giù sull'header). */
+export function isUseCaseInvalidated(useCase: AIAgentUseCase): boolean {
+  return useCase.designer_label_vote === 'down';
 }
 
 /**
@@ -414,6 +426,16 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
         typeof o.assistant_example_tokenized_source === 'string'
           ? o.assistant_example_tokenized_source
           : undefined;
+      const included_in_conversations =
+        o.included_in_conversations === false ? false : undefined;
+      const invalidationNote =
+        typeof o.invalidationNote === 'string' && o.invalidationNote.trim()
+          ? o.invalidationNote.trim()
+          : undefined;
+      const invalidationKbDocumentId =
+        typeof o.invalidationKbDocumentId === 'string' && o.invalidationKbDocumentId.trim()
+          ? o.invalidationKbDocumentId.trim()
+          : undefined;
       const phrases = parsePhrasesField(o.phrases);
       const response = parseUseCaseResponseField(o.response);
       out.push({
@@ -434,6 +456,9 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
         ...(designer_label_vote ? { designer_label_vote } : {}),
         ...(designer_payoff_vote ? { designer_payoff_vote } : {}),
         ...(designer_agent_message_vote ? { designer_agent_message_vote } : {}),
+        ...(included_in_conversations === false ? { included_in_conversations: false } : {}),
+        ...(invalidationNote ? { invalidationNote } : {}),
+        ...(invalidationKbDocumentId ? { invalidationKbDocumentId } : {}),
         ...(assistant_example_tokenized !== undefined
           ? { assistant_example_tokenized }
           : {}),

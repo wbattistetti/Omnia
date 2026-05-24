@@ -32,13 +32,20 @@ function stubDoc(overrides: Partial<StagedKbDocument> = {}): StagedKbDocument {
 }
 
 describe('kbDocumentsEligibleForUseCaseContext', () => {
-  it('includes only ready docs with repository id', () => {
+  it('includes ready upload docs with repository id and invalidation notes', () => {
     const docs = [
       stubDoc(),
       stubDoc({ id: 'd2', parseStatus: 'parsing', repositoryDocumentId: 'r2' }),
       stubDoc({ id: 'd3', repositoryDocumentId: '' }),
+      stubDoc({
+        id: 'd4',
+        kbDocumentKind: 'invalidated_use_case_note',
+        linkedUseCaseId: 'uc-1',
+        documentAnalysisMarkdown: '# neg',
+        repositoryDocumentId: undefined,
+      }),
     ];
-    expect(kbDocumentsEligibleForUseCaseContext(docs)).toHaveLength(1);
+    expect(kbDocumentsEligibleForUseCaseContext(docs)).toHaveLength(2);
   });
 });
 
@@ -68,7 +75,7 @@ describe('buildUserDescWithKnowledgeBaseContext', () => {
     expect(userDesc).toContain('# Regole');
   });
 
-  it('returns base only without projectId', async () => {
+  it('returns base only without projectId for upload docs', async () => {
     const base = 'Solo descrizione senza progetto collegato.';
     const { userDesc, kbDocCount } = await buildUserDescWithKnowledgeBaseContext({
       projectId: undefined,
@@ -77,6 +84,28 @@ describe('buildUserDescWithKnowledgeBaseContext', () => {
     });
     expect(kbDocCount).toBe(0);
     expect(userDesc).toBe(base);
+    expect(fetchKbDocumentContent).not.toHaveBeenCalled();
+  });
+
+  it('includes invalidation KB docs even without projectId', async () => {
+    const base = 'Descrizione task.';
+    const { userDesc, kbDocCount } = await buildUserDescWithKnowledgeBaseContext({
+      projectId: undefined,
+      baseUserDesc: base,
+      documents: [
+        stubDoc({
+          id: 'inv-1',
+          name: 'Note di correzione scenari — test',
+          kbDocumentKind: 'invalidated_use_case_note',
+          linkedUseCaseId: 'uc-1',
+          documentAnalysisMarkdown: '# Criterio di esclusione',
+          repositoryDocumentId: undefined,
+        }),
+      ],
+    });
+    expect(kbDocCount).toBe(1);
+    expect(userDesc).toContain('KNOWLEDGE BASE');
+    expect(userDesc).toContain('Criterio di esclusione');
     expect(fetchKbDocumentContent).not.toHaveBeenCalled();
   });
 });

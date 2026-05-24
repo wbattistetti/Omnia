@@ -111,6 +111,11 @@ import {
   parseAgentKnowledgeBaseDocumentsJson,
   serializeAgentKnowledgeBaseDocuments,
 } from '@domain/knowledgeBase/serializeKbDocuments';
+import {
+  removeInvalidationKbFromDocuments,
+  upsertInvalidationKbInDocuments,
+} from '@domain/knowledgeBase/useCaseInvalidationKb';
+import { isUseCaseInvalidated } from '@types/aiAgentUseCases';
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import {
   agentInterfaceRowsToMappingEntries,
@@ -845,8 +850,66 @@ export function useAIAgentEditorController({
   const knowledgeBaseReorderDocuments = React.useCallback(
     (next: readonly import('@domain/knowledgeBase/kbDocumentTypes').StagedKbDocument[]) => {
       knowledgeBaseReorderInternal(next);
+      setDirty(true);
     },
     [knowledgeBaseReorderInternal]
+  );
+
+  const handleUseCaseInvalidationNoteChange = React.useCallback(
+    (useCaseId: string, note: string) => {
+      const uc = useCases.find((u) => u.id === useCaseId);
+      if (!uc || !isUseCaseInvalidated(uc)) return;
+      const trimmed = String(note ?? '').trim();
+      setUseCasesUser((prev) =>
+        prev.map((u) =>
+          u.id === useCaseId ? { ...u, invalidationNote: trimmed || undefined } : u
+        )
+      );
+      if (!trimmed) {
+        knowledgeBaseReorderDocuments(
+          removeInvalidationKbFromDocuments(knowledgeBaseDocuments, useCaseId)
+        );
+        setUseCasesUser((prev) =>
+          prev.map((u) =>
+            u.id === useCaseId ? { ...u, invalidationKbDocumentId: undefined } : u
+          )
+        );
+        return;
+      }
+      const { documents: nextDocs, docId } = upsertInvalidationKbInDocuments(
+        knowledgeBaseDocuments,
+        { useCase: { ...uc, invalidationNote: trimmed }, note: trimmed }
+      );
+      knowledgeBaseReorderDocuments(nextDocs);
+      setUseCasesUser((prev) =>
+        prev.map((u) => (u.id === useCaseId ? { ...u, invalidationKbDocumentId: docId } : u))
+      );
+    },
+    [useCases, knowledgeBaseDocuments, knowledgeBaseReorderDocuments, setUseCasesUser]
+  );
+
+  const handleUseCaseInvalidationStateChange = React.useCallback(
+    (useCaseId: string, isInvalid: boolean) => {
+      if (isInvalid) {
+        setDirty(true);
+        return;
+      }
+      knowledgeBaseReorderDocuments(
+        removeInvalidationKbFromDocuments(knowledgeBaseDocuments, useCaseId)
+      );
+      setUseCasesUser((prev) =>
+        prev.map((u) =>
+          u.id === useCaseId
+            ? {
+                ...u,
+                invalidationNote: undefined,
+                invalidationKbDocumentId: undefined,
+              }
+            : u
+        )
+      );
+    },
+    [knowledgeBaseDocuments, knowledgeBaseReorderDocuments, setUseCasesUser]
   );
 
   const knowledgeBaseTaskContext = React.useMemo(
@@ -2415,12 +2478,17 @@ export function useAIAgentEditorController({
         return;
       }
       setUseCaseComposerError(null);
-      setUseCasesUser((prev) => {
-        const removeIds = collectUseCaseSubtreeIds(prev, useCaseId);
-        return prev.filter((u) => !removeIds.has(u.id));
-      });
+      const removeIds = collectUseCaseSubtreeIds(useCases, useCaseId);
+      let nextKb = knowledgeBaseDocuments;
+      for (const id of removeIds) {
+        nextKb = removeInvalidationKbFromDocuments(nextKb, id);
+      }
+      if (nextKb.length !== knowledgeBaseDocuments.length) {
+        knowledgeBaseReorderDocuments(nextKb);
+      }
+      setUseCasesUser((prev) => prev.filter((u) => !removeIds.has(u.id)));
     },
-    [useCases, setUseCasesUser]
+    [useCases, setUseCasesUser, knowledgeBaseDocuments, knowledgeBaseReorderDocuments]
   );
 
   const handleDeleteConversationalRule = React.useCallback((ruleId: string) => {
@@ -2868,6 +2936,8 @@ export function useAIAgentEditorController({
     handleRegenerateAgentMessage,
     handleAnnotateAgentMessageForJson,
     handleDeleteUseCase,
+    handleUseCaseInvalidationNoteChange,
+    handleUseCaseInvalidationStateChange,
     handleCreateConversationalRule,
     handleDeleteConversationalRule,
     useCaseSiblingSortMode,

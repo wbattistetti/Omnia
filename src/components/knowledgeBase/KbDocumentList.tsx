@@ -18,6 +18,8 @@ export type KbDocumentListProps = {
   onRemove?: (docId: string) => void;
   /** Elenco formati ammessi (empty state a workspace vuoto). */
   emptyFormatsHint?: string;
+  /** Active Tutor — data-tutor-id lista documenti. */
+  tutorListId?: string;
 };
 
 type DropIndicator = {
@@ -33,6 +35,7 @@ export function KbDocumentList({
   onReorder,
   onRemove,
   emptyFormatsHint,
+  tutorListId,
 }: KbDocumentListProps): React.ReactElement {
   const dragRef = React.useRef<{ fromIdx: number | null }>({ fromIdx: null });
   const [dropIndicator, setDropIndicator] = React.useState<DropIndicator | null>(null);
@@ -58,7 +61,10 @@ export function KbDocumentList({
   }
 
   return (
-    <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5">
+    <ul
+      className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1.5"
+      {...(tutorListId ? { 'data-tutor-id': tutorListId } : {})}
+    >
       {documents.map((doc, i) => {
         const showBefore =
           dropIndicator?.targetIndex === i && dropIndicator.placement === 'before';

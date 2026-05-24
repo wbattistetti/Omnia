@@ -36,6 +36,7 @@ import { AddBackendDropdown } from './AddBackendDropdown';
 import { ensureManualCatalogBackendTask } from './ensureManualCatalogBackendTask';
 import { ConnectPortalModal } from '@components/portalAuth/ConnectPortalModal';
 import { AgentInterfacePanel } from './AgentInterfacePanel';
+import { tutorIdProps, UI_IDS } from './activeTutor/uiIds';
 import type { PortalConnectionMeta } from '@domain/portalAuth/portalConnectionTypes';
 import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalConnections';
 import { normalizePortalOrigin } from '@domain/portalAuth/normalizePortalOrigin';
@@ -790,7 +791,6 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
 
   const patchManual = React.useCallback(
     (id: string, patch: Partial<ManualCatalogEntry>) => {
-      if (dockCtx?.reviewPortalMode) return;
       const prev = data?.backendCatalog?.manualEntries ?? [];
       const next = prev.map((e) => {
         if (e.id !== id) return e;
@@ -813,7 +813,6 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   );
 
   const removeManual = (id: string) => {
-    if (dockCtx?.reviewPortalMode) return;
     if (!data?.backendCatalog) return;
     void taskRepository.deleteTask(id, projectId);
     const manualEntriesNext = (data.backendCatalog.manualEntries ?? []).filter((e) => e.id !== id);
@@ -854,7 +853,6 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
 
   const addManualBackend = React.useCallback(
     (mode: ManualBackendCreationMode) => {
-    if (dockCtx?.reviewPortalMode) return;
     const id = generateSafeGuid();
     const now = new Date().toISOString();
     const entry: ManualCatalogEntry = {
@@ -994,7 +992,10 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/50 p-2">
+    <div
+      {...tutorIdProps(UI_IDS.backendList)}
+      className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/50 p-2"
+    >
       {/*
         Header in-panel: pulsante «Aggiungi backend» (wizard passo Backend: nascosto — stesso
         controllo nello shell header). Coerente in modalità editor libero (tab Backends).

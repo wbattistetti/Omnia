@@ -9,6 +9,12 @@ import { persistedSectionsFromReviewImport } from '@components/TaskEditor/Editor
 import { useStructuredAgentSectionsRevision } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/useStructuredAgentSectionsRevision';
 import { AGENT_STRUCTURED_SECTION_IDS } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/agentStructuredSectionIds';
 import type { AgentReviewStructuredSections } from '@domain/agentReviewChannel/reviewDocument';
+import type { ManualBackendCreationMode } from '@domain/backendCatalog/catalogTypes';
+import {
+  buildKbAgentTaskSummary,
+  buildKbExistingUseCaseSummaries,
+  buildKbTaskVariablesWire,
+} from '@domain/knowledgeBase/kbAgentTaskContext';
 import type { ReviewPortalStepId } from '@omnia/domain-components';
 import {
   backendPlaceholdersFromReviewSnapshot,
@@ -195,6 +201,34 @@ export function useReviewAgentDockBridge({
     onComposerIaError: setComposerError,
   });
 
+  const backendsAddManualHandlerRef = React.useRef<
+    ((mode: ManualBackendCreationMode) => void) | null
+  >(null);
+  const registerBackendsAddManualHandler = React.useCallback(
+    (handler: ((mode: ManualBackendCreationMode) => void) | null) => {
+      backendsAddManualHandlerRef.current = handler;
+    },
+    []
+  );
+  const invokeBackendsAddManual = React.useCallback(
+    (mode: ManualBackendCreationMode = 'import') => {
+      backendsAddManualHandlerRef.current?.(mode);
+    },
+    []
+  );
+
+  const knowledgeBaseTaskContext = React.useMemo(
+    () => ({
+      agentTaskSummary: buildKbAgentTaskSummary(
+        description,
+        structuredRevision.composedRuntimeMarkdown
+      ),
+      taskVariables: buildKbTaskVariablesWire([]),
+      existingUseCaseSummaries: buildKbExistingUseCaseSummaries(useCases),
+    }),
+    [description, structuredRevision.composedRuntimeMarkdown, useCases]
+  );
+
   return React.useMemo(
     () =>
       buildReviewAgentDockValue({
@@ -230,6 +264,10 @@ export function useReviewAgentDockBridge({
         backends,
         designerLlm,
         ia,
+        hideBackendsPanelInlineAddButton: activeStep === 'backend',
+        registerBackendsAddManualHandler,
+        invokeBackendsAddManual,
+        knowledgeBaseTaskContext,
       }),
     [
       session.projectId,
@@ -258,6 +296,10 @@ export function useReviewAgentDockBridge({
       backends,
       designerLlm,
       ia,
+      activeStep,
+      registerBackendsAddManualHandler,
+      invokeBackendsAddManual,
+      knowledgeBaseTaskContext,
     ]
   );
 }

@@ -35,6 +35,7 @@ import { KbMarkdownMonaco } from '@components/workspaces/elevenlabs/kb/KbMarkdow
 import { KbAnalysisObservationReviewPanel } from './KbAnalysisObservationReviewPanel';
 import { KbRowSplitter } from './KbRowSplitter';
 import { useKbDocumentContent } from './useKbDocumentContent';
+import { TUTOR_ID_ATTR, UI_IDS } from '@domain/activeTutor/tutorUiIds';
 
 export interface KbDocumentAnalysisTabProps {
   doc: StagedKbDocument;
@@ -420,7 +421,10 @@ export function KbDocumentAnalysisTab({
   const reviewPanelHeight = `${Math.round(reviewPanelShare * 100)}%`;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3">
+    <div
+      {...{ [TUTOR_ID_ATTR]: UI_IDS.kbAnalysisResult }}
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3"
+    >
       <div className="shrink-0 space-y-2 text-sm leading-relaxed text-slate-300">
         <p>{KB_ANALYSIS_GUIDE_DRAFT}</p>
         <p>

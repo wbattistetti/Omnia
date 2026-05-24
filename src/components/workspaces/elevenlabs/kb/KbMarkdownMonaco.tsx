@@ -12,6 +12,7 @@ import {
   kbAgentProseMarkdownOptions,
   kbReaderMonacoOptions,
 } from '@components/knowledgeBase/kbMonacoTheme';
+import { TUTOR_ID_ATTR } from '@domain/activeTutor/tutorUiIds';
 import { ensureKbMarkdownLanguage } from '@components/knowledgeBase/kbMarkdownLanguage';
 
 const EDITOR_OPTIONS = {
@@ -39,6 +40,8 @@ export type KbMarkdownMonacoProps = {
   editorDidMount?: (editor: Monaco.editor.IStandaloneCodeEditor) => void;
   /** Host wrapper context menu (e.g. backend path insert). */
   onHostContextMenu?: (e: React.MouseEvent) => void;
+  /** data-tutor-id sul bordo visibile dell'editor (Active Tutor attention). */
+  tutorHostId?: string;
 };
 
 export function KbMarkdownMonaco({
@@ -52,6 +55,7 @@ export function KbMarkdownMonaco({
   language = 'markdown',
   editorDidMount,
   onHostContextMenu,
+  tutorHostId,
 }: KbMarkdownMonacoProps): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = React.useState(heightPx);
@@ -87,6 +91,7 @@ export function KbMarkdownMonaco({
   return (
     <div
       ref={hostRef}
+      {...(tutorHostId ? { [TUTOR_ID_ATTR]: tutorHostId } : {})}
       className={
         (fillHeight ? 'h-full min-h-0 ' : '') +
         'overflow-hidden rounded-md border bg-slate-950/80 ' +

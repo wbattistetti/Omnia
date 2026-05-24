@@ -50,6 +50,8 @@ export const AI_CALL_PURPOSE = {
   KB_FINALIZE_DOCUMENT_ANALYSIS: 'KB_FINALIZE_DOCUMENT_ANALYSIS',
   /** Risposta aggiornata dopo chiarimento utente su un'osservazione. */
   KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION: 'KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION',
+  /** Domanda libera al Tutor Attivo (solo manuale designer). */
+  TUTOR_FREE_QUESTION: 'TUTOR_FREE_QUESTION',
 } as const;
 
 export type AiCallPurposeId = (typeof AI_CALL_PURPOSE)[keyof typeof AI_CALL_PURPOSE];
@@ -86,6 +88,7 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.KB_FINALIZE_DOCUMENT_ANALYSIS]: 'Analisi documento KB concordata',
   [AI_CALL_PURPOSE.KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION]:
     'Chiarimento risposta su osservazione analisi KB',
+  [AI_CALL_PURPOSE.TUTOR_FREE_QUESTION]: 'Tutor attivo: domanda libera (manuale designer)',
 });
 
 /** Human-readable label for a known purpose id; falls back to the id itself when unknown. */

@@ -123,6 +123,10 @@ export interface AIAgentEditorDockContextValue {
     assistantContentFromEditor?: string
   ) => void | Promise<boolean>;
   onDeleteUseCase: (useCaseId: string) => void;
+  /** Persistenza nota invalidazione scenario + sync documento KB. */
+  onUseCaseInvalidationNoteChange?: (useCaseId: string, note: string) => void;
+  /** Notifica cambio stato invalidato (pollice giù) per pulizia KB. */
+  onUseCaseInvalidationStateChange?: (useCaseId: string, isInvalid: boolean) => void;
   onCreateConversationalRule: (params: {
     label: string;
     parentId: string | null;

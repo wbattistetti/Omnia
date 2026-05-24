@@ -26,6 +26,9 @@ npm run dev
 | Omnia UI | http://localhost:5173 |
 | Portale review | http://localhost:5174 |
 | API Express | http://127.0.0.1:3100 |
+| API FastAPI (Read API backend) | http://127.0.0.1:8000 |
+
+**Recupera specifiche** nel tab Backend del portale usa `/api/openapi-proxy` (FastAPI). Con `npm run dev:beNew` FastAPI è già avviato; il proxy Vite del portale lo inoltra automaticamente.
 
 Alternativa **una porta** (portale buildato servito da Express):
 

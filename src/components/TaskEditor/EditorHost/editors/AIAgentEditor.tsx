@@ -45,8 +45,8 @@ import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
 import { LastAiCostBadge } from '@components/common/LastAiCostBadge';
 import { openOmniaTutorForMissingModel } from '@utils/aiModelGuard';
+import { tutorIdProps, UI_IDS } from './aiAgentEditor/activeTutor/uiIds';
 import { AIAgentEditorDockProvider } from './aiAgentEditor/AIAgentEditorDockContext';
-import { AIAgentWelcomeTutor } from './aiAgentEditor/constructionWizard/AIAgentWelcomeTutor';
 import { AIAgentConstructionWizardShell } from './aiAgentEditor/constructionWizard/AIAgentConstructionWizardShell';
 import { AddBackendDropdown } from './aiAgentEditor/AddBackendDropdown';
 import { AIAgentDeployMenu } from './aiAgentEditor/constructionWizard/AIAgentDeployMenu';
@@ -71,6 +71,12 @@ import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 import { parseElevenLabsImportRecapFromIaJson } from '@workspaces/elevenlabs/elevenLabsImportRecap';
 import { useAgentReviewChannel } from './aiAgentEditor/useAgentReviewChannel';
+import { ActiveTutorLayout } from './aiAgentEditor/activeTutor/ActiveTutorLayout';
+import { useActiveTutorSync } from './aiAgentEditor/activeTutor/useActiveTutorSync';
+import {
+  TUTOR_ENSURE_VIEW_EVENT,
+  type TutorEnsureViewDetail,
+} from '@domain/activeTutor/tutorEnsureView';
 
 export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: EditorProps) {
   const instanceId = task.instanceId || task.id;
@@ -871,8 +877,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     }
   }, [agentInterfaceOpenStorageKey, agentInterfacePanelOpen]);
 
-  const [knowledgeBasePanelOpen, setKnowledgeBasePanelOpen] = React.useState(false);
-
   const agentInterfaceTitle = React.useMemo(() => {
     const tid = String(c.instanceId ?? '').trim();
     if (!tid) return 'Agent';
@@ -881,7 +885,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     return label || 'Agent';
   }, [c.instanceId]);
 
-  /** Solo «Aggiungi backend»; Interface è nello stepper (tra Voce e Costi). */
+  /** Solo «Aggiungi backend»; Interface è nello stepper accanto al passo Backend. */
   const wizardBackendHeaderActions = (
     <AddBackendDropdown
       wizardUi
@@ -892,7 +896,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const wizardStepHeaderAction =
     isWizardTaskStep
       ? headerAction
-      : isWizardBackendStep && !knowledgeBasePanelOpen
+      : isWizardBackendStep && !agentInterfacePanelOpen
         ? wizardBackendHeaderActions
         : null;
 
@@ -947,13 +951,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       }),
     [c.designDescription, c.useCases.length, useCaseGenWizard.conversations.length]
   );
-  /**
-   * Schermata Tutor: si mostra solo se l'utente non ha ancora cliccato «Cominciamo».
-   * `agentWizardTutorAcknowledged` per i task legacy è già forzato a `true` dallo
-   * snapshot loader, quindi i veterani non la vedono mai (vedi `buildTaskSnapshotFromRaw`).
-   */
-  const showWelcomeTutor = !c.agentWizardTutorAcknowledged;
-
   const [elRecapDismissed, setElRecapDismissed] = React.useState(false);
   React.useEffect(() => {
     setElRecapDismissed(false);
@@ -975,13 +972,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * cliccando il pulsante "$" oppure cliccando uno qualunque degli step ufficiali (1..5).
    */
   const [costsViewActive, setCostsViewActive] = React.useState(false);
-  const [errorHandlingPanelOpen, setErrorHandlingPanelOpen] = React.useState(false);
 
   const onSelectWizardStep = React.useCallback(
     (next: AgentWizardStepIndex) => {
       setCostsViewActive(false);
-      setErrorHandlingPanelOpen(false);
-      setKnowledgeBasePanelOpen(false);
       if (next !== 2) setAgentInterfacePanelOpen(false);
       stepSetter(next);
     },
@@ -990,85 +984,76 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const onSelectCostsView = React.useCallback(() => {
     setCostsViewActive(true);
     setAgentInterfacePanelOpen(false);
-    setErrorHandlingPanelOpen(false);
-    setKnowledgeBasePanelOpen(false);
   }, []);
   const onToggleInterfaceView = React.useCallback(() => {
     setCostsViewActive(false);
-    setErrorHandlingPanelOpen(false);
-    setKnowledgeBasePanelOpen(false);
     setAgentInterfacePanelOpen((prev) => {
       const next = !prev;
       if (next) stepSetter(2);
       return next;
     });
   }, [stepSetter]);
-  const onToggleErrorHandlingView = React.useCallback(() => {
-    setCostsViewActive(false);
-    setAgentInterfacePanelOpen(false);
-    setKnowledgeBasePanelOpen(false);
-    setErrorHandlingPanelOpen((prev) => {
-      const next = !prev;
-      if (next) stepSetter(1);
-      return next;
-    });
-  }, [stepSetter]);
-  const onToggleKnowledgeBaseView = React.useCallback(() => {
-    setCostsViewActive(false);
-    setAgentInterfacePanelOpen(false);
-    setErrorHandlingPanelOpen(false);
-    setKnowledgeBasePanelOpen((prev) => {
-      const next = !prev;
-      if (next) stepSetter(2);
-      return next;
-    });
-  }, [stepSetter]);
-  const useCaseCatalogMode =
-    errorHandlingPanelOpen && c.agentWizardCurrentStep === 1 && !costsViewActive
-      ? ('error_handling' as const)
-      : ('prompts' as const);
-  /**
-   * Click di «Cominciamo» nella Tutor:
-   * 1. attiva l'animazione di uscita della Tutor (`tutorExiting=true`, ~400ms);
-   * 2. al termine dell'animazione: marca la Tutor come vista (one-shot, persistito), forza
-   *    l'indice step al primo, attiva il glow viola transitorio sul pulsante Step 1.
-   *
-   * I 400ms sono allineati alla durata della transizione CSS in `AIAgentWelcomeTutor`.
-   */
-  const TUTOR_EXIT_MS = 400;
-  const [tutorExiting, setTutorExiting] = React.useState(false);
-  const [recentlyEnteredWizard, setRecentlyEnteredWizard] = React.useState(false);
-  const tutorExitTimerRef = React.useRef<number | null>(null);
-  const onStartFromTutor = React.useCallback(() => {
-    if (tutorExiting) return;
-    setTutorExiting(true);
-    tutorExitTimerRef.current = window.setTimeout(() => {
-      ackTutor();
-      stepSetter(AGENT_WIZARD_FIRST_STEP_INDEX);
-      setRecentlyEnteredWizard(true);
-      setTutorExiting(false);
-      tutorExitTimerRef.current = null;
-    }, TUTOR_EXIT_MS);
-  }, [ackTutor, stepSetter, tutorExiting]);
-
   React.useEffect(() => {
-    return () => {
-      if (tutorExitTimerRef.current !== null) {
-        window.clearTimeout(tutorExitTimerRef.current);
+    const handler = (ev: Event): void => {
+      const view = (ev as CustomEvent<TutorEnsureViewDetail>).detail?.view;
+      if (!view) return;
+      setCostsViewActive(false);
+      if (view === 'knowledgeBase') {
+        setAgentInterfacePanelOpen(false);
+        stepSetter(1);
+        return;
+      }
+      if (view === 'interface') {
+        setAgentInterfacePanelOpen(true);
+        stepSetter(2);
+        return;
+      }
+      if (view === 'backendMain') {
+        setAgentInterfacePanelOpen(false);
+        stepSetter(2);
+        return;
+      }
+      if (view === 'errorHandling') {
+        setAgentInterfacePanelOpen(false);
+        stepSetter(4);
       }
     };
-  }, []);
+    window.addEventListener(TUTOR_ENSURE_VIEW_EVENT, handler);
+    return () => window.removeEventListener(TUTOR_ENSURE_VIEW_EVENT, handler);
+  }, [stepSetter]);
+  const useCaseCatalogMode = 'prompts' as const;
 
-  /**
-   * Effetto «glow viola persistente» sul pulsante Step 1 dello Stepper subito dopo l'uscita
-   * dalla Tutor: dura 4 secondi poi si spegne. Non persistito (\u00e8 un effetto puramente
-   * visivo legato alla transizione di sessione). Auto-cleanup al unmount del timer.
-   */
+  const [recentlyEnteredWizard, setRecentlyEnteredWizard] = React.useState(false);
+
+  const onAcknowledgeWelcome = React.useCallback(() => {
+    if (c.agentWizardTutorAcknowledged) return;
+    ackTutor();
+    stepSetter(AGENT_WIZARD_FIRST_STEP_INDEX);
+    setRecentlyEnteredWizard(true);
+  }, [ackTutor, c.agentWizardTutorAcknowledged, stepSetter]);
+
   React.useEffect(() => {
     if (!recentlyEnteredWizard) return;
     const t = window.setTimeout(() => setRecentlyEnteredWizard(false), 4000);
     return () => window.clearTimeout(t);
   }, [recentlyEnteredWizard]);
+
+  useActiveTutorSync({
+    taskId: instanceId,
+    wizardStep: c.agentWizardCurrentStep,
+    generating: c.generating,
+    useCaseComposerBusy: c.useCaseComposerBusy,
+    useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
+    knowledgeBaseActive: false,
+    interfaceActive: agentInterfacePanelOpen && !costsViewActive,
+    scriptContext: {
+      designDescriptionTrimmed: c.designDescription.trim(),
+      hasAgentGeneration: c.hasAgentGeneration,
+    },
+    phaseCompletion: completion,
+    onSelectWizardStep,
+    tutorWelcomeAcknowledged: c.agentWizardTutorAcknowledged,
+  });
 
   /**
    * ─────────────────────────────────────────────────────────────────────────────────────────
@@ -1318,6 +1303,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     onRegenerateAgentMessage: c.handleRegenerateAgentMessage,
     onAnnotateAgentMessageForJson: c.handleAnnotateAgentMessageForJson,
     onDeleteUseCase: c.handleDeleteUseCase,
+    onUseCaseInvalidationNoteChange: c.handleUseCaseInvalidationNoteChange,
+    onUseCaseInvalidationStateChange: c.handleUseCaseInvalidationStateChange,
     onCreateConversationalRule: c.handleCreateConversationalRule,
     onDeleteConversationalRule: c.handleDeleteConversationalRule,
     useCaseGlobalStyleId: c.useCaseGlobalStyleId,
@@ -1553,19 +1540,23 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
       <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
         {/*
-          Layout top-level (post-unificazione): due sole viste mutuamente esclusive.
-          - Tutor di benvenuto: solo al primo accesso di un task vergine.
-          - Construction Wizard: unico shell del Task Editor AI Agent. I pannelli interni
-            (Editor*Panel) leggono dallo stesso `dockValue` via `AIAgentEditorDockProvider`,
-            single source of truth.
-          Per i veterani (`hasAgentGeneration === true`) il flag `agentWizardTutorAcknowledged`
-          è già forzato a `true` dallo snapshot loader, quindi cadono direttamente nello
-          stepper senza vedere la Tutor.
+          Construction Wizard + Active Tutor (split fisso a destra).
+          Welcome assorbito nella tab Task del pannello tutor.
         */}
-        {showWelcomeTutor || tutorExiting ? (
-          <AIAgentWelcomeTutor onStart={onStartFromTutor} isExiting={tutorExiting} />
-        ) : (
-          <AIAgentEditorDockProvider value={dockValue}>
+        <AIAgentEditorDockProvider value={dockValue}>
+          <ActiveTutorLayout
+            taskId={instanceId}
+            taskLabel={typeof task?.label === 'string' ? task.label : ''}
+            generating={
+              c.generating ||
+              c.useCaseComposerBusy ||
+              c.useCaseBundleGenerationBusy ||
+              c.useCaseBundleGenerationCategorizing
+            }
+            phaseCompletion={completion}
+            onSelectWizardStep={onSelectWizardStep}
+            onAcknowledgeWelcome={onAcknowledgeWelcome}
+          >
             <AIAgentConstructionWizardShell
               currentStep={c.agentWizardCurrentStep}
               completion={completion}
@@ -1576,10 +1567,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               onSelectCosts={onSelectCostsView}
               interfaceActive={agentInterfacePanelOpen && !costsViewActive}
               onToggleInterface={onToggleInterfaceView}
-              errorHandlingActive={errorHandlingPanelOpen && !costsViewActive}
-              onToggleErrorHandling={onToggleErrorHandlingView}
-              knowledgeBaseActive={knowledgeBasePanelOpen && !costsViewActive}
-              onToggleKnowledgeBase={onToggleKnowledgeBaseView}
               taskId={instanceId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               deploySlot={deploySlot}
@@ -1588,8 +1575,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               elevenLabsImportRecap={elevenLabsImportRecap}
               onDismissElevenLabsRecap={onDismissElevenLabsRecap}
             />
-          </AIAgentEditorDockProvider>
-        )}
+          </ActiveTutorLayout>
+        </AIAgentEditorDockProvider>
         {/*
           Dialog «Crea prompt conversazionale»: confinato al rettangolo dell'editor (non
           viewport) — sta sopra al dock ma sotto la chrome esterna. Usa portal interno via
@@ -1692,6 +1679,7 @@ function CreateAgentHeaderButton({
           type="button"
           disabled={generating}
           onClick={handleClick}
+          {...tutorIdProps(UI_IDS.createAgentButton)}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-sm font-medium"
         >
           {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}

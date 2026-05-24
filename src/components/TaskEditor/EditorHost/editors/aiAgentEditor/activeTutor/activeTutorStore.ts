@@ -1,0 +1,420 @@
+/**
+ * Active Tutor — store Zustand: conversazioni strutturate per tab, routing, sync fase.
+ */
+
+import { createWithEqualityFn } from 'zustand/traditional';
+import type { TutorPhaseId, TutorBackendSubView } from '@domain/activeTutor/tutorPhase';
+import {
+  applyTutorTransition,
+  createInitialPhaseStateMap,
+  type TutorPhaseStateMap,
+  type TutorTransitionEvent,
+} from '@domain/activeTutor/tutorStateMachine';
+import {
+  TUTOR_CONTINUE_STRUCTURED,
+  TUTOR_OUT_OF_MANUAL_STRUCTURED,
+  TUTOR_WELCOME_STRUCTURED,
+  getTutorStructuredScript,
+} from '@domain/activeTutor/tutorScripts';
+import {
+  tutorStructuredPlainText,
+  type TutorStructuredMessage,
+} from '@domain/activeTutor/tutorStructuredMessage';
+import { tutorStructuredFromScriptMessage } from '@domain/activeTutor/tutorStructuredFromScript';
+import { mainUiIdForPhase } from '@domain/activeTutor/tutorPhaseAttention';
+import {
+  EMPTY_TUTOR_SCRIPT_CONTEXT,
+  type TutorScriptContext,
+} from '@domain/activeTutor/tutorScriptContext';
+import {
+  createEmptyConversations,
+  tutorPhaseKeyFromId,
+  tutorPhaseIdFromKey,
+  type TutorPhaseKey,
+} from '@domain/activeTutor/tutorPhaseKey';
+import {
+  buildPhaseEnterPayload,
+  shouldAppendIntro,
+} from '@domain/activeTutor/tutorEnterPhase';
+import { routeTutorQuestion } from '@domain/activeTutor/tutorQuestionRouter';
+import { TUTOR_PHASE_LABELS } from '@domain/activeTutor/tutorPhase';
+import { openWizardStepForPhase } from './applyPhaseAttention';
+import { applyTutorStructuredAttention } from './applyTutorStructuredAttention';
+import { attentionDismiss } from './attentionModule';
+
+export type TutorChatRole = 'tutor' | 'designer';
+
+export interface TutorChatMessage {
+  readonly id: string;
+  readonly role: TutorChatRole;
+  /** Domande designer (testo libero). */
+  readonly text?: string;
+  /** Risposte tutor (schema ufficiale). */
+  readonly structured?: TutorStructuredMessage;
+  readonly timestamp: number;
+}
+
+export type TutorConversations = Record<TutorPhaseKey, TutorChatMessage[]>;
+
+export interface ActiveTutorStore {
+  activePhase: TutorPhaseId;
+  phaseStates: TutorPhaseStateMap;
+  backendSubView: TutorBackendSubView;
+  scriptContext: TutorScriptContext;
+  conversations: TutorConversations;
+  phaseCompletion: readonly boolean[];
+  qaBusy: boolean;
+  sessionTaskId: string | null;
+
+  setSessionTaskId: (taskId: string | null) => void;
+  setScriptContext: (context: TutorScriptContext) => void;
+  setPhaseCompletion: (completion: readonly boolean[]) => void;
+  setBackendSubView: (subView: TutorBackendSubView) => void;
+  dispatchTransition: (phase: TutorPhaseId, event: TutorTransitionEvent) => void;
+  enterPhase: (phase: TutorPhaseId, opts?: { applyAttention?: boolean }) => void;
+  onTutorTabClick: (phase: TutorPhaseId) => void;
+  appendDesignerMessage: (phaseKey: TutorPhaseKey, text: string) => void;
+  appendStructuredTutorMessage: (
+    phaseKey: TutorPhaseKey,
+    message: TutorStructuredMessage,
+    opts?: { applyAttention?: boolean }
+  ) => void;
+  submitUserQuestion: (
+    question: string,
+    answerHandler: (
+      targetPhaseKey: TutorPhaseKey,
+      question: string,
+      detectedPhaseKey: TutorPhaseKey
+    ) => Promise<TutorStructuredMessage | null>
+  ) => Promise<void>;
+  appendPostAiMessage: (phase: TutorPhaseId, text: string) => void;
+  setQaBusy: (busy: boolean) => void;
+  resetForTask: (taskId: string) => void;
+  hydrateFromSession: (taskId: string) => void;
+  persistToSession: () => void;
+  appendWelcomeIfNeeded: (alreadyAcknowledged: boolean) => void;
+}
+
+let messageCounter = 0;
+
+function nextMessageId(): string {
+  messageCounter += 1;
+  return `tutor-msg-${messageCounter}-${Date.now()}`;
+}
+
+function sessionKey(taskId: string): string {
+  return `omnia.activeTutor.v4:${taskId}`;
+}
+
+interface PersistedTutorSessionV3 {
+  phaseStates: TutorPhaseStateMap;
+  activePhase: TutorPhaseId;
+  conversations: TutorConversations;
+}
+
+function emptyConversations(): TutorConversations {
+  return createEmptyConversations() as TutorConversations;
+}
+
+function loadSession(taskId: string): PersistedTutorSessionV3 | null {
+  try {
+    const raw = sessionStorage.getItem(sessionKey(taskId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedTutorSessionV3;
+    if (!parsed.conversations || typeof parsed.activePhase !== 'number') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(taskId: string, data: PersistedTutorSessionV3): void {
+  try {
+    sessionStorage.setItem(sessionKey(taskId), JSON.stringify(data));
+  } catch {
+    /* ignore */
+  }
+}
+
+function appendDesigner(
+  conversations: TutorConversations,
+  phaseKey: TutorPhaseKey,
+  text: string
+): TutorConversations {
+  const trimmed = text.trim();
+  if (!trimmed) return conversations;
+  return {
+    ...conversations,
+    [phaseKey]: [
+      ...conversations[phaseKey],
+      { id: nextMessageId(), role: 'designer', text: trimmed, timestamp: Date.now() },
+    ],
+  };
+}
+
+function appendStructured(
+  conversations: TutorConversations,
+  phaseKey: TutorPhaseKey,
+  message: TutorStructuredMessage
+): TutorConversations {
+  return {
+    ...conversations,
+    [phaseKey]: [
+      ...conversations[phaseKey],
+      { id: nextMessageId(), role: 'tutor', structured: message, timestamp: Date.now() },
+    ],
+  };
+}
+
+function structuredMessageForPlain(text: string, phaseKey: TutorPhaseKey): TutorStructuredMessage {
+  const mainId = mainUiIdForPhase(phaseKey);
+  return tutorStructuredFromScriptMessage(
+    {
+      text,
+      attentionTargetId: mainId,
+      attentionType: 'glow',
+      uiActions: [{ action: 'scrollTo', targetId: mainId }],
+    },
+    TUTOR_PHASE_LABELS[tutorPhaseIdFromKey(phaseKey)]
+  );
+}
+
+function lastTutorBody(messages: readonly TutorChatMessage[]): string {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== 'tutor' || !last.structured) return '';
+  return tutorStructuredPlainText(last.structured);
+}
+
+function shouldAppendScript(
+  messages: readonly TutorChatMessage[],
+  script: TutorStructuredMessage
+): boolean {
+  const body = tutorStructuredPlainText(script);
+  return lastTutorBody(messages) !== body;
+}
+
+export const useActiveTutorStore = createWithEqualityFn<ActiveTutorStore>((set, get) => ({
+  activePhase: 0,
+  phaseStates: createInitialPhaseStateMap(),
+  backendSubView: 'main',
+  scriptContext: EMPTY_TUTOR_SCRIPT_CONTEXT,
+  conversations: emptyConversations(),
+  phaseCompletion: [false, false, false, false, false, false, false],
+  qaBusy: false,
+  sessionTaskId: null,
+
+  setSessionTaskId: (taskId) => set({ sessionTaskId: taskId }),
+
+  setScriptContext: (context) => set({ scriptContext: context }),
+
+  setPhaseCompletion: (completion) => set({ phaseCompletion: completion }),
+
+  setBackendSubView: (subView) => set({ backendSubView: subView }),
+
+  dispatchTransition: (phase, event) => {
+    set((s) => {
+      const current = s.phaseStates[phase];
+      const next = applyTutorTransition(current, event);
+      if (next === current) return s;
+      return { phaseStates: { ...s.phaseStates, [phase]: next } };
+    });
+    get().persistToSession();
+
+    if (event === 'ai_action_completed' && phase === get().activePhase) {
+      const structured = getTutorStructuredScript(
+        phase,
+        get().phaseStates[phase],
+        get().backendSubView,
+        get().scriptContext
+      );
+      if (structured) {
+        get().appendStructuredTutorMessage(tutorPhaseKeyFromId(phase), structured, {
+          applyAttention: true,
+        });
+      }
+    }
+  },
+
+  enterPhase: (phase, opts = {}) => {
+    attentionDismiss();
+    const phaseKey = tutorPhaseKeyFromId(phase);
+    const { phaseStates, scriptContext, phaseCompletion, conversations, backendSubView } = get();
+    const payload = buildPhaseEnterPayload(
+      phaseKey,
+      phaseStates[phase],
+      scriptContext,
+      phaseCompletion[phase] === true
+    );
+
+    let nextConversations = conversations;
+
+    if (shouldAppendIntro(conversations[phaseKey], payload.introText)) {
+      nextConversations = appendStructured(
+        nextConversations,
+        phaseKey,
+        structuredMessageForPlain(payload.introText, phaseKey)
+      );
+    }
+
+    if (payload.guidanceText && lastTutorBody(nextConversations[phaseKey]) !== payload.guidanceText.trim()) {
+      nextConversations = appendStructured(
+        nextConversations,
+        phaseKey,
+        structuredMessageForPlain(payload.guidanceText, phaseKey)
+      );
+    }
+
+    if (payload.warningText) {
+      const warning = structuredMessageForPlain(payload.warningText, phaseKey);
+      if (shouldAppendScript(nextConversations[phaseKey], warning)) {
+        nextConversations = appendStructured(nextConversations, phaseKey, warning);
+      }
+    }
+
+    const stateScript = getTutorStructuredScript(
+      phase,
+      phaseStates[phase],
+      backendSubView,
+      scriptContext
+    );
+    let attentionMessage: TutorStructuredMessage | null = null;
+    if (stateScript && shouldAppendScript(nextConversations[phaseKey], stateScript)) {
+      nextConversations = appendStructured(nextConversations, phaseKey, stateScript);
+      attentionMessage = stateScript;
+    }
+
+    set({ activePhase: phase, conversations: nextConversations });
+    get().persistToSession();
+
+    if (opts.applyAttention !== false && attentionMessage) {
+      applyTutorStructuredAttention(attentionMessage, phaseKey);
+    }
+  },
+
+  onTutorTabClick: (phase) => {
+    get().enterPhase(phase);
+  },
+
+  appendDesignerMessage: (phaseKey, text) => {
+    set((s) => ({
+      conversations: appendDesigner(s.conversations, phaseKey, text),
+    }));
+    get().persistToSession();
+  },
+
+  appendStructuredTutorMessage: (phaseKey, message, opts = {}) => {
+    attentionDismiss();
+    set((s) => ({
+      conversations: appendStructured(s.conversations, phaseKey, message),
+    }));
+    get().persistToSession();
+    if (opts.applyAttention !== false) {
+      applyTutorStructuredAttention(message, phaseKey);
+    }
+  },
+
+  submitUserQuestion: async (question, answerHandler) => {
+    const trimmed = question.trim();
+    if (!trimmed) return;
+
+    const activeKeyAtSubmit = tutorPhaseKeyFromId(get().activePhase);
+    const route = routeTutorQuestion(trimmed, activeKeyAtSubmit);
+    const targetKey = route.detectedPhase;
+    const targetPhase = tutorPhaseIdFromKey(targetKey);
+
+    if (!route.belongsToActivePhase && get().activePhase !== targetPhase) {
+      set({ activePhase: targetPhase });
+      openWizardStepForPhase(targetKey);
+    }
+
+    get().appendDesignerMessage(targetKey, trimmed);
+
+    get().setQaBusy(true);
+    try {
+      const structured = await answerHandler(targetKey, trimmed, route.detectedPhase);
+      if (structured) {
+        get().appendStructuredTutorMessage(targetKey, structured, { applyAttention: true });
+        get().appendStructuredTutorMessage(targetKey, TUTOR_CONTINUE_STRUCTURED, {
+          applyAttention: false,
+        });
+      } else {
+        get().appendStructuredTutorMessage(targetKey, TUTOR_OUT_OF_MANUAL_STRUCTURED, {
+          applyAttention: false,
+        });
+      }
+    } finally {
+      get().setQaBusy(false);
+    }
+  },
+
+  appendPostAiMessage: (phase, text) => {
+    const phaseKey = tutorPhaseKeyFromId(phase);
+    const structured = tutorStructuredFromScriptMessage(
+      { text, attentionTargetId: mainUiIdForPhase(phaseKey), attentionType: 'blink' },
+      TUTOR_PHASE_LABELS[phase]
+    );
+    get().appendStructuredTutorMessage(phaseKey, structured, { applyAttention: true });
+  },
+
+  appendWelcomeIfNeeded: (alreadyAcknowledged) => {
+    if (alreadyAcknowledged) return;
+    const taskKey = tutorPhaseKeyFromId(0);
+    const existing = get().conversations[taskKey];
+    const hasWelcome = existing.some(
+      (m) => m.role === 'tutor' && m.structured?.title === TUTOR_WELCOME_STRUCTURED.title
+    );
+    if (hasWelcome) return;
+    get().appendStructuredTutorMessage(taskKey, TUTOR_WELCOME_STRUCTURED, { applyAttention: true });
+  },
+
+  setQaBusy: (busy) => set({ qaBusy: busy }),
+
+  resetForTask: (taskId) => {
+    set({
+      activePhase: 0,
+      phaseStates: createInitialPhaseStateMap(),
+      backendSubView: 'main',
+      scriptContext: EMPTY_TUTOR_SCRIPT_CONTEXT,
+      conversations: emptyConversations(),
+      phaseCompletion: [false, false, false, false, false, false, false],
+      qaBusy: false,
+      sessionTaskId: taskId,
+    });
+  },
+
+  hydrateFromSession: (taskId) => {
+    const saved = loadSession(taskId);
+    if (saved) {
+      set({
+        sessionTaskId: taskId,
+        phaseStates: saved.phaseStates,
+        activePhase: saved.activePhase,
+        conversations: saved.conversations,
+      });
+      return;
+    }
+    get().resetForTask(taskId);
+  },
+
+  persistToSession: () => {
+    const { sessionTaskId, phaseStates, activePhase, conversations } = get();
+    if (!sessionTaskId) return;
+    saveSession(sessionTaskId, { phaseStates, activePhase, conversations });
+  },
+}));
+
+/** @deprecated Usare appendStructuredTutorMessage con TUTOR_OUT_OF_MANUAL_STRUCTURED */
+export function appendOutOfManualReply(_phaseKey: TutorPhaseKey): void {
+  /* no-op: gestito in submitUserQuestion */
+}
+
+/** @deprecated Usare appendStructuredTutorMessage con TUTOR_CONTINUE_STRUCTURED */
+export function appendContinuePrompt(_phaseKey: TutorPhaseKey): void {
+  /* no-op */
+}
+
+export function messageDisplayText(m: TutorChatMessage): string {
+  if (m.role === 'designer') return m.text ?? '';
+  if (m.structured) return tutorStructuredPlainText(m.structured);
+  return '';
+}

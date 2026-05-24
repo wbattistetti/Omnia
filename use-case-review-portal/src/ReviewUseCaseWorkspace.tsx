@@ -5,7 +5,10 @@
 import React from 'react';
 import { FontProvider } from '@context/FontContext';
 import { ReviewPortalStepper, type ReviewPortalStepId } from '@omnia/domain-components';
-import { AIAgentEditorDockProvider } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentEditorDockContext';
+import {
+  AIAgentEditorDockProvider,
+  useAIAgentEditorDock,
+} from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentEditorDockContext';
 import {
   EditorConversationPanel,
   EditorBackendsTabPanel,
@@ -13,7 +16,10 @@ import {
   EditorUnifiedDescriptionPanel,
   EditorUseCasesPanel,
 } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentEditorDockPanels';
+import { AddBackendDropdown } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AddBackendDropdown';
+import { useAIProvider } from '@context/AIProviderContext';
 import type { AgentReviewBackendSnapshot } from '@domain/agentReviewChannel/reviewSnapshots';
+import { backendPlaceholdersFromReviewSnapshot } from '@reviewPortal/buildReviewAgentDockValue';
 import { ReviewSnapshotProjectProvider } from '@reviewPortal/ReviewSnapshotProjectProvider';
 import { useReviewStore } from './reviewStore';
 import { DesignerLlmSetupOpenButton } from '@components/settings/designerLlm/DesignerLlmSetupOpenButton';
@@ -36,6 +42,61 @@ interface ReviewUseCaseWorkspaceInnerProps {
   designerLlm: import('@domain/agentReviewChannel/reviewDocument').AgentReviewDesignerLlmSnapshot | null;
 }
 
+function ReviewBackendStepHeader(): React.ReactElement {
+  const { invokeBackendsAddManual } = useAIAgentEditorDock();
+  return (
+    <header className="shrink-0 border-b border-slate-800 bg-slate-900/40 px-4 py-2.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 className="text-sm font-semibold text-slate-100">Backend</h2>
+        <AddBackendDropdown
+          wizardUi
+          onAddExisting={() => invokeBackendsAddManual('import')}
+          onCreateSpecs={() => invokeBackendsAddManual('emulate')}
+        />
+      </div>
+    </header>
+  );
+}
+
+/** Debounced autosave — must run under {@link ReviewOmniaProviders} for LLM context deps. */
+function ReviewAutoSaveEffect(): null {
+  const session = useReviewStore((s) => s.session)!;
+  const channelLoaded = useReviewStore((s) => s.channelLoaded);
+  const saveToServer = useReviewStore((s) => s.saveToServer);
+  const description = useReviewStore((s) => s.description);
+  const structuredSections = useReviewStore((s) => s.structuredSections);
+  const useCases = useReviewStore((s) => s.useCases);
+  const categories = useReviewStore((s) => s.categories);
+  const conversation = useReviewStore((s) => s.conversation);
+  const knowledgeBase = useReviewStore((s) => s.knowledgeBase);
+  const backends = useReviewStore((s) => s.backends);
+  const designerLlm = useReviewStore((s) => s.designerLlm);
+  const { provider, model } = useAIProvider();
+
+  React.useEffect(() => {
+    if (!channelLoaded) return;
+    const t = window.setTimeout(() => void saveToServer(), 800);
+    return () => clearTimeout(t);
+  }, [
+    channelLoaded,
+    description,
+    structuredSections,
+    useCases,
+    categories,
+    conversation,
+    knowledgeBase,
+    backends,
+    designerLlm,
+    provider,
+    model,
+    session.projectId,
+    session.taskId,
+    saveToServer,
+  ]);
+
+  return null;
+}
+
 /** Must render under {@link ReviewOmniaProviders} — bridge calls `useAIProvider`. */
 function ReviewUseCaseWorkspaceInner({
   session,
@@ -51,6 +112,18 @@ function ReviewUseCaseWorkspaceInner({
   status,
   designerLlm,
 }: ReviewUseCaseWorkspaceInnerProps): React.ReactElement {
+  const setBackends = useReviewStore((s) => s.setBackends);
+  const backendPlaceholders = React.useMemo(
+    () => backendPlaceholdersFromReviewSnapshot(backends),
+    [backends]
+  );
+  const onBackendSnapshotChange = React.useCallback(
+    (snapshot: AgentReviewBackendSnapshot | null) => {
+      setBackends(snapshot);
+    },
+    [setBackends]
+  );
+
   const dockValue = useReviewAgentDockBridge({
     activeStep,
     composerError,
@@ -63,6 +136,8 @@ function ReviewUseCaseWorkspaceInner({
       taskInstanceId={session.taskId}
       taskLabel={session.taskLabel}
       backendSnapshot={backends}
+      backendPlaceholders={backendPlaceholders}
+      onBackendSnapshotChange={onBackendSnapshotChange}
     >
       <FontProvider>
         <AIAgentEditorDockProvider value={dockValue}>
@@ -101,13 +176,17 @@ function ReviewUseCaseWorkspaceInner({
               badges={stepBadges}
             />
 
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {activeStep === 'task' ? <EditorUnifiedDescriptionPanel /> : null}
-              {activeStep === 'knowledge_base' ? <EditorKnowledgeBasePanel /> : null}
-              {activeStep === 'backend' ? <EditorBackendsTabPanel /> : null}
-              {activeStep === 'prompts' ? <EditorUseCasesPanel /> : null}
-              {activeStep === 'conversation' ? <EditorConversationPanel /> : null}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {activeStep === 'backend' ? <ReviewBackendStepHeader /> : null}
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {activeStep === 'task' ? <EditorUnifiedDescriptionPanel /> : null}
+                {activeStep === 'knowledge_base' ? <EditorKnowledgeBasePanel /> : null}
+                {activeStep === 'backend' ? <EditorBackendsTabPanel /> : null}
+                {activeStep === 'prompts' ? <EditorUseCasesPanel /> : null}
+                {activeStep === 'conversation' ? <EditorConversationPanel /> : null}
+              </div>
             </div>
+            <ReviewAutoSaveEffect />
             <DesignerLlmSetupOverlay scope="contained" />
           </div>
         </AIAgentEditorDockProvider>
@@ -119,43 +198,23 @@ function ReviewUseCaseWorkspaceInner({
 export function ReviewUseCaseWorkspace(): React.ReactElement {
   const session = useReviewStore((s) => s.session)!;
   const useCases = useReviewStore((s) => s.useCases);
-  const saveToServer = useReviewStore((s) => s.saveToServer);
-  const channelLoaded = useReviewStore((s) => s.channelLoaded);
   const status = useReviewStore((s) => s.status);
   const saving = useReviewStore((s) => s.saving);
   const lastSavedAt = useReviewStore((s) => s.lastSavedAt);
   const closeSession = useReviewStore((s) => s.closeSession);
-  const description = useReviewStore((s) => s.description);
-  const structuredSections = useReviewStore((s) => s.structuredSections);
   const knowledgeBase = useReviewStore((s) => s.knowledgeBase);
   const backends = useReviewStore((s) => s.backends);
   const conversation = useReviewStore((s) => s.conversation);
-  const categories = useReviewStore((s) => s.categories);
   const designerLlm = useReviewStore((s) => s.designerLlm);
 
   const [activeStep, setActiveStep] = React.useState<ReviewPortalStepId>('task');
   const [composerError, setComposerError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!channelLoaded) return;
-    const t = window.setTimeout(() => void saveToServer(), 800);
-    return () => clearTimeout(t);
-  }, [
-    channelLoaded,
-    description,
-    structuredSections,
-    useCases,
-    categories,
-    conversation,
-    knowledgeBase,
-    session.projectId,
-    session.taskId,
-    saveToServer,
-  ]);
-
   const stepBadges: Partial<Record<ReviewPortalStepId, number>> = {
     knowledge_base: knowledgeBase?.documents.length ?? 0,
-    backend: (backends?.catalogRows.length ?? 0) + (backends?.structuredPlaceholders.length ?? 0),
+    backend:
+      (backends?.manualEntries?.length ?? backends?.catalogRows.length ?? 0) +
+      (backends?.structuredPlaceholders.length ?? 0),
     prompts: useCases.length,
     conversation:
       (conversation?.conversationalRules.length ?? 0) +

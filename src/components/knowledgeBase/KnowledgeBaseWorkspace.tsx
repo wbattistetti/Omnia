@@ -33,6 +33,8 @@ export type KnowledgeBaseWorkspaceProps = {
   disabled?: boolean;
   emptyHint?: string;
   className?: string;
+  tutorDocumentListId?: string;
+  tutorAnalysisResultId?: string;
 };
 
 type KbResizeState = {
@@ -79,6 +81,8 @@ export function KnowledgeBaseWorkspace({
   disabled = false,
   emptyHint = 'Trascina documenti (.txt, .md, .csv, .json, .xlsx, .pdf, .docx, .jpg, .png…)',
   className = '',
+  tutorDocumentListId,
+  tutorAnalysisResultId,
 }: KnowledgeBaseWorkspaceProps): React.ReactElement {
   const dropRef = React.useRef<KnowledgeBaseFileDropZoneHandle>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -196,6 +200,7 @@ export function KnowledgeBaseWorkspace({
               onReorder={handleReorder}
               onRemove={onRemoveDocument}
               emptyFormatsHint={emptyHint}
+              tutorListId={tutorDocumentListId}
             />
           </KnowledgeBaseFileDropZone>
         ) : (
@@ -215,6 +220,7 @@ export function KnowledgeBaseWorkspace({
                   onSelect={setSelectedId}
                   onReorder={handleReorder}
                   onRemove={onRemoveDocument}
+                  tutorListId={tutorDocumentListId}
                 />
               </KnowledgeBaseFileDropZone>
             </aside>
@@ -236,6 +242,7 @@ export function KnowledgeBaseWorkspace({
                 imageDocIds={imageDocIds}
                 onSelectDocumentId={setSelectedId}
                 onUpdateDoc={(patch) => onUpdateDocument(selectedDoc.id, patch)}
+                tutorAnalysisResultId={tutorAnalysisResultId}
               />
             ) : null}
           </>

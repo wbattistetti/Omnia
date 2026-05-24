@@ -1621,11 +1621,13 @@ export default function BackendCallEditor({
 
   // Update toolbar when it changes (for docking mode)
   const headerColor = '#94a3b8'; // Gray color for BackendCall
+  const onToolbarUpdateRef = React.useRef(onToolbarUpdate);
+  onToolbarUpdateRef.current = onToolbarUpdate;
   React.useEffect(() => {
-    if (hideHeader && onToolbarUpdate) {
-      onToolbarUpdate(toolbarButtons, headerColor);
+    if (hideHeader && onToolbarUpdateRef.current) {
+      onToolbarUpdateRef.current(toolbarButtons, headerColor);
     }
-  }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
+  }, [hideHeader, toolbarButtons, headerColor]);
 
   const type = String(task?.type || 'BackendCall') as any;
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)

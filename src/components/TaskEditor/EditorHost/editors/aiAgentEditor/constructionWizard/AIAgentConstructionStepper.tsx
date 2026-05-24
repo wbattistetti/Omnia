@@ -21,12 +21,13 @@
  */
 
 import React from 'react';
-import { BookOpen, Check, DollarSign, Lock, MessagesSquare, ShieldAlert, Unplug } from 'lucide-react';
+import { BookOpen, Check, DollarSign, Lock, Unplug } from 'lucide-react';
 import {
   AGENT_WIZARD_STEP_COUNT,
   type AgentWizardStepIndex,
 } from '@domain/aiAgentConstruction/agentConstructionPhase';
 import { AGENT_WIZARD_STEPS_META } from './agentWizardStepsMeta';
+import { tutorIdProps, UI_IDS, wizardStepUiId } from '../activeTutor/uiIds';
 
 export interface AIAgentConstructionStepperProps {
   readonly currentStep: AgentWizardStepIndex;
@@ -51,14 +52,9 @@ export interface AIAgentConstructionStepperProps {
    * ufficiali, tra «Voce» e «Costi di design».
    */
   readonly interfaceActive?: boolean;
-  /** Toggle pannello Interface; tipicamente apre anche il passo Backend. */
+  /** Toggle pannello Interface sul passo Backend (step 2). */
+  readonly interfaceActive?: boolean;
   readonly onToggleInterface?: () => void;
-  /** Vista regole conversazionali (error handling) sul passo Prompts. */
-  readonly errorHandlingActive?: boolean;
-  readonly onToggleErrorHandling?: () => void;
-  /** Vista Knowledge Base sul passo Backend (documenti .txt / .xlsx del task). */
-  readonly knowledgeBaseActive?: boolean;
-  readonly onToggleKnowledgeBase?: () => void;
   /**
    * Slot opzionale renderizzato all'estrema destra dello stepper, dopo il pulsante "Costi".
    * Tipicamente contiene il dropdown «Deploy»: il parent decide quando mostrarlo (es. solo
@@ -105,10 +101,6 @@ export function AIAgentConstructionStepper({
   onSelectCosts,
   interfaceActive = false,
   onToggleInterface,
-  errorHandlingActive = false,
-  onToggleErrorHandling,
-  knowledgeBaseActive = false,
-  onToggleKnowledgeBase,
   deploySlot = null,
   reviewPublishSlot = null,
   bypassGating = false,
@@ -141,13 +133,8 @@ export function AIAgentConstructionStepper({
           Su layout stretto che va a capo, il deploy resta allineato a destra dell'ULTIMA riga.
         */}
         {AGENT_WIZARD_STEPS_META.map((meta) => {
-          const isPromptsStep = meta.index === 1;
           const isBackendStep = meta.index === 2;
-          const isCurrent =
-            !costsActive &&
-            !errorHandlingActive &&
-            !knowledgeBaseActive &&
-            meta.index === currentStep;
+          const isCurrent = !costsActive && meta.index === currentStep;
           const isComplete = completion[meta.index] === true;
           const isEnabled = enabled[meta.index] === true;
           const Icon = meta.icon;
@@ -166,39 +153,6 @@ export function AIAgentConstructionStepper({
 
           const showPendingLabelMark = isEnabled && !isComplete;
 
-          const errorHandlingButton =
-            isPromptsStep && onToggleErrorHandling ? (
-              <li key="error-handling">
-                <button
-                  type="button"
-                  aria-pressed={errorHandlingActive}
-                  aria-label="Error Handling: regole conversazionali trasversali"
-                  title="Apre le regole conversazionali (error handling) nel pannello sinistro"
-                  onClick={onToggleErrorHandling}
-                  className={
-                    'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
-                    (errorHandlingActive
-                      ? 'border-rose-500/55 bg-rose-950/75 text-rose-100 shadow-sm ring-2 ring-rose-400/30'
-                      : 'border-rose-800/45 bg-rose-950/35 text-rose-200/85 hover:border-rose-600/50 hover:bg-rose-950/55 hover:text-rose-100')
-                  }
-                >
-                  <span
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-black/25"
-                    aria-hidden
-                  >
-                    <ShieldAlert size={14} className="text-rose-300/90" strokeWidth={2} />
-                  </span>
-                  <MessagesSquare
-                    size={15}
-                    aria-hidden
-                    className="shrink-0 opacity-85 text-amber-300/90"
-                    strokeWidth={2}
-                  />
-                  <span className="whitespace-nowrap">Error Handling</span>
-                </button>
-              </li>
-            ) : null;
-
           return (
             <React.Fragment key={meta.index}>
               <li>
@@ -206,6 +160,7 @@ export function AIAgentConstructionStepper({
                   type="button"
                   disabled={!isEnabled}
                   aria-current={isCurrent ? 'step' : undefined}
+                  {...tutorIdProps(wizardStepUiId(meta.index))}
                   aria-label={`Passo ${meta.displayNumber}: ${meta.title}${
                     isComplete
                       ? ' (completato)'
@@ -245,27 +200,6 @@ export function AIAgentConstructionStepper({
                   </span>
                 </button>
               </li>
-              {errorHandlingButton}
-              {isBackendStep && onToggleKnowledgeBase ? (
-                <li key="knowledge-base">
-                  <button
-                    type="button"
-                    aria-pressed={knowledgeBaseActive}
-                    aria-label="Knowledge Base: documenti tabellari del task"
-                    title="Carica .txt o .xlsx: le colonne diventano variabili cliccabili"
-                    onClick={onToggleKnowledgeBase}
-                    className={
-                      'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
-                      (knowledgeBaseActive
-                        ? 'border-violet-500/55 bg-violet-950/75 text-violet-100 shadow-sm ring-2 ring-violet-400/30'
-                        : 'border-violet-800/45 bg-violet-950/35 text-violet-200/85 hover:border-violet-600/50 hover:bg-violet-950/55 hover:text-violet-100')
-                    }
-                  >
-                    <BookOpen size={15} aria-hidden className="shrink-0 opacity-90" strokeWidth={2} />
-                    <span className="whitespace-nowrap">Knowledge Base</span>
-                  </button>
-                </li>
-              ) : null}
             </React.Fragment>
           );
         })}
@@ -278,6 +212,7 @@ export function AIAgentConstructionStepper({
             <li>
               <button
                 type="button"
+                {...tutorIdProps(UI_IDS.interfaceToggleButton)}
                 aria-pressed={interfaceActive}
                 aria-label="Interfaccia agente: parametri INPUT e OUTPUT esposti all'orchestratore del flow"
                 title="Apre il pannello Interface (INPUT/OUTPUT) sul passo Backend"

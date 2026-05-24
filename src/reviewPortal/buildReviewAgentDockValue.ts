@@ -26,6 +26,8 @@ import {
   reviewIaDisabledAsync,
   reviewNoop,
 } from './reviewAgentDockStubs';
+import type { ManualBackendCreationMode } from '@domain/backendCatalog/catalogTypes';
+import type { KbDocumentAnalysisTaskContext } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import type { ReviewAgentIaDockSlice } from './useReviewAgentIaDockSlice';
 
 export interface ReviewAgentDockLiveInput {
@@ -201,8 +203,11 @@ export function buildReviewAgentDockValue(
     setIaRuntimeConfig: reviewNoop,
     saveIaRuntimeOverrideToTask: reviewNoop,
     persistIaRuntimeOverrideSnapshot: reviewNoop,
-    registerBackendsAddManualHandler: reviewNoop,
-    invokeBackendsAddManual: reviewNoop,
+    registerBackendsAddManualHandler: live.registerBackendsAddManualHandler,
+    invokeBackendsAddManual: live.invokeBackendsAddManual,
+    hideBackendsPanelInlineAddButton: live.hideBackendsPanelInlineAddButton,
+    knowledgeBaseCallMeta: live.ia.buildUseCasePropagatorCallMeta('KB_REFINE_DOCUMENT_ANALYSIS'),
+    knowledgeBaseTaskContext: live.knowledgeBaseTaskContext,
     setAgentInterfacePanelOpen: reviewNoop,
     setAgentInterfaceInput: reviewNoop as React.Dispatch<React.SetStateAction<never[]>>,
     setAgentInterfaceOutput: reviewNoop as React.Dispatch<React.SetStateAction<never[]>>,

@@ -1,111 +1,66 @@
 /**
- * AI Agent — Regole di completamento per gli step del wizard di costruzione.
- *
- * Single source of truth per «quando uno step è ✅». Funzioni pure, testabili in isolamento,
- * nessuna dipendenza React. Le regole sono definite dal prodotto (regole D del design):
- *
- *   Step 1 — Task     → descrizione del task non vuota (gate STRETTO)
- *   Step 2 — Prompts  → ≥1 use case + ≥1 conversazione (gate STRETTO)
- *   Step 3 — Backend  → SEMPRE ✅ (soft, mock-data deferred)
- *   Step 4 — Dati     → SEMPRE ✅ (soft, deferred)
- *   Step 5 — Voce     → SEMPRE ✅ (default voice precaricata)
- *
- * Solo i due gate stretti (1 e 2) possono trattenere il flusso. Gli step soft permettono
- * comunque di aprire la pagina per personalizzare (visibili e navigabili) ma non bloccano
- * l'auto-transizione `wizard → edit` quando tutti sono ✅.
- *
- * NB: i nomi delle funzioni `isStep2BackendComplete` / `isStep3ConversationComplete`
- * descrivono il **concetto** (Backend / Conversazione), non la **posizione** nello
- * stepper. Dopo il riordino di mag 2026 (Prompts spostato dal 3° al 2° posto, Backend
- * dal 2° al 3°) il mapping posizionale è stato aggiornato in `STEP_COMPLETION_RULES`.
- * I nomi delle funzioni restano invariati per coerenza semantica e per non rompere
- * test/usage esistenti.
- *
- * Nota di evoluzione: quando in futuro vorrai rendere stretti anche gli altri step
- * (es. richiedere almeno un backend dichiarato, o slot tipizzati, o voce esplicita),
- * basta rimpiazzare il `return true` della relativa funzione `isStep*Complete`.
+ * AI Agent — Regole di completamento per gli step del wizard (7 fasi).
  */
 
 import type { AgentWizardStepIndex } from './agentConstructionPhase';
 import { AGENT_WIZARD_STEP_COUNT } from './agentConstructionPhase';
 
-/**
- * Snapshot dei dati del task necessari per valutare il completamento dei 5 step.
- * Volutamente minimale: niente logica, solo i dati grezzi che bastano alle regole.
- *
- * @property descriptionTrimmed   `task.agentDesignDescription.trim()`
- * @property useCaseCount         numero di use case nel catalogo dell'agente
- * @property conversationCount    numero di conversazioni del wizard interno (passo 2 use case)
- */
 export interface AgentWizardCompletionInput {
   readonly descriptionTrimmed: string;
   readonly useCaseCount: number;
   readonly conversationCount: number;
+  readonly knowledgeBaseDocumentCount?: number;
 }
 
-/** Step 1 — completato se la descrizione del task è non vuota. */
-export function isStep1TaskComplete(input: AgentWizardCompletionInput): boolean {
+export function isStepTaskComplete(input: AgentWizardCompletionInput): boolean {
   return input.descriptionTrimmed.length > 0;
 }
 
-/**
- * Step 2 — Backend. SOFT per ora: sempre completato. Quando vorrai gating stretto
- * (es. ≥1 backend dichiarato O flag «no-backend agent») cambia questa funzione.
- */
-export function isStep2BackendComplete(_input: AgentWizardCompletionInput): boolean {
+export function isStepKnowledgeBaseComplete(_input: AgentWizardCompletionInput): boolean {
   return true;
 }
 
-/** Step 3 — completato se esiste almeno una use case e almeno una conversazione. */
-export function isStep3ConversationComplete(input: AgentWizardCompletionInput): boolean {
+export function isStepBackendComplete(_input: AgentWizardCompletionInput): boolean {
+  return true;
+}
+
+export function isStepPromptsComplete(input: AgentWizardCompletionInput): boolean {
   return input.useCaseCount >= 1 && input.conversationCount >= 1;
 }
 
-/** Step 4 — Dati. SOFT per ora: sempre completato (slot review/typing deferred). */
-export function isStep4DataComplete(_input: AgentWizardCompletionInput): boolean {
+export function isStepErrorHandlingComplete(_input: AgentWizardCompletionInput): boolean {
   return true;
 }
 
-/** Step 5 — Voce. SOFT per ora: la voce di default fa scattare ✅ all'avvio. */
-export function isStep5VoiceComplete(_input: AgentWizardCompletionInput): boolean {
+export function isStepDatiComplete(_input: AgentWizardCompletionInput): boolean {
   return true;
 }
 
-/**
- * Mapping ordinato 0..4 → predicato di completamento dello step.
- *
- * Allineato all'ordine UFFICIALE post-riordino mag 2026:
- *   0 → Task     1 → Prompts (= Conversazione) 2 → Backend  3 → Dati  4 → Voce
- */
+export function isStepVoceComplete(_input: AgentWizardCompletionInput): boolean {
+  return true;
+}
+
+/** 0 Task, 1 KB, 2 Backend, 3 Prompts, 4 Error Handling, 5 Dati, 6 Voce */
 const STEP_COMPLETION_RULES: ReadonlyArray<(input: AgentWizardCompletionInput) => boolean> = [
-  isStep1TaskComplete,
-  isStep3ConversationComplete,
-  isStep2BackendComplete,
-  isStep4DataComplete,
-  isStep5VoiceComplete,
+  isStepTaskComplete,
+  isStepKnowledgeBaseComplete,
+  isStepBackendComplete,
+  isStepPromptsComplete,
+  isStepErrorHandlingComplete,
+  isStepDatiComplete,
+  isStepVoceComplete,
 ];
 
-/**
- * Valuta tutti i 5 step e restituisce un array `[bool, bool, bool, bool, bool]` dove
- * l'indice `i` indica se lo step `i+1` è completato.
- */
 export function evaluateAgentWizardCompletion(
   input: AgentWizardCompletionInput
 ): readonly boolean[] {
   return STEP_COMPLETION_RULES.map((rule) => rule(input));
 }
 
-/**
- * True se TUTTI i 5 step sono ✅. Trigger della transizione automatica `wizard → edit`.
- */
 export function areAllAgentWizardStepsComplete(input: AgentWizardCompletionInput): boolean {
   return evaluateAgentWizardCompletion(input).every(Boolean);
 }
 
-/**
- * Ritorna l'indice del prossimo step disponibile (primo step non completato).
- * Se tutti sono ✅, ritorna l'ultimo step (utility per UI di navigazione).
- */
 export function nextIncompleteAgentWizardStep(
   input: AgentWizardCompletionInput
 ): AgentWizardStepIndex {
@@ -113,5 +68,5 @@ export function nextIncompleteAgentWizardStep(
   for (let i = 0; i < AGENT_WIZARD_STEP_COUNT; i++) {
     if (!flags[i]) return i as AgentWizardStepIndex;
   }
-  return (AGENT_WIZARD_STEP_COUNT - 1) as AgentWizardStepIndex;
+  return AGENT_WIZARD_STEP_COUNT - 1;
 }

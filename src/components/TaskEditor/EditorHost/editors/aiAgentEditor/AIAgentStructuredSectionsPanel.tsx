@@ -13,6 +13,7 @@ import {
   type AIAgentStructuredSectionsDockContextValue,
 } from './AIAgentStructuredSectionsDockContext';
 import { AIAgentStructuredSectionsDockview } from './AIAgentStructuredSectionsDockview';
+import { tutorIdProps, UI_IDS } from './activeTutor/uiIds';
 
 export type { IaSectionDiffPair } from './iaSectionDiffTypes';
 
@@ -116,7 +117,10 @@ export function AIAgentStructuredSectionsPanel({
         </p>
       ) : null}
 
-      <div className={embeddedDock ? 'flex-1 min-h-0 flex flex-col' : ''}>
+      <div
+        {...(!omitStructuredSections ? tutorIdProps(UI_IDS.taskFormattedBox) : {})}
+        className={embeddedDock ? 'flex-1 min-h-0 flex flex-col' : ''}
+      >
         <AIAgentStructuredSectionsDockProvider value={dockValue}>
           <AIAgentStructuredSectionsDockview
             layoutKey={suffix}

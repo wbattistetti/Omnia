@@ -14,6 +14,9 @@ export {
 
 export type KbParseStatus = 'parsing' | 'ready' | 'error' | 'unsupported';
 
+/** Documenti KB generati dal designer (non upload file). */
+export type KbDocumentKind = 'upload' | 'invalidated_use_case_note';
+
 export type KbStagedFileBase = {
   id: string;
   name: string;
@@ -38,6 +41,10 @@ export type StagedKbDocument = KbStagedFileBase & {
   documentAnalysisMarkdown: string;
   /** Ultima versione proposta/concordata dall'agente (base esplicita per il diff). */
   agentAnalysisBaselineMarkdown: string;
+  /** Default `upload` per documenti caricati; note invalidazione scenario = `invalidated_use_case_note`. */
+  kbDocumentKind?: KbDocumentKind;
+  /** Use case collegato (note invalidazione scenario). */
+  linkedUseCaseId?: string;
 };
 
 export type PersistedKbDocument = Omit<StagedKbDocument, 'file'>;
@@ -102,6 +109,12 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
       typeof raw.agentAnalysisBaselineMarkdown === 'string'
         ? raw.agentAnalysisBaselineMarkdown
         : '',
+    kbDocumentKind:
+      raw.kbDocumentKind === 'invalidated_use_case_note' ? 'invalidated_use_case_note' : 'upload',
+    linkedUseCaseId:
+      typeof raw.linkedUseCaseId === 'string' && raw.linkedUseCaseId.trim()
+        ? raw.linkedUseCaseId.trim()
+        : undefined,
   };
 }
 
@@ -123,5 +136,8 @@ export type KbDocumentPatch = Partial<
     | 'variables'
     | 'variableDictionary'
     | 'format'
+    | 'kbDocumentKind'
+    | 'linkedUseCaseId'
+    | 'name'
   >
 >;

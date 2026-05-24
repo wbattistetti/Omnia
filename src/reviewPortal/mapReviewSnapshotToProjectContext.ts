@@ -2,10 +2,17 @@
  * Maps review backend snapshot → minimal ProjectData + Task seeds for Omnia panels in the portal.
  */
 
-import type { AgentReviewBackendSnapshot } from '@domain/agentReviewChannel/reviewSnapshots';
+import type {
+  AgentReviewBackendSnapshot,
+  AgentReviewManualBackendEntrySnapshot,
+} from '@domain/agentReviewChannel/reviewSnapshots';
 import type { ManualCatalogEntry } from '@domain/backendCatalog/catalogTypes';
 import type { ProjectData } from '@types/project';
 import { TaskType, type Task } from '@types/taskTypes';
+import {
+  backendCallTaskFromManualEntry,
+  resolveEphemeralBackendCallTask,
+} from './reviewBackendCallTaskWire';
 
 function manualEntriesFromSnapshot(
   snapshot: AgentReviewBackendSnapshot | null | undefined
@@ -54,17 +61,17 @@ function manualEntriesFromSnapshot(
   return out;
 }
 
-function backendCallTaskFromManualEntry(entry: ManualCatalogEntry): Task {
-  return {
-    id: entry.id,
-    type: TaskType.BackendCall,
-    label: entry.label || entry.endpointUrl || 'Backend',
-    endpointUrl: entry.endpointUrl,
-    method: entry.method ?? 'GET',
-  } as Task;
+function manualEntrySnapshotById(
+  snapshot: AgentReviewBackendSnapshot | null | undefined
+): Map<string, AgentReviewManualBackendEntrySnapshot> {
+  const map = new Map<string, AgentReviewManualBackendEntrySnapshot>();
+  for (const e of snapshot?.manualEntries ?? []) {
+    map.set(e.id, e);
+  }
+  return map;
 }
 
-function agentTaskStub(taskInstanceId: string, label: string): Task {
+export function agentTaskStub(taskInstanceId: string, label: string): Task {
   return {
     id: taskInstanceId,
     type: TaskType.AIAgent,
@@ -75,6 +82,7 @@ function agentTaskStub(taskInstanceId: string, label: string): Task {
 export interface ReviewSnapshotProjectContext {
   projectData: ProjectData;
   ephemeralTasks: Task[];
+  manualEntrySnapshotsById: Map<string, AgentReviewManualBackendEntrySnapshot>;
 }
 
 /** Builds in-memory project context for the review portal from a published backend snapshot. */
@@ -85,6 +93,7 @@ export function buildReviewSnapshotProjectContext(params: {
   backendSnapshot: AgentReviewBackendSnapshot | null | undefined;
 }): ReviewSnapshotProjectContext {
   const manualEntries = manualEntriesFromSnapshot(params.backendSnapshot);
+  const manualEntrySnapshotsById = manualEntrySnapshotById(params.backendSnapshot);
   const projectData: ProjectData = {
     id: params.projectId,
     name: params.projectId,
@@ -105,8 +114,13 @@ export function buildReviewSnapshotProjectContext(params: {
 
   const ephemeralTasks: Task[] = [
     agentTaskStub(params.taskInstanceId, params.taskLabel),
-    ...manualEntries.map(backendCallTaskFromManualEntry),
+    ...manualEntries.map((entry) =>
+      backendCallTaskFromManualEntry(entry, manualEntrySnapshotsById.get(entry.id)?.taskWire)
+    ),
   ];
 
-  return { projectData, ephemeralTasks };
+  return { projectData, ephemeralTasks, manualEntrySnapshotsById };
 }
+
+/** Re-export for callers that merge with live taskRepository state. */
+export { backendCallTaskFromManualEntry, resolveEphemeralBackendCallTask };

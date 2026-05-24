@@ -10,6 +10,7 @@ import { createMappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import { shouldSkipInterfaceDuplicate } from '@components/FlowMappingPanel/interfaceMappingLabels';
 import type { FlowInterfaceDropPayload } from '@components/FlowMappingPanel/flowInterfaceDragTypes';
 import type { AgentInterfaceParamSide } from '@domain/agentInterface/agentInterfaceState';
+import { tutorIdProps, UI_IDS } from './activeTutor/uiIds';
 
 export interface AgentInterfacePanelProps {
   agentTitle: string;
@@ -89,6 +90,7 @@ export function AgentInterfacePanel({
 
   return (
     <div
+      {...tutorIdProps(UI_IDS.interfacePanel)}
       className={`flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-slate-700/60 bg-slate-950/80 ${className}`}
     >
       <InterfaceMappingEditor

@@ -31,6 +31,7 @@ import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAge
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
+import { tutorIdProps, UI_IDS } from './activeTutor/uiIds';
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
@@ -283,7 +284,10 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         : 'bg-violet-600 hover:bg-violet-500';
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto space-y-1 bg-violet-950/15 p-1.5 border-l-4 border-violet-500/45">
+    <div
+      {...tutorIdProps(UI_IDS.voicePanel)}
+      className="h-full min-h-0 overflow-y-auto space-y-1 bg-violet-950/15 p-1.5 border-l-4 border-violet-500/45"
+    >
       <div className="flex items-center justify-between gap-2 pb-0.5">
         <span
           className={

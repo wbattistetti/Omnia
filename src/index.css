@@ -492,3 +492,147 @@
 .elevenlabs-inspector-scroll::-webkit-scrollbar-thumb:hover {
   background: rgb(148 163 184);
 }
+
+/* Active Tutor — attention + idle guidance */
+@keyframes omnia-tutor-attention-blink {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.45); }
+}
+
+@keyframes omnia-tutor-attention-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.35); }
+  50% { box-shadow: 0 0 0 8px rgba(167, 139, 250, 0); }
+}
+
+@keyframes omnia-tutor-attention-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+.omnia-tutor-attention-blink {
+  animation: omnia-tutor-attention-blink 0.8s ease-in-out 3;
+}
+
+.omnia-tutor-attention-pulse {
+  animation: omnia-tutor-attention-pulse 1.2s ease-in-out 2;
+}
+
+.omnia-tutor-attention-highlight {
+  outline: 2px solid rgba(167, 139, 250, 0.75);
+  outline-offset: 2px;
+}
+
+.omnia-tutor-attention-shake {
+  animation: omnia-tutor-attention-shake 0.35s ease-in-out 3;
+}
+
+.omnia-tutor-attention-glow {
+  animation-name: omnia-tutor-attention-glow-border;
+  animation-duration: 0.8s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: var(--omnia-tutor-glow-cycles, 3);
+  animation-fill-mode: both;
+}
+
+@keyframes omnia-tutor-attention-blink-twice {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0);
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(167, 139, 250, 0.55);
+    outline: 2px solid rgba(167, 139, 250, 0.75);
+    outline-offset: 2px;
+  }
+}
+
+.omnia-tutor-attention-blink-twice {
+  animation: omnia-tutor-attention-blink-twice 0.6s ease-in-out 2;
+}
+
+.omnia-tutor-attention-persistent {
+  outline: 2px solid rgba(167, 139, 250, 0.88) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 14px rgba(167, 139, 250, 0.28);
+}
+
+@keyframes omnia-tutor-attention-glow-border {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.25);
+    border-color: rgba(167, 139, 250, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(167, 139, 250, 0.75),
+      0 0 18px rgba(167, 139, 250, 0.35);
+    border-color: rgba(167, 139, 250, 0.9);
+  }
+}
+
+.omnia-tutor-guidance-glow {
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.35);
+}
+
+/* Active Tutor — tab chat attiva illuminata */
+.omnia-tutor-tab-active {
+  position: relative;
+  animation: omnia-tutor-tab-glow-pulse 2.2s ease-in-out infinite;
+}
+
+.omnia-tutor-tab-active-task {
+  --omnia-tutor-tab-glow: rgba(139, 92, 246, 0.65);
+}
+
+.omnia-tutor-tab-active-prompts {
+  --omnia-tutor-tab-glow: rgba(56, 189, 248, 0.6);
+}
+
+.omnia-tutor-tab-active-backend {
+  --omnia-tutor-tab-glow: rgba(251, 191, 36, 0.55);
+}
+
+.omnia-tutor-tab-active-knowledgeBase {
+  --omnia-tutor-tab-glow: rgba(129, 140, 248, 0.6);
+}
+
+.omnia-tutor-tab-active-errorHandling {
+  --omnia-tutor-tab-glow: rgba(248, 113, 113, 0.55);
+}
+
+.omnia-tutor-tab-active-dati {
+  --omnia-tutor-tab-glow: rgba(52, 211, 153, 0.55);
+}
+
+.omnia-tutor-tab-active-voce {
+  --omnia-tutor-tab-glow: rgba(251, 113, 133, 0.55);
+}
+
+@keyframes omnia-tutor-tab-glow-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.15);
+    box-shadow:
+      0 0 12px var(--omnia-tutor-tab-glow, rgba(167, 139, 250, 0.5)),
+      0 0 22px var(--omnia-tutor-tab-glow, rgba(167, 139, 250, 0.35));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omnia-tutor-tab-active {
+    animation: none;
+  }
+
+  .omnia-tutor-attention-blink,
+  .omnia-tutor-attention-pulse,
+  .omnia-tutor-attention-shake {
+    animation: none;
+    outline: 2px solid rgba(167, 139, 250, 0.6);
+    outline-offset: 2px;
+  }
+}

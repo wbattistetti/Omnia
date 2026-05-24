@@ -21,6 +21,8 @@ export type KnowledgeBaseViewerProps = {
   emptyHint?: string;
   footerHint?: string;
   className?: string;
+  tutorDocumentListId?: string;
+  tutorAnalysisResultId?: string;
 };
 
 export function KnowledgeBaseViewer({

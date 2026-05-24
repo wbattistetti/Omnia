@@ -30,6 +30,7 @@ import {
 import {
   newAgentUseCaseTurnId,
   isUseCaseIncludedInConversations,
+  isUseCaseInvalidated,
   type AIAgentLogicalStep,
   type AIAgentUseCase,
   type AIAgentUseCaseCategory,
@@ -64,6 +65,7 @@ import {
   withScenarioText,
 } from '@domain/aiAgentUseCase/scenarioText';
 import { UseCaseWizardScenarioDisplay } from './useCaseWizardScenarioDisplay';
+import { UseCaseInvalidationNoteBlock } from './UseCaseInvalidationNoteBlock';
 import { orderUseCasesWithDepth } from './useCaseTreeOrder';
 import { applySiblingReorderForPersist } from './useCaseHierarchy';
 import { syncPrimaryPhraseNaturalFromAssistantTurn } from '@domain/useCaseBundle/phraseVariantHelpers';
@@ -172,6 +174,7 @@ import { TokenizedHighlightedText } from './useCaseGeneratorWizard/TokenizedHigh
 import { CORRECTION_PREVIEW_SYNTHESIS_WAITING_MESSAGE } from './useCaseGeneratorWizard/CompletaCorrezioneCallout';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import { UseCaseEmptyTutorPanel } from './useCaseGeneratorWizard/UseCaseEmptyTutorPanel';
+import { tutorIdProps, UI_IDS } from './activeTutor/uiIds';
 import { UseCaseRootComposerHeader } from './useCaseGeneratorWizard/UseCaseRootComposerHeader';
 import { UseCaseCategoryHeader } from './useCaseGeneratorWizard/UseCaseCategoryHeader';
 import {
@@ -239,6 +242,10 @@ export interface AIAgentUseCaseComposerProps {
     assistantContentFromEditor?: string
   ) => void | Promise<boolean>;
   onDeleteUseCase: (useCaseId: string) => void;
+  /** Persistenza nota invalidazione + documento KB collegato. */
+  onUseCaseInvalidationNoteChange?: (useCaseId: string, note: string) => void;
+  /** Cambio stato invalidato (pollice giù) per sync KB. */
+  onUseCaseInvalidationStateChange?: (useCaseId: string, isInvalid: boolean) => void;
   useCaseGlobalStyleId: string;
   onUseCaseGlobalStyleIdChange: (styleId: string) => void;
   /** Persistite su `Task.agentUseCaseStyleLearningNotes`, unite al preset stile nelle API. */
@@ -348,6 +355,8 @@ export function AIAgentUseCaseComposer({
   onRegenerateAgentMessage,
   onAnnotateAgentMessageForJson: _onAnnotateAgentMessageForJson,
   onDeleteUseCase,
+  onUseCaseInvalidationNoteChange,
+  onUseCaseInvalidationStateChange,
   useCaseGlobalStyleId,
   onUseCaseGlobalStyleIdChange,
   useCaseStyleLearningNotes = '',
@@ -401,6 +410,10 @@ export function AIAgentUseCaseComposer({
   const [completeCorrectionNewIds, setCompleteCorrectionNewIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set());
+  /** Evidenzia textarea obbligatoria dopo invalidazione senza nota. */
+  const [invalidationNoteRequiredIds, setInvalidationNoteRequiredIds] = React.useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const phraseStyleNewSet = React.useMemo(
     () => new Set([...assistantPhraseStyleNewIds, ...completeCorrectionNewIds]),
     [assistantPhraseStyleNewIds, completeCorrectionNewIds]
@@ -421,7 +434,8 @@ export function AIAgentUseCaseComposer({
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
   const dock = useOptionalAIAgentEditorDock();
   /** Portale review: stile globale / runtime catalog nel composer (in Omnia wizard sono nel pannello DX). */
-  const showComposerClassicChrome = dock?.reviewPortalMode === true;
+  const showComposerClassicChrome =
+    dock?.reviewPortalMode === true && composerCatalog === 'prompts';
   /** `dock` dal parent è un oggetto nuovo a ogni render: non va nelle deps dell'effect anteprima. */
   const dockRef = React.useRef(dock);
   dockRef.current = dock;
@@ -1799,12 +1813,55 @@ export function AIAgentUseCaseComposer({
    */
   const validateUseCaseFromHeader = React.useCallback(
     (useCaseId: string, choice: DesignerFieldVote) => {
+      const prevUc = useCases.find((u) => u.id === useCaseId);
+      const nextVote = prevUc?.designer_label_vote === choice ? undefined : choice;
       setUseCases((prev) => applyUseCaseHeaderVoteToggle(prev, useCaseId, choice));
       clearNewHighlightOnDesignerAction(useCaseId);
-      commitCardExpansion(useCaseId, false, 'programmatic');
+
+      if (nextVote === 'down') {
+        commitCardExpansion(useCaseId, true, 'programmatic');
+        setInvalidationNoteRequiredIds((prev) => {
+          const next = new Set(prev);
+          next.add(useCaseId);
+          return next;
+        });
+        onUseCaseInvalidationStateChange?.(useCaseId, true);
+      } else if (prevUc && isUseCaseInvalidated(prevUc)) {
+        setInvalidationNoteRequiredIds((prev) => {
+          const next = new Set(prev);
+          next.delete(useCaseId);
+          return next;
+        });
+        onUseCaseInvalidationStateChange?.(useCaseId, false);
+        commitCardExpansion(useCaseId, false, 'programmatic');
+      } else {
+        commitCardExpansion(useCaseId, false, 'programmatic');
+      }
       listToolbarCtx?.notifyCardToggle();
     },
-    [setUseCases, clearNewHighlightOnDesignerAction, listToolbarCtx, commitCardExpansion]
+    [
+      useCases,
+      setUseCases,
+      clearNewHighlightOnDesignerAction,
+      listToolbarCtx,
+      commitCardExpansion,
+      onUseCaseInvalidationStateChange,
+    ]
+  );
+
+  const handleInvalidationNoteChange = React.useCallback(
+    (useCaseId: string, note: string) => {
+      if (note.trim()) {
+        setInvalidationNoteRequiredIds((prev) => {
+          if (!prev.has(useCaseId)) return prev;
+          const next = new Set(prev);
+          next.delete(useCaseId);
+          return next;
+        });
+      }
+      onUseCaseInvalidationNoteChange?.(useCaseId, note);
+    },
+    [onUseCaseInvalidationNoteChange]
   );
 
   const beginPayoffEdit = React.useCallback((useCaseId: string, current: string) => {
@@ -2548,7 +2605,7 @@ export function AIAgentUseCaseComposer({
             'w-full'
           } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div {...tutorIdProps(UI_IDS.useCaseList)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {!showUseCaseEmptyTutor ? (
                 <UseCaseRootComposerHeader
                   rootDraftRef={rootDraftRef}
@@ -2639,7 +2696,6 @@ export function AIAgentUseCaseComposer({
                   rootChipLabel={rootChipLabel}
                   onAnalyzeClick={() => void handleCreateRoot()}
                   rootBatchWarning={rootBatchWarning}
-                  generateContext={emptyTutorGenerateContext}
                   onGenerateFromScratch={onGenerateUseCaseBundle}
                   generating={generating}
                   bundleGenerateBusy={bundleGenerateBusy}
@@ -3075,6 +3131,17 @@ export function AIAgentUseCaseComposer({
                           </div>
                         )}
                       </UseCaseRowHeader>
+                      {isUseCaseInvalidated(u) &&
+                      !cardExpanded &&
+                      onUseCaseInvalidationNoteChange ? (
+                        <UseCaseInvalidationNoteBlock
+                          note={u.invalidationNote ?? ''}
+                          disabled={busy}
+                          required={invalidationNoteRequiredIds.has(u.id)}
+                          onNoteChange={(next) => handleInvalidationNoteChange(u.id, next)}
+                          onNoteDelete={() => handleInvalidationNoteChange(u.id, '')}
+                        />
+                      ) : null}
                       {creatingChild ? (
                         <div className="border-t border-slate-700/45 px-2 py-2 bg-slate-950/40">
                           <input
@@ -3212,6 +3279,17 @@ export function AIAgentUseCaseComposer({
                                   }
                                 />
                               )}
+                              {isUseCaseInvalidated(u) && onUseCaseInvalidationNoteChange ? (
+                                <UseCaseInvalidationNoteBlock
+                                  note={u.invalidationNote ?? ''}
+                                  disabled={busy}
+                                  required={invalidationNoteRequiredIds.has(u.id)}
+                                  onNoteChange={(next) =>
+                                    handleInvalidationNoteChange(u.id, next)
+                                  }
+                                  onNoteDelete={() => handleInvalidationNoteChange(u.id, '')}
+                                />
+                              ) : null}
                             </div>
                           ) : null}
                           {wizardShowMessage ? (

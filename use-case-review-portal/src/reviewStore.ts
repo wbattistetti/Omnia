@@ -12,6 +12,7 @@ import type {
   AgentReviewConversationSnapshot,
   AgentReviewKnowledgeBaseSnapshot,
 } from '@domain/agentReviewChannel/reviewSnapshots';
+import { reviewBackendSnapshotsEqual } from '@reviewPortal/reviewBackendSnapshotEqual';
 import {
   buildAgentReviewDocument,
   computeReviewContentHashAsync,
@@ -93,6 +94,7 @@ interface ReviewState {
     >
   ) => void;
   setKnowledgeBase: (snapshot: AgentReviewKnowledgeBaseSnapshot | null) => void;
+  setBackends: (snapshot: AgentReviewBackendSnapshot | null) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
   updateUseCase: (id: string, patch: Partial<AIAgentUseCase>) => void;
@@ -257,6 +259,11 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     })),
 
   setKnowledgeBase: (snapshot) => set({ knowledgeBase: snapshot }),
+  setBackends: (snapshot) => {
+    const current = get().backends;
+    if (reviewBackendSnapshotsEqual(current, snapshot)) return;
+    set({ backends: snapshot });
+  },
 
   setUseCases: (next) =>
     set((s) => ({

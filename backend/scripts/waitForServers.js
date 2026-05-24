@@ -5,8 +5,8 @@ import http from 'http';
 const servers = [
   {
     name: 'Express',
-    url: 'http://localhost:3100',
-    healthCheck: 'http://localhost:3100/api/health/redis', // Usa endpoint specifico
+    url: 'http://127.0.0.1:3100',
+    healthCheck: 'http://127.0.0.1:3100/api/health/redis', // Usa endpoint specifico
     port: 3100
   },
   {

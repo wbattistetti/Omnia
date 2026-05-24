@@ -8,6 +8,8 @@ import { isDesignerLlmMissingModelMessage } from '@components/settings/designerL
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { DesignDescriptionPolishOffer } from './DesignDescriptionPolishOffer';
 import { AgentDescriptionMarkdownEditor } from './AgentDescriptionMarkdownEditor';
+import { UI_IDS } from './activeTutor/uiIds';
+import { tutorNotifyUserEdit } from './activeTutor/useActiveTutorSync';
 
 export interface DesignDescriptionTextareaProps {
   className?: string;
@@ -23,9 +25,9 @@ export function DesignDescriptionTextarea({
 
   if (!editorCtx) {
     return (
-      <div className="p-3 text-sm text-red-300">
+      <p className="p-3 text-sm text-red-300">
         Pannello Descrizione: AIAgentEditorDockProvider mancante.
-      </div>
+      </p>
     );
   }
 
@@ -45,18 +47,24 @@ export function DesignDescriptionTextarea({
             {editorCtx.useCaseComposerError}
           </div>
         ) : null}
-        <AgentDescriptionMarkdownEditor
-          value={editorCtx.designDescription}
-          onChange={editorCtx.setDesignDescription}
-          readOnly={readOnly}
-          insertBackendPathInDesign={editorCtx.insertBackendPathInDesign}
-        />
-        <DesignDescriptionPolishOffer
-          visible={editorCtx.showDesignDescriptionPolishOffer}
-          busy={editorCtx.designDescriptionPolishBusy}
-          onAccept={() => void editorCtx.onPolishDesignDescription()}
-          onDismiss={editorCtx.onDismissDesignDescriptionPolishOffer}
-        />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <AgentDescriptionMarkdownEditor
+            value={editorCtx.designDescription}
+            onChange={(value) => {
+              editorCtx.setDesignDescription(value);
+              tutorNotifyUserEdit(0);
+            }}
+            readOnly={readOnly}
+            insertBackendPathInDesign={editorCtx.insertBackendPathInDesign}
+            tutorHostId={UI_IDS.taskDescriptionInput}
+          />
+          <DesignDescriptionPolishOffer
+            visible={editorCtx.showDesignDescriptionPolishOffer}
+            busy={editorCtx.designDescriptionPolishBusy}
+            onAccept={() => void editorCtx.onPolishDesignDescription()}
+            onDismiss={editorCtx.onDismissDesignDescriptionPolishOffer}
+          />
+        </div>
       </div>
     </div>
   );

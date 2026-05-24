@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Braces, GraduationCap, Loader2, Sparkles, Trash2, X } from 'lucide-react';
+import { Braces, Loader2, Trash2, X } from 'lucide-react';
 import { getUseCaseGeneratorWizardStepConfig, USE_CASE_GENERATOR_WIZARD_STEPS } from '@domain/useCaseGeneratorWizard/config';
 import type { UseCaseGeneratorWizardStepId } from '@domain/useCaseGeneratorWizard/types';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
@@ -14,23 +14,20 @@ import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { LABEL_GENERATE_USE_CASES } from '../constants';
 import { resolveUseCaseBundleGeneratingLabel } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import type { UseCaseGeneratorWizardModel } from './useUseCaseGeneratorWizard';
-import { UseCaseListStepReviewCard } from './UseCaseListStepReviewCard';
-import {
-  ConversationsStepReviewCard,
-  type AssembleConversationInvocation,
-} from './ConversationsStepReviewCard';
 import { WizardAdvanceDialog } from './WizardAdvanceDialog';
 import { WizardStepOneListToolbarControls } from './WizardStepOneListToolbar';
 import { WizardConversationsTabsControls } from './WizardConversationsToolbarRows';
 import { ClearAllWizardOutputDialog } from './ClearAllWizardOutputDialog';
-import { ConversationalJsonPanel } from './ConversationalJsonPanel';
+import type { AssembleConversationInvocation } from './ConversationsStepReviewCard';
 import { CompletaCorrezioneCallout } from './CompletaCorrezioneCallout';
 import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarContext';
 import { isCompletaCorrezioneCalloutSurfaceActive } from '../useCaseSubstantialEdits';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
-import { UseCaseActionsPalettePanel } from '../UseCaseActionsPalettePanel';
-import { SlotMappingRightPanel } from '../useCaseBundle/SlotMappingRightPanel';
+import {
+  PromptsOperationalOverlay,
+  type PromptsOperationalOverlayMode,
+} from './PromptsOperationalOverlay';
 
 const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'omnia.aiAgent.useCaseWizard.rightPanelWidthPx';
 const RIGHT_PANEL_MIN_PX = 250;
@@ -206,39 +203,6 @@ export interface ViewSkaGeneratorProps {
   generationStyleFieldDisabled?: boolean;
 }
 
-function TutorialAsideBody(props: { stepId: UseCaseGeneratorWizardStepId }): React.ReactElement {
-  const cfg = getUseCaseGeneratorWizardStepConfig(props.stepId);
-  const leadParagraphs = cfg.instructionLead.split(/\n\n+/).filter(Boolean);
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2 text-xs leading-relaxed text-slate-300">
-        {leadParagraphs.map((p, i) => (
-          <p key={i}>{p.trim()}</p>
-        ))}
-      </div>
-      {cfg.instructionBullets.length > 0 ? (
-        <ul className="space-y-2.5 text-xs leading-relaxed text-slate-200">
-          {cfg.instructionBullets.map((line) => (
-            <li
-              key={line}
-              className="flex gap-2.5 pl-1 border-l-2 border-violet-500/45 py-0.5 text-slate-300"
-            >
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-violet-400/90" aria-hidden />
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {cfg.instructionPlain.trim().length > 0 ? (
-        <p className="text-[11px] leading-relaxed text-slate-500 border-t border-slate-700/60 pt-3">
-          {cfg.instructionPlain}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 export function ViewSkaGenerator({
   wizard,
   leftPanel,
@@ -373,6 +337,37 @@ export function ViewSkaGenerator({
       wizard.toggleShowJsonPanel();
     }
   }, [listToolbarCtx?.showSlotMappingPanel, wizard.showJsonPanel, wizard.toggleShowJsonPanel]);
+
+  const showOperationalOverlay =
+    showJsonRightPanel || showSlotMappingRightPanel || showActionsRightPanel;
+  const operationalOverlayMode: PromptsOperationalOverlayMode | null = showJsonRightPanel
+    ? 'json'
+    : showSlotMappingRightPanel
+      ? 'slotMapping'
+      : showActionsRightPanel
+        ? 'actions'
+        : null;
+
+  const closeOperationalOverlay = React.useCallback(() => {
+    if (showJsonRightPanel && wizard.showJsonPanel) {
+      wizard.toggleShowJsonPanel();
+      return;
+    }
+    if (showSlotMappingRightPanel && listToolbarCtx) {
+      listToolbarCtx.toggleSlotMappingPanel();
+      return;
+    }
+    if (showActionsRightPanel && listToolbarCtx) {
+      listToolbarCtx.toggleActionsPanel();
+    }
+  }, [
+    listToolbarCtx,
+    showActionsRightPanel,
+    showJsonRightPanel,
+    showSlotMappingRightPanel,
+    wizard,
+  ]);
+
   const stepTheme = STEP_COLOR_THEME[wizard.currentStepId];
   const clearDialogAnchorRef =
     clearScope === 'conversations'
@@ -394,63 +389,6 @@ export function ViewSkaGenerator({
         : 'Pulisci casi d’uso';
 
   const advanceStepAnchorRef = React.useRef<HTMLButtonElement>(null);
-
-  const [rightAsideWidthPx, setRightAsideWidthPx] = React.useState(readInitialRightAsideWidth);
-  const resizeActiveRef = React.useRef(false);
-
-  /**
-   * Mantiene l'aside DX entro i limiti se cambia la viewport (es. drag finestra). Il media
-   * query `lg` non è più rilevante: il layout è sempre a due colonne (vedi nota nel JSX
-   * sopra). Il clamp serve solo a garantire `min/max` rispetto alla larghezza viewport.
-   */
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onResize = () => {
-      setRightAsideWidthPx((w) => clampRightAsideWidth(w, window.innerWidth));
-    };
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-    };
-  }, []);
-
-  const onAsideResizePointerDown = React.useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      resizeActiveRef.current = true;
-      e.currentTarget.setPointerCapture(e.pointerId);
-    },
-    []
-  );
-
-  const onAsideResizePointerMove = React.useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!resizeActiveRef.current) return;
-      const vw = window.innerWidth;
-      const fromRight = vw - e.clientX;
-      setRightAsideWidthPx(clampRightAsideWidth(fromRight, vw));
-    },
-    []
-  );
-
-  const finishAsideResize = React.useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!resizeActiveRef.current) return;
-    resizeActiveRef.current = false;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    const vw = window.innerWidth;
-    const fromRight = vw - e.clientX;
-    const w = clampRightAsideWidth(fromRight, vw);
-    setRightAsideWidthPx(w);
-    try {
-      sessionStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(w));
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   return (
     <>
@@ -663,238 +601,32 @@ export function ViewSkaGenerator({
           ) : null}
         </div>
 
-        {/*
-          Layout SX/DX SEMPRE a due colonne (flex-row) — non più condizionato a `lg:` del
-          viewport. Il vincolo `min-w-[720px]` su `AIAgentEditor` garantisce che il pannello
-          interno non scenda mai sotto questa soglia (sotto, scroll orizzontale esterno),
-          quindi le due colonne hanno sempre lo spazio per coesistere senza che la SX (lista
-          use case / bubble view) venga schiacciata a 0 dall'aside DX (Guida rapida).
-          Risolve la regressione: in modalità "verticale" (pannello dock stretto) il SX
-          non sparisce più.
-        */}
-        <div className="flex min-h-0 flex-1 flex-row gap-0">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <section
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col"
             aria-label="Area lavoro passo corrente"
           >
-            {/*
-              Flex column + overflow-hidden: senza `flex` il composer non è un flex item con altezza
-              vincolata → la lista use case cresce col contenuto e non compare mai la scrollbar.
-            */}
+            {correctionReplacesUseCaseTutorial ? (
+              <div className="shrink-0 border-b border-violet-500/25 px-3 py-2 dark:border-violet-500/20">
+                <CompletaCorrezioneCallout />
+              </div>
+            ) : null}
             <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{leftPanel}</div>
-          </section>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Ridimensiona pannello destro"
-            tabIndex={0}
-            className="flex w-2 shrink-0 cursor-col-resize touch-none flex-col items-stretch justify-center border-x border-slate-300/80 bg-slate-200/45 select-none hover:bg-violet-200/50 dark:border-slate-700/75 dark:bg-slate-900/45 dark:hover:bg-violet-950/30"
-            onPointerDown={onAsideResizePointerDown}
-            onPointerMove={onAsideResizePointerMove}
-            onPointerUp={finishAsideResize}
-            onPointerCancel={finishAsideResize}
-          >
-            <span className="mx-auto h-12 w-1 rounded-full bg-slate-500/90" aria-hidden />
-          </div>
-          <aside
-            className="flex min-w-[250px] max-w-[60vw] shrink-0 flex-col border-slate-200 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100/95 dark:border-slate-800 dark:from-slate-900/55 dark:via-slate-950 dark:to-slate-950/90"
-            style={{ width: rightAsideWidthPx }}
-            aria-label={
-              showJsonRightPanel
-                ? 'Anteprima JSON conversazionale dello use case selezionato'
-                : showSlotMappingRightPanel
-                  ? 'Slot Mapping'
-                  : showActionsRightPanel
-                    ? 'Pannello azioni per il response'
-                    : correctionReplacesUseCaseTutorial
-                      ? 'Completa correzione messaggi'
-                      : 'Tutorial e azioni del passo'
-            }
-          >
-            {showJsonRightPanel ? (
-              <ConversationalJsonRightPanel
+
+            {showOperationalOverlay && operationalOverlayMode ? (
+              <PromptsOperationalOverlay
+                mode={operationalOverlayMode}
+                onClose={closeOperationalOverlay}
                 selectedUseCase={selectedUseCase}
                 useCases={useCases ?? []}
                 onSelectUseCase={onSelectUseCaseRequest}
                 lexicon={projectSlotLexicon}
+                onApproveLexiconEntry={onApproveLexiconEntry}
+                onRevokeLexiconEntry={onRevokeLexiconEntry}
+                onUpdateLexiconSlotId={onUpdateLexiconSlotId}
               />
-            ) : showSlotMappingRightPanel &&
-              projectSlotLexicon &&
-              onApproveLexiconEntry &&
-              onRevokeLexiconEntry &&
-              onUpdateLexiconSlotId ? (
-              <SlotMappingRightPanel
-                lexicon={projectSlotLexicon}
-                onApproveEntry={onApproveLexiconEntry}
-                onRevokeEntryApproval={onRevokeLexiconEntry}
-                onUpdateSlotId={onUpdateLexiconSlotId}
-              />
-            ) : showActionsRightPanel ? (
-              <UseCaseActionsPalettePanel />
-            ) : (
-              <>
-            {!unifiedUseCaseListReview && !unifiedConversationsReview && !unifiedTokenizationReview ? (
-              <div className="shrink-0 border-b border-violet-400/35 bg-gradient-to-br from-violet-950/95 via-slate-900/95 to-slate-950 px-4 py-4 shadow-[inset_0_1px_0_rgba(167,139,250,0.12)]">
-                <div className="flex items-start gap-4">
-                  <span
-                    className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-2xl border border-violet-400/45 bg-violet-950/90 text-violet-100 shadow-lg shadow-violet-950/50"
-                    aria-hidden
-                  >
-                    <GraduationCap className="h-8 w-8" strokeWidth={2} />
-                  </span>
-                  <h2 className="min-w-0 flex-1 pt-1 text-base font-semibold leading-snug text-amber-100">
-                    {stepCfg.panelHeading}
-                  </h2>
-                </div>
-              </div>
-            ) : correctionReplacesUseCaseTutorial ? (
-              <div className="shrink-0 border-b border-violet-500/25 bg-slate-50/95 px-4 py-2.5 dark:bg-slate-950/90">
-                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-violet-400/85">
-                  <Sparkles className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
-                  <span>Completa correzione</span>
-                </div>
-              </div>
-            ) : (
-              <div className="shrink-0 border-b border-violet-500/25 bg-slate-50/95 px-4 py-2.5 dark:bg-slate-950/90">
-                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-violet-400/85">
-                  <GraduationCap className="h-4 w-4 shrink-0 opacity-90" strokeWidth={2} aria-hidden />
-                  <span>Guida rapida</span>
-                </div>
-              </div>
-            )}
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              {unifiedUseCaseListReview ? (
-                <>
-                  {/*
-                    Callout «Completa correzione»: quando attivo sostituisce la review card
-                    tutorial nel DX (stessa logica `correctionReplacesUseCaseTutorial`).
-                  */}
-                  <CompletaCorrezioneCallout />
-                  {correctionReplacesUseCaseTutorial ? null : (
-                    <>
-                      <UseCaseListStepReviewCard
-                        useCaseCount={useCaseCount}
-                        panelHeading={stepCfg.panelHeading}
-                        /**
-                         * Vecchio CTA inline «Omogeneizza messaggi» disattivato dalla
-                         * v3 della propagazione stile: l'entry point è il callout
-                         * {@link CompletaCorrezioneCallout} nel pannello DX «Guida rapida»,
-                         * che chiama `propagate_correction_style` con coppie
-                         * `(original, modified)` esplicite.
-                         */
-                        showStyleHint={false}
-                        styleBusy={examplePhraseStyleBusy}
-                        styleBusyLabel={examplePhraseStyleBusyLabel}
-                        onApplyStyle={onApplyExamplePhraseStyle}
-                        bundleFeedback={bundleFeedback}
-                        onDismissBundleFeedback={onDismissBundleFeedback}
-                        generateBusy={generateBusy}
-                        generateBusyLabel={useCaseGenerateBusyLabel}
-                        onGenerateMore={onGenerateUseCaseBundle}
-                        canGenerateMore={false}
-                        onAdvanceStep={onAdvanceWizardStep}
-                        canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
-                        advanceStepAnchorRef={advanceStepAnchorRef}
-                        generationStyleContract={generationStyleContract}
-                        onGenerationStyleContractChange={
-                          onGenerationStyleContractChange ?? (() => {})
-                        }
-                        styleFieldDisabled={generationStyleFieldDisabled}
-                      />
-                      {wizard.showNoChangesTutorial ? (
-                        <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
-                          <p className="leading-relaxed">{wizard.tutorialIfNoChanges}</p>
-                          <button
-                            type="button"
-                            className="mt-2 text-[11px] text-amber-200 underline hover:text-amber-50"
-                            onClick={wizard.dismissNoChangesTutorial}
-                          >
-                            Chiudi
-                          </button>
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </>
-              ) : unifiedConversationsReview ? (
-                <>
-                  <ConversationsStepReviewCard
-                    panelHeading={stepCfg.panelHeading}
-                    conversationsCount={wizard.conversations.length}
-                    createBusy={createConversationBusy}
-                    onCreateConversation={onCreateConversation}
-                    showProofreadCta={wizard.conversationStylePlan.showProofreadCta}
-                    proofreadBusy={proofreadConversationBusy}
-                    onProofread={onProofreadConversationAgentTurns}
-                    onAdvanceStep={onAdvanceWizardStep}
-                    canAdvanceStep={typeof onAdvanceWizardStep === 'function'}
-                    advanceStepAnchorRef={advanceStepAnchorRef}
-                    payoffMessage={conversationsPayoffMessage}
-                  />
-                  {wizard.showNoChangesTutorial ? (
-                    <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
-                      <p className="leading-relaxed">{wizard.tutorialIfNoChanges}</p>
-                      <button
-                        type="button"
-                        className="mt-2 text-[11px] text-amber-200 underline hover:text-amber-50"
-                        onClick={wizard.dismissNoChangesTutorial}
-                      >
-                        Chiudi
-                      </button>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  {bundleFeedback ? (
-                    <div className="mb-3 flex items-start gap-2 rounded-md border border-emerald-500/40 bg-emerald-950/45 px-2.5 py-2 text-xs leading-snug text-emerald-50 shadow-[inset_0_1px_0_rgba(52,211,153,0.12)]">
-                      <span className="min-w-0 flex-1">{bundleFeedback}</span>
-                      {typeof onDismissBundleFeedback === 'function' ? (
-                        <button
-                          type="button"
-                          aria-label="Chiudi messaggio"
-                          className="shrink-0 rounded p-0.5 text-emerald-200/90 hover:bg-emerald-900/60 hover:text-emerald-50"
-                          onClick={() => onDismissBundleFeedback()}
-                        >
-                          <X size={14} aria-hidden />
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  {showStepOneInitialTutorial ? (
-                    <TutorialAsideBody stepId="use_case_list" />
-                  ) : (
-                    <TutorialAsideBody stepId={wizard.currentStepId} />
-                  )}
-                  {wizard.showNoChangesTutorial ? (
-                    <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-950/35 p-2 text-xs text-amber-100">
-                      <p className="leading-relaxed">{wizard.tutorialIfNoChanges}</p>
-                      <button
-                        type="button"
-                        className="mt-2 text-[11px] text-amber-200 underline hover:text-amber-50"
-                        onClick={wizard.dismissNoChangesTutorial}
-                      >
-                        Chiudi
-                      </button>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </div>
-
-            {showFooterGenerateInitial ? (
-              <div className="shrink-0 border-t border-violet-500/25 bg-slate-50/95 px-3 py-3 dark:bg-slate-950/80">
-                <ViewSkaGenerateButton
-                  generateBusy={generateBusy}
-                  generateBusyLabel={useCaseGenerateBusyLabel}
-                  onGenerateUseCaseBundle={onGenerateUseCaseBundle}
-                />
-              </div>
             ) : null}
-              </>
-            )}
-          </aside>
+          </section>
         </div>
       </div>
     </>

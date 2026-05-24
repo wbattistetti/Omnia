@@ -31,6 +31,11 @@ export function EmbeddedBackendCallEditor({
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
   const [signatureSubOpen, setSignatureSubOpen] = React.useState(false);
 
+  /** Stable callback — inline handler made BackendCallEditor's toolbar effect re-run every render. */
+  const handleToolbarUpdate = React.useCallback((btns: ToolbarButton[]) => {
+    setToolbarButtons((prev) => (prev === btns ? prev : btns));
+  }, []);
+
   return (
     <BackendCallEmbeddedLayout
       deferScrollToParent={workspaceInspectorEmbed}
@@ -50,7 +55,7 @@ export function EmbeddedBackendCallEditor({
         embeddedSignatureSubToolbarOpen={signatureSubOpen}
         embeddedCloseSignatureToolbar={() => setSignatureSubOpen(false)}
         workspaceInspectorEmbed={workspaceInspectorEmbed}
-        onToolbarUpdate={(btns) => setToolbarButtons(btns)}
+        onToolbarUpdate={handleToolbarUpdate}
       />
     </BackendCallEmbeddedLayout>
   );

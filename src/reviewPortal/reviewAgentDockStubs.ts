@@ -124,7 +124,7 @@ export function createReviewAgentDockStaticSlice(): Pick<
     promptFinaleJsMode: false,
     iaRuntimeConfig: loadGlobalIaAgentConfig(),
     iaRuntimeLoadedFrom: 'global_defaults',
-    hideBackendsPanelInlineAddButton: true,
+    hideBackendsPanelInlineAddButton: false,
     agentInterfacePanelOpen: false,
     agentInterfaceInput: [],
     agentInterfaceOutput: [],

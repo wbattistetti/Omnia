@@ -631,6 +631,7 @@ async function resolveTemplateRefsWithLevels(subTasks, templates) {
 // ✅ ENTERPRISE AI SERVICES INITIALIZATION
 const aiProviderService = new AIProviderService();
 const { translateAdvancementDslRequest } = require('./services/advancementDslTranslateService');
+const { answerTutorQuestion } = require('./services/tutorQuestionService');
 const templateIntelligenceOrchestrator = new TemplateIntelligenceOrchestrator(aiProviderService);
 
 // ✅ ENTERPRISE MIDDLEWARE INITIALIZATION
@@ -8006,6 +8007,56 @@ app.post('/design/advancement-dsl-translate', async (req, res) => {
     return res.status(status).json({
       success: false,
       error: error.message || 'advancement-dsl-translate failed',
+    });
+  }
+});
+
+/**
+ * Tutor Attivo — domanda libera vincolata al manuale designer.
+ * Body: { question, currentPhaseLabel?, currentState?, provider?, model?, callMeta? }
+ */
+app.post('/design/tutor-question', async (req, res) => {
+  const requestId = Date.now();
+  try {
+    if (respondDesignAiLlmBurst429(req, res, requestId)) return;
+    const body = req.body || {};
+    const {
+      question,
+      currentPhaseLabel,
+      detectedPhaseLabel,
+      currentState,
+      provider: providerInput,
+      model: modelInput,
+    } = body;
+    const { provider, model } = assertAiCallContract({
+      provider: providerInput,
+      model: modelInput,
+      action: 'Tutor question',
+    });
+    console.log(`[TUTOR_QA][${requestId}] POST /design/tutor-question`, {
+      phase: currentPhaseLabel,
+      provider,
+    });
+    const out = await answerTutorQuestion({
+      question,
+      currentPhaseLabel,
+      detectedPhaseLabel,
+      currentState,
+      aiProviderService,
+      provider,
+      model,
+    });
+    return res.json(out);
+  } catch (error) {
+    console.error(`[TUTOR_QA][${requestId}]`, error.message);
+    const contractRes = aiCallContractErrorResponse(error);
+    if (contractRes) {
+      return res.status(contractRes.status).json(contractRes.body);
+    }
+    const status = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 502;
+    return res.status(status).json({
+      success: false,
+      error: error.message || 'tutor-question failed',
     });
   }
 });

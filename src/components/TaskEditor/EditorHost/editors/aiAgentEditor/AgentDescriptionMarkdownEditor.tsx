@@ -17,6 +17,7 @@ export interface AgentDescriptionMarkdownEditorProps {
   containerClassName?: string;
   fillHeight?: boolean;
   insertBackendPathInDesign?: (path: string, rangeStart: number, rangeEnd?: number) => void;
+  tutorHostId?: string;
 }
 
 export function AgentDescriptionMarkdownEditor({
@@ -27,6 +28,7 @@ export function AgentDescriptionMarkdownEditor({
   containerClassName = 'relative flex min-h-0 flex-1 flex-col',
   fillHeight = true,
   insertBackendPathInDesign,
+  tutorHostId,
 }: AgentDescriptionMarkdownEditorProps): React.ReactElement {
   const editorRef = React.useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
@@ -57,6 +59,7 @@ export function AgentDescriptionMarkdownEditor({
           editorRef.current = editor;
         }}
         onHostContextMenu={onContextMenu}
+        tutorHostId={tutorHostId}
       />
       {!value.trim() && !readOnly ? (
         <div

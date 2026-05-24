@@ -21,6 +21,8 @@ export type KbWorkspaceTabHostProps = {
   imageDocIds: readonly string[];
   onSelectDocumentId: (docId: string) => void;
   onUpdateDoc: (patch: KbDocumentPatch) => void;
+  /** Active Tutor — data-tutor-id pannello analisi. */
+  tutorAnalysisResultId?: string;
 };
 
 const TAB_DEFS: { id: KbWorkspaceTabId; label: string; Icon: typeof FileSearch }[] = [
@@ -77,6 +79,7 @@ export function KbWorkspaceTabHost({
   imageDocIds,
   onSelectDocumentId,
   onUpdateDoc,
+  tutorAnalysisResultId,
 }: KbWorkspaceTabHostProps): React.ReactElement {
   const [tabOrder, setTabOrder] = React.useState<readonly KbWorkspaceTabId[]>(['analysis', 'document']);
   const [activeTab, setActiveTab] = React.useState<KbWorkspaceTabId>('document');
@@ -131,14 +134,19 @@ export function KbWorkspaceTabHost({
   };
 
   const analysisPane = (
-    <KbDocumentAnalysisTab
-      doc={doc}
-      projectId={projectId}
-      disabled={disabled}
-      callMeta={callMeta}
-      taskContext={taskContext}
-      onUpdateDoc={onUpdateDoc}
-    />
+    <div
+      className="min-h-0 flex-1 flex flex-col overflow-hidden"
+      {...(tutorAnalysisResultId ? { 'data-tutor-id': tutorAnalysisResultId } : {})}
+    >
+      <KbDocumentAnalysisTab
+        doc={doc}
+        projectId={projectId}
+        disabled={disabled}
+        callMeta={callMeta}
+        taskContext={taskContext}
+        onUpdateDoc={onUpdateDoc}
+      />
+    </div>
   );
 
   const documentPane = (

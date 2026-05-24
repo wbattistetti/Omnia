@@ -28,6 +28,7 @@ import {
   hasAnyPendingImport,
   type ReviewAudiencePendingStatus,
 } from './reviewChannelPending';
+import { isExpressBackendPaused } from '@services/expressBackendReachability';
 import { reviewChannelClientToken } from '@lib/reviewChannelClientToken';
 import { structuredSectionsForReviewPublish } from './structuredSectionsForReviewPublish';
 import { buildReviewPublishSnapshots } from './reviewSnapshotsForPublish';
@@ -173,6 +174,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
 
   const checkAllReviewChannels = React.useCallback(async () => {
     if (!canUseChannel) return [];
+    if (isExpressBackendPaused()) return [];
     const token = reviewChannelClientToken();
     const local = buildLocalParams();
     const pid = projectId!;

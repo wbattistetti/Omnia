@@ -51,6 +51,15 @@ export interface AgentReviewBackendSnapshot {
   manualEntries?: AgentReviewManualBackendEntrySnapshot[];
 }
 
+export interface AgentReviewBackendCallTaskWireSnapshot {
+  inputs?: unknown[];
+  outputs?: unknown[];
+  backendCallSpecMeta?: Record<string, unknown>;
+  backendToolDescription?: string;
+  openapiSpecUrl?: string;
+  endpoint?: { url: string; method: string; headers?: Record<string, string> };
+}
+
 /** Serializable subset of {@link ManualCatalogEntry} for review publish round-trip. */
 export interface AgentReviewManualBackendEntrySnapshot {
   id: string;
@@ -72,6 +81,8 @@ export interface AgentReviewManualBackendEntrySnapshot {
   portalConnectionId?: string;
   creationMode?: 'import' | 'emulate';
   importSpecRevealed?: boolean;
+  /** SEND/RECEIVE + spec meta for portal round-trip after Read API. */
+  taskWire?: AgentReviewBackendCallTaskWireSnapshot;
 }
 
 export interface AgentReviewConversationalRuleSnapshot {

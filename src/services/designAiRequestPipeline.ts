@@ -21,6 +21,7 @@ export const DESIGN_AI_LLM_PATH_PREFIXES = [
   '/design/ai-agent-induce-style-rule',
   '/design/ai-agent-analyze-debug-turn',
   '/design/advancement-dsl-translate',
+  '/design/tutor-question',
 ] as const;
 
 function isDesignAiLlmRequestUrl(url: string): boolean {

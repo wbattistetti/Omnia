@@ -1,63 +1,33 @@
 /**
  * AI Agent — Phase machine di alto livello del Task Editor.
  *
- * **Stato attuale (post-unificazione layout):** esiste un *solo* shell, il
- * Construction Wizard. Il vecchio Dockview classic (`AIAgentEditorDockShell`) è stato
- * rimosso. TUTTI i task — sia nuovi sia legacy con `hasAgentGeneration=true` — usano
- * lo stesso `AIAgentConstructionWizardShell`.
- *
- * Per ragioni di compatibilità del payload persistito, il campo
- * `task.agentConstructionPhase` può ancora esistere su disco con valore `'edit'` (scritto
- * da versioni precedenti). Il resolver lo normalizza a `'wizard'`: NON c'è più un
- * branch di rendering che differenzi le due fasi. Il tipo viene mantenuto come union
- * letterale per non rompere la firma di snapshot/patch e la lettura dei dati storici,
- * ma `'edit'` è di fatto deprecato e non viene mai più scritto da nuovo codice.
- *
- * La schermata Tutor di benvenuto è mostrata solo se `agentWizardTutorAcknowledged === false`.
- * Per i task legacy con `hasAgentGeneration=true` lo snapshot la forza a `true` (vedi
- * `buildTaskSnapshotFromRaw`), così i veterani non rivedono l'onboarding.
- *
- * Per i veterani (`hasAgentGeneration === true`) lo stepper sblocca anche la navigazione
- * libera tra step incompleti (vedi `AIAgentConstructionStepper#bypassGating`): un task
- * pre-wizard può non avere completato la "voce" o i "backend" e va comunque navigabile.
+ * Wizard 7 step (ordine vincolante mag 2026):
+ *   0 Task → 1 Knowledge Base → 2 Backend → 3 Prompts → 4 Error Handling → 5 Dati → 6 Voce
  */
 
-/**
- * Fasi di costruzione del Task Editor AI Agent.
- *
- * - `'wizard'` → unica fase attiva: shell wizard 5-step.
- * - `'edit'`   → DEPRECATO. Conservato solo per compatibilità di payload storici.
- *                Il resolver lo mappa a `'wizard'`. Non viene mai scritto da nuovo
- *                codice.
- */
 export type AgentConstructionPhase = 'wizard' | 'edit';
 
-/**
- * Indici (0-based) dei 5 step del wizard di costruzione iniziale.
- * Volutamente const-enum-like ma come union literal per evitare runtime cost.
- *
- * Ordine UFFICIALE post-riordino mag 2026:
- * - 0 → Task description
- * - 1 → Prompts (use case + dialoghi + stile conversazionale)
- * - 2 → Backend
- * - 3 → Dati (slot inferiti)
- * - 4 → Voce
- */
-export type AgentWizardStepIndex = 0 | 1 | 2 | 3 | 4;
+/** Indici 0-based dei 7 step del Construction Wizard. */
+export type AgentWizardStepIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-/** Numero totale di step del wizard. Single source of truth. */
-export const AGENT_WIZARD_STEP_COUNT = 5 as const;
+export const AGENT_WIZARD_STEP_COUNT = 7 as const;
 
-/** Indice del primo step. Costante semantica per evitare magic number `0`. */
 export const AGENT_WIZARD_FIRST_STEP_INDEX: AgentWizardStepIndex = 0;
 
-/** Indice dell'ultimo step. */
-export const AGENT_WIZARD_LAST_STEP_INDEX: AgentWizardStepIndex = 4;
+export const AGENT_WIZARD_LAST_STEP_INDEX: AgentWizardStepIndex = 6;
 
-/**
- * True se `value` è un indice step valido (0..4). Usato dai parser di persistenza
- * per scartare valori spuri da JSON storici/manomessi senza propagare bug.
- */
+/** Versione ordine step persistita su task (2 = wizard a 7 fasi). */
+export const AGENT_WIZARD_STEP_ORDER_VERSION = 2 as const;
+
+/** Migrazione indici wizard legacy (5 step) → ordine attuale (7 step). */
+const LEGACY_5_STEP_TO_7: Readonly<Record<number, AgentWizardStepIndex>> = {
+  0: 0,
+  1: 3,
+  2: 2,
+  3: 5,
+  4: 6,
+};
+
 export function isAgentWizardStepIndex(value: unknown): value is AgentWizardStepIndex {
   return (
     typeof value === 'number' &&
@@ -67,39 +37,44 @@ export function isAgentWizardStepIndex(value: unknown): value is AgentWizardStep
   );
 }
 
-/**
- * True se `value` è una phase valida. Tollerante a stringhe sconosciute.
- */
 export function isAgentConstructionPhase(value: unknown): value is AgentConstructionPhase {
   return value === 'wizard' || value === 'edit';
 }
 
-/**
- * Risolve la phase effettiva dato lo stato persistito letto dal task.
- *
- * **Post-unificazione layout:** esiste un solo shell (il Construction Wizard).
- * Il resolver ignora il valore persistito e ritorna sempre `'wizard'`.
- * I parametri sono mantenuti in firma per non rompere i call site dello snapshot
- * builder, ma non hanno più effetto sul valore restituito.
- *
- * I task storici con `agentConstructionPhase === 'edit'` continuano a essere letti
- * senza errore: vengono semplicemente normalizzati a `'wizard'` in render.
- */
 export function resolveAgentConstructionPhase(
-  _persistedPhase: unknown,
-  _hasAgentGeneration: boolean
+  persistedPhase: unknown,
+  hasAgentGeneration: boolean
 ): AgentConstructionPhase {
-  return 'wizard';
+  if (isAgentConstructionPhase(persistedPhase)) {
+    return persistedPhase;
+  }
+  return hasAgentGeneration ? 'edit' : 'wizard';
 }
 
 /**
- * Risolve l'indice step corrente del wizard, con fallback al primo step.
- * Garantisce che, se la phase è `edit`, l'indice sia comunque valido (utile come
- * indicatore di navigazione rapida nello stepper, anche post-completamento).
+ * Risolve l'indice step corrente con migrazione da ordine legacy (5 step).
  */
 export function resolveAgentWizardCurrentStep(
-  persistedStep: unknown
+  persistedStep: unknown,
+  persistedStepOrderVersion: unknown = 1
 ): AgentWizardStepIndex {
+  const version =
+    persistedStepOrderVersion === AGENT_WIZARD_STEP_ORDER_VERSION
+      ? AGENT_WIZARD_STEP_ORDER_VERSION
+      : 1;
+
+  if (typeof persistedStep !== 'number' || !Number.isInteger(persistedStep)) {
+    return AGENT_WIZARD_FIRST_STEP_INDEX;
+  }
+
+  if (version === AGENT_WIZARD_STEP_ORDER_VERSION && isAgentWizardStepIndex(persistedStep)) {
+    return persistedStep;
+  }
+
+  if (persistedStep >= 0 && persistedStep <= 4) {
+    return LEGACY_5_STEP_TO_7[persistedStep] ?? AGENT_WIZARD_FIRST_STEP_INDEX;
+  }
+
   if (isAgentWizardStepIndex(persistedStep)) return persistedStep;
   return AGENT_WIZARD_FIRST_STEP_INDEX;
 }
