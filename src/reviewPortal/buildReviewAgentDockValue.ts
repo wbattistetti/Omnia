@@ -16,7 +16,6 @@ import type { StagedKbDocument, KbDocumentPatch } from '@domain/knowledgeBase/kb
 import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
 import {
   createBlankUseCaseInList,
-  deleteUseCaseFromList,
 } from '@omnia/domain-core/usecase/logic/useCaseBundleCompose';
 import { applySiblingReorderForPersist } from '@omnia/domain-core/usecase/tree/useCaseHierarchy';
 import { parseRootUseCaseDraftSegmentsFallback } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/parseRootUseCaseDraft';
@@ -29,6 +28,8 @@ import {
 import type { ManualBackendCreationMode } from '@domain/backendCatalog/catalogTypes';
 import type { KbDocumentAnalysisTaskContext } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import type { ReviewAgentIaDockSlice } from './useReviewAgentIaDockSlice';
+import type { AgentDockPromptsPanelHandlers } from '@domain/agentEditorDock/agentDockPromptsPanelHandlers';
+import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
 
 export interface ReviewAgentDockLiveInput {
   projectId: string;
@@ -67,6 +68,13 @@ export interface ReviewAgentDockLiveInput {
   backends: import('@domain/agentReviewChannel/reviewSnapshots').AgentReviewBackendSnapshot | null;
   designerLlm: import('@domain/agentReviewChannel/reviewDocument').AgentReviewDesignerLlmSnapshot | null;
   ia: ReviewAgentIaDockSlice;
+  promptsPanelHandlers: AgentDockPromptsPanelHandlers;
+  knowledgeBaseTaskContext: KbDocumentAnalysisTaskContext;
+  registerBackendsAddManualHandler: (
+    handler: ((mode: ManualBackendCreationMode) => void) | null
+  ) => void;
+  invokeBackendsAddManual: (mode?: ManualBackendCreationMode) => void;
+  hideBackendsPanelInlineAddButton: boolean;
 }
 
 export function conversationalRulesFromReviewSnapshot(
@@ -181,9 +189,7 @@ export function buildReviewAgentDockValue(
     onRootUseCaseBatchCreated: reviewNoop,
     onRegenerateAgentMessage: () => reviewIaDisabledAsync('Rigenera messaggio agente'),
     onAnnotateAgentMessageForJson: () => reviewIaDisabledAsync('Annota messaggio JSON'),
-    onDeleteUseCase: (useCaseId) => {
-      live.setUseCases((prev) => deleteUseCaseFromList(prev, useCaseId));
-    },
+    ...live.promptsPanelHandlers,
     onDeleteConversationalRule: (ruleId) => {
       live.setConversationalRules((prev) => prev.filter((r) => r.id !== ruleId));
     },
@@ -235,6 +241,7 @@ export function buildReviewAgentDockValue(
     onClearAllWizardOutput: reviewNoop,
     onClearWizardConversations: reviewNoop,
     onClearWizardTokenization: reviewNoop,
+    canCreateConversationalPrompt: areAllUseCasesProjectable(live.useCases),
     onOpenConversationalPromptDialog: reviewNoop,
     setAgentConversationStyleExample: reviewNoop,
     agentConversationStyleAuto: live.agentConversationStyleAuto,

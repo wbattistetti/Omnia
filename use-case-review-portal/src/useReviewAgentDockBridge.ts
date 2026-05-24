@@ -24,6 +24,8 @@ import {
 } from '@reviewPortal/buildReviewAgentDockValue';
 import { useReviewKnowledgeBaseDocuments } from '@reviewPortal/useReviewKnowledgeBaseDocuments';
 import { useReviewAgentIaDockSlice } from '@reviewPortal/useReviewAgentIaDockSlice';
+import { useAgentDockUseCaseInvalidationHandlers } from '@domain/agentEditorDock/useAgentDockUseCaseInvalidationHandlers';
+import { agentDockPromptsPanelHandlersFromInvalidation } from '@domain/agentEditorDock/agentDockPromptsPanelHandlers';
 import { useReviewStore } from './reviewStore';
 
 function structuredSectionsEqual(
@@ -201,6 +203,27 @@ export function useReviewAgentDockBridge({
     onComposerIaError: setComposerError,
   });
 
+  const useCaseInvalidationHandlers = useAgentDockUseCaseInvalidationHandlers({
+    useCases,
+    setUseCases,
+    knowledgeBaseDocuments: kb.documents,
+    knowledgeBaseReorderDocuments: kb.reorderDocuments,
+  });
+
+  const promptsPanelHandlers = React.useMemo(
+    () =>
+      agentDockPromptsPanelHandlersFromInvalidation(
+        useCaseInvalidationHandlers,
+        (useCaseId: string) => {
+          setComposerError(null);
+          if (!useCaseInvalidationHandlers.deleteUseCaseWithInvalidationKb(useCaseId)) {
+            setComposerError('Use case non trovato.');
+          }
+        }
+      ),
+    [useCaseInvalidationHandlers, setComposerError]
+  );
+
   const backendsAddManualHandlerRef = React.useRef<
     ((mode: ManualBackendCreationMode) => void) | null
   >(null);
@@ -264,6 +287,7 @@ export function useReviewAgentDockBridge({
         backends,
         designerLlm,
         ia,
+        promptsPanelHandlers,
         hideBackendsPanelInlineAddButton: activeStep === 'backend',
         registerBackendsAddManualHandler,
         invokeBackendsAddManual,
@@ -296,6 +320,7 @@ export function useReviewAgentDockBridge({
       backends,
       designerLlm,
       ia,
+      promptsPanelHandlers,
       activeStep,
       registerBackendsAddManualHandler,
       invokeBackendsAddManual,

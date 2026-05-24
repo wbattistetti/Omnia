@@ -26,6 +26,7 @@ import { DesignerLlmSetupOpenButton } from '@components/settings/designerLlm/Des
 import { DesignerLlmSetupOverlay } from '@components/settings/designerLlm/DesignerLlmSetupHost';
 import { ReviewOmniaProviders } from './ReviewOmniaProviders';
 import { useReviewAgentDockBridge } from './useReviewAgentDockBridge';
+import { ReviewCopySystemPromptControl } from '@reviewPortal/ReviewCopySystemPromptControl';
 
 interface ReviewUseCaseWorkspaceInnerProps {
   session: NonNullable<ReturnType<typeof useReviewStore.getState>['session']>;
@@ -164,9 +165,10 @@ function ReviewUseCaseWorkspaceInner({
               </div>
               <div
                 id="review-designer-llm-picker"
-                className="mt-2 border-t border-slate-800/80 pt-2"
+                className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 pt-2"
               >
                 <DesignerLlmSetupOpenButton publishedSnapshot={designerLlm} />
+                <ReviewCopySystemPromptControl />
               </div>
             </header>
 

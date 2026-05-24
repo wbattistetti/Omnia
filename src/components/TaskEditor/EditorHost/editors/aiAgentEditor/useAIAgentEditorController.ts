@@ -111,11 +111,8 @@ import {
   parseAgentKnowledgeBaseDocumentsJson,
   serializeAgentKnowledgeBaseDocuments,
 } from '@domain/knowledgeBase/serializeKbDocuments';
-import {
-  removeInvalidationKbFromDocuments,
-  upsertInvalidationKbInDocuments,
-} from '@domain/knowledgeBase/useCaseInvalidationKb';
-import { isUseCaseInvalidated } from '@types/aiAgentUseCases';
+import { useAgentDockUseCaseInvalidationHandlers } from '@domain/agentEditorDock/useAgentDockUseCaseInvalidationHandlers';
+import { agentDockPromptsPanelHandlersFromInvalidation } from '@domain/agentEditorDock/agentDockPromptsPanelHandlers';
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import {
   agentInterfaceRowsToMappingEntries,
@@ -199,7 +196,6 @@ import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAge
 import {
   appendUseCaseToSiblingGroup,
   applySiblingReorderForPersist,
-  collectUseCaseSubtreeIds,
   normalizeUseCaseSiblingOrder,
   type UseCaseSiblingSortMode,
 } from './useCaseHierarchy';
@@ -855,62 +851,34 @@ export function useAIAgentEditorController({
     [knowledgeBaseReorderInternal]
   );
 
-  const handleUseCaseInvalidationNoteChange = React.useCallback(
-    (useCaseId: string, note: string) => {
-      const uc = useCases.find((u) => u.id === useCaseId);
-      if (!uc || !isUseCaseInvalidated(uc)) return;
-      const trimmed = String(note ?? '').trim();
-      setUseCasesUser((prev) =>
-        prev.map((u) =>
-          u.id === useCaseId ? { ...u, invalidationNote: trimmed || undefined } : u
-        )
-      );
-      if (!trimmed) {
-        knowledgeBaseReorderDocuments(
-          removeInvalidationKbFromDocuments(knowledgeBaseDocuments, useCaseId)
-        );
-        setUseCasesUser((prev) =>
-          prev.map((u) =>
-            u.id === useCaseId ? { ...u, invalidationKbDocumentId: undefined } : u
-          )
-        );
-        return;
-      }
-      const { documents: nextDocs, docId } = upsertInvalidationKbInDocuments(
-        knowledgeBaseDocuments,
-        { useCase: { ...uc, invalidationNote: trimmed }, note: trimmed }
-      );
-      knowledgeBaseReorderDocuments(nextDocs);
-      setUseCasesUser((prev) =>
-        prev.map((u) => (u.id === useCaseId ? { ...u, invalidationKbDocumentId: docId } : u))
-      );
-    },
-    [useCases, knowledgeBaseDocuments, knowledgeBaseReorderDocuments, setUseCasesUser]
+  const useCaseInvalidationHandlers = useAgentDockUseCaseInvalidationHandlers({
+    useCases,
+    setUseCases: setUseCasesUser,
+    knowledgeBaseDocuments,
+    knowledgeBaseReorderDocuments,
+    onMutate: () => setDirty(true),
+  });
+
+  const promptsPanelHandlers = React.useMemo(
+    () =>
+      agentDockPromptsPanelHandlersFromInvalidation(
+        useCaseInvalidationHandlers,
+        (useCaseId: string) => {
+          if (!useCases.some((u) => u.id === useCaseId)) {
+            setUseCaseComposerError('Use case non trovato.');
+            return;
+          }
+          setUseCaseComposerError(null);
+          useCaseInvalidationHandlers.deleteUseCaseWithInvalidationKb(useCaseId);
+        }
+      ),
+    [useCaseInvalidationHandlers, useCases]
   );
 
-  const handleUseCaseInvalidationStateChange = React.useCallback(
-    (useCaseId: string, isInvalid: boolean) => {
-      if (isInvalid) {
-        setDirty(true);
-        return;
-      }
-      knowledgeBaseReorderDocuments(
-        removeInvalidationKbFromDocuments(knowledgeBaseDocuments, useCaseId)
-      );
-      setUseCasesUser((prev) =>
-        prev.map((u) =>
-          u.id === useCaseId
-            ? {
-                ...u,
-                invalidationNote: undefined,
-                invalidationKbDocumentId: undefined,
-              }
-            : u
-        )
-      );
-    },
-    [knowledgeBaseDocuments, knowledgeBaseReorderDocuments, setUseCasesUser]
-  );
+  const handleUseCaseInvalidationNoteChange =
+    useCaseInvalidationHandlers.onUseCaseInvalidationNoteChange;
+  const handleUseCaseInvalidationStateChange =
+    useCaseInvalidationHandlers.onUseCaseInvalidationStateChange;
 
   const knowledgeBaseTaskContext = React.useMemo(
     () => ({
@@ -2473,22 +2441,9 @@ export function useAIAgentEditorController({
    */
   const handleDeleteUseCase = React.useCallback(
     (useCaseId: string) => {
-      if (!useCases.some((u) => u.id === useCaseId)) {
-        setUseCaseComposerError('Use case non trovato.');
-        return;
-      }
-      setUseCaseComposerError(null);
-      const removeIds = collectUseCaseSubtreeIds(useCases, useCaseId);
-      let nextKb = knowledgeBaseDocuments;
-      for (const id of removeIds) {
-        nextKb = removeInvalidationKbFromDocuments(nextKb, id);
-      }
-      if (nextKb.length !== knowledgeBaseDocuments.length) {
-        knowledgeBaseReorderDocuments(nextKb);
-      }
-      setUseCasesUser((prev) => prev.filter((u) => !removeIds.has(u.id)));
+      promptsPanelHandlers.onDeleteUseCase(useCaseId);
     },
-    [useCases, setUseCasesUser, knowledgeBaseDocuments, knowledgeBaseReorderDocuments]
+    [promptsPanelHandlers]
   );
 
   const handleDeleteConversationalRule = React.useCallback((ruleId: string) => {

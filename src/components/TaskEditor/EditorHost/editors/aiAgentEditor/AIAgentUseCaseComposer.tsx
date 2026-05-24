@@ -3132,8 +3132,8 @@ export function AIAgentUseCaseComposer({
                         )}
                       </UseCaseRowHeader>
                       {isUseCaseInvalidated(u) &&
-                      !cardExpanded &&
-                      onUseCaseInvalidationNoteChange ? (
+                      !isConversationalRulesCatalog &&
+                      !cardExpanded ? (
                         <UseCaseInvalidationNoteBlock
                           note={u.invalidationNote ?? ''}
                           disabled={busy}
@@ -3279,7 +3279,7 @@ export function AIAgentUseCaseComposer({
                                   }
                                 />
                               )}
-                              {isUseCaseInvalidated(u) && onUseCaseInvalidationNoteChange ? (
+                              {isUseCaseInvalidated(u) && !isConversationalRulesCatalog ? (
                                 <UseCaseInvalidationNoteBlock
                                   note={u.invalidationNote ?? ''}
                                   disabled={busy}

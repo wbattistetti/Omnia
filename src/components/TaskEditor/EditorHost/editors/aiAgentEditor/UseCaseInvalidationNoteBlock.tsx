@@ -139,12 +139,6 @@ export function UseCaseInvalidationNoteBlock(
             </button>
           </div>
         </div>
-        {showRequired ? (
-          <p className="mt-1 text-[11px] text-red-300/90">
-            Scrivi perché questo scenario non è valido: la nota alimenta la knowledge base
-            dell&apos;agente.
-          </p>
-        ) : null}
       </InvalidationNoteShell>
     );
   }
