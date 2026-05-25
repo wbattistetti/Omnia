@@ -864,12 +864,13 @@ export function EditorKnowledgeBasePanel() {
     knowledgeBaseReorderDocuments,
     knowledgeBaseCallMeta,
     knowledgeBaseTaskContext,
+    registerKbAddDocumentPicker,
   } = useAIAgentEditorDock();
 
   return (
     <div
       {...tutorIdProps(UI_IDS.knowledgeBasePanel)}
-      className="h-full min-h-0 flex flex-col overflow-hidden p-3 bg-violet-950/20 border-l-4 border-violet-500/50"
+      className="h-full min-h-0 flex flex-col overflow-hidden bg-violet-950/20 border-l-4 border-violet-500/50"
     >
       <KnowledgeBaseViewer
         className="min-h-0 flex-1"
@@ -882,6 +883,8 @@ export function EditorKnowledgeBasePanel() {
         onRemoveDocument={knowledgeBaseRemoveDocument}
         onReorderDocuments={knowledgeBaseReorderDocuments}
         onUpdateDocument={knowledgeBaseUpdateDocument}
+        hideWorkspaceHeader
+        onRegisterAddDocumentPicker={registerKbAddDocumentPicker}
         footerHint="I file sono nel repository progetto; l'analisi markdown resta sul task."
         tutorDocumentListId={UI_IDS.kbDocumentList}
         tutorAnalysisResultId={UI_IDS.kbAnalysisResult}

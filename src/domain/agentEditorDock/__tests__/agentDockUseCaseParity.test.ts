@@ -136,6 +136,8 @@ describe('agentDockPromptsPanelHandlers', () => {
       },
       registerBackendsAddManualHandler: vi.fn(),
       invokeBackendsAddManual: vi.fn(),
+      registerKbAddDocumentPicker: vi.fn(),
+      invokeKbAddDocumentPicker: vi.fn(),
       hideBackendsPanelInlineAddButton: false,
     });
     expect(agentDockPromptsPanelHandlersComplete(dock)).toBe(true);

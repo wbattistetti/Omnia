@@ -14,7 +14,6 @@ import {
   TUTOR_CONTINUE_STRUCTURED,
   TUTOR_OUT_OF_MANUAL_STRUCTURED,
   TUTOR_WELCOME_STRUCTURED,
-  getTutorStructuredScript,
 } from '@domain/activeTutor/tutorScripts';
 import {
   tutorStructuredPlainText,
@@ -32,10 +31,7 @@ import {
   tutorPhaseIdFromKey,
   type TutorPhaseKey,
 } from '@domain/activeTutor/tutorPhaseKey';
-import {
-  buildPhaseEnterPayload,
-  shouldAppendIntro,
-} from '@domain/activeTutor/tutorEnterPhase';
+import { resolveTutorStickyPanelContent } from '@domain/activeTutor/tutorStickyPanel';
 import { routeTutorQuestion } from '@domain/activeTutor/tutorQuestionRouter';
 import { TUTOR_PHASE_LABELS } from '@domain/activeTutor/tutorPhase';
 import { openWizardStepForPhase } from './applyPhaseAttention';
@@ -166,33 +162,6 @@ function appendStructured(
   };
 }
 
-function structuredMessageForPlain(text: string, phaseKey: TutorPhaseKey): TutorStructuredMessage {
-  const mainId = mainUiIdForPhase(phaseKey);
-  return tutorStructuredFromScriptMessage(
-    {
-      text,
-      attentionTargetId: mainId,
-      attentionType: 'glow',
-      uiActions: [{ action: 'scrollTo', targetId: mainId }],
-    },
-    TUTOR_PHASE_LABELS[tutorPhaseIdFromKey(phaseKey)]
-  );
-}
-
-function lastTutorBody(messages: readonly TutorChatMessage[]): string {
-  const last = messages[messages.length - 1];
-  if (!last || last.role !== 'tutor' || !last.structured) return '';
-  return tutorStructuredPlainText(last.structured);
-}
-
-function shouldAppendScript(
-  messages: readonly TutorChatMessage[],
-  script: TutorStructuredMessage
-): boolean {
-  const body = tutorStructuredPlainText(script);
-  return lastTutorBody(messages) !== body;
-}
-
 export const useActiveTutorStore = createWithEqualityFn<ActiveTutorStore>((set, get) => ({
   activePhase: 0,
   phaseStates: createInitialPhaseStateMap(),
@@ -221,16 +190,17 @@ export const useActiveTutorStore = createWithEqualityFn<ActiveTutorStore>((set, 
     get().persistToSession();
 
     if (event === 'ai_action_completed' && phase === get().activePhase) {
-      const structured = getTutorStructuredScript(
+      const { phaseStates, backendSubView, scriptContext, phaseCompletion } = get();
+      const sticky = resolveTutorStickyPanelContent({
         phase,
-        get().phaseStates[phase],
-        get().backendSubView,
-        get().scriptContext
-      );
-      if (structured) {
-        get().appendStructuredTutorMessage(tutorPhaseKeyFromId(phase), structured, {
-          applyAttention: true,
-        });
+        phaseKey: tutorPhaseKeyFromId(phase),
+        phaseState: phaseStates[phase],
+        backendSubView,
+        scriptContext,
+        phaseComplete: phaseCompletion[phase] === true,
+      });
+      if (sticky.stateMessage) {
+        applyTutorStructuredAttention(sticky.stateMessage, tutorPhaseKeyFromId(phase));
       }
     }
   },
@@ -238,56 +208,21 @@ export const useActiveTutorStore = createWithEqualityFn<ActiveTutorStore>((set, 
   enterPhase: (phase, opts = {}) => {
     attentionDismiss();
     const phaseKey = tutorPhaseKeyFromId(phase);
-    const { phaseStates, scriptContext, phaseCompletion, conversations, backendSubView } = get();
-    const payload = buildPhaseEnterPayload(
-      phaseKey,
-      phaseStates[phase],
-      scriptContext,
-      phaseCompletion[phase] === true
-    );
-
-    let nextConversations = conversations;
-
-    if (shouldAppendIntro(conversations[phaseKey], payload.introText)) {
-      nextConversations = appendStructured(
-        nextConversations,
-        phaseKey,
-        structuredMessageForPlain(payload.introText, phaseKey)
-      );
-    }
-
-    if (payload.guidanceText && lastTutorBody(nextConversations[phaseKey]) !== payload.guidanceText.trim()) {
-      nextConversations = appendStructured(
-        nextConversations,
-        phaseKey,
-        structuredMessageForPlain(payload.guidanceText, phaseKey)
-      );
-    }
-
-    if (payload.warningText) {
-      const warning = structuredMessageForPlain(payload.warningText, phaseKey);
-      if (shouldAppendScript(nextConversations[phaseKey], warning)) {
-        nextConversations = appendStructured(nextConversations, phaseKey, warning);
-      }
-    }
-
-    const stateScript = getTutorStructuredScript(
+    const { phaseStates, scriptContext, phaseCompletion, backendSubView } = get();
+    const sticky = resolveTutorStickyPanelContent({
       phase,
-      phaseStates[phase],
+      phaseKey,
+      phaseState: phaseStates[phase],
       backendSubView,
-      scriptContext
-    );
-    let attentionMessage: TutorStructuredMessage | null = null;
-    if (stateScript && shouldAppendScript(nextConversations[phaseKey], stateScript)) {
-      nextConversations = appendStructured(nextConversations, phaseKey, stateScript);
-      attentionMessage = stateScript;
-    }
+      scriptContext,
+      phaseComplete: phaseCompletion[phase] === true,
+    });
 
-    set({ activePhase: phase, conversations: nextConversations });
+    set({ activePhase: phase });
     get().persistToSession();
 
-    if (opts.applyAttention !== false && attentionMessage) {
-      applyTutorStructuredAttention(attentionMessage, phaseKey);
+    if (opts.applyAttention !== false && sticky.stateMessage) {
+      applyTutorStructuredAttention(sticky.stateMessage, phaseKey);
     }
   },
 

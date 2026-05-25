@@ -17,11 +17,17 @@ import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import type { TutorStructuredMessage } from '@domain/activeTutor/tutorStructuredMessage';
 import {
+  filterTutorConversationMessages,
+  resolveTutorStickyPanelContent,
+  tutorStickyPanelHeading,
+} from '@domain/activeTutor/tutorStickyPanel';
+import {
   useActiveTutorStore,
 } from './activeTutorStore';
 import { tutorIdProps, UI_IDS } from './uiIds';
 import { tutorNotifyPhaseConfirm } from './useActiveTutorSync';
 import { TutorTabs } from './TutorTabs';
+import { TutorPhaseStickyPanel } from './TutorPhaseStickyPanel';
 import { TutorStructuredMessageBubble } from './TutorStructuredMessageBubble';
 import {
   applyTutorActionInteraction,
@@ -55,6 +61,8 @@ export function ActiveTutorPanel({
   const qaBusy = useActiveTutorStore((s) => s.qaBusy);
   const activePhase = useActiveTutorStore((s) => s.activePhase);
   const phaseStates = useActiveTutorStore((s) => s.phaseStates);
+  const backendSubView = useActiveTutorStore((s) => s.backendSubView);
+  const scriptContext = useActiveTutorStore((s) => s.scriptContext);
   const enterPhase = useActiveTutorStore((s) => s.enterPhase);
   const submitUserQuestion = useActiveTutorStore((s) => s.submitUserQuestion);
   const appendStructuredTutorMessage = useActiveTutorStore((s) => s.appendStructuredTutorMessage);
@@ -65,13 +73,29 @@ export function ActiveTutorPanel({
 
   const activeKey = tutorPhaseKeyFromId(activePhase);
   const messages = conversations[activeKey];
+  const chatMessages = React.useMemo(
+    () => filterTutorConversationMessages(messages, activeKey),
+    [messages, activeKey]
+  );
+  const stickyContent = React.useMemo(
+    () =>
+      resolveTutorStickyPanelContent({
+        phase: activePhase,
+        phaseKey: activeKey,
+        phaseState: phaseStates[activePhase],
+        backendSubView,
+        scriptContext,
+        phaseComplete: phaseCompletion[activePhase] === true,
+      }),
+    [activeKey, activePhase, backendSubView, phaseCompletion, phaseStates, scriptContext]
+  );
   const currentState = phaseStates[activePhase];
   const silent = generating || currentState === 'waiting_for_ai';
   const inputDisabled = silent || qaBusy;
 
   React.useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, qaBusy, activePhase]);
+  }, [chatMessages.length, qaBusy, activePhase]);
 
   React.useEffect(() => {
     const onDocPointerDown = (ev: PointerEvent): void => {
@@ -197,17 +221,23 @@ export function ActiveTutorPanel({
         onSelectPhase={onSelectPhase}
       />
 
+      <TutorPhaseStickyPanel
+        heading={tutorStickyPanelHeading(activePhase)}
+        content={stickyContent}
+        onUiRefClick={(ref) => onUiRefChipClick(activeKey, ref)}
+        onActionClick={(action) => onActionChipClick(activeKey, action)}
+      />
+
       <div
         ref={listRef}
         className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3"
       >
-        {messages.length === 0 ? (
+        {chatMessages.length === 0 ? (
           <p className="text-xs leading-relaxed text-slate-400">
-            Sono qui per guidarti passo passo. Ogni tab ha la sua conversazione — chiedi pure su
-            qualsiasi fase.
+            Chiedi pure su questa fase — la guida resta sempre visibile sopra.
           </p>
         ) : (
-          messages.map((m) => {
+          chatMessages.map((m) => {
             if (m.role === 'designer') {
               return (
                 <div

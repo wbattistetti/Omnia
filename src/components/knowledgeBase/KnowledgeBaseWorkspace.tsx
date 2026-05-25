@@ -14,7 +14,7 @@ import {
 import { KbDocumentList } from './KbDocumentList';
 import { KbWorkspaceTabHost } from './KbWorkspaceTabHost';
 import { KB_DOCUMENT_ACCEPT } from '@domain/knowledgeBase/kbFileKinds';
-import { KB_WORKSPACE_ROOT, kbType } from './kbTypography';
+import { KB_WORKSPACE_ROOT } from './kbTypography';
 
 const SPLIT_COL = '6px';
 const DEFAULT_LIST_WIDTH_PX = 220;
@@ -35,6 +35,10 @@ export type KnowledgeBaseWorkspaceProps = {
   className?: string;
   tutorDocumentListId?: string;
   tutorAnalysisResultId?: string;
+  /** When true, omits the internal header (e.g. wizard step header hosts «Aggiungi documento»). */
+  hideWorkspaceHeader?: boolean;
+  /** Registers open-picker handler for external header actions. Returns cleanup. */
+  onRegisterAddDocumentPicker?: (open: () => void) => void | (() => void);
 };
 
 type KbResizeState = {
@@ -83,6 +87,8 @@ export function KnowledgeBaseWorkspace({
   className = '',
   tutorDocumentListId,
   tutorAnalysisResultId,
+  hideWorkspaceHeader = false,
+  onRegisterAddDocumentPicker,
 }: KnowledgeBaseWorkspaceProps): React.ReactElement {
   const dropRef = React.useRef<KnowledgeBaseFileDropZoneHandle>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -92,6 +98,11 @@ export function KnowledgeBaseWorkspace({
   const userResizedListRef = React.useRef(false);
 
   const canEdit = !disabled;
+
+  React.useEffect(() => {
+    if (!onRegisterAddDocumentPicker) return;
+    return onRegisterAddDocumentPicker(() => dropRef.current?.openPicker());
+  }, [onRegisterAddDocumentPicker]);
 
   React.useEffect(() => {
     if (documents.length === 0) {
@@ -167,17 +178,18 @@ export function KnowledgeBaseWorkspace({
       className={'flex min-h-0 flex-1 flex-col ' + KB_WORKSPACE_ROOT + ' ' + className}
       data-kb-workspace="v4-document-analysis"
     >
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-violet-800/50 bg-violet-950/30 px-2 py-2">
-        <p className={kbType.accent + ' font-medium'}>Documenti knowledge base</p>
-        <button
-          type="button"
-          disabled={!canEdit}
-          onClick={() => dropRef.current?.openPicker()}
-          className="rounded-md border border-violet-500/80 bg-violet-700/50 px-3 py-1 font-medium text-violet-50 hover:bg-violet-600/60 disabled:opacity-60"
-        >
-          Aggiungi documento
-        </button>
-      </header>
+      {!hideWorkspaceHeader ? (
+        <header className="flex shrink-0 items-center justify-end gap-2 border-b border-violet-800/50 bg-violet-950/30 px-2 py-1.5">
+          <button
+            type="button"
+            disabled={!canEdit}
+            onClick={() => dropRef.current?.openPicker()}
+            className="rounded-md border border-violet-500/80 bg-violet-700/50 px-3 py-1 text-sm font-medium text-violet-50 hover:bg-violet-600/60 disabled:opacity-60"
+          >
+            Aggiungi documento
+          </button>
+        </header>
+      ) : null}
 
       <div
         ref={bodyRef}

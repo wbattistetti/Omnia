@@ -6,9 +6,13 @@ import React from 'react';
 import type { StagedKbDocument, KbDocumentPatch } from '@domain/knowledgeBase/kbDocumentTypes';
 import type { AiCallMeta } from '@services/aiAgentDesignApi';
 import type { KbDocumentAnalysisTaskContext } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
+import type { KbAnalysisToolbarState } from '@domain/knowledgeBase/kbAnalysisToolbarState';
+import {
+  KB_ANALYSIS_REVIEW_TOGGLE,
+} from '@domain/knowledgeBase/kbDocumentAnalysisGuide';
 import { KbDocumentAnalysisTab } from './KbDocumentAnalysisTab';
 import { KnowledgeBaseDocumentDetail } from './KnowledgeBaseDocumentDetail';
-import { Columns2, FileSearch, FileText } from 'lucide-react';
+import { Columns2, FileSearch, FileText, Loader2 } from 'lucide-react';
 
 export type KbWorkspaceTabId = 'analysis' | 'document';
 
@@ -21,7 +25,6 @@ export type KbWorkspaceTabHostProps = {
   imageDocIds: readonly string[];
   onSelectDocumentId: (docId: string) => void;
   onUpdateDoc: (patch: KbDocumentPatch) => void;
-  /** Active Tutor — data-tutor-id pannello analisi. */
   tutorAnalysisResultId?: string;
 };
 
@@ -33,6 +36,7 @@ const TAB_DEFS: { id: KbWorkspaceTabId; label: string; Icon: typeof FileSearch }
 type KbTabChromeProps = {
   def: (typeof TAB_DEFS)[number];
   active: boolean;
+  pendingUpdate?: boolean;
   onSelect: () => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -42,11 +46,25 @@ type KbTabChromeProps = {
 function KbWorkspaceTabChrome({
   def,
   active,
+  pendingUpdate = false,
   onSelect,
   onDragStart,
   onDragOver,
   onDrop,
 }: KbTabChromeProps): React.ReactElement {
+  let className =
+    'inline-flex cursor-grab items-center gap-1 rounded-t border py-1 pl-2.5 pr-2.5 text-xs font-medium transition-colors active:cursor-grabbing ';
+
+  if (pendingUpdate) {
+    className += active
+      ? 'border-amber-500/80 bg-amber-600 text-amber-50'
+      : 'border-amber-600/60 bg-amber-700/90 text-amber-50 hover:bg-amber-600';
+  } else if (active) {
+    className += 'border-violet-500/50 bg-slate-800 text-violet-100';
+  } else {
+    className += 'border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200';
+  }
+
   return (
     <button
       type="button"
@@ -57,16 +75,58 @@ function KbWorkspaceTabChrome({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onClick={onSelect}
-      className={
-        'inline-flex cursor-grab items-center gap-1 rounded-t border py-1 pl-2.5 pr-2.5 text-xs font-medium active:cursor-grabbing ' +
-        (active
-          ? 'border-violet-500/50 bg-slate-800 text-violet-100'
-          : 'border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200')
-      }
+      className={className}
     >
       <def.Icon className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
       {def.label}
     </button>
+  );
+}
+
+function KbAnalysisTabToolbar({
+  toolbar,
+}: {
+  toolbar: KbAnalysisToolbarState;
+}): React.ReactElement | null {
+  if (!toolbar.executeVisible && !toolbar.reviewToggleVisible) return null;
+
+  const executeClass =
+    'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-40 ' +
+    (toolbar.executeEmphasized
+      ? 'border-violet-400/90 bg-violet-600/80 text-white shadow-sm shadow-violet-900/40 hover:bg-violet-500/90'
+      : 'border-slate-600/70 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80');
+
+  return (
+    <div className="flex items-center gap-1.5 border-l border-slate-700/60 pl-2 ml-1">
+      {toolbar.reviewToggleVisible ? (
+        <button
+          type="button"
+          aria-pressed={toolbar.reviewPanelOpen}
+          onClick={toolbar.onToggleReviewPanel}
+          className={
+            'rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ' +
+            (toolbar.reviewPanelOpen
+              ? 'border-violet-500/70 bg-violet-950/60 text-violet-100'
+              : 'border-slate-600/70 bg-slate-900/50 text-slate-300 hover:bg-slate-800/70')
+          }
+        >
+          {KB_ANALYSIS_REVIEW_TOGGLE}
+        </button>
+      ) : null}
+      {toolbar.executeVisible ? (
+        <button
+          type="button"
+          disabled={!toolbar.executeEnabled || toolbar.executeBusy}
+          onClick={toolbar.onExecute}
+          className={executeClass}
+        >
+          {toolbar.executeBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : null}
+          {toolbar.executeLabel}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -84,11 +144,15 @@ export function KbWorkspaceTabHost({
   const [tabOrder, setTabOrder] = React.useState<readonly KbWorkspaceTabId[]>(['analysis', 'document']);
   const [activeTab, setActiveTab] = React.useState<KbWorkspaceTabId>('document');
   const [splitView, setSplitView] = React.useState(false);
+  const [analysisToolbar, setAnalysisToolbar] = React.useState<KbAnalysisToolbarState | null>(null);
+  const [reviewPanelOpen, setReviewPanelOpen] = React.useState(true);
   const dragTabRef = React.useRef<KbWorkspaceTabId | null>(null);
 
   React.useEffect(() => {
     setActiveTab('document');
     setSplitView(false);
+    setAnalysisToolbar(null);
+    setReviewPanelOpen(true);
   }, [doc.id]);
 
   const orderedTabs = React.useMemo(() => {
@@ -133,6 +197,12 @@ export function KbWorkspaceTabHost({
     dragTabRef.current = null;
   };
 
+  const showAnalysisToolbar =
+    analysisToolbar !== null &&
+    (analysisToolbar.executeVisible || analysisToolbar.reviewToggleVisible);
+
+  const analysisTabPending = Boolean(analysisToolbar?.analysisTabHighlight);
+
   const analysisPane = (
     <div
       className="min-h-0 flex-1 flex flex-col overflow-hidden"
@@ -145,6 +215,9 @@ export function KbWorkspaceTabHost({
         callMeta={callMeta}
         taskContext={taskContext}
         onUpdateDoc={onUpdateDoc}
+        onToolbarStateChange={setAnalysisToolbar}
+        reviewPanelOpen={reviewPanelOpen}
+        onReviewPanelOpenChange={setReviewPanelOpen}
       />
     </div>
   );
@@ -170,19 +243,25 @@ export function KbWorkspaceTabHost({
         {orderedTabs.map((tabId) => {
           const def = TAB_DEFS.find((t) => t.id === tabId)!;
           const active = !splitView && activeTab === tabId;
+          const isAnalysisTab = tabId === 'analysis';
           return (
-            <KbWorkspaceTabChrome
-              key={tabId}
-              def={def}
-              active={active}
-              onSelect={() => {
-                setActiveTab(tabId);
-                setSplitView(false);
-              }}
-              onDragStart={onTabDragStart(tabId)}
-              onDragOver={onTabDragOver}
-              onDrop={onTabDropOnBar(tabId)}
-            />
+            <React.Fragment key={tabId}>
+              <KbWorkspaceTabChrome
+                def={def}
+                active={active}
+                pendingUpdate={isAnalysisTab && analysisTabPending}
+                onSelect={() => {
+                  setActiveTab(tabId);
+                  setSplitView(false);
+                }}
+                onDragStart={onTabDragStart(tabId)}
+                onDragOver={onTabDragOver}
+                onDrop={onTabDropOnBar(tabId)}
+              />
+              {isAnalysisTab && showAnalysisToolbar && analysisToolbar ? (
+                <KbAnalysisTabToolbar toolbar={analysisToolbar} />
+              ) : null}
+            </React.Fragment>
           );
         })}
         <div className="ml-auto flex items-center gap-1 pr-1">
@@ -212,12 +291,29 @@ export function KbWorkspaceTabHost({
         {splitView ? (
           <div className="flex min-h-0 flex-1 divide-x divide-slate-800">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{analysisPane}</div>
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{documentPane}</div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {documentPane}
+            </div>
           </div>
-        ) : activeTab === 'analysis' ? (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{analysisPane}</div>
         ) : (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{documentPane}</div>
+          <>
+            <div
+              className={
+                'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ' +
+                (activeTab === 'analysis' ? '' : 'hidden')
+              }
+            >
+              {analysisPane}
+            </div>
+            <div
+              className={
+                'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ' +
+                (activeTab === 'document' ? '' : 'hidden')
+              }
+            >
+              {documentPane}
+            </div>
+          </>
         )}
       </div>
     </main>

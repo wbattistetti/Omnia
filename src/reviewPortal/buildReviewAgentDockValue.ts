@@ -74,6 +74,8 @@ export interface ReviewAgentDockLiveInput {
     handler: ((mode: ManualBackendCreationMode) => void) | null
   ) => void;
   invokeBackendsAddManual: (mode?: ManualBackendCreationMode) => void;
+  registerKbAddDocumentPicker: (handler: (() => void) | null) => void;
+  invokeKbAddDocumentPicker: () => void;
   hideBackendsPanelInlineAddButton: boolean;
 }
 
@@ -211,6 +213,8 @@ export function buildReviewAgentDockValue(
     persistIaRuntimeOverrideSnapshot: reviewNoop,
     registerBackendsAddManualHandler: live.registerBackendsAddManualHandler,
     invokeBackendsAddManual: live.invokeBackendsAddManual,
+    registerKbAddDocumentPicker: live.registerKbAddDocumentPicker,
+    invokeKbAddDocumentPicker: live.invokeKbAddDocumentPicker,
     hideBackendsPanelInlineAddButton: live.hideBackendsPanelInlineAddButton,
     knowledgeBaseCallMeta: live.ia.buildUseCasePropagatorCallMeta('KB_REFINE_DOCUMENT_ANALYSIS'),
     knowledgeBaseTaskContext: live.knowledgeBaseTaskContext,

@@ -23,6 +23,8 @@ export type KnowledgeBaseViewerProps = {
   className?: string;
   tutorDocumentListId?: string;
   tutorAnalysisResultId?: string;
+  hideWorkspaceHeader?: boolean;
+  onRegisterAddDocumentPicker?: (open: () => void) => void | (() => void);
 };
 
 export function KnowledgeBaseViewer({

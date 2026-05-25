@@ -13,12 +13,14 @@ import {
   KB_ANALYSIS_CLARIFY_PROMPT,
   KB_ANALYSIS_CLARIFY_SUBMIT,
   KB_ANALYSIS_CONFIRMED_BADGE,
-  KB_ANALYSIS_DISMISS_REVIEW,
+  KB_ANALYSIS_DOCUMENT_EXCERPT_EMPTY,
   KB_ANALYSIS_DOCUMENT_EXCERPT_LABEL,
   KB_ANALYSIS_EXCERPT_RATIONALE_LABEL,
   KB_ANALYSIS_REVIEW_PANEL_TITLE,
   KB_ANALYSIS_STATUS_CLARIFYING,
   KB_ANALYSIS_STATUS_PENDING,
+  KB_ANALYSIS_USER_OBSERVATION_LABEL,
+  KB_ANALYSIS_USER_QUESTION_LABEL,
 } from '@domain/knowledgeBase/kbDocumentAnalysisGuide';
 import { observationHeaderPreview } from '@domain/knowledgeBase/kbDocumentExcerptValidation';
 
@@ -31,7 +33,6 @@ export type KbAnalysisObservationReviewPanelProps = {
   onDisagree: (observationId: string) => void;
   onClarificationDraftChange: (observationId: string, text: string) => void;
   onSubmitClarification: (observationId: string) => void;
-  onDismissReview: () => void;
 };
 
 function statusBadgeLabel(status: KbAnalysisReviewSessionItem['status']): string {
@@ -44,6 +45,12 @@ function statusBadgeClass(status: KbAnalysisReviewSessionItem['status']): string
   if (status === 'confirmed') return 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200';
   if (status === 'clarifying') return 'border-amber-700/60 bg-amber-950/40 text-amber-100';
   return 'border-slate-600/70 bg-slate-900/60 text-slate-300';
+}
+
+function designerNoteLabel(presentation: KbAnalysisReviewSessionItem['observation']['presentation']): string {
+  return presentation === 'domanda'
+    ? KB_ANALYSIS_USER_QUESTION_LABEL
+    : KB_ANALYSIS_USER_OBSERVATION_LABEL;
 }
 
 function interpretationLines(interpretation: string): readonly string[] {
@@ -96,6 +103,18 @@ function ObservationAccordionItem({
   const canInteract = !globalBusy && !confirmed;
   const headerId = `kb-obs-header-${observation.id}`;
   const panelId = `kb-obs-panel-${observation.id}`;
+  const clarifyRef = React.useRef<HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    if (clarifying && expanded) {
+      clarifyRef.current?.focus();
+    }
+  }, [clarifying, expanded]);
+
+  const handleDisagree = React.useCallback(() => {
+    if (!expanded) onToggle();
+    onDisagree(observation.id);
+  }, [expanded, onToggle, onDisagree, observation.id]);
 
   return (
     <article
@@ -143,6 +162,9 @@ function ObservationAccordionItem({
 
       {expanded ? (
         <div id={panelId} aria-labelledby={headerId} className="border-t border-slate-700/50 px-3 pb-3 pt-2">
+          <p className="mb-1 text-xs font-semibold text-amber-200/90">
+            {designerNoteLabel(observation.presentation)}
+          </p>
           <p className="mb-1 whitespace-pre-wrap text-sm leading-relaxed text-amber-50/90">
             {observation.text}
           </p>
@@ -154,24 +176,30 @@ function ObservationAccordionItem({
             <AgentResponseBody interpretation={observation.interpretation} />
           </div>
 
-          {observation.documentExcerpt ? (
-            <details className="mb-3 rounded-md border border-emerald-800/40 bg-emerald-950/25">
-              <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-emerald-200/90">
-                {KB_ANALYSIS_DOCUMENT_EXCERPT_LABEL}
-              </summary>
-              <div className="space-y-2 border-t border-emerald-900/40 px-3 py-2">
-                <blockquote className="border-l-2 border-emerald-600/60 pl-3 text-sm italic leading-relaxed text-emerald-50/90">
-                  {observation.documentExcerpt}
-                </blockquote>
-                {observation.excerptRationale ? (
-                  <p className="text-xs leading-relaxed text-emerald-200/80">
-                    <span className="font-semibold">{KB_ANALYSIS_EXCERPT_RATIONALE_LABEL}: </span>
-                    {observation.excerptRationale}
-                  </p>
-                ) : null}
-              </div>
-            </details>
-          ) : null}
+          <details className="mb-3 rounded-md border border-emerald-800/40 bg-emerald-950/25">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-emerald-200/90">
+              {KB_ANALYSIS_DOCUMENT_EXCERPT_LABEL}
+            </summary>
+            <div className="space-y-2 border-t border-emerald-900/40 px-3 py-2">
+              {observation.documentExcerpt ? (
+                <>
+                  <blockquote className="border-l-2 border-emerald-600/60 pl-3 text-sm italic leading-relaxed text-emerald-50/90">
+                    {observation.documentExcerpt}
+                  </blockquote>
+                  {observation.excerptRationale ? (
+                    <p className="text-xs leading-relaxed text-emerald-200/80">
+                      <span className="font-semibold">{KB_ANALYSIS_EXCERPT_RATIONALE_LABEL}: </span>
+                      {observation.excerptRationale}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-xs italic leading-relaxed text-emerald-200/70">
+                  {KB_ANALYSIS_DOCUMENT_EXCERPT_EMPTY}
+                </p>
+              )}
+            </div>
+          </details>
 
           {!confirmed ? (
             <>
@@ -191,7 +219,7 @@ function ObservationAccordionItem({
                 <button
                   type="button"
                   disabled={!canInteract || busy}
-                  onClick={() => onDisagree(observation.id)}
+                  onClick={handleDisagree}
                   className="rounded-md border border-slate-600/80 bg-slate-900/60 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-800/80 disabled:opacity-50"
                 >
                   {KB_ANALYSIS_AGREE_NO}
@@ -207,6 +235,7 @@ function ObservationAccordionItem({
                     {KB_ANALYSIS_CLARIFY_PROMPT}
                   </label>
                   <textarea
+                    ref={clarifyRef}
                     id={`kb-clarify-${observation.id}`}
                     value={clarificationDraft}
                     disabled={busy}
@@ -251,7 +280,6 @@ export function KbAnalysisObservationReviewPanel({
   onDisagree,
   onClarificationDraftChange,
   onSubmitClarification,
-  onDismissReview,
 }: KbAnalysisObservationReviewPanelProps): React.ReactElement {
   const sessionKey = items.map((item) => item.observation.id).join(',');
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() =>
@@ -283,21 +311,13 @@ export function KbAnalysisObservationReviewPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-violet-800/40 px-3 py-2">
+      <header className="flex shrink-0 items-center gap-2 border-b border-violet-800/40 px-3 py-2">
         <div>
           <p className="text-sm font-medium text-violet-100">{KB_ANALYSIS_REVIEW_PANEL_TITLE}</p>
           <p className="text-xs text-slate-400">
             {confirmedCount}/{items.length} concordati
           </p>
         </div>
-        <button
-          type="button"
-          disabled={globalBusy}
-          onClick={onDismissReview}
-          className="text-xs text-slate-400 underline decoration-slate-600 underline-offset-2 hover:text-slate-200 disabled:opacity-50"
-        >
-          {KB_ANALYSIS_DISMISS_REVIEW}
-        </button>
       </header>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {items.map((item) => (

@@ -1,5 +1,5 @@
 /**
- * Tab «Analisi del documento»: guida, pannello revisione + splitter + Monaco.
+ * Tab «Analisi del documento»: guida, pannello revisione a schermo intero o Monaco.
  */
 
 import React from 'react';
@@ -17,23 +17,23 @@ import {
   type KbDocumentAnalysisTaskContext,
 } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import {
-  KB_ANALYSIS_FINALIZE_BUTTON,
   KB_ANALYSIS_GUIDE_CLICK_HERE,
   KB_ANALYSIS_GUIDE_DRAFT,
   KB_ANALYSIS_GUIDE_PROPOSE_PREFIX,
   KB_ANALYSIS_GUIDE_PROPOSE_SUFFIX,
 } from '@domain/knowledgeBase/kbDocumentAnalysisGuide';
+import type { KbAnalysisToolbarState } from '@domain/knowledgeBase/kbAnalysisToolbarState';
 import {
   allReviewItemsConfirmed,
   countConfirmedReviewItems,
   createReviewSessionItems,
   observationsForFinalize,
+  resolveKbAnalysisToolbarPresentation,
   shouldRunObservationReview,
   type KbAnalysisReviewSessionItem,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
 import { KbMarkdownMonaco } from '@components/workspaces/elevenlabs/kb/KbMarkdownMonaco';
 import { KbAnalysisObservationReviewPanel } from './KbAnalysisObservationReviewPanel';
-import { KbRowSplitter } from './KbRowSplitter';
 import { useKbDocumentContent } from './useKbDocumentContent';
 import { TUTOR_ID_ATTR, UI_IDS } from '@domain/activeTutor/tutorUiIds';
 
@@ -44,11 +44,10 @@ export interface KbDocumentAnalysisTabProps {
   callMeta?: AiCallMeta;
   taskContext?: KbDocumentAnalysisTaskContext;
   onUpdateDoc: (patch: KbDocumentPatch) => void;
+  onToolbarStateChange?: (state: KbAnalysisToolbarState | null) => void;
+  reviewPanelOpen?: boolean;
+  onReviewPanelOpenChange?: (open: boolean) => void;
 }
-
-const DEFAULT_REVIEW_SHARE = 0.38;
-const MIN_REVIEW_PX = 120;
-const MAX_REVIEW_SHARE = 0.72;
 
 function apiBase(
   projectId: string,
@@ -72,6 +71,14 @@ function apiBase(
   };
 }
 
+function hasReviewDisagreement(items: readonly KbAnalysisReviewSessionItem[]): boolean {
+  return items.some(
+    (item) =>
+      item.status === 'clarifying' ||
+      Boolean(item.observation.userCorrectionNote?.trim())
+  );
+}
+
 export function KbDocumentAnalysisTab({
   doc,
   projectId,
@@ -79,28 +86,38 @@ export function KbDocumentAnalysisTab({
   callMeta,
   taskContext,
   onUpdateDoc,
+  onToolbarStateChange,
+  reviewPanelOpen: reviewPanelOpenProp,
+  onReviewPanelOpenChange,
 }: KbDocumentAnalysisTabProps): React.ReactElement {
   const { provider, model } = useAIProvider();
   const editorRef = React.useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
-  const splitBodyRef = React.useRef<HTMLDivElement>(null);
-  const resizeRef = React.useRef<{ startY: number; startShare: number; height: number } | null>(
-    null
-  );
 
   const [busy, setBusy] = React.useState(false);
   const [busyObservationId, setBusyObservationId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState(doc.documentAnalysisMarkdown);
   const [reviewItems, setReviewItems] = React.useState<KbAnalysisReviewSessionItem[] | null>(null);
-  const [reviewPanelShare, setReviewPanelShare] = React.useState(DEFAULT_REVIEW_SHARE);
+  const [analysisStarted, setAnalysisStarted] = React.useState(
+    () => Boolean(doc.agentAnalysisBaselineMarkdown?.trim())
+  );
+  const [hasManualEdit, setHasManualEdit] = React.useState(false);
+  const [reviewPanelOpenInternal, setReviewPanelOpenInternal] = React.useState(true);
 
-  const inReview = reviewItems !== null && reviewItems.length > 0;
+  const reviewPanelOpen = reviewPanelOpenProp ?? reviewPanelOpenInternal;
+  const setReviewPanelOpen = onReviewPanelOpenChange ?? setReviewPanelOpenInternal;
+
+  const inReviewSession = reviewItems !== null && reviewItems.length > 0;
+  const showReviewPanel = inReviewSession && reviewPanelOpen;
 
   React.useEffect(() => {
     setDraft(doc.documentAnalysisMarkdown);
     setError(null);
     setReviewItems(null);
     setBusyObservationId(null);
+    setAnalysisStarted(Boolean(doc.agentAnalysisBaselineMarkdown?.trim()));
+    setHasManualEdit(false);
+    setReviewPanelOpenInternal(true);
   }, [doc.id, doc.documentAnalysisMarkdown]);
 
   const repoId = doc.repositoryDocumentId?.trim();
@@ -110,16 +127,26 @@ export function KbDocumentAnalysisTab({
   const hasRepo = Boolean(repoId);
   const baseline = doc.agentAnalysisBaselineMarkdown;
 
-  const canRunAgent =
-    canEdit && hasModel && Boolean(projectId?.trim()) && hasRepo && !busy && !inReview;
-
-  const canStartAnalysis = canRunAgent && draft.trim().length > 0;
-  const canPropose = canRunAgent;
   const allConfirmed = reviewItems ? allReviewItemsConfirmed(reviewItems) : false;
   const confirmedCount = reviewItems ? countConfirmedReviewItems(reviewItems) : 0;
+  const draftDiffersFromBaseline = shouldRunObservationReview(baseline, draft);
+  const reviewHasDisagreement = reviewItems ? hasReviewDisagreement(reviewItems) : false;
+
+  const canRunAgent =
+    canEdit && hasModel && Boolean(projectId?.trim()) && hasRepo && !busy;
+
+  const canPropose = canRunAgent && !inReviewSession;
+  const showGuide = !analysisStarted;
+
+  React.useEffect(() => {
+    if (inReviewSession && allConfirmed) {
+      setReviewPanelOpen(false);
+    }
+  }, [inReviewSession, allConfirmed, setReviewPanelOpen]);
 
   const persistDraft = React.useCallback(
     (next: string) => {
+      setHasManualEdit(true);
       setDraft(next);
       if (next !== doc.documentAnalysisMarkdown) {
         onUpdateDoc({ documentAnalysisMarkdown: next });
@@ -132,6 +159,8 @@ export function KbDocumentAnalysisTab({
     (markdown: string) => {
       const next = markdown.trim();
       setDraft(next);
+      setHasManualEdit(false);
+      setAnalysisStarted(true);
       onUpdateDoc({
         documentAnalysisMarkdown: next,
         agentAnalysisBaselineMarkdown: next,
@@ -215,9 +244,10 @@ export function KbDocumentAnalysisTab({
   ]);
 
   const onStartAnalysis = React.useCallback(async () => {
-    if (!canStartAnalysis || !projectId?.trim() || !repoId) return;
+    if (!canRunAgent || !draft.trim() || !projectId?.trim() || !repoId) return;
     setBusy(true);
     setError(null);
+    setAnalysisStarted(true);
     try {
       const base = apiBase(
         projectId.trim(),
@@ -230,7 +260,7 @@ export function KbDocumentAnalysisTab({
         callMeta
       );
 
-      if (shouldRunObservationReview(baseline, draft)) {
+      if (draftDiffersFromBaseline) {
         const review = await reviewKbDocumentAnalysisObservations({
           ...base,
           agentBaselineMarkdown: baseline,
@@ -238,6 +268,7 @@ export function KbDocumentAnalysisTab({
         });
         setReviewItems(createReviewSessionItems(review));
         setReviewPanelShare(DEFAULT_REVIEW_SHARE);
+        setReviewPanelOpen(true);
         return;
       }
 
@@ -252,11 +283,12 @@ export function KbDocumentAnalysisTab({
       setBusy(false);
     }
   }, [
-    canStartAnalysis,
+    canRunAgent,
+    draft,
+    draftDiffersFromBaseline,
     projectId,
     repoId,
     doc.name,
-    draft,
     baseline,
     content.text,
     taskContext,
@@ -264,6 +296,7 @@ export function KbDocumentAnalysisTab({
     model,
     callMeta,
     applyAgentResult,
+    setReviewPanelOpen,
   ]);
 
   const onFinalizeAnalysis = React.useCallback(async () => {
@@ -288,6 +321,7 @@ export function KbDocumentAnalysisTab({
       });
       applyAgentResult(result.documentAnalysisMarkdown);
       setReviewItems(null);
+      setReviewPanelOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -307,13 +341,29 @@ export function KbDocumentAnalysisTab({
     model,
     callMeta,
     applyAgentResult,
+    setReviewPanelOpen,
   ]);
 
-  const onDismissReview = React.useCallback(() => {
-    setReviewItems(null);
-    setError(null);
-    focusEditor();
-  }, [focusEditor]);
+  const onExecute = React.useCallback(() => {
+    if (inReviewSession && allConfirmed) {
+      void onFinalizeAnalysis();
+      return;
+    }
+    void onStartAnalysis();
+  }, [inReviewSession, allConfirmed, onFinalizeAnalysis, onStartAnalysis]);
+
+  const toolbarPresentation = resolveKbAnalysisToolbarPresentation({
+    baseline,
+    draft,
+    hasManualEdit,
+    inReviewSession,
+    allConfirmed,
+    reviewHasDisagreement,
+    canRunAgent,
+  });
+
+  const { executeVisible, executeLabel, executeEnabled, executeEmphasized } =
+    toolbarPresentation;
 
   const onAgree = React.useCallback(
     (observationId: string) => {
@@ -325,8 +375,9 @@ export function KbDocumentAnalysisTab({
   const onDisagree = React.useCallback(
     (observationId: string) => {
       updateReviewItem(observationId, { status: 'clarifying' });
+      setReviewPanelOpen(true);
     },
-    [updateReviewItem]
+    [updateReviewItem, setReviewPanelOpen]
   );
 
   const onClarificationDraftChange = React.useCallback(
@@ -391,58 +442,69 @@ export function KbDocumentAnalysisTab({
     ]
   );
 
-  const onReviewResizePointerDown = React.useCallback(
-    (e: React.PointerEvent) => {
-      e.preventDefault();
-      const height = splitBodyRef.current?.clientHeight ?? 400;
-      resizeRef.current = {
-        startY: e.clientY,
-        startShare: reviewPanelShare,
-        height,
-      };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    },
-    [reviewPanelShare]
-  );
+  const onToggleReviewPanel = React.useCallback(() => {
+    setReviewPanelOpen(!reviewPanelOpen);
+  }, [reviewPanelOpen, setReviewPanelOpen]);
 
-  const onReviewResizePointerMove = React.useCallback((e: React.PointerEvent) => {
-    const st = resizeRef.current;
-    if (!st || st.height <= 0) return;
-    const delta = e.clientY - st.startY;
-    setReviewPanelShare(
-      Math.min(MAX_REVIEW_SHARE, Math.max(MIN_REVIEW_PX / st.height, st.startShare + delta / st.height))
-    );
-  }, []);
+  const onExecuteRef = React.useRef(onExecute);
+  onExecuteRef.current = onExecute;
+  const onToggleReviewPanelRef = React.useRef(onToggleReviewPanel);
+  onToggleReviewPanelRef.current = onToggleReviewPanel;
 
-  const finishReviewResize = React.useCallback(() => {
-    resizeRef.current = null;
-  }, []);
+  React.useEffect(() => {
+    if (!onToolbarStateChange) return;
+    onToolbarStateChange({
+      executeVisible,
+      executeLabel,
+      executeEnabled,
+      executeEmphasized,
+      analysisTabHighlight: executeEmphasized,
+      executeBusy: busy,
+      onExecute: () => onExecuteRef.current(),
+      reviewToggleVisible: inReviewSession,
+      reviewPanelOpen,
+      onToggleReviewPanel: () => onToggleReviewPanelRef.current(),
+    });
+  }, [
+    onToolbarStateChange,
+    executeVisible,
+    executeLabel,
+    executeEnabled,
+    executeEmphasized,
+    busy,
+    inReviewSession,
+    reviewPanelOpen,
+  ]);
 
-  const reviewPanelHeight = `${Math.round(reviewPanelShare * 100)}%`;
+  React.useEffect(() => {
+    return () => onToolbarStateChange?.(null);
+  }, [onToolbarStateChange]);
 
   return (
     <div
       {...{ [TUTOR_ID_ATTR]: UI_IDS.kbAnalysisResult }}
-      className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3"
+      className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2"
     >
-      <div className="shrink-0 space-y-2 text-sm leading-relaxed text-slate-300">
-        <p>{KB_ANALYSIS_GUIDE_DRAFT}</p>
-        <p>
-          {KB_ANALYSIS_GUIDE_PROPOSE_PREFIX}
-          <button
-            type="button"
-            disabled={!canPropose}
-            onClick={() => void onGuardiTu()}
-            className="font-medium text-violet-200 underline decoration-violet-500/50 underline-offset-2 hover:text-violet-50 disabled:opacity-50"
-          >
-            {busy && !inReview ? (
-              <Loader2 className="mr-0.5 inline h-3.5 w-3.5 animate-spin align-text-bottom" aria-hidden />
-            ) : null}
-            {KB_ANALYSIS_GUIDE_CLICK_HERE}
-          </button>
-          {KB_ANALYSIS_GUIDE_PROPOSE_SUFFIX}
-        </p>
-      </div>
+      {showGuide ? (
+        <div className="shrink-0 space-y-1.5 text-sm leading-relaxed text-slate-300">
+          <p>{KB_ANALYSIS_GUIDE_DRAFT}</p>
+          <p>
+            {KB_ANALYSIS_GUIDE_PROPOSE_PREFIX}
+            <button
+              type="button"
+              disabled={!canPropose}
+              onClick={() => void onGuardiTu()}
+              className="font-medium text-violet-200 underline decoration-violet-500/50 underline-offset-2 hover:text-violet-50 disabled:opacity-50"
+            >
+              {busy && !inReviewSession ? (
+                <Loader2 className="mr-0.5 inline h-3.5 w-3.5 animate-spin align-text-bottom" aria-hidden />
+              ) : null}
+              {KB_ANALYSIS_GUIDE_CLICK_HERE}
+            </button>
+            {KB_ANALYSIS_GUIDE_PROPOSE_SUFFIX}
+          </p>
+        </div>
+      ) : null}
 
       {!hasModel ? (
         <p className="shrink-0 text-xs text-amber-200/90" role="alert">
@@ -462,77 +524,36 @@ export function KbDocumentAnalysisTab({
         </p>
       ) : null}
 
-      <div
-        ref={splitBodyRef}
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-      >
-        {inReview && reviewItems ? (
-          <>
-            <div
-              className="min-h-0 shrink-0 overflow-hidden rounded-md border border-violet-700/60 bg-violet-950/20"
-              style={{ height: reviewPanelHeight, minHeight: MIN_REVIEW_PX }}
-            >
-              <KbAnalysisObservationReviewPanel
-                items={reviewItems}
-                confirmedCount={confirmedCount}
-                busyObservationId={busyObservationId}
-                globalBusy={busy}
-                onAgree={onAgree}
-                onDisagree={onDisagree}
-                onClarificationDraftChange={onClarificationDraftChange}
-                onSubmitClarification={(id) => void onSubmitClarification(id)}
-                onDismissReview={onDismissReview}
-              />
-            </div>
-            <KbRowSplitter
-              ariaLabel="Ridimensiona pannello revisione"
-              onPointerDown={onReviewResizePointerDown}
-              onPointerMove={onReviewResizePointerMove}
-              onPointerEnd={finishReviewResize}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {showReviewPanel && reviewItems ? (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-violet-700/60 bg-violet-950/20">
+            <KbAnalysisObservationReviewPanel
+              items={reviewItems}
+              confirmedCount={confirmedCount}
+              busyObservationId={busyObservationId}
+              globalBusy={busy}
+              onAgree={onAgree}
+              onDisagree={onDisagree}
+              onClarificationDraftChange={onClarificationDraftChange}
+              onSubmitClarification={(id) => void onSubmitClarification(id)}
             />
-          </>
-        ) : null}
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-700/80 bg-slate-950/50">
-          <KbMarkdownMonaco
-            value={draft}
-            onChange={canEdit && !inReview ? persistDraft : undefined}
-            readOnly={!canEdit || inReview}
-            fillHeight
-            appearance="plain"
-            ariaLabel="Analisi del documento in Markdown"
-            editorDidMount={(editor) => {
-              editorRef.current = editor;
-            }}
-          />
-        </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-700/80 bg-slate-950/50">
+            <KbMarkdownMonaco
+              value={draft}
+              onChange={canEdit && !busy ? persistDraft : undefined}
+              readOnly={!canEdit || busy}
+              fillHeight
+              appearance="plain"
+              ariaLabel="Analisi del documento in Markdown"
+              editorDidMount={(editor) => {
+                editorRef.current = editor;
+              }}
+            />
+          </div>
+        )}
       </div>
-
-      {inReview ? (
-        <div className="flex shrink-0 justify-end">
-          <button
-            type="button"
-            disabled={!allConfirmed || busy}
-            onClick={() => void onFinalizeAnalysis()}
-            className="inline-flex items-center gap-2 rounded-md border border-emerald-600/80 bg-emerald-950/50 px-4 py-2 text-sm font-medium text-emerald-50 hover:bg-emerald-900/50 disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            {KB_ANALYSIS_FINALIZE_BUTTON}
-          </button>
-        </div>
-      ) : (
-        <div className="flex shrink-0 justify-end">
-          <button
-            type="button"
-            disabled={!canStartAnalysis}
-            onClick={() => void onStartAnalysis()}
-            className="inline-flex items-center gap-2 rounded-md border border-violet-600/80 bg-violet-950/50 px-4 py-2 text-sm font-medium text-violet-50 hover:bg-violet-900/50 disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-            Avvia analisi
-          </button>
-        </div>
-      )}
     </div>
   );
 }

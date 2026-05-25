@@ -2,6 +2,10 @@
  * Deterministic rules for the KB document analysis micro-workflow (no chat, explicit diff only).
  */
 
+import {
+  KB_ANALYSIS_EXECUTE_BUTTON,
+  KB_ANALYSIS_UPDATE_BUTTON,
+} from './kbDocumentAnalysisGuide';
 import { sanitizeDocumentExcerpt } from './kbDocumentExcerptValidation';
 
 export type KbAnalysisObservationKind =
@@ -174,4 +178,56 @@ export function observationsForFinalize(
   items: readonly KbAnalysisReviewSessionItem[]
 ): KbAnalysisObservation[] {
   return items.map((item) => item.observation);
+}
+
+export type KbAnalysisActionLabel =
+  | typeof KB_ANALYSIS_EXECUTE_BUTTON
+  | typeof KB_ANALYSIS_UPDATE_BUTTON;
+
+export type KbAnalysisToolbarPresentation = {
+  executeVisible: boolean;
+  executeLabel: KbAnalysisActionLabel;
+  executeEnabled: boolean;
+  executeEmphasized: boolean;
+};
+
+/**
+ * Toolbar «Esegui» / «Aggiorna»: visibile solo dopo edit manuale o in review;
+ * «Esegui» solo prima della prima analisi agente, poi sempre «Aggiorna».
+ */
+export function resolveKbAnalysisToolbarPresentation(input: {
+  baseline: string;
+  draft: string;
+  hasManualEdit: boolean;
+  inReviewSession: boolean;
+  allConfirmed: boolean;
+  reviewHasDisagreement: boolean;
+  canRunAgent: boolean;
+}): KbAnalysisToolbarPresentation {
+  const draftTrimmed = normalizeAnalysisText(input.draft);
+  const hasBaseline = normalizeAnalysisText(input.baseline).length > 0;
+  const userEditedDraft =
+    input.hasManualEdit || analysisDraftDiffersFromBaseline(input.draft, input.baseline);
+
+  const executeVisible =
+    input.inReviewSession || (userEditedDraft && draftTrimmed.length > 0);
+
+  const executeLabel: KbAnalysisActionLabel =
+    hasBaseline || input.inReviewSession
+      ? KB_ANALYSIS_UPDATE_BUTTON
+      : KB_ANALYSIS_EXECUTE_BUTTON;
+
+  const executeEnabled =
+    input.canRunAgent &&
+    draftTrimmed.length > 0 &&
+    (input.inReviewSession ? input.allConfirmed : true);
+
+  const executeEmphasized =
+    executeVisible &&
+    (analysisDraftDiffersFromBaseline(input.draft, input.baseline) ||
+      input.reviewHasDisagreement ||
+      (input.inReviewSession && input.allConfirmed) ||
+      (!hasBaseline && input.hasManualEdit && draftTrimmed.length > 0));
+
+  return { executeVisible, executeLabel, executeEnabled, executeEmphasized };
 }

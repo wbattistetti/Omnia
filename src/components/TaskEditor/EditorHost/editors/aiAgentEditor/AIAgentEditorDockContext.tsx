@@ -207,6 +207,12 @@ export interface AIAgentEditorDockContextValue {
     mode?: import('@domain/backendCatalog/catalogTypes').ManualBackendCreationMode
   ) => void;
   /**
+   * {@link EditorKnowledgeBasePanel} registers the file-picker opener; wizard step header
+   * calls {@link invokeKbAddDocumentPicker}.
+   */
+  registerKbAddDocumentPicker: (handler: (() => void) | null) => void;
+  invokeKbAddDocumentPicker: () => void;
+  /**
    * Wizard passo Backend (3/5): il pulsante «Aggiungi backend» è nello shell header;
    * il pannello non duplica la stessa riga in cima.
    */

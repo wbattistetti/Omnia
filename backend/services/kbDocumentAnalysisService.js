@@ -226,10 +226,10 @@ async function reviewAnalysisObservations(params) {
   const parts = [
     `Document name: ${params.documentName || 'document'}`,
     '',
-    '--- Agent last version ---',
+    '--- Agent last version (automatic analysis) ---',
     baseline.slice(0, 48_000),
     '',
-    '--- User edited version ---',
+    '--- Designer edited version ---',
     userDraft.slice(0, 48_000),
   ];
   const sample = loadDocumentSample(params.projectId, params.repositoryDocumentId, params.documentSampleText);
@@ -255,13 +255,13 @@ async function clarifyObservationResponse(params) {
   const parts = [
     `Document name: ${params.documentName || 'document'}`,
     '',
-    '--- User observation ---',
+    '--- Designer note ---',
     String(params.userText || '').slice(0, 8_000),
     '',
-    '--- Previous agent response ---',
+    '--- Previous assistant response ---',
     String(params.previousInterpretation || '').slice(0, 8_000),
     '',
-    '--- User correction ---',
+    '--- Designer correction ---',
     userCorrection.slice(0, 4_000),
   ];
   if (sample.trim()) parts.push('', '--- Document sample (reference only) ---', sample.slice(0, 12_000));

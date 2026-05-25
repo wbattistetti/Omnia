@@ -6,6 +6,7 @@ import {
   inferObservationPresentation,
   normalizeAnalysisText,
   parseKbAnalysisObservationReview,
+  resolveKbAnalysisToolbarPresentation,
   shouldRunObservationReview,
 } from '../kbDocumentAnalysisWorkflow';
 
@@ -107,5 +108,92 @@ describe('kbDocumentAnalysisWorkflow', () => {
     expect(allReviewItemsConfirmed(items)).toBe(false);
     items[1]!.status = 'confirmed';
     expect(allReviewItemsConfirmed(items)).toBe(true);
+  });
+});
+
+describe('resolveKbAnalysisToolbarPresentation', () => {
+  const base = {
+    canRunAgent: true,
+    inReviewSession: false,
+    allConfirmed: false,
+    reviewHasDisagreement: false,
+  };
+
+  it('hides action before manual edit (guide / AI-only text)', () => {
+    expect(
+      resolveKbAnalysisToolbarPresentation({
+        ...base,
+        baseline: '',
+        draft: '',
+        hasManualEdit: false,
+      })
+    ).toMatchObject({ executeVisible: false });
+
+    expect(
+      resolveKbAnalysisToolbarPresentation({
+        ...base,
+        baseline: 'analisi agente',
+        draft: 'analisi agente',
+        hasManualEdit: false,
+      })
+    ).toMatchObject({ executeVisible: false, executeLabel: 'Aggiorna' });
+  });
+
+  it('shows Esegui on first manual trace before any agent baseline', () => {
+    expect(
+      resolveKbAnalysisToolbarPresentation({
+        ...base,
+        baseline: '',
+        draft: 'mia traccia',
+        hasManualEdit: true,
+      })
+    ).toMatchObject({
+      executeVisible: true,
+      executeLabel: 'Esegui',
+      executeEnabled: true,
+      executeEmphasized: true,
+    });
+  });
+
+  it('shows Aggiorna after first analysis when user edits again', () => {
+    expect(
+      resolveKbAnalysisToolbarPresentation({
+        ...base,
+        baseline: 'v1 agente',
+        draft: 'v1 agente con modifica utente',
+        hasManualEdit: true,
+      })
+    ).toMatchObject({
+      executeVisible: true,
+      executeLabel: 'Aggiorna',
+      executeEnabled: true,
+      executeEmphasized: true,
+    });
+  });
+
+  it('shows Aggiorna during review; enabled only when all confirmed', () => {
+    const pending = resolveKbAnalysisToolbarPresentation({
+      ...base,
+      baseline: 'v1',
+      draft: 'v1 edit',
+      hasManualEdit: true,
+      inReviewSession: true,
+      allConfirmed: false,
+    });
+    expect(pending).toMatchObject({
+      executeVisible: true,
+      executeLabel: 'Aggiorna',
+      executeEnabled: false,
+    });
+
+    const done = resolveKbAnalysisToolbarPresentation({
+      ...base,
+      baseline: 'v1',
+      draft: 'v1 edit',
+      hasManualEdit: true,
+      inReviewSession: true,
+      allConfirmed: true,
+    });
+    expect(done).toMatchObject({ executeEnabled: true, executeEmphasized: true });
   });
 });

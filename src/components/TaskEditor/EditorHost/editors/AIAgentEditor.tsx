@@ -799,6 +799,14 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     []
   );
 
+  const kbAddDocumentPickerRef = React.useRef<(() => void) | null>(null);
+  const registerKbAddDocumentPicker = React.useCallback((handler: (() => void) | null) => {
+    kbAddDocumentPickerRef.current = handler;
+  }, []);
+  const invokeKbAddDocumentPicker = React.useCallback(() => {
+    kbAddDocumentPickerRef.current?.();
+  }, []);
+
   const showRightPanel =
     c.hasAgentGeneration ||
     c.proposedFields.length > 0 ||
@@ -856,6 +864,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const globalHeaderAction = isWizardTaskStep ? null : headerAction;
   const isWizardBackendStep = c.agentWizardCurrentStep === 2;
+  const isWizardKbStep = c.agentWizardCurrentStep === 1;
 
   const agentInterfaceOpenStorageKey = c.instanceId
     ? `omnia:agent-interface-open:${c.instanceId}`
@@ -893,12 +902,24 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       onCreateSpecs={() => invokeBackendsAddManual('emulate')}
     />
   );
+  const wizardKbHeaderAction = (
+    <button
+      type="button"
+      disabled={c.generating}
+      onClick={() => invokeKbAddDocumentPicker()}
+      className="rounded-md border border-violet-500/80 bg-violet-700/50 px-3 py-1 text-sm font-medium text-violet-50 hover:bg-violet-600/60 disabled:opacity-60"
+    >
+      Aggiungi documento
+    </button>
+  );
   const wizardStepHeaderAction =
     isWizardTaskStep
       ? headerAction
-      : isWizardBackendStep && !agentInterfacePanelOpen
-        ? wizardBackendHeaderActions
-        : null;
+      : isWizardKbStep
+        ? wizardKbHeaderAction
+        : isWizardBackendStep && !agentInterfacePanelOpen
+          ? wizardBackendHeaderActions
+          : null;
 
   /**
    * Dialog «Crea prompt conversazionale»: state e mount risiedono nel root dell'editor (non
@@ -1339,6 +1360,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
     registerBackendsAddManualHandler,
     invokeBackendsAddManual,
+    registerKbAddDocumentPicker,
+    invokeKbAddDocumentPicker,
     hideBackendsPanelInlineAddButton: c.agentWizardCurrentStep === 2,
 
     agentInterfacePanelOpen,
