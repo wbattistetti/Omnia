@@ -20,6 +20,7 @@ import { commitEffectiveTextChange } from './revisionCommitFromEffective';
 import { monacoSelectionAdapter } from './backendPathSelectionAdapter';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { useDebouncedCallback } from './useDebouncedCallback';
+import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
 
 const COMMIT_DEBOUNCE_MS = 280;
 
@@ -126,6 +127,7 @@ export function StructuredSectionMarkdownMonacoEditor({
   const handleEditorDidMount = React.useCallback(
     (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
       editorRef.current = editor;
+      applyMonacoEmbeddedEditorUi(editor);
 
       if (onUndoRequest) {
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {

@@ -60,6 +60,11 @@ const {
   finalizeDocumentAnalysis,
 } = require('./services/kbDocumentAnalysisService');
 const {
+  reviewTaskTextObservations,
+  clarifyTaskTextObservation,
+  finalizeTaskText,
+} = require('./services/agentTaskTextAnalysisService');
+const {
   assertAiCallContract,
   aiCallContractErrorResponse,
   readCallMetaFromBody,
@@ -6923,6 +6928,94 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
           ? existingUseCaseSummaries
           : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'agent_review_task_text_observations') {
+      const {
+        projectId,
+        fieldId,
+        sectionLabel,
+        agentBaselineMarkdown,
+        userDraftMarkdown,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'AGENT_REVIEW_TASK_TEXT_OBSERVATIONS',
+      });
+      const result = await reviewTaskTextObservations({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        fieldId: typeof fieldId === 'string' ? fieldId : '',
+        sectionLabel: typeof sectionLabel === 'string' ? sectionLabel : 'task text',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'agent_clarify_task_text_observation') {
+      const {
+        projectId,
+        fieldId,
+        sectionLabel,
+        userText,
+        previousInterpretation,
+        userCorrection,
+        userDraftMarkdown,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'AGENT_CLARIFY_TASK_TEXT_OBSERVATION',
+      });
+      const result = await clarifyTaskTextObservation({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        fieldId: typeof fieldId === 'string' ? fieldId : '',
+        sectionLabel: typeof sectionLabel === 'string' ? sectionLabel : 'task text',
+        userText: typeof userText === 'string' ? userText : '',
+        previousInterpretation:
+          typeof previousInterpretation === 'string' ? previousInterpretation : '',
+        userCorrection: typeof userCorrection === 'string' ? userCorrection : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'agent_finalize_task_text') {
+      const {
+        projectId,
+        fieldId,
+        sectionLabel,
+        agentBaselineMarkdown,
+        userDraftMarkdown,
+        observations,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'AGENT_FINALIZE_TASK_TEXT' });
+      const result = await finalizeTaskText({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        fieldId: typeof fieldId === 'string' ? fieldId : '',
+        sectionLabel: typeof sectionLabel === 'string' ? sectionLabel : 'task text',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
+        observations: Array.isArray(observations) ? observations : [],
         provider,
         model,
         aiProviderService,

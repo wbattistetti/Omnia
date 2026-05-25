@@ -48,6 +48,7 @@ import {
   ensureConversationalJsonTheme,
   getConversationalJsonThemeId,
 } from './conversationalMonaco';
+import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
 import './conversationalMonaco.css';
 
 export interface ConversationalJsonPanelProps {
@@ -83,6 +84,7 @@ const MONACO_OPTIONS = {
   lineNumbers: 'on',
   folding: true,
   renderLineHighlight: 'line',
+  mouseWheelZoom: true,
 } as const;
 
 export function ConversationalJsonPanel({
@@ -341,6 +343,7 @@ function SemanticJsonEditor({ value }: { value: string }): React.ReactElement {
   const handleEditorDidMount = React.useCallback(
     (editor: monaco.editor.IStandaloneCodeEditor) => {
       editorRef.current = editor;
+      applyMonacoEmbeddedEditorUi(editor);
       applyDecorations();
     },
     [applyDecorations]

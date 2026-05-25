@@ -42,6 +42,7 @@ import {
   getConversationalPromptLanguageId,
   getConversationalPromptThemeId,
 } from './conversationalMonaco';
+import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
 
 export interface ConversationalPromptDialogProps {
   open: boolean;
@@ -77,6 +78,7 @@ const MONACO_PROMPT_OPTIONS = {
   folding: true,
   renderLineHighlight: 'line',
   contextmenu: false,
+  mouseWheelZoom: true,
   scrollbar: {
     vertical: 'visible',
     verticalScrollbarSize: 12,
@@ -210,6 +212,7 @@ export function ConversationalPromptDialog({
     ) => {
       editorRef.current = editor;
       monacoRef.current = monacoInstance;
+      applyMonacoEmbeddedEditorUi(editor);
       ensureConversationalPromptLanguage(monacoInstance);
       monacoInstance.editor.setTheme(getConversationalPromptThemeId(catalogFormat));
     },

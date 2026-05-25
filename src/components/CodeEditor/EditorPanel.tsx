@@ -6,7 +6,7 @@ import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController.js';
 import 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetController2.js';
 import { useFontContext } from '../../context/FontContext';
-import { ensureMonacoEmbeddedOverlayStyles } from '../../utils/monacoEmbeddedSetup';
+import { applyMonacoEmbeddedEditorUi } from '../../utils/monacoEmbeddedSetup';
 import { VariablesTreeMenu } from './VariablesTreeMenu';
 
 const TEMPLATE = `// Describe below, in detail, when the condition should be TRUE.
@@ -325,7 +325,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
           }
 
           try {
-            ensureMonacoEmbeddedOverlayStyles();
+            applyMonacoEmbeddedEditorUi(editor);
 
             // Register custom language FIRST, before anything else
 

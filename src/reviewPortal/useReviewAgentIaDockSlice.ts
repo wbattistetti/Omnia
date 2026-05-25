@@ -7,7 +7,7 @@ import { useAIProvider } from '@context/AIProviderContext';
 import type { AIAgentEditorDockContextValue } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/AIAgentEditorDockContext';
 import type { UseStructuredAgentSectionsRevisionResult } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/useStructuredAgentSectionsRevision';
 import { buildRefineUserDescFromSections } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimePromptMarkdown';
-import { hasSignificantDesignDescriptionEdit } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/designDescriptionPolish';
+import type { AgentTaskTextFieldId } from '@domain/aiAgent/agentTaskTextFieldIds';
 import {
   mergeUseCaseGlobalStyleContract,
 } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/mergeUseCaseGlobalStyleContract';
@@ -20,7 +20,6 @@ import { buildUserDescWithKnowledgeBaseContext } from '@domain/knowledgeBase/bui
 import {
   generateAIAgentUseCases,
   generalizeAIAgentUseCaseMetaApi,
-  polishDesignDescriptionApi,
   polishUseCaseScenarioApi,
   regenerateAIAgentUseCaseApi,
 } from '@services/aiAgentDesignApi';
@@ -35,11 +34,15 @@ import { DESIGNER_LLM_MISSING_MODEL_MESSAGE } from '@components/settings/designe
 
 export type ReviewAgentIaDockSlice = Pick<
   AIAgentEditorDockContextValue,
-  | 'designDescriptionPolishBaseline'
-  | 'showDesignDescriptionPolishOffer'
-  | 'designDescriptionPolishBusy'
-  | 'onPolishDesignDescription'
-  | 'onDismissDesignDescriptionPolishOffer'
+  | 'getTaskTextBaseline'
+  | 'setTaskTextBaseline'
+  | 'getTaskTextCurrentText'
+  | 'applyTaskTextFieldText'
+  | 'dismissTaskTextReviewOffer'
+  | 'clearTaskTextReviewOfferDismissed'
+  | 'isTaskTextReviewOfferDismissed'
+  | 'buildCallMeta'
+  | 'onTaskTextReviewError'
   | 'useCaseComposerBusy'
   | 'useCaseBundleGenerationBusy'
   | 'useCaseBundleGenerationCount'
@@ -75,12 +78,12 @@ export function useReviewAgentIaDockSlice(
 ): ReviewAgentIaDockSlice {
   const { provider, model } = useAIProvider();
 
-  const [designDescriptionPolishBaseline, setDesignDescriptionPolishBaseline] =
-    React.useState('');
-  const [designDescriptionPolishBusy, setDesignDescriptionPolishBusy] = React.useState(false);
-  const [designDescriptionPolishOfferDismissed, setDesignDescriptionPolishOfferDismissed] =
-    React.useState(false);
-  const designDescriptionWasSignificantRef = React.useRef(false);
+  const [taskTextBaselines, setTaskTextBaselines] = React.useState<Record<string, string>>({
+    designDescription: '',
+  });
+  const [taskTextReviewDismissed, setTaskTextReviewDismissed] = React.useState<
+    Partial<Record<AgentTaskTextFieldId, boolean>>
+  >({});
 
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   const [useCaseBundleGenerationBusy, setUseCaseBundleGenerationBusy] = React.useState(false);
@@ -102,8 +105,8 @@ export function useReviewAgentIaDockSlice(
     const key = `${params.projectId}:${params.taskInstanceId}`;
     if (loadedBaselineKeyRef.current === key) return;
     loadedBaselineKeyRef.current = key;
-    setDesignDescriptionPolishBaseline(params.designDescription);
-    setDesignDescriptionPolishOfferDismissed(false);
+    setTaskTextBaselines({ designDescription: params.designDescription.trim() });
+    setTaskTextReviewDismissed({});
   }, [
     params.channelLoaded,
     params.projectId,
@@ -127,71 +130,57 @@ export function useReviewAgentIaDockSlice(
     return mergeUseCaseGlobalStyleContract(base, params.agentUseCaseStyleLearningNotes);
   }, [params.useCaseGlobalStyleId, params.agentUseCaseStyleLearningNotes]);
 
-  const onPolishDesignDescription = React.useCallback(async () => {
-    const raw = params.designDescription.trim();
-    if (raw.length < 40) {
-      params.onComposerIaError(
-        'Scrivi almeno qualche riga nella descrizione prima di riformattare.'
-      );
-      return;
-    }
-    if (!model) {
-      params.onComposerIaError(DESIGNER_LLM_MISSING_MODEL_MESSAGE);
-      return;
-    }
-    params.onClearUseCaseComposerError();
-    setDesignDescriptionPolishBusy(true);
-    try {
-      const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-      const { design_description } = await polishDesignDescriptionApi({
-        descriptionText: raw,
-        provider,
-        model,
-        outputLanguage,
-        callMeta: buildCallMeta(AI_CALL_PURPOSE.AGENT_POLISH_DESIGN_DESCRIPTION),
-      });
-      params.setDesignDescription(design_description);
-      setDesignDescriptionPolishBaseline(design_description);
-      setDesignDescriptionPolishOfferDismissed(false);
-    } catch (e) {
-      params.onComposerIaError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDesignDescriptionPolishBusy(false);
-    }
-  }, [
-    params.designDescription,
-    params.setDesignDescription,
-    params.onClearUseCaseComposerError,
-    params.onComposerIaError,
-    provider,
-    model,
-    buildCallMeta,
-  ]);
-
-  const onDismissDesignDescriptionPolishOffer = React.useCallback(() => {
-    setDesignDescriptionPolishOfferDismissed(true);
-  }, []);
-
-  const designDescriptionEditSignificant = React.useMemo(
-    () =>
-      hasSignificantDesignDescriptionEdit(
-        params.designDescription,
-        designDescriptionPolishBaseline
-      ),
-    [params.designDescription, designDescriptionPolishBaseline]
+  const getTaskTextBaseline = React.useCallback(
+    (fieldId: AgentTaskTextFieldId) =>
+      fieldId === 'designDescription' ? taskTextBaselines.designDescription ?? '' : '',
+    [taskTextBaselines]
   );
 
-  React.useEffect(() => {
-    if (designDescriptionEditSignificant && !designDescriptionWasSignificantRef.current) {
-      setDesignDescriptionPolishOfferDismissed(false);
-    }
-    designDescriptionWasSignificantRef.current = designDescriptionEditSignificant;
-  }, [designDescriptionEditSignificant]);
+  const setTaskTextBaseline = React.useCallback(
+    (fieldId: AgentTaskTextFieldId, text: string) => {
+      if (fieldId !== 'designDescription') return;
+      setTaskTextBaselines({ designDescription: text.trim() });
+    },
+    []
+  );
 
-  const showDesignDescriptionPolishOffer =
-    !useCaseBundleGenerationBusy &&
-    !designDescriptionPolishOfferDismissed &&
-    (designDescriptionPolishBusy || designDescriptionEditSignificant);
+  const getTaskTextCurrentText = React.useCallback(
+    (fieldId: AgentTaskTextFieldId) =>
+      fieldId === 'designDescription' ? params.designDescription : '',
+    [params.designDescription]
+  );
+
+  const applyTaskTextFieldText = React.useCallback(
+    (fieldId: AgentTaskTextFieldId, text: string) => {
+      if (fieldId === 'designDescription') params.setDesignDescription(text);
+    },
+    [params.setDesignDescription]
+  );
+
+  const dismissTaskTextReviewOffer = React.useCallback((fieldId: AgentTaskTextFieldId) => {
+    setTaskTextReviewDismissed((prev) => ({ ...prev, [fieldId]: true }));
+  }, []);
+
+  const clearTaskTextReviewOfferDismissed = React.useCallback((fieldId: AgentTaskTextFieldId) => {
+    setTaskTextReviewDismissed((prev) => {
+      if (!prev[fieldId]) return prev;
+      const next = { ...prev };
+      delete next[fieldId];
+      return next;
+    });
+  }, []);
+
+  const isTaskTextReviewOfferDismissed = React.useCallback(
+    (fieldId: AgentTaskTextFieldId) => Boolean(taskTextReviewDismissed[fieldId]),
+    [taskTextReviewDismissed]
+  );
+
+  const onTaskTextReviewError = React.useCallback(
+    (message: string | null) => {
+      if (message) params.onComposerIaError(message);
+    },
+    [params.onComposerIaError]
+  );
 
   const onPolishUseCaseScenario = React.useCallback(
     async (useCaseId: string, scenarioText: string): Promise<AIAgentUseCase | null> => {
@@ -462,11 +451,15 @@ export function useReviewAgentIaDockSlice(
   ]);
 
   return {
-    designDescriptionPolishBaseline,
-    showDesignDescriptionPolishOffer,
-    designDescriptionPolishBusy,
-    onPolishDesignDescription,
-    onDismissDesignDescriptionPolishOffer,
+    getTaskTextBaseline,
+    setTaskTextBaseline,
+    getTaskTextCurrentText,
+    applyTaskTextFieldText,
+    dismissTaskTextReviewOffer,
+    clearTaskTextReviewOfferDismissed,
+    isTaskTextReviewOfferDismissed,
+    buildCallMeta,
+    onTaskTextReviewError,
     useCaseComposerBusy,
     useCaseBundleGenerationBusy,
     useCaseBundleGenerationCount,

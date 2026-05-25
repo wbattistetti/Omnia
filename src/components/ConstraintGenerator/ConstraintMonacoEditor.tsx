@@ -2,7 +2,10 @@ import React from 'react';
 import MonacoEditor from 'react-monaco-editor';
 import * as monaco from 'monaco-editor';
 import { setMonacoMarkers } from '../../utils/monacoMarkers';
-import { applyMonacoEmbeddedEditorUi } from '../../utils/monacoEmbeddedSetup';
+import {
+  applyMonacoEmbeddedEditorUi,
+  ensureConstraintDarkMonacoTheme,
+} from '../../utils/monacoEmbeddedSetup';
 // Se Monaco non è installato, mostra un placeholder
 // In produzione, importa: import MonacoEditor from 'react-monaco-editor';
 
@@ -15,6 +18,7 @@ interface ConstraintMonacoEditorProps {
 
 const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script, onChange, readOnly, markers }) => {
   function handleEditorDidMount(editor: any, monacoInstance: typeof monaco) {
+    ensureConstraintDarkMonacoTheme(monacoInstance);
     applyMonacoEmbeddedEditorUi(editor);
     if (markers && markers.length > 0) {
       setMonacoMarkers(editor, monacoInstance, markers);
@@ -25,7 +29,7 @@ const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script,
       width="100%"
       height="120"
       language="javascript"
-      theme="vs-dark"
+      theme="custom-dark"
       value={script}
       options={{
         readOnly: !!readOnly,
@@ -40,7 +44,8 @@ const ConstraintMonacoEditor: React.FC<ConstraintMonacoEditorProps> = ({ script,
         overviewRulerLanes: 0,
         renderLineHighlight: 'all',
         fixedOverflowWidgets: true,
-        tabSize: 2
+        tabSize: 2,
+        mouseWheelZoom: true,
       }}
       onChange={onChange}
       editorDidMount={handleEditorDidMount}

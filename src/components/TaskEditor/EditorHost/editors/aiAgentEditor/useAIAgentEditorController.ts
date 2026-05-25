@@ -33,7 +33,6 @@ import {
   regenerateAIAgentUseCaseTurnApi,
   generalizeAIAgentUseCaseMetaApi,
   polishUseCaseScenarioApi,
-  polishDesignDescriptionApi,
 } from '@services/aiAgentDesignApi';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type {
@@ -63,7 +62,8 @@ import {
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
-import { hasSignificantDesignDescriptionEdit } from './designDescriptionPolish';
+import type { AgentTaskTextFieldId } from '@domain/aiAgent/agentTaskTextFieldIds';
+import { commitEffectiveTextChange } from './revisionCommitFromEffective';
 import {
   stripAssistantTurnsFromUseCase,
   stripAssistantTurnsFromUseCases,
@@ -306,13 +306,15 @@ export function useAIAgentEditorController({
   > | null>(null);
   const [hasAgentGeneration, setHasAgentGeneration] = React.useState(false);
   const [committedDesignDescription, setCommittedDesignDescription] = React.useState('');
-  /** Baseline per pillola polish descrizione (ultimo testo accettato o caricato). */
-  const [designDescriptionPolishBaseline, setDesignDescriptionPolishBaseline] =
-    React.useState('');
-  const [designDescriptionPolishBusy, setDesignDescriptionPolishBusy] = React.useState(false);
-  const [designDescriptionPolishOfferDismissed, setDesignDescriptionPolishOfferDismissed] =
-    React.useState(false);
-  const designDescriptionWasSignificantRef = React.useRef(false);
+  /** Baseline agente per revisione osservazioni (descrizione + sezioni strutturate). */
+  const [taskTextBaselines, setTaskTextBaselines] = React.useState<Record<string, string>>(() => {
+    const m: Record<string, string> = { designDescription: '' };
+    for (const id of AGENT_STRUCTURED_SECTION_IDS) m[id] = '';
+    return m;
+  });
+  const [taskTextReviewDismissed, setTaskTextReviewDismissed] = React.useState<
+    Partial<Record<AgentTaskTextFieldId, boolean>>
+  >({});
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
   const [useCases, setUseCases] = React.useState<AIAgentUseCase[]>([]);
   const [useCaseCategories, setUseCaseCategories] = React.useState<AIAgentUseCaseCategory[]>([]);
@@ -563,6 +565,87 @@ export function useAIAgentEditorController({
       structuredRev.applyOtCommit(sectionId, newOps);
     },
     [structuredRev, markPromptFinalMisaligned]
+  );
+
+  const syncTaskTextBaselines = React.useCallback(() => {
+    const next: Record<string, string> = { designDescription: designDescription.trim() };
+    for (const id of AGENT_STRUCTURED_SECTION_IDS) {
+      next[id] = (structuredRev.effectiveBySection[id] ?? '').trim();
+    }
+    setTaskTextBaselines(next);
+    setTaskTextReviewDismissed({});
+  }, [designDescription, structuredRev.effectiveBySection]);
+
+  const getTaskTextBaseline = React.useCallback(
+    (fieldId: AgentTaskTextFieldId) => taskTextBaselines[fieldId] ?? '',
+    [taskTextBaselines]
+  );
+
+  const setTaskTextBaseline = React.useCallback((fieldId: AgentTaskTextFieldId, text: string) => {
+    setTaskTextBaselines((prev) => ({ ...prev, [fieldId]: text.trim() }));
+  }, []);
+
+  const getTaskTextCurrentText = React.useCallback(
+    (fieldId: AgentTaskTextFieldId): string => {
+      if (fieldId === 'designDescription') return designDescription;
+      return structuredRev.effectiveBySection[fieldId] ?? '';
+    },
+    [designDescription, structuredRev.effectiveBySection]
+  );
+
+  const applyStructuredSectionEffectiveText = React.useCallback(
+    (sectionId: AgentStructuredSectionId, nextEffective: string) => {
+      const slice = structuredRev.sectionsState[sectionId];
+      if (!slice) return;
+      const isOt = Boolean(
+        structuredOtEnabled && slice.storageMode === 'ot' && slice.ot
+      );
+      const result = commitEffectiveTextChange({
+        baseText: slice.promptBaseText,
+        deletedMask: slice.deletedMask,
+        inserts: slice.inserts,
+        otMode: isOt,
+        otCurrentText: isOt ? slice.ot?.currentText : undefined,
+        targetEffective: nextEffective,
+      });
+      setDirty(true);
+      markPromptFinalMisaligned('structuredSectionRevision');
+      if (result.kind === 'ot') {
+        structuredRev.applyOtCommit(sectionId, result.ops);
+      } else if (result.kind === 'linear') {
+        structuredRev.applyRevisionOps(sectionId, result.ops);
+      }
+    },
+    [structuredRev, structuredOtEnabled, markPromptFinalMisaligned]
+  );
+
+  const applyTaskTextFieldText = React.useCallback(
+    (fieldId: AgentTaskTextFieldId, text: string) => {
+      if (fieldId === 'designDescription') {
+        setDesignDescriptionUser(text);
+        return;
+      }
+      applyStructuredSectionEffectiveText(fieldId, text);
+    },
+    [setDesignDescriptionUser, applyStructuredSectionEffectiveText]
+  );
+
+  const dismissTaskTextReviewOffer = React.useCallback((fieldId: AgentTaskTextFieldId) => {
+    setTaskTextReviewDismissed((prev) => ({ ...prev, [fieldId]: true }));
+  }, []);
+
+  const clearTaskTextReviewOfferDismissed = React.useCallback((fieldId: AgentTaskTextFieldId) => {
+    setTaskTextReviewDismissed((prev) => {
+      if (!prev[fieldId]) return prev;
+      const next = { ...prev };
+      delete next[fieldId];
+      return next;
+    });
+  }, []);
+
+  const isTaskTextReviewOfferDismissed = React.useCallback(
+    (fieldId: AgentTaskTextFieldId) => Boolean(taskTextReviewDismissed[fieldId]),
+    [taskTextReviewDismissed]
   );
 
   const undoSection = React.useCallback(
@@ -1050,7 +1133,15 @@ export function useAIAgentEditorController({
     });
     setAgentPromptTargetPlatformState(normalizeAgentPromptPlatformId(b.agentPromptTargetPlatform));
     setCommittedDesignDescription(b.agentDesignDescription);
-    setDesignDescriptionPolishBaseline(b.agentDesignDescription);
+    const effLoaded = effectiveBySectionFromPersistedStructured(parsed.sections);
+    const baselines: Record<string, string> = {
+      designDescription: b.agentDesignDescription.trim(),
+    };
+    for (const id of AGENT_STRUCTURED_SECTION_IDS) {
+      baselines[id] = (effLoaded[id] ?? '').trim();
+    }
+    setTaskTextBaselines(baselines);
+    setTaskTextReviewDismissed({});
     setOutputVariableMappings(b.outputVariableMappings);
     setProposedFields(
       b.agentProposedFields.map((f) => ({
@@ -1127,7 +1218,6 @@ export function useAIAgentEditorController({
     }
     setUseCaseComposerError(null);
     setIaRevisionDiffBySection(null);
-    const effLoaded = effectiveBySectionFromPersistedStructured(parsed.sections);
     const expectedCompact = JSON.stringify(
       buildDeterministicRuntimeCompactFromSectionBases({
         goal: effLoaded.goal ?? '',
@@ -1604,7 +1694,7 @@ export function useAIAgentEditorController({
       setOutputVariableMappings((prev) => applied.mergeOutputMappings(prev));
       setHasAgentGeneration(true);
       setCommittedDesignDescription(designDescription);
-      setDesignDescriptionPolishBaseline(designDescription);
+      syncTaskTextBaselines();
       if (refining) {
         const diff: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> = {};
         for (const id of AGENT_STRUCTURED_SECTION_IDS) {
@@ -1676,6 +1766,10 @@ export function useAIAgentEditorController({
   );
 
   const clearUseCaseComposerError = React.useCallback(() => setUseCaseComposerError(null), []);
+
+  const onTaskTextReviewError = React.useCallback((message: string | null) => {
+    if (message) setUseCaseComposerError(message);
+  }, []);
 
   const handleGenerateUseCaseBundle = React.useCallback(async (): Promise<
     GenerateUseCaseBundleOutcome | null
@@ -2090,63 +2184,6 @@ export function useAIAgentEditorController({
     },
     [useCases, provider, model, buildCallMeta, setUseCases]
   );
-
-  const handlePolishDesignDescription = React.useCallback(async () => {
-    const raw = designDescription.trim();
-    if (raw.length < 40) {
-      setGenerateError('Scrivi almeno qualche riga nella descrizione prima di riformattare.');
-      return;
-    }
-    setGenerateError(null);
-    setDesignDescriptionPolishBusy(true);
-    try {
-      const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-      const { design_description } = await polishDesignDescriptionApi({
-        descriptionText: raw,
-        provider,
-        model,
-        outputLanguage,
-        callMeta: buildCallMeta(AI_CALL_PURPOSE.AGENT_POLISH_DESIGN_DESCRIPTION),
-      });
-      setDesignDescriptionUser(design_description);
-      setDesignDescriptionPolishBaseline(design_description);
-      setDesignDescriptionPolishOfferDismissed(false);
-      setDirty(true);
-    } catch (e) {
-      setGenerateError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDesignDescriptionPolishBusy(false);
-    }
-  }, [
-    designDescription,
-    provider,
-    model,
-    buildCallMeta,
-    setDesignDescriptionUser,
-    setDirty,
-  ]);
-
-  const onDismissDesignDescriptionPolishOffer = React.useCallback(() => {
-    setDesignDescriptionPolishOfferDismissed(true);
-  }, []);
-
-  const designDescriptionEditSignificant = React.useMemo(
-    () =>
-      hasSignificantDesignDescriptionEdit(designDescription, designDescriptionPolishBaseline),
-    [designDescription, designDescriptionPolishBaseline]
-  );
-
-  React.useEffect(() => {
-    if (designDescriptionEditSignificant && !designDescriptionWasSignificantRef.current) {
-      setDesignDescriptionPolishOfferDismissed(false);
-    }
-    designDescriptionWasSignificantRef.current = designDescriptionEditSignificant;
-  }, [designDescriptionEditSignificant]);
-
-  const showDesignDescriptionPolishOffer =
-    !generating &&
-    !designDescriptionPolishOfferDismissed &&
-    (designDescriptionPolishBusy || designDescriptionEditSignificant);
 
   /**
    * Wizard passo 2: riscrivi le frasi esempio ancora alla baseline IA usando quelle modificate come riferimento di stile.
@@ -2814,11 +2851,15 @@ export function useAIAgentEditorController({
     buildCallMeta,
     designDescription,
     setDesignDescription: setDesignDescriptionUser,
-    designDescriptionPolishBaseline,
-    showDesignDescriptionPolishOffer,
-    designDescriptionPolishBusy,
-    onPolishDesignDescription: handlePolishDesignDescription,
-    onDismissDesignDescriptionPolishOffer,
+    getTaskTextBaseline,
+    setTaskTextBaseline,
+    syncTaskTextBaselines,
+    getTaskTextCurrentText,
+    applyTaskTextFieldText,
+    dismissTaskTextReviewOffer,
+    clearTaskTextReviewOfferDismissed,
+    isTaskTextReviewOfferDismissed,
+    onTaskTextReviewError,
     agentPrompt,
     agentStructuredSectionsJson,
     structuredSectionsState: structuredRev.sectionsState,

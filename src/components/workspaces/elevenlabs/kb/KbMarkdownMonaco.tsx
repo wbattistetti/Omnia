@@ -14,6 +14,7 @@ import {
 } from '@components/knowledgeBase/kbMonacoTheme';
 import { TUTOR_ID_ATTR } from '@domain/activeTutor/tutorUiIds';
 import { ensureKbMarkdownLanguage } from '@components/knowledgeBase/kbMarkdownLanguage';
+import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
 
 const EDITOR_OPTIONS = {
   minimap: { enabled: false },
@@ -64,6 +65,14 @@ export function KbMarkdownMonaco({
     ensureKbReaderMonacoTheme(monaco);
   }, []);
 
+  const handleEditorDidMount = React.useCallback(
+    (editor: Monaco.editor.IStandaloneCodeEditor) => {
+      applyMonacoEmbeddedEditorUi(editor);
+      editorDidMount?.(editor);
+    },
+    [editorDidMount]
+  );
+
   React.useLayoutEffect(() => {
     if (fillHeight) return;
     setEditorHeight(heightPx);
@@ -109,7 +118,7 @@ export function KbMarkdownMonaco({
         theme={KB_READER_MONACO_THEME_ID}
         value={value}
         editorWillMount={handleEditorWillMount}
-        editorDidMount={editorDidMount}
+        editorDidMount={handleEditorDidMount}
         options={
           isAgentProse
             ? baseOptions

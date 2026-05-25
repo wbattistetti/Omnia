@@ -7,7 +7,10 @@ import pythonIcon from './icons/python.svg';
 import tsIcon from './icons/ts.svg';
 import { LANGUAGES } from './constants';
 import * as monaco from 'monaco-editor';
-import { applyMonacoEmbeddedEditorUi } from '../../utils/monacoEmbeddedSetup';
+import {
+  applyMonacoEmbeddedEditorUi,
+  ensureConstraintDarkMonacoTheme,
+} from '../../utils/monacoEmbeddedSetup';
 import MonacoToolbar from './MonacoToolbar';
 import PanelHeader from './PanelHeader';
 
@@ -40,31 +43,7 @@ const MonacoEditorWithToolbar: React.FC<MonacoEditorWithToolbarProps & { panelHe
   const panelRef = useRef<HTMLDivElement>(null);
   // Define custom Monaco theme for better highlighting
   useEffect(() => {
-    monaco.editor.defineTheme('custom-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'keyword', foreground: 'C586C0', fontStyle: 'bold' },
-        { token: 'identifier', foreground: '9CDCFE' },
-        { token: 'type.identifier', foreground: '4EC9B0' },
-        { token: 'number', foreground: 'B5CEA8' },
-        { token: 'string', foreground: 'CE9178' },
-        { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
-        { token: 'variable', foreground: '9CDCFE' },
-        { token: 'function', foreground: 'DCDCAA' },
-        { token: 'delimiter', foreground: 'D4D4D4' },
-      ],
-      colors: {
-        'editor.foreground': '#D4D4D4',
-        'editor.background': '#18181b',
-        'editorLineNumber.foreground': '#858585',
-        'editorCursor.foreground': '#A7A7A7',
-        'editor.selectionBackground': '#264F78',
-        'editor.inactiveSelectionBackground': '#3A3D41',
-        'editorIndentGuide.background': '#404040',
-        'editorIndentGuide.activeBackground': '#707070',
-      },
-    });
+    ensureConstraintDarkMonacoTheme(monaco);
   }, []);
   // ResizeObserver per aggiornare panelHeight solo su vero resize
   useEffect(() => {

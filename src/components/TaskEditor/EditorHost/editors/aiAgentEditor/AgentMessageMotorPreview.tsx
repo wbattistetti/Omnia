@@ -7,6 +7,10 @@ import { createPortal } from 'react-dom';
 import MonacoEditor from 'react-monaco-editor';
 import { ChevronDown, ChevronRight, Copy, Maximize2, Minimize2 } from 'lucide-react';
 import * as monaco from 'monaco-editor';
+import {
+  applyMonacoEmbeddedEditorUi,
+  withOmniaMonacoChromeColors,
+} from '@utils/monacoEmbeddedSetup';
 import type {
   AgentMessageMotorPayload,
   AgentTemplateSegment,
@@ -46,12 +50,19 @@ export function AgentMessageMotorPreview({
       base: 'vs-dark',
       inherit: true,
       rules: [],
-      colors: {
+      colors: withOmniaMonacoChromeColors({
         'editor.background': '#0c0c0f',
         'editor.foreground': '#d4d4d8',
-      },
+      }),
     });
   }, []);
+
+  const handleEditorDidMount = React.useCallback(
+    (editor: monaco.editor.IStandaloneCodeEditor) => {
+      applyMonacoEmbeddedEditorUi(editor);
+    },
+    []
+  );
 
   const measureShell = React.useCallback(() => {
     const el = expandMountRef?.current;
@@ -107,6 +118,7 @@ export function AgentMessageMotorPreview({
       lineNumbers: 'on' as const,
       folding: true,
       renderLineHighlight: 'line' as const,
+      mouseWheelZoom: true,
     }),
     []
   );
@@ -157,6 +169,7 @@ export function AgentMessageMotorPreview({
                   theme="omnia-json-panel"
                   value={jsonStr}
                   options={monacoOptions}
+                  editorDidMount={handleEditorDidMount}
                 />
               ) : null}
             </div>
@@ -251,6 +264,7 @@ export function AgentMessageMotorPreview({
                     theme="omnia-json-panel"
                     value={jsonStr}
                     options={monacoOptions}
+                    editorDidMount={handleEditorDidMount}
                   />
                 </div>
               </>

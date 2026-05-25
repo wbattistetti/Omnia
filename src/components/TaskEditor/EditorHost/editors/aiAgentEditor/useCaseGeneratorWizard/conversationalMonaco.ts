@@ -17,6 +17,7 @@
 
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type * as Monaco from 'monaco-editor';
+import { withOmniaMonacoChromeColors } from '@utils/monacoEmbeddedSetup';
 
 const JSON_THEME_ID = 'omnia-conversational-json';
 const PROMPT_LANGUAGE_ID = 'omnia-conversational-prompt';
@@ -67,14 +68,14 @@ export function ensureConversationalJsonTheme(monaco: typeof Monaco): void {
       { token: 'delimiter.colon.json', foreground: '64748b' },
       { token: 'delimiter.comma.json', foreground: '475569' },
     ],
-    colors: {
+    colors: withOmniaMonacoChromeColors({
       'editor.background': '#0c0c0f',
       'editor.foreground': '#cbd5e1',
       'editorLineNumber.foreground': '#475569',
       'editorLineNumber.activeForeground': '#94a3b8',
       'editorIndentGuide.background1': '#1e293b',
       'editor.lineHighlightBackground': '#11151d',
-    },
+    }),
   });
   jsonThemeRegistered = true;
 }
@@ -257,13 +258,13 @@ export function ensureConversationalPromptLanguage(monaco: typeof Monaco): void 
       { token: 'omnia-token-bracket', foreground: 'fbbf24' },
       { token: 'omnia-style-token', foreground: 'e879f9', fontStyle: 'italic' },
     ],
-    colors: {
+    colors: withOmniaMonacoChromeColors({
       'editor.background': '#0c0c0f',
       'editor.foreground': '#d4d4d8',
       'editorLineNumber.foreground': '#475569',
       'editorLineNumber.activeForeground': '#94a3b8',
       'editor.lineHighlightBackground': '#11151d',
-    },
+    }),
   });
 
   promptLanguageRegistered = true;

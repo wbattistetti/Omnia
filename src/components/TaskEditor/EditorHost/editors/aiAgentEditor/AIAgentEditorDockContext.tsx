@@ -13,6 +13,7 @@ import type {
 import type { AIAgentPreviewTurn } from '@types/aiAgentPreview';
 import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import type { AgentStructuredSectionId } from './agentStructuredSectionIds';
+import type { AgentTaskTextFieldId } from '@domain/aiAgent/agentTaskTextFieldIds';
 import type { OtOp } from './otTypes';
 import type { StructuredSectionsRevisionState } from './structuredSectionsRevisionReducer';
 import type { IaSectionDiffPair } from './iaSectionDiffTypes';
@@ -40,13 +41,17 @@ export interface AIAgentEditorDockContextValue {
   hasAgentGeneration: boolean;
   designDescription: string;
   setDesignDescription: (value: string) => void;
-  /** Baseline testo per rilevare edit sostanziali e proporre polish descrizione. */
-  designDescriptionPolishBaseline: string;
-  /** Pillola «riformatta senza cambiare contenuto» visibile dopo edit significative. */
-  showDesignDescriptionPolishOffer: boolean;
-  designDescriptionPolishBusy: boolean;
-  onPolishDesignDescription: () => void | Promise<void>;
-  onDismissDesignDescriptionPolishOffer: () => void;
+  /** Baseline agente per revisione osservazioni su un campo testo (descrizione o sezione). */
+  getTaskTextBaseline: (fieldId: AgentTaskTextFieldId) => string;
+  setTaskTextBaseline: (fieldId: AgentTaskTextFieldId, text: string) => void;
+  getTaskTextCurrentText: (fieldId: AgentTaskTextFieldId) => string;
+  applyTaskTextFieldText: (fieldId: AgentTaskTextFieldId, text: string) => void;
+  dismissTaskTextReviewOffer: (fieldId: AgentTaskTextFieldId) => void;
+  clearTaskTextReviewOfferDismissed: (fieldId: AgentTaskTextFieldId) => void;
+  isTaskTextReviewOfferDismissed: (fieldId: AgentTaskTextFieldId) => boolean;
+  buildCallMeta: (purpose: string) => AiCallMeta;
+  /** Errori della revisione testo (mostrati anche nel banner composer / alert locale). */
+  onTaskTextReviewError: (message: string | null) => void;
   composedRuntimeMarkdown: string;
   /** True when structured sections diverge from last committed snapshot (Create/Refine baseline). */
   structuredDesignDirty: boolean;

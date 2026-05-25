@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { getAllFunctionNames } from '../compiler/builtinFunctions';
+import { withOmniaMonacoChromeColors } from '@utils/monacoEmbeddedSetup';
 
 /**
  * Registers DSL custom language in Monaco Editor.
@@ -103,12 +104,10 @@ export function registerDslLanguage(monaco: any): void {
       { token: 'identifier', foreground: '9CDCFE' },
       { token: 'white', foreground: '808080' },
     ],
-    colors: {
+    colors: withOmniaMonacoChromeColors({
       'editor.foreground': '#D4D4D4',
       'editor.background': '#1e1e1e',
-      'editorCursor.foreground': '#FFFFFF', // White cursor for dark theme
-      'editorCursor.background': '#1e1e1e', // Background behind cursor
-    },
+    }),
   });
 
   console.log('[registerDslLanguage] ✅ DSL language registered', { langId, themeName });

@@ -36,6 +36,12 @@ export const AI_CALL_PURPOSE = {
   USE_CASE_POLISH_SCENARIO: 'USE_CASE_POLISH_SCENARIO',
   /** Rifinisce forma descrizione task (struttura/paragrafi, stesso significato). */
   AGENT_POLISH_DESIGN_DESCRIPTION: 'AGENT_POLISH_DESIGN_DESCRIPTION',
+  /** Estrazione osservazioni dal diff designer su testo task (descrizione / sezioni). */
+  AGENT_REVIEW_TASK_TEXT_OBSERVATIONS: 'AGENT_REVIEW_TASK_TEXT_OBSERVATIONS',
+  /** Testo task concordato dopo revisione osservazioni. */
+  AGENT_FINALIZE_TASK_TEXT: 'AGENT_FINALIZE_TASK_TEXT',
+  /** Chiarimento risposta su osservazione testo task. */
+  AGENT_CLARIFY_TASK_TEXT_OBSERVATION: 'AGENT_CLARIFY_TASK_TEXT_OBSERVATION',
   USE_CASE_COMPLETE_CORRECTION: 'USE_CASE_COMPLETE_CORRECTION',
   USE_CASE_COMPLETE_CORRECTION_PREVIEW: 'USE_CASE_COMPLETE_CORRECTION_PREVIEW',
   TRAINING_PHRASES_GENERATE: 'TRAINING_PHRASES_GENERATE',
@@ -75,6 +81,11 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.USE_CASE_POLISH_SCENARIO]: 'Aggiusta forma testo scenario (senza cambiare significato)',
   [AI_CALL_PURPOSE.AGENT_POLISH_DESIGN_DESCRIPTION]:
     'Riformatta descrizione task (senza cambiare significato)',
+  [AI_CALL_PURPOSE.AGENT_REVIEW_TASK_TEXT_OBSERVATIONS]:
+    'Revisione osservazioni su testo task (descrizione / sezioni)',
+  [AI_CALL_PURPOSE.AGENT_FINALIZE_TASK_TEXT]: 'Testo task concordato dopo revisione',
+  [AI_CALL_PURPOSE.AGENT_CLARIFY_TASK_TEXT_OBSERVATION]:
+    'Chiarimento risposta su osservazione testo task',
   [AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION]:
     'Completa correzione: propagazione directional dello stile sui messaggi agente',
   [AI_CALL_PURPOSE.USE_CASE_COMPLETE_CORRECTION_PREVIEW]:

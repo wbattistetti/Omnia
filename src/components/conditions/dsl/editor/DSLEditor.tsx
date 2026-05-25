@@ -10,6 +10,7 @@ import { InsertMenu } from '../menu/InsertMenu';
 import { DSLContextMenu } from '../menu/DSLContextMenu';
 import { Plus } from 'lucide-react';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
 
 interface DSLEditorProps {
   value: string;
@@ -92,9 +93,11 @@ export function DSLEditor({
           lineNumbers: 'on',
           renderWhitespace: 'selection',
           contextmenu: false, // Disable Monaco's default context menu
+          mouseWheelZoom: true,
         });
 
         monacoEditorRef.current = editor;
+        applyMonacoEmbeddedEditorUi(editor);
 
         // Helper: Check if cursor is inside a string
         const isInsideString = (model: monacoNS.editor.ITextModel, position: monacoNS.Position): boolean => {

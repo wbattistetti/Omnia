@@ -10,6 +10,7 @@ import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useAgentStructuredDockSlice } from './useAgentStructuredDockSlice';
 import { parseAgentRuntimeCompactJson } from './composeRuntimeRulesFromCompact';
 import { DesignDescriptionTextarea } from './DesignDescriptionTextarea';
+import { AgentTaskTextObservationReviewShell } from './AgentTaskTextObservationReviewShell';
 import {
   buildAiAgentRuntimeExperimentPayload,
   stringifyExperimentPayload,
@@ -111,34 +112,89 @@ export function AgentSectionDockPanel(
         {contractualElevenLabsHint}
         {contractualGuardrailsHint}
         {operationalSequenceToolHint}
-        <AIAgentRevisionEditorShell
-          key={sectionId}
-          instanceId={`${instanceIdSuffix}-${sectionId}`}
-          promptBaseText={activeSlice.promptBaseText}
-          deletedMask={activeSlice.deletedMask}
-          inserts={activeSlice.inserts}
-          onApplyRevisionOps={(ops) => onApplyRevisionOps(sectionId, ops)}
-          readOnly={readOnly}
-          iaRevisionDiff={
-            activeDiff
-              ? { oldIaPrompt: activeDiff.oldIaPrompt, newIaPrompt: activeDiff.newIaPrompt }
-              : null
-          }
-          onDismissIaRevisionDiff={() => onDismissIaRevisionForSection(sectionId)}
-          otMode={otMode}
-          otCurrentText={activeSlice.ot?.currentText}
-          onApplyOtCommit={
-            otMode ? (ops) => onApplyOtCommit(sectionId, ops) : undefined
-          }
-          onUndoRequest={() => onUndoSection(sectionId)}
-          onRedoRequest={() => onRedoSection(sectionId)}
-          onInsertBackendPathAtCaret={
-            readOnly || !editorCtx
-              ? undefined
-              : (path, rangeStart, rangeEnd) =>
-                  editorCtx.insertBackendPathAtSection(sectionId, path, rangeStart, rangeEnd)
-          }
-        />
+        {editorCtx && editorCtx.hasAgentGeneration ? (
+          <AgentTaskTextObservationReviewShell
+            fieldId={sectionId}
+            currentText={editorCtx.getTaskTextCurrentText(sectionId)}
+            baseline={editorCtx.getTaskTextBaseline(sectionId)}
+            onApplyFinalText={(text) => editorCtx.applyTaskTextFieldText(sectionId, text)}
+            onCommitBaseline={(text) => editorCtx.setTaskTextBaseline(sectionId, text)}
+            projectId={editorCtx.projectId}
+            buildCallMeta={editorCtx.buildCallMeta}
+            offerDismissed={editorCtx.isTaskTextReviewOfferDismissed(sectionId)}
+            onDismissOffer={() => editorCtx.dismissTaskTextReviewOffer(sectionId)}
+            onClearOfferDismissed={() =>
+              editorCtx.clearTaskTextReviewOfferDismissed(sectionId)
+            }
+            generating={editorCtx.generating}
+            onError={editorCtx.onTaskTextReviewError}
+          >
+            {({ reviewBlocksEdit }) => (
+              <AIAgentRevisionEditorShell
+                key={sectionId}
+                instanceId={`${instanceIdSuffix}-${sectionId}`}
+                promptBaseText={activeSlice.promptBaseText}
+                deletedMask={activeSlice.deletedMask}
+                inserts={activeSlice.inserts}
+                onApplyRevisionOps={(ops) => onApplyRevisionOps(sectionId, ops)}
+                readOnly={readOnly || reviewBlocksEdit}
+                iaRevisionDiff={
+                  activeDiff
+                    ? { oldIaPrompt: activeDiff.oldIaPrompt, newIaPrompt: activeDiff.newIaPrompt }
+                    : null
+                }
+                onDismissIaRevisionDiff={() => onDismissIaRevisionForSection(sectionId)}
+                otMode={otMode}
+                otCurrentText={activeSlice.ot?.currentText}
+                onApplyOtCommit={
+                  otMode ? (ops) => onApplyOtCommit(sectionId, ops) : undefined
+                }
+                onUndoRequest={() => onUndoSection(sectionId)}
+                onRedoRequest={() => onRedoSection(sectionId)}
+                onInsertBackendPathAtCaret={
+                  readOnly || reviewBlocksEdit || !editorCtx
+                    ? undefined
+                    : (path, rangeStart, rangeEnd) =>
+                        editorCtx.insertBackendPathAtSection(
+                          sectionId,
+                          path,
+                          rangeStart,
+                          rangeEnd
+                        )
+                }
+              />
+            )}
+          </AgentTaskTextObservationReviewShell>
+        ) : (
+          <AIAgentRevisionEditorShell
+            key={sectionId}
+            instanceId={`${instanceIdSuffix}-${sectionId}`}
+            promptBaseText={activeSlice.promptBaseText}
+            deletedMask={activeSlice.deletedMask}
+            inserts={activeSlice.inserts}
+            onApplyRevisionOps={(ops) => onApplyRevisionOps(sectionId, ops)}
+            readOnly={readOnly}
+            iaRevisionDiff={
+              activeDiff
+                ? { oldIaPrompt: activeDiff.oldIaPrompt, newIaPrompt: activeDiff.newIaPrompt }
+                : null
+            }
+            onDismissIaRevisionDiff={() => onDismissIaRevisionForSection(sectionId)}
+            otMode={otMode}
+            otCurrentText={activeSlice.ot?.currentText}
+            onApplyOtCommit={
+              otMode ? (ops) => onApplyOtCommit(sectionId, ops) : undefined
+            }
+            onUndoRequest={() => onUndoSection(sectionId)}
+            onRedoRequest={() => onRedoSection(sectionId)}
+            onInsertBackendPathAtCaret={
+              readOnly || !editorCtx
+                ? undefined
+                : (path, rangeStart, rangeEnd) =>
+                    editorCtx.insertBackendPathAtSection(sectionId, path, rangeStart, rangeEnd)
+            }
+          />
+        )}
       </div>
     </div>
   );

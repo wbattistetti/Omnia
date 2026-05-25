@@ -3,6 +3,7 @@
  */
 
 import type * as Monaco from 'monaco-editor';
+import { withOmniaMonacoChromeColors } from '@utils/monacoEmbeddedSetup';
 import { KB_MONACO_FONT_FAMILY } from './kbTypography';
 
 export const KB_READER_MONACO_THEME_ID = 'omnia-kb-reader';
@@ -37,14 +38,13 @@ export function ensureKbReaderMonacoTheme(monaco: typeof Monaco): void {
         { token: 'markup.inline.raw', foreground: 'fda4af' },
         { token: 'variable', foreground: 'cbd5e1' },
       ],
-      colors: {
+      colors: withOmniaMonacoChromeColors({
         'editor.background': '#020617',
         'editor.foreground': '#cbd5e1',
         'editorLineNumber.foreground': '#475569',
         'editorLineNumber.activeForeground': '#94a3b8',
-        'editor.selectionBackground': '#312e8133',
         'editor.lineHighlightBackground': '#1e293b44',
-      },
+      }),
     });
     registered = true;
   }
@@ -59,6 +59,7 @@ export function kbReaderMonacoOptions(
     fontSize: 12,
     fontFamily: KB_MONACO_FONT_FAMILY,
     lineHeight: 18,
+    mouseWheelZoom: true,
   };
 }
 
@@ -99,5 +100,6 @@ export function kbAgentProseMarkdownOptions(readOnly: boolean): Record<string, u
     fontFamily: AGENT_PROSE_FONT,
     readOnly,
     domReadOnly: readOnly,
+    mouseWheelZoom: true,
   };
 }

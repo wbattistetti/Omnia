@@ -28,7 +28,7 @@ export const KB_ANALYSIS_EXCERPT_RATIONALE_LABEL = 'Perché questo passaggio';
 export const KB_ANALYSIS_STATUS_PENDING = 'In attesa';
 export const KB_ANALYSIS_STATUS_CLARIFYING = 'Da chiarire';
 
-export const KB_ANALYSIS_CLARIFY_PROMPT = 'Spiegami come ho capito male';
+export const KB_ANALYSIS_CLARIFY_PROMPT = 'Spiegami dove ho capito male';
 export const KB_ANALYSIS_CLARIFY_SUBMIT = 'Invia chiarimento';
 export const KB_ANALYSIS_REVIEW_PANEL_TITLE = 'Revisione note del designer';
 export const KB_ANALYSIS_EXECUTE_BUTTON = 'Esegui';
