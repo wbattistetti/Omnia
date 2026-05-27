@@ -24,8 +24,16 @@ import {
 } from '@reviewPortal/buildReviewAgentDockValue';
 import { useReviewKnowledgeBaseDocuments } from '@reviewPortal/useReviewKnowledgeBaseDocuments';
 import { useReviewAgentIaDockSlice } from '@reviewPortal/useReviewAgentIaDockSlice';
+import { useReviewWizardDockIntegration } from '@reviewPortal/useReviewWizardDockIntegration';
+import {
+  AI_AGENT_GLOBAL_USE_CASE_STYLES,
+} from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/constants';
+import {
+  mergeUseCaseGlobalStyleContract,
+} from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/mergeUseCaseGlobalStyleContract';
 import { useAgentDockUseCaseInvalidationHandlers } from '@domain/agentEditorDock/useAgentDockUseCaseInvalidationHandlers';
 import { agentDockPromptsPanelHandlersFromInvalidation } from '@domain/agentEditorDock/agentDockPromptsPanelHandlers';
+import { createBlankUseCaseInList } from '@omnia/domain-core/usecase/logic/useCaseBundleCompose';
 import { useReviewStore } from './reviewStore';
 
 function structuredSectionsEqual(
@@ -65,6 +73,8 @@ export function useReviewAgentDockBridge({
   const categories = useReviewStore((s) => s.categories);
   const setCategories = useReviewStore((s) => s.setCategories);
   const channelLoaded = useReviewStore((s) => s.channelLoaded);
+  const agentUseCaseWizardStateJson = useReviewStore((s) => s.agentUseCaseWizardStateJson);
+  const setAgentUseCaseWizardStateJson = useReviewStore((s) => s.setAgentUseCaseWizardStateJson);
 
   const structuredRevision = useStructuredAgentSectionsRevision(false);
   const loadedTaskRef = React.useRef<string | null>(null);
@@ -240,6 +250,51 @@ export function useReviewAgentDockBridge({
     []
   );
 
+  const globalStyleContract = React.useMemo(() => {
+    const base =
+      AI_AGENT_GLOBAL_USE_CASE_STYLES.find((s) => s.id === globalStyleId)?.contract ?? '';
+    return mergeUseCaseGlobalStyleContract(base, styleLearningNotes);
+  }, [globalStyleId, styleLearningNotes]);
+
+  const kbAddDocumentPickerRef = React.useRef<(() => void) | null>(null);
+  const registerKbAddDocumentPicker = React.useCallback((handler: (() => void) | null) => {
+    kbAddDocumentPickerRef.current = handler;
+  }, []);
+  const invokeKbAddDocumentPicker = React.useCallback(() => {
+    kbAddDocumentPickerRef.current?.();
+  }, []);
+
+  const wizard = useReviewWizardDockIntegration({
+    taskInstanceId: session.taskId,
+    channelLoaded,
+    useCases,
+    setUseCases,
+    composedRuntimeMarkdown: structuredRevision.composedRuntimeMarkdown,
+    globalStyleContract,
+    useCaseGlobalStyleId: globalStyleId,
+    agentConversationStyleSelections: styleSelections,
+    agentConversationStyleAuto: styleAuto,
+    agentUseCaseWizardStateJson,
+    persistAgentUseCaseWizardState: setAgentUseCaseWizardStateJson,
+    buildCallMeta: ia.buildCallMeta,
+    onCreateUseCase: async (createParams) => {
+      setComposerError(null);
+      const label = String(createParams.label ?? '').trim();
+      const parentId = createParams.parentId ?? null;
+      let newId = '';
+      setUseCases((prev) => {
+        const result = createBlankUseCaseInList(prev, {
+          parentId,
+          label: label || undefined,
+        });
+        newId = result.newId;
+        return result.useCases;
+      });
+      return newId;
+    },
+    onComposerIaError: setComposerError,
+  });
+
   const knowledgeBaseTaskContext = React.useMemo(
     () => ({
       agentTaskSummary: buildKbAgentTaskSummary(
@@ -291,7 +346,10 @@ export function useReviewAgentDockBridge({
         hideBackendsPanelInlineAddButton: activeStep === 'backend',
         registerBackendsAddManualHandler,
         invokeBackendsAddManual,
+        registerKbAddDocumentPicker,
+        invokeKbAddDocumentPicker,
         knowledgeBaseTaskContext,
+        wizard,
       }),
     [
       session.projectId,
@@ -324,7 +382,17 @@ export function useReviewAgentDockBridge({
       activeStep,
       registerBackendsAddManualHandler,
       invokeBackendsAddManual,
+      registerKbAddDocumentPicker,
+      invokeKbAddDocumentPicker,
       knowledgeBaseTaskContext,
+      wizard,
+      structuredRevision.composedRuntimeMarkdown,
+      globalStyleId,
+      styleLearningNotes,
+      styleAuto,
+      styleSelections,
+      agentUseCaseWizardStateJson,
+      setAgentUseCaseWizardStateJson,
     ]
   );
 }

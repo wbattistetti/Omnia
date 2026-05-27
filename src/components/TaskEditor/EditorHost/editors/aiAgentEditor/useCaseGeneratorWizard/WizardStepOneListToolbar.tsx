@@ -47,6 +47,7 @@ import {
   WizardSlotMappingToggle,
 } from './WizardToolbarSlotMappingControls';
 import { UseCaseTestQuestionsToolbar } from '../useCaseTestQuestions/UseCaseTestQuestionsToolbar';
+import { UseCaseOverlapCheckToolbar } from '../useCaseOverlap/UseCaseOverlapCheckToolbar';
 
 /**
  * Glifo «token disattivati / mostra/nascondi tokenizzazione»: due parentesi quadre con
@@ -533,6 +534,7 @@ export function WizardStepOneListToolbarControls({
       */}
       <UseCaseListSearchInput ctx={ctx} />
       <UseCaseTestQuestionsToolbar />
+      <UseCaseOverlapCheckToolbar />
       {dock && projectSlotLexicon ? (
         <WizardSlotMappingToggle lexicon={projectSlotLexicon} useCases={catalogUseCases} />
       ) : null}

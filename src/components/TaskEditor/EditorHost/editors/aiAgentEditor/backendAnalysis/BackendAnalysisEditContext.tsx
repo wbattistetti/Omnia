@@ -1,5 +1,5 @@
 /**
- * Contesto edit/revisione per sezioni Monaco analisi backend (debounce + diff).
+ * Contesto edit/revisione per sezioni Monaco analisi backend (revisione su «Aggiorna»).
  */
 
 import React from 'react';
@@ -9,9 +9,12 @@ import {
   reviewBackendAnalysisObservations,
 } from '@domain/backendAnalysis/backendAnalysisApi';
 import {
+  allReviewItemsConfirmed,
   createReviewSessionItems,
+  resolveSectionEditsToolbarPresentation,
   shouldRunObservationReview,
   type KbAnalysisReviewSessionItem,
+  type KbAnalysisToolbarPresentation,
 } from '@domain/backendAnalysis/backendAnalysisWorkflow';
 import type { KbDocumentAnalysisTaskContext } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import {
@@ -27,15 +30,15 @@ import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { buildSectionBaselinesFromDocument } from '@domain/backendAnalysis/backendAnalysisSectionBaselines';
 import { useAgentBackendAnalysis } from '../AgentBackendAnalysisContext';
 
-const REVIEW_DEBOUNCE_MS = 420;
-
 export type BackendAnalysisEditContextValue = {
   getSectionBaseline: (sectionId: BackendAnalysisSectionId) => string;
   confirmSectionBaseline: (sectionId: BackendAnalysisSectionId, text: string) => void;
   getSectionReview: (sectionId: BackendAnalysisSectionId) => readonly KbAnalysisReviewSessionItem[] | null;
   sectionReviewBusy: boolean;
   busyObservationId: string | null;
-  scheduleSectionReanalysis: (sectionId: BackendAnalysisSectionId, draft: string) => void;
+  notifySectionDraftChange: (sectionId: BackendAnalysisSectionId, draft: string) => void;
+  sectionToolbarPresentation: KbAnalysisToolbarPresentation;
+  runSectionToolbarAction: () => void;
   onAgree: (sectionId: BackendAnalysisSectionId, observationId: string) => void;
   onDisagree: (sectionId: BackendAnalysisSectionId, observationId: string) => void;
   onClarificationDraftChange: (
@@ -104,18 +107,15 @@ export function BackendAnalysisEditProvider({
   >({});
   const [sectionReviewBusy, setSectionReviewBusy] = React.useState(false);
   const [busyObservationId, setBusyObservationId] = React.useState<string | null>(null);
-  const debounceTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [sectionDrafts, setSectionDrafts] = React.useState<Record<string, string>>({});
+  const [pendingSectionIds, setPendingSectionIds] = React.useState<Set<string>>(() => new Set());
 
   React.useEffect(() => {
     setSectionBaselines({ ...bundle.sectionBaselines });
     setReviewsBySection({});
+    setSectionDrafts({});
+    setPendingSectionIds(new Set());
   }, [agentTaskId, bundle.sectionBaselines]);
-
-  React.useEffect(() => {
-    return () => {
-      for (const t of Object.values(debounceTimers.current)) clearTimeout(t);
-    };
-  }, []);
 
   const persistBaselines = React.useCallback(
     (next: Record<string, string>) => {
@@ -151,6 +151,16 @@ export function BackendAnalysisEditProvider({
       const next = { ...sectionBaselines, [sectionId]: text };
       persistBaselines(next);
       setReviewsBySection((prev) => {
+        const copy = { ...prev };
+        delete copy[sectionId];
+        return copy;
+      });
+      setPendingSectionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sectionId);
+        return next;
+      });
+      setSectionDrafts((prev) => {
         const copy = { ...prev };
         delete copy[sectionId];
         return copy;
@@ -217,17 +227,92 @@ export function BackendAnalysisEditProvider({
     [canRunReview, sectionBaselines, apiBase]
   );
 
-  const scheduleSectionReanalysis = React.useCallback(
+  const notifySectionDraftChange = React.useCallback(
     (sectionId: BackendAnalysisSectionId, draft: string) => {
-      const prev = debounceTimers.current[sectionId];
-      if (prev) clearTimeout(prev);
-      debounceTimers.current[sectionId] = setTimeout(() => {
-        delete debounceTimers.current[sectionId];
-        void runSectionReview(sectionId, draft);
-      }, REVIEW_DEBOUNCE_MS);
+      setSectionDrafts((prev) => ({ ...prev, [sectionId]: draft }));
+      const baseline = sectionBaselines[sectionId] ?? '';
+      setPendingSectionIds((prev) => {
+        const next = new Set(prev);
+        if (shouldRunObservationReview(baseline, draft)) {
+          next.add(sectionId);
+        } else {
+          next.delete(sectionId);
+        }
+        return next;
+      });
     },
-    [runSectionReview]
+    [sectionBaselines]
   );
+
+  const runPendingSectionReviews = React.useCallback(async () => {
+    const ids = [...pendingSectionIds];
+    for (const sectionId of ids) {
+      const draft = sectionDrafts[sectionId];
+      if (draft === undefined) continue;
+      await runSectionReview(sectionId as BackendAnalysisSectionId, draft);
+    }
+  }, [pendingSectionIds, sectionDrafts, runSectionReview]);
+
+  const sectionReviewMeta = React.useMemo(() => {
+    const entries = Object.entries(reviewsBySection).filter(
+      (pair): pair is [string, KbAnalysisReviewSessionItem[]] => {
+        const items = pair[1];
+        return Boolean(items && items.length > 0);
+      }
+    );
+    const inReviewSession = entries.length > 0;
+    const allConfirmed =
+      inReviewSession &&
+      entries.every(([, items]) => allReviewItemsConfirmed(items));
+    const reviewHasDisagreement = entries.some(([, items]) =>
+      items.some(
+        (item) =>
+          item.status === 'clarifying' ||
+          Boolean(item.observation.userCorrectionNote?.trim())
+      )
+    );
+    let readyToApplyCount = 0;
+    for (const [, items] of entries) {
+      if (allReviewItemsConfirmed(items)) readyToApplyCount += 1;
+    }
+    return { inReviewSession, allConfirmed, reviewHasDisagreement, readyToApplyCount };
+  }, [reviewsBySection]);
+
+  const sectionToolbarPresentation = React.useMemo(
+    () =>
+      resolveSectionEditsToolbarPresentation({
+        pendingSectionCount: pendingSectionIds.size,
+        inReviewSession: sectionReviewMeta.inReviewSession,
+        allConfirmed: sectionReviewMeta.allConfirmed,
+        reviewHasDisagreement: sectionReviewMeta.reviewHasDisagreement,
+        canRunReview,
+        readyToApplyCount: sectionReviewMeta.readyToApplyCount,
+      }),
+    [pendingSectionIds.size, sectionReviewMeta, canRunReview]
+  );
+
+  const applyConfirmedSections = React.useCallback(() => {
+    for (const [sectionId, items] of Object.entries(reviewsBySection)) {
+      if (!items?.length || !allReviewItemsConfirmed(items)) continue;
+      const draft = sectionDrafts[sectionId];
+      if (draft === undefined) continue;
+      confirmSectionBaseline(sectionId as BackendAnalysisSectionId, draft);
+    }
+  }, [reviewsBySection, sectionDrafts, confirmSectionBaseline]);
+
+  const runSectionToolbarAction = React.useCallback(() => {
+    if (sectionToolbarPresentation.phase === 'request_review') {
+      void runPendingSectionReviews();
+      return;
+    }
+    if (sectionToolbarPresentation.phase === 'apply_update') {
+      applyConfirmedSections();
+    }
+  }, [
+    sectionToolbarPresentation.phase,
+    runPendingSectionReviews,
+    applyConfirmedSections,
+  ]);
 
   const updateReviewItem = React.useCallback(
     (
@@ -328,7 +413,9 @@ export function BackendAnalysisEditProvider({
       getSectionReview,
       sectionReviewBusy,
       busyObservationId,
-      scheduleSectionReanalysis,
+      notifySectionDraftChange,
+      sectionToolbarPresentation,
+      runSectionToolbarAction,
       onAgree,
       onDisagree,
       onClarificationDraftChange,
@@ -341,7 +428,9 @@ export function BackendAnalysisEditProvider({
       getSectionReview,
       sectionReviewBusy,
       busyObservationId,
-      scheduleSectionReanalysis,
+      notifySectionDraftChange,
+      sectionToolbarPresentation,
+      runSectionToolbarAction,
       onAgree,
       onDisagree,
       onClarificationDraftChange,

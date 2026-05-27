@@ -80,6 +80,8 @@ export interface UseAgentReviewChannelParams {
   manualBackendEntries?: readonly ManualCatalogEntry[];
   /** Modello LLM designer attivo in Omnia (incluso nel publish verso il portale). */
   designerLlm?: AgentReviewDesignerLlmSnapshot | null;
+  /** Stato wizard use case (allineato a `Task.agentUseCaseWizardStateJson`). */
+  agentUseCaseWizardStateJson?: string;
 }
 
 export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
@@ -109,6 +111,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
     projectTasks = [],
     manualBackendEntries = [],
     designerLlm = null,
+    agentUseCaseWizardStateJson = '',
   } = params;
 
   const [banner, setBanner] = React.useState<ReviewChannelBanner>({ kind: 'idle' });
@@ -169,6 +172,7 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
       projectTasks,
       manualBackendEntries,
       designerLlm,
+      agentUseCaseWizardStateJson,
     ]
   );
 

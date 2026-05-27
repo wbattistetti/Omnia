@@ -162,7 +162,7 @@ describe('resolveKbAnalysisToolbarPresentation', () => {
         draft: 'analisi agente',
         hasManualEdit: false,
       })
-    ).toMatchObject({ executeVisible: false, executeLabel: 'Aggiorna' });
+    ).toMatchObject({ executeVisible: false, phase: 'hidden' });
   });
 
   it('shows Esegui on first manual trace before any agent baseline', () => {
@@ -176,6 +176,7 @@ describe('resolveKbAnalysisToolbarPresentation', () => {
     ).toMatchObject({
       executeVisible: true,
       executeLabel: 'Esegui',
+      phase: 'request_review',
       executeEnabled: true,
       executeEmphasized: true,
     });
@@ -191,13 +192,14 @@ describe('resolveKbAnalysisToolbarPresentation', () => {
       })
     ).toMatchObject({
       executeVisible: true,
-      executeLabel: 'Aggiorna',
+      executeLabel: 'Rivedi modifiche',
+      phase: 'request_review',
       executeEnabled: true,
       executeEmphasized: true,
     });
   });
 
-  it('shows Aggiorna during review; enabled only when all confirmed', () => {
+  it('shows Review osservazioni during review; Aggiorna only when all confirmed', () => {
     const pending = resolveKbAnalysisToolbarPresentation({
       ...base,
       baseline: 'v1',
@@ -208,7 +210,8 @@ describe('resolveKbAnalysisToolbarPresentation', () => {
     });
     expect(pending).toMatchObject({
       executeVisible: true,
-      executeLabel: 'Aggiorna',
+      executeLabel: 'Review osservazioni',
+      phase: 'review_observations',
       executeEnabled: false,
     });
 
@@ -220,6 +223,11 @@ describe('resolveKbAnalysisToolbarPresentation', () => {
       inReviewSession: true,
       allConfirmed: true,
     });
-    expect(done).toMatchObject({ executeEnabled: true, executeEmphasized: true });
+    expect(done).toMatchObject({
+      executeLabel: 'Aggiorna',
+      phase: 'apply_update',
+      executeEnabled: true,
+      executeEmphasized: true,
+    });
   });
 });

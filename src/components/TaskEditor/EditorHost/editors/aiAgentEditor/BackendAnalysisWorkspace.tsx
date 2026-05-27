@@ -40,13 +40,10 @@ import {
 import { ProposedBackendParameterTable } from './backendAnalysis/ProposedBackendParameterTable';
 
 import {
-
   howToUseSectionId,
-
+  paramDetailSectionId,
   proposedBackendAccordionTitle,
-
   proposedBackendSectionId,
-
 } from '@domain/backendAnalysis/backendAnalysisSectionIds';
 
 import { useAgentBackendAnalysis } from './AgentBackendAnalysisContext';
@@ -80,21 +77,17 @@ function ParameterDescriptionCell({ text }: { text: string }): React.ReactElemen
 
 
 function ParameterTable({
-
   backend,
-
-  onEditParam,
-
+  editingParamKey,
+  onToggleEditParam,
   onOpenInfo,
-
+  onSaveDetail,
 }: {
-
   backend: BackendAnalysisBackendRecord;
-
-  onEditParam: (paramKey: string) => void;
-
+  editingParamKey: string | null;
+  onToggleEditParam: (paramKey: string) => void;
   onOpenInfo: (row: BackendParameterAnalysisRecord) => void;
-
+  onSaveDetail: (paramKey: string, analysisDetailMarkdown: string) => void;
 }): React.ReactElement {
 
   const rows = Object.values(backend.parameters).sort((a, b) =>
@@ -145,87 +138,84 @@ function ParameterTable({
 
         <tbody>
 
-          {rows.map((row) => (
+          {rows.map((row) => {
+            const isEditing = editingParamKey === row.paramKey;
+            const sectionId = paramDetailSectionId(backend.catalogEntryId, row.paramKey);
+            const preview =
+              row.analysisDetailMarkdown.trim() ||
+              row.descriptionShort ||
+              row.analysisSummary ||
+              '';
 
-            <tr key={row.paramKey} className="border-b border-slate-800/80 text-slate-200">
-
-              <td className="px-1 py-1.5 text-center">
-
-                <BackendParameterKindIcon kind={row.kind} />
-
-              </td>
-
-              <td className="px-2 py-1.5">
-
-                <code className="rounded bg-slate-800/90 px-1 py-0.5 font-mono text-[11px] text-violet-100">
-
-                  {row.paramKey}
-
-                </code>
-
-              </td>
-
-              <td className="px-2 py-1.5 text-slate-400">
-
-                {row.direction === 'input' ? '→ input' : '← output'}
-
-              </td>
-
-              <td className="px-2 py-1.5 text-slate-300">{row.role || '—'}</td>
-
-              <td className="px-2 py-1.5">
-
-                <ParameterDescriptionCell
-
-                  text={row.descriptionShort || row.analysisSummary || ''}
-
-                />
-
-              </td>
-
-              <td className="px-1 py-1.5">
-
-                <div className="flex items-center justify-center gap-0.5">
-
-                  <button
-
-                    type="button"
-
-                    title="Analisi parametro (sola lettura)"
-
-                    className="rounded p-1 text-violet-300/90 hover:bg-violet-950/80"
-
-                    onClick={() => onOpenInfo(row)}
-
-                  >
-
-                    <Info className="h-3.5 w-3.5" aria-hidden />
-
-                  </button>
-
-                  <button
-
-                    type="button"
-
-                    title="Modifica analisi parametro (Livello 1)"
-
-                    className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-violet-200"
-
-                    onClick={() => onEditParam(row.paramKey)}
-
-                  >
-
-                    <Pencil className="h-3.5 w-3.5" aria-hidden />
-
-                  </button>
-
-                </div>
-
-              </td>
-
-            </tr>
-
-          ))}
+            return (
+              <React.Fragment key={row.paramKey}>
+                <tr
+                  className={
+                    'border-b border-slate-800/80 text-slate-200 ' +
+                    (isEditing ? 'bg-emerald-950/20' : '')
+                  }
+                >
+                  <td className="px-1 py-1.5 text-center">
+                    <BackendParameterKindIcon kind={row.kind} />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <code className="rounded bg-slate-800/90 px-1 py-0.5 font-mono text-[11px] text-violet-100">
+                      {row.paramKey}
+                    </code>
+                  </td>
+                  <td className="px-2 py-1.5 text-slate-400">
+                    {row.direction === 'input' ? '→ input' : '← output'}
+                  </td>
+                  <td className="px-2 py-1.5 text-slate-300">{row.role || '—'}</td>
+                  <td className="px-2 py-1.5">
+                    {isEditing ? (
+                      <span className="text-[11px] text-emerald-300/80">Modifica in corso…</span>
+                    ) : (
+                      <ParameterDescriptionCell text={preview} />
+                    )}
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <div className="flex items-center justify-center gap-0.5">
+                      <button
+                        type="button"
+                        title="Anteprima analisi (sola lettura)"
+                        className="rounded p-1 text-violet-300/90 hover:bg-violet-950/80"
+                        onClick={() => onOpenInfo(row)}
+                      >
+                        <Info className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        title={isEditing ? 'Chiudi editor' : 'Modifica analisi parametro'}
+                        className={
+                          'rounded p-1 hover:bg-slate-800 ' +
+                          (isEditing
+                            ? 'bg-emerald-900/50 text-emerald-200'
+                            : 'text-slate-400 hover:text-violet-200')
+                        }
+                        onClick={() => onToggleEditParam(row.paramKey)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {isEditing ? (
+                  <tr className="border-b border-emerald-900/40 bg-slate-950/80">
+                    <td colSpan={6} className="px-2 py-2">
+                      <BackendAnalysisSectionWithReview
+                        sectionId={sectionId}
+                        value={row.analysisDetailMarkdown}
+                        onValueChange={(v) => onSaveDetail(row.paramKey, v)}
+                        minHeightPx={220}
+                        ariaLabel={`Analisi dettaglio ${row.paramKey}`}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
 
         </tbody>
 
@@ -253,9 +243,32 @@ function CatalogBackendAccordion({
 
 }): React.ReactElement {
 
-  const { persistDocument, document, setEditingParam, openParameterPanel } =
-
+  const { persistDocument, document, editingParam, setEditingParam, openParameterPanel } =
     useAgentBackendAnalysis();
+
+  const editingParamKey =
+    editingParam?.catalogEntryId === backend.catalogEntryId ? editingParam.paramKey : null;
+
+  const saveParamDetail = React.useCallback(
+    (paramKey: string, analysisDetailMarkdown: string) => {
+      const param = backend.parameters[paramKey];
+      if (!param) return;
+      persistDocument({
+        ...document,
+        backends: {
+          ...document.backends,
+          [backend.catalogEntryId]: {
+            ...backend,
+            parameters: {
+              ...backend.parameters,
+              [paramKey]: { ...param, analysisDetailMarkdown },
+            },
+          },
+        },
+      });
+    },
+    [backend, document, persistDocument]
+  );
 
   const chipCls = backendChipClassForCatalogEntry();
 
@@ -332,29 +345,23 @@ function CatalogBackendAccordion({
         <BackendAnalysisAccordion level={2} title="Analisi parametro per parametro" defaultOpen>
 
           <ParameterTable
-
             backend={backend}
-
-            onEditParam={(paramKey) =>
-
-              setEditingParam({ catalogEntryId: backend.catalogEntryId, paramKey })
-
+            editingParamKey={editingParamKey}
+            onToggleEditParam={(paramKey) =>
+              setEditingParam(
+                editingParamKey === paramKey
+                  ? null
+                  : { catalogEntryId: backend.catalogEntryId, paramKey }
+              )
             }
-
+            onSaveDetail={saveParamDetail}
             onOpenInfo={(row) =>
-
               openParameterPanel({
-
                 catalogEntryId: backend.catalogEntryId,
-
                 paramKey: row.paramKey,
-
                 displayLabel: backend.displayLabel,
-
               })
-
             }
-
           />
 
         </BackendAnalysisAccordion>

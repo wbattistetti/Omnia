@@ -17,6 +17,8 @@ import {
   parseTestQuestionsField,
   type UseCaseTestQuestion,
 } from '@domain/aiAgentUseCase/useCaseTestQuestions';
+import type { UseCaseOverlapHint } from '@domain/aiAgentUseCase/useCaseSemanticOverlap';
+import { parseOverlapHintField } from '@domain/aiAgentUseCase/useCaseSemanticOverlap';
 import {
   ensureUseCaseResponse,
   parseUseCaseResponseField,
@@ -167,6 +169,9 @@ export interface AIAgentUseCase {
 
   /** Domande di test designer (validazione routing / disambiguazione). */
   testQuestions?: UseCaseTestQuestion[];
+
+  /** Ultima analisi sovrapposizione semantica vs catalogo (design-time). */
+  overlapHint?: UseCaseOverlapHint;
 }
 
 export type {
@@ -174,6 +179,7 @@ export type {
   UseCaseTestQuestionStatus,
   UseCaseTestQuestionKind,
 } from '@domain/aiAgentUseCase/useCaseTestQuestions';
+export type { UseCaseOverlapHint } from '@domain/aiAgentUseCase/useCaseSemanticOverlap';
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
 export function newAgentUseCaseTurnId(): string {
@@ -452,6 +458,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
       const phrases = parsePhrasesField(o.phrases);
       const response = parseUseCaseResponseField(o.response);
       const testQuestions = parseTestQuestionsField(o.testQuestions);
+      const overlapHint = parseOverlapHintField(o.overlapHint);
       out.push({
         id,
         label,
@@ -482,6 +489,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
         ...(phrases.length > 0 ? { phrases } : {}),
         ...(response ? { response } : {}),
         ...(testQuestions.length > 0 ? { testQuestions } : {}),
+        ...(overlapHint ? { overlapHint } : {}),
       });
     }
   return out.map((uc) => ensureUseCaseResponse(ensureUseCasePhrases(uc)));

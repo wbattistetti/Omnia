@@ -1,6 +1,7 @@
 import path from 'path';
 
-const omniaRoot = path.resolve(import.meta.dirname, '..');
+/** PostCSS/Tailwind load this file via jiti (non-ESM) — avoid import.meta. */
+const omniaRoot = path.resolve(process.cwd(), '..');
 
 /** @type {import('tailwindcss').Config} */
 export default {

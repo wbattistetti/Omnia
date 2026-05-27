@@ -34,6 +34,10 @@ export const KB_ANALYSIS_CLARIFY_PROMPT = 'Spiegami dove ho capito male';
 export const KB_ANALYSIS_CLARIFY_SUBMIT = 'Invia chiarimento';
 export const KB_ANALYSIS_REVIEW_PANEL_TITLE = 'Revisione note del designer';
 export const KB_ANALYSIS_EXECUTE_BUTTON = 'Esegui';
+/** Prima review dopo modifiche rispetto alla baseline agente. */
+export const KB_ANALYSIS_REQUEST_REVIEW_BUTTON = 'Rivedi modifiche';
+/** Sessione con osservazioni IA non ancora tutte confermate dal designer. */
+export const KB_ANALYSIS_REVIEW_OBSERVATIONS_BUTTON = 'Review osservazioni';
 export const KB_ANALYSIS_UPDATE_BUTTON = 'Aggiorna';
 export const KB_ANALYSIS_REVIEW_TOGGLE = 'Revisione';
 /** @deprecated Use KB_ANALYSIS_EXECUTE_BUTTON */

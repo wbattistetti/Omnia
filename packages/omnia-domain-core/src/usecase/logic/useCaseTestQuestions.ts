@@ -157,6 +157,28 @@ export function findFirstTestQuestionAnchor(
   return null;
 }
 
+/** Ordine alfabetico per visualizzazione (locale, case-insensitive). */
+export function sortTestQuestionsByText(
+  questions: readonly UseCaseTestQuestion[]
+): UseCaseTestQuestion[] {
+  return [...questions].sort((a, b) =>
+    a.text.localeCompare(b.text, undefined, { sensitivity: 'base' })
+  );
+}
+
+/** Nuova domanda inserita manualmente dal designer. */
+export function createManualTestQuestion(text: string): UseCaseTestQuestion | null {
+  const trimmed = String(text ?? '').trim();
+  if (!trimmed) return null;
+  return {
+    id: newUseCaseTestQuestionId(),
+    text: trimmed,
+    expectedAnswer: '',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+}
+
 /** Append senza duplicati testuali (normalizzati). */
 export function appendUniqueTestQuestions(
   existing: readonly UseCaseTestQuestion[],
@@ -170,5 +192,5 @@ export function appendUniqueTestQuestions(
     seen.add(key);
     next.push(q);
   }
-  return next;
+  return sortTestQuestionsByText(next);
 }

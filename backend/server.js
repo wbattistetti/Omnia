@@ -75,6 +75,10 @@ const {
 } = require('./services/backendAnalysisService');
 const { generateUseCaseTestQuestions } = require('./services/useCaseTestQuestionsService');
 const {
+  analyzeUseCaseOverlap,
+  checkUseCaseOverlaps,
+} = require('./services/useCaseOverlapService');
+const {
   assertAiCallContract,
   aiCallContractErrorResponse,
   readCallMetaFromBody,
@@ -7354,6 +7358,68 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         taskLabel: callMeta.taskLabel,
       });
       return sendKbMarkdownHttpResponse(res, markdown);
+    }
+
+    if (action === 'analyze_use_case_overlap') {
+      const { candidateUseCase, catalogUseCases, threshold, catalogNumberById } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'USE_CASE_ANALYZE_OVERLAP',
+      });
+      const numberMap = new Map(
+        catalogNumberById && typeof catalogNumberById === 'object'
+          ? Object.entries(catalogNumberById).map(([k, v]) => [k, Number(v)])
+          : []
+      );
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] analyze_use_case_overlap`, {
+        provider,
+        model,
+        candidateId:
+          candidateUseCase && typeof candidateUseCase === 'object' ? candidateUseCase.id : undefined,
+      });
+      const result = await analyzeUseCaseOverlap({
+        candidateUseCase,
+        catalogUseCases: Array.isArray(catalogUseCases) ? catalogUseCases : [],
+        threshold,
+        catalogNumberById: numberMap,
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'check_use_case_overlaps') {
+      const { useCases, threshold, catalogNumberById } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'USE_CASE_CHECK_OVERLAPS',
+      });
+      const numberMap = new Map(
+        catalogNumberById && typeof catalogNumberById === 'object'
+          ? Object.entries(catalogNumberById).map(([k, v]) => [k, Number(v)])
+          : []
+      );
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] check_use_case_overlaps`, {
+        provider,
+        model,
+        count: Array.isArray(useCases) ? useCases.length : 0,
+      });
+      const result = await checkUseCaseOverlaps({
+        useCases: Array.isArray(useCases) ? useCases : [],
+        threshold,
+        catalogNumberById: numberMap,
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
     }
 
     if (action === 'generate_use_case_test_questions') {

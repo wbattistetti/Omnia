@@ -1,5 +1,5 @@
 /**
- * Revisione per sezione ### nell'analisi documento KB (debounce + osservazioni).
+ * Revisione per sezione ### nell'analisi documento KB (review su azione toolbar).
  */
 
 import React from 'react';
@@ -11,9 +11,12 @@ import {
   type KbDocumentAnalysisTaskContext,
 } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import {
+  allReviewItemsConfirmed,
   createReviewSessionItems,
+  resolveSectionEditsToolbarPresentation,
   shouldRunObservationReview,
   type KbAnalysisReviewSessionItem,
+  type KbAnalysisToolbarPresentation,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
 import {
   kbSectionReviewHeading,
@@ -22,19 +25,19 @@ import {
 import type { KbDocumentPatch, StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
 import { buildKbSectionBaselinesFromMarkdown } from '@domain/knowledgeBase/kbDocumentAnalysisSections';
 
-const REVIEW_DEBOUNCE_MS = 420;
-
 export type KbDocumentAnalysisEditContextValue = {
   getSectionBaseline: (sectionId: KbAnalysisSectionId) => string;
   confirmSectionBaseline: (sectionId: KbAnalysisSectionId, text: string) => void;
   getSectionReview: (sectionId: KbAnalysisSectionId) => readonly KbAnalysisReviewSessionItem[] | null;
   sectionReviewBusy: boolean;
   busyObservationId: string | null;
-  scheduleSectionReanalysis: (
+  notifySectionDraftChange: (
     sectionId: KbAnalysisSectionId,
     draft: string,
     heading: string
   ) => void;
+  sectionToolbarPresentation: KbAnalysisToolbarPresentation;
+  runSectionToolbarAction: () => void;
   onAgree: (sectionId: KbAnalysisSectionId, observationId: string) => void;
   onDisagree: (sectionId: KbAnalysisSectionId, observationId: string) => void;
   onClarificationDraftChange: (
@@ -58,6 +61,11 @@ export function useKbDocumentAnalysisEdit(): KbDocumentAnalysisEditContextValue 
   return ctx;
 }
 
+export type KbSectionToolbarBridge = {
+  presentation: KbAnalysisToolbarPresentation;
+  runAction: () => void;
+};
+
 export type KbDocumentAnalysisEditProviderProps = {
   doc: StagedKbDocument;
   onUpdateDoc: (patch: KbDocumentPatch) => void;
@@ -70,6 +78,7 @@ export type KbDocumentAnalysisEditProviderProps = {
   model: string | undefined;
   callMeta?: AiCallMeta;
   disabled?: boolean;
+  onSectionToolbarBridgeChange?: (bridge: KbSectionToolbarBridge | null) => void;
   children: React.ReactNode;
 };
 
@@ -85,6 +94,7 @@ export function KbDocumentAnalysisEditProvider({
   model,
   callMeta,
   disabled = false,
+  onSectionToolbarBridgeChange,
   children,
 }: KbDocumentAnalysisEditProviderProps): React.ReactElement {
   const [sectionBaselines, setSectionBaselines] = React.useState<Record<string, string>>(
@@ -95,18 +105,17 @@ export function KbDocumentAnalysisEditProvider({
   >({});
   const [sectionReviewBusy, setSectionReviewBusy] = React.useState(false);
   const [busyObservationId, setBusyObservationId] = React.useState<string | null>(null);
-  const debounceTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [sectionDrafts, setSectionDrafts] = React.useState<Record<string, string>>({});
+  const [sectionHeadings, setSectionHeadings] = React.useState<Record<string, string>>({});
+  const [pendingSectionIds, setPendingSectionIds] = React.useState<Set<string>>(() => new Set());
 
   React.useEffect(() => {
     setSectionBaselines({ ...(doc.documentAnalysisSectionBaselines ?? {}) });
     setReviewsBySection({});
+    setSectionDrafts({});
+    setSectionHeadings({});
+    setPendingSectionIds(new Set());
   }, [doc.id, doc.documentAnalysisSectionBaselines]);
-
-  React.useEffect(() => {
-    return () => {
-      for (const t of Object.values(debounceTimers.current)) clearTimeout(t);
-    };
-  }, []);
 
   const persistBaselines = React.useCallback(
     (next: Record<string, string>) => {
@@ -134,6 +143,16 @@ export function KbDocumentAnalysisEditProvider({
     (sectionId: KbAnalysisSectionId, text: string) => {
       persistBaselines({ ...sectionBaselines, [sectionId]: text });
       setReviewsBySection((prev) => {
+        const copy = { ...prev };
+        delete copy[sectionId];
+        return copy;
+      });
+      setPendingSectionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sectionId);
+        return next;
+      });
+      setSectionDrafts((prev) => {
         const copy = { ...prev };
         delete copy[sectionId];
         return copy;
@@ -211,17 +230,94 @@ export function KbDocumentAnalysisEditProvider({
     [canRunReview, sectionBaselines, apiBase, documentSampleText]
   );
 
-  const scheduleSectionReanalysis = React.useCallback(
+  const notifySectionDraftChange = React.useCallback(
     (sectionId: KbAnalysisSectionId, draft: string, heading: string) => {
-      const prev = debounceTimers.current[sectionId];
-      if (prev) clearTimeout(prev);
-      debounceTimers.current[sectionId] = setTimeout(() => {
-        delete debounceTimers.current[sectionId];
-        void runSectionReview(sectionId, draft, heading);
-      }, REVIEW_DEBOUNCE_MS);
+      setSectionDrafts((prev) => ({ ...prev, [sectionId]: draft }));
+      setSectionHeadings((prev) => ({ ...prev, [sectionId]: heading }));
+      const baseline = sectionBaselines[sectionId] ?? '';
+      setPendingSectionIds((prev) => {
+        const next = new Set(prev);
+        if (shouldRunObservationReview(baseline, draft)) {
+          next.add(sectionId);
+        } else {
+          next.delete(sectionId);
+        }
+        return next;
+      });
     },
-    [runSectionReview]
+    [sectionBaselines]
   );
+
+  const runPendingSectionReviews = React.useCallback(async () => {
+    const ids = [...pendingSectionIds];
+    for (const sectionId of ids) {
+      const draft = sectionDrafts[sectionId];
+      const heading = sectionHeadings[sectionId] ?? sectionId;
+      if (draft === undefined) continue;
+      await runSectionReview(sectionId as KbAnalysisSectionId, draft, heading);
+    }
+  }, [pendingSectionIds, sectionDrafts, sectionHeadings, runSectionReview]);
+
+  const sectionReviewMeta = React.useMemo(() => {
+    const entries = Object.entries(reviewsBySection).filter(
+      (pair): pair is [string, KbAnalysisReviewSessionItem[]] => {
+        const items = pair[1];
+        return Boolean(items && items.length > 0);
+      }
+    );
+    const inReviewSession = entries.length > 0;
+    const allConfirmed =
+      inReviewSession &&
+      entries.every(([, items]) => allReviewItemsConfirmed(items));
+    const reviewHasDisagreement = entries.some(([, items]) =>
+      items.some(
+        (item) =>
+          item.status === 'clarifying' ||
+          Boolean(item.observation.userCorrectionNote?.trim())
+      )
+    );
+    let readyToApplyCount = 0;
+    for (const [, items] of entries) {
+      if (allReviewItemsConfirmed(items)) readyToApplyCount += 1;
+    }
+    return { inReviewSession, allConfirmed, reviewHasDisagreement, readyToApplyCount };
+  }, [reviewsBySection]);
+
+  const sectionToolbarPresentation = React.useMemo(
+    () =>
+      resolveSectionEditsToolbarPresentation({
+        pendingSectionCount: pendingSectionIds.size,
+        inReviewSession: sectionReviewMeta.inReviewSession,
+        allConfirmed: sectionReviewMeta.allConfirmed,
+        reviewHasDisagreement: sectionReviewMeta.reviewHasDisagreement,
+        canRunReview,
+        readyToApplyCount: sectionReviewMeta.readyToApplyCount,
+      }),
+    [pendingSectionIds.size, sectionReviewMeta, canRunReview]
+  );
+
+  const applyConfirmedSections = React.useCallback(() => {
+    for (const [sectionId, items] of Object.entries(reviewsBySection)) {
+      if (!items?.length || !allReviewItemsConfirmed(items)) continue;
+      const draft = sectionDrafts[sectionId];
+      if (draft === undefined) continue;
+      confirmSectionBaseline(sectionId as KbAnalysisSectionId, draft);
+    }
+  }, [reviewsBySection, sectionDrafts, confirmSectionBaseline]);
+
+  const runSectionToolbarAction = React.useCallback(() => {
+    if (sectionToolbarPresentation.phase === 'request_review') {
+      void runPendingSectionReviews();
+      return;
+    }
+    if (sectionToolbarPresentation.phase === 'apply_update') {
+      applyConfirmedSections();
+    }
+  }, [
+    sectionToolbarPresentation.phase,
+    runPendingSectionReviews,
+    applyConfirmedSections,
+  ]);
 
   const updateReviewItem = React.useCallback(
     (
@@ -322,7 +418,9 @@ export function KbDocumentAnalysisEditProvider({
       getSectionReview,
       sectionReviewBusy,
       busyObservationId,
-      scheduleSectionReanalysis,
+      notifySectionDraftChange,
+      sectionToolbarPresentation,
+      runSectionToolbarAction,
       onAgree,
       onDisagree,
       onClarificationDraftChange,
@@ -335,7 +433,9 @@ export function KbDocumentAnalysisEditProvider({
       getSectionReview,
       sectionReviewBusy,
       busyObservationId,
-      scheduleSectionReanalysis,
+      notifySectionDraftChange,
+      sectionToolbarPresentation,
+      runSectionToolbarAction,
       onAgree,
       onDisagree,
       onClarificationDraftChange,
@@ -343,6 +443,26 @@ export function KbDocumentAnalysisEditProvider({
       canRunReview,
     ]
   );
+
+  React.useEffect(() => {
+    if (!onSectionToolbarBridgeChange) return;
+    if (sectionToolbarPresentation.phase === 'hidden') {
+      onSectionToolbarBridgeChange(null);
+      return;
+    }
+    onSectionToolbarBridgeChange({
+      presentation: sectionToolbarPresentation,
+      runAction: runSectionToolbarAction,
+    });
+  }, [
+    onSectionToolbarBridgeChange,
+    sectionToolbarPresentation,
+    runSectionToolbarAction,
+  ]);
+
+  React.useEffect(() => {
+    return () => onSectionToolbarBridgeChange?.(null);
+  }, [onSectionToolbarBridgeChange]);
 
   return (
     <KbDocumentAnalysisEditContext.Provider value={value}>

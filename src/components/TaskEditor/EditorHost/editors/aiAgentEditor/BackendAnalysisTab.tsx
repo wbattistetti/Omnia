@@ -38,7 +38,7 @@ import {
 } from '@domain/backendAnalysis/backendAnalysisGuide';
 import { useAgentBackendAnalysis } from './AgentBackendAnalysisContext';
 import { BackendAnalysisWorkspace } from './BackendAnalysisWorkspace';
-import { BackendAnalysisEditProvider } from './backendAnalysis/BackendAnalysisEditContext';
+import { useRegisterBackendAnalysisDocumentActions } from './backendAnalysis/BackendAnalysisDocumentActionsContext';
 import { buildSectionBaselinesFromDocument } from '@domain/backendAnalysis/backendAnalysisSectionBaselines';
 import { buildBackendReferenceCorpus } from '@domain/backendAnalysis/buildBackendReferenceCorpus';
 import { collectBackendAnalysisStructureContext } from '@domain/backendAnalysis/collectBackendAnalysisStructureContext';
@@ -417,6 +417,16 @@ export function BackendAnalysisTab({
     canRunAgent,
   });
 
+  const registerDocumentActions = useRegisterBackendAnalysisDocumentActions();
+  React.useEffect(() => {
+    registerDocumentActions({
+      presentation: toolbar,
+      busy,
+      onExecute: () => onExecute(),
+    });
+    return () => registerDocumentActions(null);
+  }, [registerDocumentActions, toolbar, busy, onExecute]);
+
   React.useEffect(() => {
     if (inReviewSession && allConfirmed) {
       setReviewPanelOpen(false);
@@ -475,33 +485,15 @@ export function BackendAnalysisTab({
         <p className="text-xs text-slate-400">
           {manualEntries.length} backend · corpus {referenceCorpus.length.toLocaleString()} caratteri
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            disabled={!canEdit || busy || (!draft.trim() && !contextMarkdown.trim())}
-            onClick={onStructureDocument}
-            title="Normalizza nel formato Analisi backend + PayoffData"
-            className="rounded-md border border-slate-600/80 bg-slate-900/60 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-800/80 disabled:opacity-50"
-          >
-            {BACKEND_ANALYSIS_STRUCTURE_BUTTON}
-          </button>
-          {toolbar.executeVisible ? (
-            <button
-              type="button"
-              disabled={!toolbar.executeEnabled || busy}
-              onClick={onExecute}
-              className={
-                'rounded-md border px-3 py-1 text-sm font-medium disabled:opacity-50 ' +
-                (toolbar.executeEmphasized
-                  ? 'border-amber-600/70 bg-amber-950/50 text-amber-100 hover:bg-amber-900/40'
-                  : 'border-violet-600/70 bg-violet-950/50 text-violet-100 hover:bg-violet-900/40')
-              }
-            >
-              {busy ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-              {toolbar.executeLabel}
-            </button>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          disabled={!canEdit || busy || (!draft.trim() && !contextMarkdown.trim())}
+          onClick={onStructureDocument}
+          title="Normalizza nel formato Analisi backend + PayoffData"
+          className="rounded-md border border-slate-600/80 bg-slate-900/60 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-800/80 disabled:opacity-50"
+        >
+          {BACKEND_ANALYSIS_STRUCTURE_BUTTON}
+        </button>
       </div>
 
       {showGuide ? (
@@ -582,20 +574,7 @@ export function BackendAnalysisTab({
           </div>
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-700/80 bg-slate-950/50 p-2">
-            <BackendAnalysisEditProvider
-              projectId={projectId}
-              agentTaskId={agentTaskId}
-              backendCatalog={backendCatalog}
-              onPersistCatalog={onPersistCatalog}
-              referenceCorpus={referenceCorpus}
-              taskContext={taskContext}
-              provider={provider}
-              model={model}
-              callMeta={callMeta}
-              disabled={disabled}
-            >
-              <BackendAnalysisWorkspace />
-            </BackendAnalysisEditProvider>
+            <BackendAnalysisWorkspace />
           </div>
         )}
       </div>

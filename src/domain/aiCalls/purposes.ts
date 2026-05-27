@@ -72,6 +72,10 @@ export const AI_CALL_PURPOSE = {
   RUNTIME_ANALYSIS_DISTILL: 'RUNTIME_ANALYSIS_DISTILL',
   /** Domande di test semantiche per validazione use case. */
   USE_CASE_GENERATE_TEST_QUESTIONS: 'USE_CASE_GENERATE_TEST_QUESTIONS',
+  /** Analisi sovrapposizione semantica singolo use case vs catalogo. */
+  USE_CASE_ANALYZE_OVERLAP: 'USE_CASE_ANALYZE_OVERLAP',
+  /** Verifica sovrapposizioni su tutto il catalogo use case. */
+  USE_CASE_CHECK_OVERLAPS: 'USE_CASE_CHECK_OVERLAPS',
 } as const;
 
 export type AiCallPurposeId = (typeof AI_CALL_PURPOSE)[keyof typeof AI_CALL_PURPOSE];
@@ -125,6 +129,9 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
     'Distillazione estrema analisi KB/backend per runtime',
   [AI_CALL_PURPOSE.USE_CASE_GENERATE_TEST_QUESTIONS]:
     'Generazione domande di test per use case',
+  [AI_CALL_PURPOSE.USE_CASE_ANALYZE_OVERLAP]:
+    'Analisi sovrapposizione use case vs catalogo',
+  [AI_CALL_PURPOSE.USE_CASE_CHECK_OVERLAPS]: 'Verifica sovrapposizioni catalogo use case',
 });
 
 /** Human-readable label for a known purpose id; falls back to the id itself when unknown. */

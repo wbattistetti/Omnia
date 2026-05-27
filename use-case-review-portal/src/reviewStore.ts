@@ -64,6 +64,7 @@ interface ReviewState {
   conversation: AgentReviewConversationSnapshot | null;
   /** Modello LLM designer da Omnia (publish) o scelto nel portale. */
   designerLlm: AgentReviewDesignerLlmSnapshot | null;
+  agentUseCaseWizardStateJson: string;
   useCases: AIAgentUseCase[];
   categories: AIAgentUseCaseCategory[];
   baselinesByUseCaseId: Record<string, { payoff: string }>;
@@ -97,6 +98,7 @@ interface ReviewState {
   setBackends: (snapshot: AgentReviewBackendSnapshot | null) => void;
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   setCategories: React.Dispatch<React.SetStateAction<AIAgentUseCaseCategory[]>>;
+  setAgentUseCaseWizardStateJson: (json: string) => void;
   updateUseCase: (id: string, patch: Partial<AIAgentUseCase>) => void;
   loadFromServer: () => Promise<void>;
   saveToServer: () => Promise<void>;
@@ -151,6 +153,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   backends: null,
   conversation: null,
   designerLlm: null,
+  agentUseCaseWizardStateJson: '',
   useCases: [],
   categories: [],
   baselinesByUseCaseId: {},
@@ -198,6 +201,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       conversation: null,
       useCases: [],
       categories: [],
+      agentUseCaseWizardStateJson: '',
       baselinesByUseCaseId: {},
       status: '',
       channelLoaded: false,
@@ -217,6 +221,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       backends: null,
       conversation: null,
       designerLlm: null,
+      agentUseCaseWizardStateJson: '',
       status: '',
       channelLoaded: false,
     }),
@@ -275,6 +280,8 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       categories: typeof next === 'function' ? next(s.categories) : [...next],
     })),
 
+  setAgentUseCaseWizardStateJson: (json) => set({ agentUseCaseWizardStateJson: json }),
+
   updateUseCase: (id, patch) =>
     set((s) => ({
       useCases: s.useCases.map((u) => (u.id === id ? { ...u, ...patch } : u)),
@@ -300,6 +307,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
           backends: doc.backends ?? null,
           conversation: doc.conversation ?? null,
           designerLlm: doc.designerLlm ?? null,
+          agentUseCaseWizardStateJson: doc.agentUseCaseWizardStateJson ?? '',
           useCases,
           categories: [...doc.useCaseBundle.categories],
           baselinesByUseCaseId: captureBaselines(useCases),
@@ -327,6 +335,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
             backends: parsed.backends ?? null,
             conversation: parsed.conversation ?? null,
             designerLlm: parsed.designerLlm ?? null,
+            agentUseCaseWizardStateJson: parsed.agentUseCaseWizardStateJson ?? '',
             useCases,
             categories: [...parsed.useCaseBundle.categories],
             baselinesByUseCaseId: captureBaselines(useCases),
@@ -355,6 +364,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       knowledgeBase,
       backends,
       conversation,
+      agentUseCaseWizardStateJson,
     } = get();
     const designerLlm = designerLlmFromBrowser() ?? get().designerLlm ?? undefined;
     set({ saving: true });
@@ -371,6 +381,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         ...(backends ? { backends } : {}),
         ...(conversation ? { conversation } : {}),
         ...(designerLlm ? { designerLlm } : {}),
+        ...(agentUseCaseWizardStateJson.trim()
+          ? { agentUseCaseWizardStateJson: agentUseCaseWizardStateJson.trim() }
+          : {}),
       });
       const payload = canonicalReviewPayload(doc);
       doc = { ...doc, contentHash: await computeReviewContentHashAsync(payload) };

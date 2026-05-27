@@ -37,6 +37,7 @@ type KbTabChromeProps = {
   def: (typeof TAB_DEFS)[number];
   active: boolean;
   pendingUpdate?: boolean;
+  toolbar?: KbAnalysisToolbarState | null;
   onSelect: () => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -47,84 +48,86 @@ function KbWorkspaceTabChrome({
   def,
   active,
   pendingUpdate = false,
+  toolbar = null,
   onSelect,
   onDragStart,
   onDragOver,
   onDrop,
 }: KbTabChromeProps): React.ReactElement {
-  let className =
-    'inline-flex cursor-grab items-center gap-1 rounded-t border py-1 pl-2.5 pr-2.5 text-xs font-medium transition-colors active:cursor-grabbing ';
+  const showToolbar =
+    def.id === 'analysis' &&
+    toolbar &&
+    (toolbar.executeVisible || toolbar.reviewToggleVisible);
+
+  let shellClass =
+    'inline-flex cursor-grab overflow-hidden rounded-t border text-xs font-medium transition-colors active:cursor-grabbing ';
 
   if (pendingUpdate) {
-    className += active
+    shellClass += active
       ? 'border-amber-500/80 bg-amber-600 text-amber-50'
       : 'border-amber-600/60 bg-amber-700/90 text-amber-50 hover:bg-amber-600';
   } else if (active) {
-    className += 'border-violet-500/50 bg-slate-800 text-violet-100';
+    shellClass += 'border-violet-500/50 bg-slate-800 text-violet-100';
   } else {
-    className += 'border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200';
+    shellClass += 'border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200';
   }
 
+  const tabBtnClass =
+    'inline-flex items-center gap-1 py-1 pl-2.5 pr-2.5 ' +
+    (showToolbar ? '' : 'rounded-t');
+
+  const actionClass =
+    'inline-flex items-center gap-1 border-l border-violet-400/30 px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40 ' +
+    (toolbar?.executeEmphasized
+      ? 'bg-amber-950/70 text-amber-100'
+      : 'bg-violet-900/40 text-violet-50');
+
   return (
-    <button
-      type="button"
+    <div
       role="tab"
       aria-selected={active}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onClick={onSelect}
-      className={className}
+      className={shellClass}
     >
-      <def.Icon className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
-      {def.label}
-    </button>
-  );
-}
-
-function KbAnalysisTabToolbar({
-  toolbar,
-}: {
-  toolbar: KbAnalysisToolbarState;
-}): React.ReactElement | null {
-  if (!toolbar.executeVisible && !toolbar.reviewToggleVisible) return null;
-
-  const executeClass =
-    'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-40 ' +
-    (toolbar.executeEmphasized
-      ? 'border-violet-400/90 bg-violet-600/80 text-white shadow-sm shadow-violet-900/40 hover:bg-violet-500/90'
-      : 'border-slate-600/70 bg-slate-900/60 text-slate-300 hover:bg-slate-800/80');
-
-  return (
-    <div className="flex items-center gap-1.5 border-l border-slate-700/60 pl-2 ml-1">
-      {toolbar.reviewToggleVisible ? (
-        <button
-          type="button"
-          aria-pressed={toolbar.reviewPanelOpen}
-          onClick={toolbar.onToggleReviewPanel}
-          className={
-            'rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ' +
-            (toolbar.reviewPanelOpen
-              ? 'border-violet-500/70 bg-violet-950/60 text-violet-100'
-              : 'border-slate-600/70 bg-slate-900/50 text-slate-300 hover:bg-slate-800/70')
-          }
-        >
-          {KB_ANALYSIS_REVIEW_TOGGLE}
-        </button>
-      ) : null}
-      {toolbar.executeVisible ? (
-        <button
-          type="button"
-          disabled={!toolbar.executeEnabled || toolbar.executeBusy}
-          onClick={toolbar.onExecute}
-          className={executeClass}
-        >
-          {toolbar.executeBusy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+      <button type="button" onClick={onSelect} className={tabBtnClass}>
+        <def.Icon className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+        {def.label}
+      </button>
+      {showToolbar && toolbar ? (
+        <>
+          {toolbar.reviewToggleVisible ? (
+            <button
+              type="button"
+              aria-pressed={toolbar.reviewPanelOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                toolbar.onToggleReviewPanel();
+              }}
+              className="border-l border-violet-400/30 px-2 py-1 text-[11px] font-medium text-violet-100/90 hover:bg-violet-900/40"
+            >
+              {KB_ANALYSIS_REVIEW_TOGGLE}
+            </button>
           ) : null}
-          {toolbar.executeLabel}
-        </button>
+          {toolbar.executeVisible ? (
+            <button
+              type="button"
+              disabled={!toolbar.executeEnabled || toolbar.executeBusy}
+              onClick={(e) => {
+                e.stopPropagation();
+                toolbar.onExecute();
+              }}
+              className={actionClass}
+            >
+              {toolbar.executeBusy ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              ) : null}
+              {toolbar.executeLabel}
+            </button>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -149,8 +152,8 @@ export function KbWorkspaceTabHost({
   const dragTabRef = React.useRef<KbWorkspaceTabId | null>(null);
 
   React.useEffect(() => {
-    setActiveTab('document');
-    setSplitView(false);
+    setActiveTab('analysis');
+    setSplitView(true);
     setAnalysisToolbar(null);
     setReviewPanelOpen(true);
   }, [doc.id]);
@@ -250,6 +253,7 @@ export function KbWorkspaceTabHost({
                 def={def}
                 active={active}
                 pendingUpdate={isAnalysisTab && analysisTabPending}
+                toolbar={isAnalysisTab && showAnalysisToolbar ? analysisToolbar : null}
                 onSelect={() => {
                   setActiveTab(tabId);
                   setSplitView(false);
@@ -258,9 +262,6 @@ export function KbWorkspaceTabHost({
                 onDragOver={onTabDragOver}
                 onDrop={onTabDropOnBar(tabId)}
               />
-              {isAnalysisTab && showAnalysisToolbar && analysisToolbar ? (
-                <KbAnalysisTabToolbar toolbar={analysisToolbar} />
-              ) : null}
             </React.Fragment>
           );
         })}

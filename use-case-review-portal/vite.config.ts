@@ -38,16 +38,21 @@ export default defineConfig(({ mode }) => {
     secure: false,
   };
 
-  const defineDevToken =
-    mode === 'development' && reviewToken
-      ? { 'import.meta.env.VITE_REVIEW_DEV_AUTO_TOKEN': JSON.stringify(reviewToken) }
-      : {};
+  /** Local/PoC: token from backend/.env at build time (also for static serve on :3100). */
+  const defineReviewAuth: Record<string, string> = {};
+  if (reviewToken) {
+    defineReviewAuth['import.meta.env.VITE_AGENT_REVIEW_CHANNEL_TOKEN'] =
+      JSON.stringify(reviewToken);
+    if (mode === 'development') {
+      defineReviewAuth['import.meta.env.VITE_REVIEW_DEV_AUTO_TOKEN'] = JSON.stringify(reviewToken);
+    }
+  }
 
   const rootNodeModules = path.resolve(root, 'node_modules');
 
   return {
     plugins: [react()],
-    define: defineDevToken,
+    define: defineReviewAuth,
     // In production the portal is served by Express under /review-portal/
     base: mode === 'production' ? '/review-portal/' : '/',
     resolve: {

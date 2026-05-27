@@ -2,12 +2,7 @@
  * Client per GET /api/ia-catalog/diagnostics — stato env Node + cataloghi sincronizzati (no segreti).
  */
 
-function getDiagnosticsApiBase(): string {
-  const fromEnv = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_BACKEND_URL : '';
-  if (typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.replace(/\/$/, '');
-  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) return '';
-  return 'http://127.0.0.1:3100';
-}
+import { resolveOmniaApiBase } from '@services/resolveOmniaApiBase';
 
 export interface IaProviderDiagnosticResult {
   ok: boolean;
@@ -35,7 +30,7 @@ export async function runIaProviderDiagnostics(
     .toLowerCase();
   const qs = new URLSearchParams({ provider: p });
   const path = `/api/ia-catalog/diagnostics?${qs.toString()}`;
-  const base = getDiagnosticsApiBase();
+  const base = resolveOmniaApiBase();
   const res = await fetch(`${base}${path}`);
   let json: Record<string, unknown> = {};
   try {

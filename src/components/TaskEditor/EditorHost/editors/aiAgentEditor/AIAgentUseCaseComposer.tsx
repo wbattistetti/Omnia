@@ -130,6 +130,10 @@ import {
 } from '@domain/aiAgentUseCase/useCaseTestQuestions';
 import { UseCaseTestQuestionsPanel } from './useCaseTestQuestions/UseCaseTestQuestionsPanel';
 import { buildGenerateTestQuestionsHandler } from './useCaseTestQuestions/UseCaseTestQuestionsToolbar';
+import { buildCheckOverlapsHandler } from './useCaseOverlap/buildCheckOverlapsHandler';
+import { UseCaseOverlapBadge } from './useCaseOverlap/UseCaseOverlapBadge';
+import { UseCaseOverlapPayoff } from './useCaseOverlap/UseCaseOverlapPayoff';
+import { analyzeUseCase } from '@domain/useCaseOverlap/useCaseOverlapApi';
 import {
   type AiTripletFieldBaseline,
   UC_USE_CASE_LIST_SCROLL,
@@ -138,6 +142,7 @@ import {
   UC_AGENT_VOTE_BTN,
   UC_CLASSIC_TEXTAREA_AGENT,
   UC_CLASSIC_TEXTAREA_SCENARIO,
+  UC_CATALOG_NUMBER_COL,
   UC_SCENARIO_BODY_TEXT,
   UC_SCENARIO_PANEL_SURFACE,
   UC_HEAD_VOTE_BTN,
@@ -749,6 +754,24 @@ export function AIAgentUseCaseComposer({
     );
     return () => listToolbarCtx.registerGenerateTestQuestionsHandler(null);
   }, [listToolbarCtx, editorDock, provider, model, setUseCases]);
+
+  React.useEffect(() => {
+    if (!listToolbarCtx || !editorDock) return;
+    listToolbarCtx.registerCheckOverlapsHandler(
+      buildCheckOverlapsHandler({
+        getUseCases: () => useCasesRef.current,
+        provider,
+        model,
+        buildCallMeta: editorDock.buildCallMeta,
+        onReport: (report) => listToolbarCtx.setOverlapReport(report),
+      })
+    );
+    return () => listToolbarCtx.registerCheckOverlapsHandler(null);
+  }, [listToolbarCtx, editorDock, provider, model]);
+
+  const [overlapAnalyzingIds, setOverlapAnalyzingIds] = React.useState<ReadonlySet<string>>(
+    () => new Set()
+  );
 
   const [editingTitleId, setEditingTitleId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
@@ -1437,6 +1460,40 @@ export function AIAgentUseCaseComposer({
     [draftTitle, setUseCases, clearNewHighlightOnDesignerAction]
   );
 
+  const runOverlapAnalysisForUseCase = React.useCallback(
+    async (useCaseId: string) => {
+      if (!provider || !model || !editorDock) return;
+      const catalog = useCasesRef.current;
+      const candidate = catalog.find((u) => u.id === useCaseId);
+      if (!candidate) return;
+      setOverlapAnalyzingIds((prev) => new Set(prev).add(useCaseId));
+      try {
+        const hint = await analyzeUseCase({
+          candidateUseCase: candidate,
+          catalogUseCases: catalog,
+          provider,
+          model,
+          callMeta: editorDock.buildCallMeta(AI_CALL_PURPOSE.USE_CASE_ANALYZE_OVERLAP),
+        });
+        setUseCases((prev) =>
+          prev.map((u) => (u.id === useCaseId ? { ...u, overlapHint: hint } : u))
+        );
+        if (hint.classification === 'duplicate' || hint.classification === 'variant') {
+          commitCardExpansion(useCaseId, true, 'programmatic');
+        }
+      } catch (err) {
+        console.warn('[useCaseOverlap] analyze failed', err);
+      } finally {
+        setOverlapAnalyzingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(useCaseId);
+          return next;
+        });
+      }
+    },
+    [provider, model, editorDock, setUseCases, commitCardExpansion]
+  );
+
   const createUseCase = React.useCallback(
     async (params: {
       label: string;
@@ -1469,9 +1526,12 @@ export function AIAgentUseCaseComposer({
       if (!params.skipSelectAfterCreate && createdId) {
         setSelectedId(createdId);
       }
+      if (createdId && (params.creationScope ?? 'single') === 'single') {
+        void runOverlapAnalysisForUseCase(createdId);
+      }
       return createdId;
     },
-    [onCreateUseCase]
+    [onCreateUseCase, runOverlapAnalysisForUseCase]
   );
 
   const handleCreateRoot = React.useCallback(async () => {
@@ -2949,8 +3009,19 @@ export function AIAgentUseCaseComposer({
                         onClick={() => {
                           if (u.id !== effectiveSelectedId) setSelectedId(u.id);
                         }}
-                        className={`group/uc-head flex cursor-pointer items-start gap-1 pl-1.5 pr-2 py-1.5 ${useCaseHeaderShellClass(active)}`}
+                        className={`group/uc-head flex cursor-pointer items-start gap-1.5 pl-1 pr-2 py-1.5 ${useCaseHeaderShellClass(active)}`}
                       >
+                        <div
+                          className={UC_CATALOG_NUMBER_COL}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Numero catalogo deploy (stesso del log USECASE)"
+                        >
+                          <UseCaseCatalogNumberBadge
+                            catalogNumber={catalogNumber}
+                            included={includedInConv}
+                            size="md"
+                          />
+                        </div>
                         {/*
                           Checkbox "incluso nelle conversazioni" (sempre presente, default
                           checked). Posizionato per primo a sinistra perch\u00e9 governa il
@@ -3002,10 +3073,6 @@ export function AIAgentUseCaseComposer({
                             <ChevronRight size={14} aria-hidden />
                           )}
                         </button>
-                        <UseCaseCatalogNumberBadge
-                          catalogNumber={catalogNumber}
-                          included={includedInConv}
-                        />
                         {searchHighlight ? (
                           <span
                             className="mt-[2px] shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide bg-sky-500/25 text-sky-200 ring-1 ring-sky-400/40"
@@ -3091,6 +3158,13 @@ export function AIAgentUseCaseComposer({
                               }}
                             >
                               <span className="min-w-0 break-words whitespace-normal">
+                                {wizardAccordionHeaderMode === 'message' &&
+                                includedInConv &&
+                                catalogNumber ? (
+                                  <span className="mr-1 font-mono text-xs font-bold tabular-nums text-violet-500 dark:text-violet-300">
+                                    {catalogNumber} —
+                                  </span>
+                                ) : null}
                                 {wizardAccordionHeaderMode === 'message' ? (
                                   rowAssistant?.content?.trim() ? (
                                     wizardSearchSeed.trim() ? (
@@ -3118,6 +3192,10 @@ export function AIAgentUseCaseComposer({
                                 getUseCaseDeployRowStats(u, projectSlotLexicon)
                               }
                               onInspectCompiled={undefined}
+                            />
+                            <UseCaseOverlapBadge
+                              hint={u.overlapHint}
+                              analyzing={overlapAnalyzingIds.has(u.id)}
                             />
                             {phraseStyleNewSet.has(u.id) ? (
                               <span
@@ -3409,6 +3487,11 @@ export function AIAgentUseCaseComposer({
                                   onNoteDelete={() => handleInvalidationNoteChange(u.id, '')}
                                 />
                               ) : null}
+                              <UseCaseOverlapPayoff
+                                hint={u.overlapHint}
+                                analyzing={overlapAnalyzingIds.has(u.id)}
+                                catalogUseCases={useCases}
+                              />
                             </div>
                           ) : null}
                           {wizardShowMessage ? (

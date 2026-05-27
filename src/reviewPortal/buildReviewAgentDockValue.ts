@@ -29,6 +29,7 @@ import type { ManualBackendCreationMode } from '@domain/backendCatalog/catalogTy
 import type { KbDocumentAnalysisTaskContext } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
 import type { ReviewAgentIaDockSlice } from './useReviewAgentIaDockSlice';
 import type { AgentDockPromptsPanelHandlers } from '@domain/agentEditorDock/agentDockPromptsPanelHandlers';
+import type { ReviewWizardDockSlice } from './useReviewWizardDockIntegration';
 import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
 
 export interface ReviewAgentDockLiveInput {
@@ -77,6 +78,7 @@ export interface ReviewAgentDockLiveInput {
   registerKbAddDocumentPicker: (handler: (() => void) | null) => void;
   invokeKbAddDocumentPicker: () => void;
   hideBackendsPanelInlineAddButton: boolean;
+  wizard: ReviewWizardDockSlice;
 }
 
 export function conversationalRulesFromReviewSnapshot(
@@ -188,7 +190,7 @@ export function buildReviewAgentDockValue(
     onClearUseCaseComposerError: live.onClearUseCaseComposerError,
     onCreateUseCase: handleCreateUseCase,
     onSplitRootUseCaseDraft: async (draftText) => parseRootUseCaseDraftSegmentsFallback(draftText),
-    onRootUseCaseBatchCreated: reviewNoop,
+    onRootUseCaseBatchCreated: live.wizard.onRootUseCaseBatchCreated,
     onRegenerateAgentMessage: () => reviewIaDisabledAsync('Rigenera messaggio agente'),
     onAnnotateAgentMessageForJson: () => reviewIaDisabledAsync('Annota messaggio JSON'),
     ...live.promptsPanelHandlers,
@@ -226,25 +228,35 @@ export function buildReviewAgentDockValue(
     knowledgeBaseRemoveDocument: live.knowledgeBaseRemoveDocument,
     knowledgeBaseUpdateDocument: live.knowledgeBaseUpdateDocument,
     knowledgeBaseReorderDocuments: live.knowledgeBaseReorderDocuments,
-    onDismissUseCaseBundleFeedback: reviewNoop,
-    onClearUseCaseHighlight: reviewNoop,
-    onPropagateExamplePhraseStyle: () => reviewIaDisabledAsync('Propaga stile frasi'),
+    onDismissUseCaseBundleFeedback: live.wizard.onDismissUseCaseBundleFeedback,
+    onClearUseCaseHighlight: live.wizard.onClearUseCaseHighlight,
+    onPropagateExamplePhraseStyle: live.wizard.onPropagateExamplePhraseStyle,
     onCompleteCorrection: async () => null,
-    onAssistantPhraseDraftChange: reviewNoop,
+    onAssistantPhraseDraftChange: live.wizard.onAssistantPhraseDraftChange,
+    useCasePhraseStylePropagationBusy: live.wizard.useCasePhraseStylePropagationBusy,
+    useCasePhraseStyleBatchProgress: live.wizard.useCasePhraseStyleBatchProgress,
+    assistantPhraseStyleNewIds: live.wizard.assistantPhraseStyleNewIds,
+    useCaseBundleFeedback: live.wizard.useCaseBundleFeedback,
+    useCaseHighlightIds: live.wizard.useCaseHighlightIds,
+    useCaseGeneratorWizard: live.wizard.useCaseGeneratorWizard,
     setUseCaseSiblingSortMode: reviewNoop,
     reorderUseCaseSiblingByDrag: (draggedId, targetId, position) => {
       live.setUseCases((prev) =>
         applySiblingReorderForPersist(prev, draggedId, targetId, position)
       );
     },
-    onAssembleConversation: () => reviewIaDisabledAsync('Crea conversazione'),
-    onProofreadConversationAgentTurns: () => reviewIaDisabledAsync('Proofread conversazione'),
-    onPromoteSuggestionToCatalog: () => reviewIaDisabledAsync('Promuovi suggestion'),
-    onRejectSuggestion: reviewNoop,
-    onTokenizeUseCases: () => reviewIaDisabledAsync('Tokenizza use case'),
-    onClearAllWizardOutput: reviewNoop,
-    onClearWizardConversations: reviewNoop,
-    onClearWizardTokenization: reviewNoop,
+    onAssembleConversation: live.wizard.onAssembleConversation,
+    assembleConversationBusy: live.wizard.assembleConversationBusy,
+    onProofreadConversationAgentTurns: live.wizard.onProofreadConversationAgentTurns,
+    proofreadConversationBusy: live.wizard.proofreadConversationBusy,
+    onPromoteSuggestionToCatalog: live.wizard.onPromoteSuggestionToCatalog,
+    onRejectSuggestion: live.wizard.onRejectSuggestion,
+    onTokenizeUseCases: live.wizard.onTokenizeUseCases,
+    tokenizeUseCasesBusy: live.wizard.tokenizeUseCasesBusy,
+    tokenizedByUseCaseId: live.wizard.tokenizedByUseCaseId,
+    onClearAllWizardOutput: live.wizard.onClearAllWizardOutput,
+    onClearWizardConversations: live.wizard.onClearWizardConversations,
+    onClearWizardTokenization: live.wizard.onClearWizardTokenization,
     canCreateConversationalPrompt: areAllUseCasesProjectable(live.useCases),
     onOpenConversationalPromptDialog: reviewNoop,
     setAgentConversationStyleExample: reviewNoop,

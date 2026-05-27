@@ -91,6 +91,8 @@ export interface AgentReviewChannelDocument {
   conversation?: AgentReviewConversationSnapshot;
   /** Modello LLM designer usato in Omnia al publish (portale review lo applica al load). */
   designerLlm?: AgentReviewDesignerLlmSnapshot;
+  /** Stato wizard use case (passo pipeline, baselines, conversazioni) serializzato come sul Task. */
+  agentUseCaseWizardStateJson?: string;
 }
 
 export interface BuildReviewDocumentParams {
@@ -107,6 +109,7 @@ export interface BuildReviewDocumentParams {
   backends?: AgentReviewBackendSnapshot;
   conversation?: AgentReviewConversationSnapshot;
   designerLlm?: AgentReviewDesignerLlmSnapshot;
+  agentUseCaseWizardStateJson?: string;
 }
 
 function stableStringify(value: unknown): string {
@@ -218,6 +221,13 @@ export function buildAgentReviewDocument(params: BuildReviewDocumentParams): Age
       model: params.designerLlm.model.trim(),
     };
   }
+  const wizardJson =
+    typeof params.agentUseCaseWizardStateJson === 'string'
+      ? params.agentUseCaseWizardStateJson.trim()
+      : '';
+  if (wizardJson) {
+    doc.agentUseCaseWizardStateJson = wizardJson;
+  }
   return doc;
 }
 
@@ -296,6 +306,11 @@ export function parseAgentReviewDocument(raw: unknown): AgentReviewChannelDocume
   const designerLlm = parseDesignerLlmSnapshot(o.designerLlm);
   if (designerLlm) {
     doc.designerLlm = designerLlm;
+  }
+  const wizardJson =
+    typeof o.agentUseCaseWizardStateJson === 'string' ? o.agentUseCaseWizardStateJson.trim() : '';
+  if (wizardJson) {
+    doc.agentUseCaseWizardStateJson = wizardJson;
   }
   return doc;
 }

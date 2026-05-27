@@ -3,7 +3,6 @@
  */
 
 import React from 'react';
-import { Loader2 } from 'lucide-react';
 import { KbAnalysisObservationReviewPanel } from './KbAnalysisObservationReviewPanel';
 import {
   allReviewItemsConfirmed,
@@ -72,7 +71,7 @@ export function KbDocumentAnalysisSectionWithReview({
   const handleChange = React.useCallback(
     (next: string) => {
       onValueChange(next);
-      if (!readOnly) edit.scheduleSectionReanalysis(sectionId, next, heading);
+      if (!readOnly) edit.notifySectionDraftChange(sectionId, next, heading);
     },
     [edit, onValueChange, readOnly, sectionId, heading]
   );
@@ -91,12 +90,6 @@ export function KbDocumentAnalysisSectionWithReview({
           minHeightPx={100}
           ariaLabel={`Analisi: ${heading}`}
         />
-        {edit.sectionReviewBusy && !hasReview ? (
-          <div className="pointer-events-none absolute bottom-2 right-2 flex items-center gap-1 rounded bg-slate-900/90 px-2 py-0.5 text-[10px] text-violet-200">
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-            Revisione…
-          </div>
-        ) : null}
       </div>
 
       {hasReview ? (

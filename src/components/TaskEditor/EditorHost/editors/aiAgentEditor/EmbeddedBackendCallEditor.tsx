@@ -11,6 +11,21 @@ import BackendCallEditor from '../BackendCallEditor';
 import { BackendCallEmbeddedLayout } from './BackendCallEmbeddedLayout';
 import { EmbeddedBackendToolbar } from './EmbeddedBackendToolbar';
 
+/** Evita loop onToolbarUpdate quando BackendCallEditor ricrea l'array a ogni render. */
+function embeddedToolbarSignature(buttons: ToolbarButton[]): string {
+  return JSON.stringify(
+    buttons.map((b) => ({
+      label: b?.label,
+      title: typeof b?.title === 'string' ? b.title : '',
+      disabled: Boolean(b?.disabled),
+      primary: Boolean(b?.primary),
+      active: Boolean(b?.active),
+      visible: b?.visible !== false,
+      buttonId: (b as { buttonId?: string })?.buttonId,
+    }))
+  );
+}
+
 export function EmbeddedBackendCallEditor({
   task,
   endpointExternalRevision = 0,
@@ -30,10 +45,15 @@ export function EmbeddedBackendCallEditor({
 }) {
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
   const [signatureSubOpen, setSignatureSubOpen] = React.useState(false);
+  const lastToolbarSigRef = React.useRef<string | null>(null);
 
-  /** Stable callback — inline handler made BackendCallEditor's toolbar effect re-run every render. */
-  const handleToolbarUpdate = React.useCallback((btns: ToolbarButton[]) => {
-    setToolbarButtons((prev) => (prev === btns ? prev : btns));
+  /** Stable callback — confronto per firma, non per riferimento array. */
+  const handleToolbarUpdate = React.useCallback((btns: ToolbarButton[], _color: string) => {
+    void _color;
+    const sig = embeddedToolbarSignature(btns);
+    if (lastToolbarSigRef.current === sig) return;
+    lastToolbarSigRef.current = sig;
+    setToolbarButtons(btns);
   }, []);
 
   return (

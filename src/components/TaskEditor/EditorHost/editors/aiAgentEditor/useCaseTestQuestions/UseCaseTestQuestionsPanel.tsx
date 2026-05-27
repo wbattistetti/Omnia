@@ -17,6 +17,12 @@ import type {
   UseCaseTestQuestionStatus,
 } from '@domain/aiAgentUseCase/useCaseTestQuestions';
 import {
+  appendUniqueTestQuestions,
+  createManualTestQuestion,
+  normalizeTestQuestionText,
+  sortTestQuestionsByText,
+} from '@domain/aiAgentUseCase/useCaseTestQuestions';
+import {
   UC_TEST_QUESTION_TEXTAREA,
   UC_WIZARD_TEST_QUESTION_TEXT,
 } from '../useCaseComposerPresentation';
@@ -36,9 +42,22 @@ const ROW_ACTIONS =
 
 /** Chip Passed / Failed compatti in toolbar riga. */
 const VALIDATION_CHIP_BASE =
-  'inline-flex h-5 shrink-0 cursor-pointer items-center gap-0.5 rounded px-1.5 text-[9px] font-semibold leading-none text-white shadow-sm transition hover:brightness-110 focus:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-45';
+  'inline-flex h-5 shrink-0 cursor-pointer items-center gap-0.5 rounded px-1.5 text-[9px] font-semibold leading-none transition focus:outline-none focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-950 disabled:cursor-not-allowed disabled:opacity-45';
+
+const PASSED_CHIP_MUTED =
+  'border border-emerald-800/25 bg-emerald-950/25 text-emerald-800/35 shadow-none hover:bg-emerald-950/40 dark:border-emerald-700/20 dark:bg-emerald-950/20 dark:text-emerald-600/35 dark:hover:bg-emerald-950/35';
+const PASSED_CHIP_ACTIVE =
+  'border-0 bg-[#4CAF50] text-white shadow-md hover:brightness-110 focus-visible:ring-[#81C784] ring-1 ring-white/40';
+
+const FAILED_CHIP_MUTED =
+  'border border-red-900/25 bg-red-950/25 text-red-900/35 shadow-none hover:bg-red-950/40 dark:border-red-800/20 dark:bg-red-950/20 dark:text-red-600/35 dark:hover:bg-red-950/35';
+const FAILED_CHIP_ACTIVE =
+  'border-0 bg-[#F44336] text-white shadow-md hover:brightness-110 focus-visible:ring-[#E57373] ring-1 ring-white/40';
 
 const FAILURE_RADIO_CLS = 'h-3.5 w-3.5 shrink-0 accent-sky-400';
+
+const ROW_JUST_ADDED_HIGHLIGHT =
+  'ring-2 ring-amber-400/75 bg-amber-950/35 border-amber-500/50';
 
 export type UseCaseCatalogEntry = {
   readonly id: string;
@@ -91,42 +110,30 @@ function RowValidationChips({
         type="button"
         disabled={disabled}
         aria-pressed={status === 'ok'}
-        className={`${VALIDATION_CHIP_BASE} border-0 focus-visible:ring-[#81C784] ${
-          status === 'ok' ? 'ring-1 ring-white/35' : ''
+        className={`${VALIDATION_CHIP_BASE} ${
+          status === 'ok' ? PASSED_CHIP_ACTIVE : PASSED_CHIP_MUTED
         }`}
-        style={{ backgroundColor: '#4CAF50' }}
         onClick={onPassedClick}
-        title="Passed"
+        title={status === 'ok' ? 'Annulla Passed' : 'Segna come Passed'}
       >
-        <Check size={10} strokeWidth={2.5} className="shrink-0 text-white" aria-hidden />
+        <Check size={10} strokeWidth={2.5} className="shrink-0" aria-hidden />
         <span>Passed</span>
       </button>
       <button
         type="button"
         disabled={disabled}
         aria-pressed={status === 'ko'}
-        className={`${VALIDATION_CHIP_BASE} border-0 focus-visible:ring-[#E57373] ${
-          status === 'ko' ? 'ring-1 ring-white/35' : ''
+        className={`${VALIDATION_CHIP_BASE} ${
+          status === 'ko' ? FAILED_CHIP_ACTIVE : FAILED_CHIP_MUTED
         }`}
-        style={{ backgroundColor: '#F44336' }}
         onClick={onFailedClick}
-        title="Not passed"
+        title={status === 'ko' ? 'Annulla Failed' : 'Segna come Failed'}
       >
-        <X size={10} strokeWidth={2.5} className="shrink-0 text-white" aria-hidden />
+        <X size={10} strokeWidth={2.5} className="shrink-0" aria-hidden />
         <span>Failed</span>
       </button>
     </div>
   );
-}
-
-/** Stub — esito positivo (persistenza in arrivo). */
-function handlePassedChipClick(): void {
-  /* stub */
-}
-
-/** Stub — esito negativo / apertura flusso not passed (persistenza in arrivo). */
-function handleFailedChipClick(): void {
-  /* stub */
 }
 
 /** Stub — scelta use case interpretato erroneamente. */
@@ -144,26 +151,18 @@ function handleFailureAltroTextChange(_value: string): void {
   /* stub */
 }
 
+type FailureMode = 'misinterpreted' | 'altro' | null;
+
 type QuestionRowProps = {
   question: UseCaseTestQuestion;
   ownerUseCaseId: string;
   useCaseCatalog: readonly UseCaseCatalogEntry[];
   disabled?: boolean;
   lens: TestQuestionLens | null;
+  highlighted?: boolean;
   onPatch: (id: string, patch: Partial<UseCaseTestQuestion>) => void;
   onDelete: (id: string) => void;
 };
-
-function formatInterpretedUseCaseList(
-  catalog: readonly UseCaseCatalogEntry[],
-  ownerUseCaseId: string
-): string {
-  const labels = catalog
-    .filter((e) => e.id !== ownerUseCaseId)
-    .map((e) => catalogEntryDisplayLabel(e));
-  if (labels.length === 0) return '—';
-  return labels.join(', ');
-}
 
 function TestQuestionRow({
   question,
@@ -171,22 +170,44 @@ function TestQuestionRow({
   useCaseCatalog,
   disabled,
   lens,
+  highlighted = false,
   onPatch,
   onDelete,
 }: QuestionRowProps): React.ReactElement {
   const [editing, setEditing] = React.useState(false);
   const [draftText, setDraftText] = React.useState(question.text);
   const [notPassedOpen, setNotPassedOpen] = React.useState(false);
-  const [failureRadio, setFailureRadio] = React.useState<string | null>(null);
+  const [misinterpretedUseCaseId, setMisinterpretedUseCaseId] = React.useState<string | null>(
+    null
+  );
+  const [useCasePickerOpen, setUseCasePickerOpen] = React.useState(false);
+  const [failureMode, setFailureMode] = React.useState<FailureMode>(null);
   const [altroDraft, setAltroDraft] = React.useState('');
 
-  const radioGroupName = `test-q-failure-${question.id}`;
-  const altroSelected = failureRadio === 'altro';
-  const interpretedList = formatInterpretedUseCaseList(useCaseCatalog, ownerUseCaseId);
+  const otherUseCases = React.useMemo(
+    () => useCaseCatalog.filter((e) => e.id !== ownerUseCaseId),
+    [useCaseCatalog, ownerUseCaseId]
+  );
+  const selectedMisinterpreted = otherUseCases.find((e) => e.id === misinterpretedUseCaseId);
+  const misinterpretedLabel = selectedMisinterpreted
+    ? catalogEntryDisplayLabel(selectedMisinterpreted)
+    : null;
 
   React.useEffect(() => {
     if (!editing) setDraftText(question.text);
   }, [question.text, editing]);
+
+  React.useEffect(() => {
+    if (question.status === 'ko') {
+      setNotPassedOpen(true);
+    } else {
+      setNotPassedOpen(false);
+      setMisinterpretedUseCaseId(null);
+      setUseCasePickerOpen(false);
+      setFailureMode(null);
+      setAltroDraft('');
+    }
+  }, [question.status]);
 
   const commitEdit = () => {
     const text = draftText.trim();
@@ -195,25 +216,51 @@ function TestQuestionRow({
     setEditing(false);
   };
 
-  const onPassedClick = (): void => {
-    handlePassedChipClick();
+  const resetNotPassedFlow = (): void => {
     setNotPassedOpen(false);
-    setFailureRadio(null);
+    setMisinterpretedUseCaseId(null);
+    setUseCasePickerOpen(false);
+    setFailureMode(null);
     setAltroDraft('');
   };
 
-  const onFailedClick = (): void => {
-    handleFailedChipClick();
-    setNotPassedOpen(true);
+  const onPassedClick = (): void => {
+    if (question.status === 'ok') {
+      onPatch(question.id, { status: 'pending' });
+      resetNotPassedFlow();
+      return;
+    }
+    onPatch(question.id, { status: 'ok' });
+    resetNotPassedFlow();
   };
 
-  const onFailureRadioChange = (value: string): void => {
-    setFailureRadio(value);
-    if (value === 'altro') {
-      handleFailureAltroRadioClick();
-    } else {
-      handleFailureUseCaseRadioClick(value);
+  const onFailedClick = (): void => {
+    if (question.status === 'ko') {
+      onPatch(question.id, { status: 'pending' });
+      resetNotPassedFlow();
+      return;
     }
+    onPatch(question.id, { status: 'ko' });
+    setNotPassedOpen(true);
+    setMisinterpretedUseCaseId(null);
+    setUseCasePickerOpen(false);
+    setFailureMode('misinterpreted');
+    setAltroDraft('');
+  };
+
+  const onPickMisinterpretedUseCase = (useCaseId: string): void => {
+    setMisinterpretedUseCaseId(useCaseId);
+    setUseCasePickerOpen(false);
+    setFailureMode('misinterpreted');
+    setAltroDraft('');
+    handleFailureUseCaseRadioClick(useCaseId);
+  };
+
+  const onAltroModeSelect = (): void => {
+    setFailureMode('altro');
+    setMisinterpretedUseCaseId(null);
+    setUseCasePickerOpen(false);
+    handleFailureAltroRadioClick();
   };
 
   const onAltroDraftChange = (value: string): void => {
@@ -226,7 +273,7 @@ function TestQuestionRow({
       data-test-question-id={question.id}
       className={[
         'group/test-q-row rounded-md border px-2 py-1 transition-colors',
-        questionHighlightClass(question.status, lens),
+        highlighted ? ROW_JUST_ADDED_HIGHLIGHT : questionHighlightClass(question.status, lens),
       ].join(' ')}
     >
       {editing ? (
@@ -256,14 +303,16 @@ function TestQuestionRow({
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 w-full flex-wrap items-center gap-x-1.5 gap-y-1">
             <TestQuestionIcon />
-            <p
-              className={`min-w-0 flex-1 whitespace-pre-wrap leading-snug ${UC_WIZARD_TEST_QUESTION_TEXT}`}
+            <span
+              className={`inline whitespace-pre-wrap leading-snug ${UC_WIZARD_TEST_QUESTION_TEXT}`}
             >
               {question.text}
-            </p>
-            <div className={ROW_ACTIONS}>
+            </span>
+            <span
+              className={`${ROW_ACTIONS} ms-0.5 inline-flex items-center gap-0.5 align-middle`}
+            >
               <button
                 type="button"
                 disabled={disabled}
@@ -288,51 +337,89 @@ function TestQuestionRow({
                 onPassedClick={onPassedClick}
                 onFailedClick={onFailedClick}
               />
-            </div>
+            </span>
           </div>
 
           {notPassedOpen ? (
             <div className="mt-1.5 space-y-1.5 border-t border-slate-700/40 pt-1.5">
-              <p
-                className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-md border border-amber-500/35 bg-amber-950/40 px-2 py-0.5 text-[10px] leading-snug text-amber-100/95"
+              <div
+                className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-amber-500/35 bg-amber-950/40 px-2 py-1 text-[11px] leading-snug text-amber-100/95"
                 role="status"
               >
-                <span className="font-medium text-amber-200/90">Ha interpretato come usecase:</span>
-                <span>{interpretedList}</span>
-              </p>
-
-              <fieldset className="space-y-1" disabled={disabled}>
-                <legend className="sr-only">Use case interpretato</legend>
-                {useCaseCatalog
-                  .filter((e) => e.id !== ownerUseCaseId)
-                  .map((entry) => (
-                    <label
-                      key={entry.id}
-                      className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-300"
-                    >
-                      <input
-                        type="radio"
-                        name={radioGroupName}
-                        className={FAILURE_RADIO_CLS}
-                        checked={failureRadio === entry.id}
-                        onChange={() => onFailureRadioChange(entry.id)}
-                      />
-                      <span className="min-w-0 truncate">{catalogEntryDisplayLabel(entry)}</span>
-                    </label>
-                  ))}
-                <label className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-300">
+                <span className="shrink-0 font-medium text-amber-200/90">Ha interpretato come</span>
+                <label className="inline-flex min-w-0 max-w-[min(100%,14rem)] cursor-pointer items-center gap-1.5">
                   <input
                     type="radio"
-                    name={radioGroupName}
+                    name={`test-q-failure-mode-${question.id}`}
                     className={FAILURE_RADIO_CLS}
-                    checked={altroSelected}
-                    onChange={() => onFailureRadioChange('altro')}
+                    checked={failureMode === 'misinterpreted'}
+                    disabled={disabled}
+                    onChange={() => {
+                      setFailureMode('misinterpreted');
+                      setAltroDraft('');
+                      setUseCasePickerOpen(true);
+                    }}
                   />
-                  <span>Altro</span>
+                  <button
+                    type="button"
+                    disabled={disabled || failureMode === 'altro'}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setFailureMode('misinterpreted');
+                      setAltroDraft('');
+                      setUseCasePickerOpen((open) => !open);
+                    }}
+                    className="min-w-0 truncate rounded border border-amber-400/45 bg-amber-900/50 px-1.5 py-px font-medium text-amber-50 underline-offset-2 hover:bg-amber-800/60 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    title={
+                      misinterpretedLabel
+                        ? 'Cambia use case interpretato'
+                        : 'Scegli quale altro use case ha interpretato l’agente'
+                    }
+                  >
+                    {misinterpretedLabel ?? 'Altro use case'}
+                  </button>
                 </label>
-              </fieldset>
+                <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name={`test-q-failure-mode-${question.id}`}
+                    className={FAILURE_RADIO_CLS}
+                    checked={failureMode === 'altro'}
+                    disabled={disabled}
+                    onChange={onAltroModeSelect}
+                  />
+                  <span>altro</span>
+                </label>
+              </div>
 
-              {altroSelected ? (
+              {useCasePickerOpen && failureMode === 'misinterpreted' ? (
+                <ul
+                  className="max-h-40 space-y-0.5 overflow-y-auto rounded-md border border-slate-600/50 bg-slate-900/90 py-1"
+                  role="listbox"
+                  aria-label="Altri use case del catalogo"
+                >
+                  {otherUseCases.length === 0 ? (
+                    <li className="px-2 py-1 text-[11px] text-slate-500">Nessun altro use case.</li>
+                  ) : (
+                    otherUseCases.map((entry) => (
+                      <li key={entry.id}>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          role="option"
+                          aria-selected={misinterpretedUseCaseId === entry.id}
+                          className="block w-full truncate px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-violet-900/45 disabled:opacity-50"
+                          onClick={() => onPickMisinterpretedUseCase(entry.id)}
+                        >
+                          {catalogEntryDisplayLabel(entry)}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              ) : null}
+
+              {failureMode === 'altro' ? (
                 <textarea
                   value={altroDraft}
                   disabled={disabled}
@@ -367,18 +454,54 @@ export function UseCaseTestQuestionsPanel({
   const ctx = useUseCaseWizardListToolbarOptional();
   const lens = ctx?.testQuestionLens ?? null;
   const questions = useCase.testQuestions ?? [];
+  const sortedQuestions = React.useMemo(
+    () => sortTestQuestionsByText(questions),
+    [questions]
+  );
   const forceOpen = Boolean(lens && questions.some((q) => q.status === lens));
   const [open, setOpen] = React.useState(questions.length > 0);
+  const [manualComposerOpen, setManualComposerOpen] = React.useState(false);
+  const [manualDraft, setManualDraft] = React.useState('');
+  const [highlightedQuestionId, setHighlightedQuestionId] = React.useState<string | null>(
+    null
+  );
+  const manualInputRef = React.useRef<HTMLInputElement>(null);
+  const listBodyRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (forceOpen) setOpen(true);
   }, [forceOpen]);
 
+  React.useEffect(() => {
+    if (!manualComposerOpen) return;
+    const t = window.setTimeout(() => manualInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [manualComposerOpen]);
+
+  React.useEffect(() => {
+    if (!highlightedQuestionId) return;
+    const row = listBodyRef.current?.querySelector(
+      `[data-test-question-id="${CSS.escape(highlightedQuestionId)}"]`
+    );
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const clear = window.setTimeout(() => setHighlightedQuestionId(null), 3200);
+    return () => window.clearTimeout(clear);
+  }, [highlightedQuestionId, sortedQuestions]);
+
+  const setSortedQuestions = (next: readonly UseCaseTestQuestion[]) => {
+    onPatchUseCase((uc) => ({
+      ...uc,
+      testQuestions: sortTestQuestionsByText(next),
+    }));
+  };
+
   const patchQuestion = (id: string, patch: Partial<UseCaseTestQuestion>) => {
     onPatchUseCase((uc) => ({
       ...uc,
-      testQuestions: (uc.testQuestions ?? []).map((q) =>
-        q.id === id ? { ...q, ...patch } : q
+      testQuestions: sortTestQuestionsByText(
+        (uc.testQuestions ?? []).map((q) => (q.id === id ? { ...q, ...patch } : q))
       ),
     }));
   };
@@ -390,31 +513,92 @@ export function UseCaseTestQuestionsPanel({
     }));
   };
 
+  const openManualComposer = (): void => {
+    setOpen(true);
+    setManualComposerOpen(true);
+  };
+
+  const commitManualQuestion = (): void => {
+    const created = createManualTestQuestion(manualDraft);
+    if (!created) return;
+    const beforeLen = questions.length;
+    const merged = appendUniqueTestQuestions(questions, [created]);
+    if (merged.length === beforeLen) return;
+    const key = normalizeTestQuestionText(created.text);
+    const hit = merged.find((q) => normalizeTestQuestionText(q.text) === key);
+    setSortedQuestions(merged);
+    setHighlightedQuestionId(hit?.id ?? created.id);
+    setManualDraft('');
+    setManualComposerOpen(false);
+  };
+
   const expanded = open || forceOpen;
 
   return (
     <div className="mt-2 overflow-hidden rounded-md border border-cyan-500/20 bg-cyan-950/10">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-xs font-semibold text-cyan-100/95 hover:bg-cyan-950/20"
-      >
-        <span>Domande di Test ({questions.length})</span>
-        <ChevronDown
-          size={14}
-          className={['shrink-0 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
-          aria-hidden
-        />
-      </button>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-2">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex shrink-0 items-center gap-1 text-left text-xs font-semibold text-cyan-100/95 hover:bg-cyan-950/20 rounded px-0.5 -mx-0.5"
+        >
+          <span>Domande di Test ({questions.length})</span>
+          <ChevronDown
+            size={14}
+            className={['shrink-0 transition-transform', expanded ? 'rotate-180' : ''].join(' ')}
+            aria-hidden
+          />
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          title="Aggiungi una domanda di test"
+          onClick={(e) => {
+            e.stopPropagation();
+            openManualComposer();
+          }}
+          className="inline-flex shrink-0 items-center rounded border border-cyan-500/35 bg-cyan-950/40 px-2 py-0.5 text-[10px] font-medium leading-snug text-cyan-100/95 hover:bg-cyan-900/55 disabled:opacity-40"
+        >
+          aggiungi domanda
+        </button>
+      </div>
       {expanded ? (
-        <div className="space-y-1.5 border-t border-cyan-500/15 px-2.5 pb-2 pt-1.5">
-          {questions.length === 0 ? (
+        <div
+          ref={listBodyRef}
+          className="space-y-1.5 border-t border-cyan-500/15 px-2.5 pb-2 pt-1.5"
+        >
+          {manualComposerOpen ? (
+            <div className="flex items-center gap-2 rounded-md border border-cyan-500/30 bg-slate-900/50 px-2 py-1.5">
+              <TestQuestionIcon />
+              <input
+                ref={manualInputRef}
+                type="text"
+                value={manualDraft}
+                disabled={disabled}
+                onChange={(e) => setManualDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitManualQuestion();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setManualComposerOpen(false);
+                    setManualDraft('');
+                  }
+                }}
+                placeholder="Inserisci la domanda di test"
+                className={`min-w-0 flex-1 rounded-md border border-sky-500/40 bg-slate-950/90 px-2 py-1 ${UC_WIZARD_TEST_QUESTION_TEXT} placeholder:text-sky-400/45 focus:outline-none focus:ring-2 focus:ring-sky-500/45 disabled:opacity-60`}
+              />
+            </div>
+          ) : null}
+
+          {sortedQuestions.length === 0 ? (
             <p className="text-[11px] text-slate-500">
-              Nessuna domanda. Usa «Genera Domande di Test» nella toolbar.
+              Nessuna domanda. Usa «aggiungi domanda» qui o «Genera Domande di Test» nella toolbar.
             </p>
           ) : (
-            questions.map((q) => (
+            sortedQuestions.map((q) => (
               <TestQuestionRow
                 key={q.id}
                 question={q}
@@ -422,6 +606,7 @@ export function UseCaseTestQuestionsPanel({
                 useCaseCatalog={useCaseCatalog}
                 disabled={disabled}
                 lens={lens}
+                highlighted={highlightedQuestionId === q.id}
                 onPatch={patchQuestion}
                 onDelete={deleteQuestion}
               />

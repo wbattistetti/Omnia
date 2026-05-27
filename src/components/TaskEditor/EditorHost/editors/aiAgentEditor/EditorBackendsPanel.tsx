@@ -46,7 +46,9 @@ import { PORTAL_AUTH_REQUIRED_CODE } from '@domain/portalAuth/portalConnectionTy
 import { BackendAnalysisTab } from './BackendAnalysisTab';
 import { AgentBackendAnalysisProvider } from './AgentBackendAnalysisContext';
 import { ParameterAnalysisDetailPanel } from './ParameterAnalysisDetailPanel';
-import { BackendParameterL1EditorSheet } from './BackendParameterL1EditorSheet';
+import { BackendAnalysisEditScope } from './backendAnalysis/BackendAnalysisEditScope';
+import { BackendAnalysisDocumentActionsProvider } from './backendAnalysis/BackendAnalysisDocumentActionsContext';
+import { BackendsAnalysisSubTabs } from './backendAnalysis/BackendsAnalysisSubTabs';
 
 /** Canvas del flow per «Aggiungi da canvas» (stesso contratto della vecchia BackendToolsSection). */
 type ConvaiBackendToolsDiscoveryContext = {
@@ -1031,32 +1033,11 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
         </div>
       ) : null}
       {canShowAnalysisTab ? (
-        <div className="mb-2 shrink-0 flex items-center gap-1 rounded-md border border-slate-700/70 bg-slate-900/40 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('catalog')}
-            className={
-              'rounded px-2.5 py-1 text-xs font-semibold ' +
-              (showingCatalog
-                ? 'bg-violet-800/70 text-violet-50'
-                : 'text-slate-300 hover:bg-slate-800/70')
-            }
-          >
-            Catalogo backend
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('analysis')}
-            className={
-              'rounded px-2.5 py-1 text-xs font-semibold ' +
-              (!showingCatalog
-                ? 'bg-violet-800/70 text-violet-50'
-                : 'text-slate-300 hover:bg-slate-800/70')
-            }
-          >
-            Analisi dei backend
-          </button>
-        </div>
+        <BackendsAnalysisSubTabs
+          showingCatalog={showingCatalog}
+          onSelectCatalog={() => setActiveTab('catalog')}
+          onSelectAnalysis={() => setActiveTab('analysis')}
+        />
       ) : null}
       {showingCatalog ? (
         <div
@@ -1183,11 +1164,23 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
       manualEntries={manualEntries}
       onPersistCatalog={(next) => mergeProject(next)}
     >
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        {panelChrome}
-        <ParameterAnalysisDetailPanel />
-        <BackendParameterL1EditorSheet />
-      </div>
+      <BackendAnalysisDocumentActionsProvider>
+        <BackendAnalysisEditScope
+          projectId={projectId}
+          agentTaskId={agentTaskId}
+          manualEntries={manualEntries}
+          backendCatalog={backendCatalog}
+          onPersistCatalog={(next) => mergeProject(next)}
+          taskContext={dockCtx?.knowledgeBaseTaskContext}
+          kbDocuments={dockCtx?.knowledgeBaseDocuments}
+          callMeta={dockCtx?.buildCallMeta(AI_CALL_PURPOSE.BACKEND_REFINE_ANALYSIS)}
+        >
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            {panelChrome}
+            <ParameterAnalysisDetailPanel />
+          </div>
+        </BackendAnalysisEditScope>
+      </BackendAnalysisDocumentActionsProvider>
     </AgentBackendAnalysisProvider>
   );
 }

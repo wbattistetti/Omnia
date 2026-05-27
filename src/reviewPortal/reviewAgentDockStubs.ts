@@ -74,7 +74,6 @@ export function createReviewAgentDockStaticSlice(): Pick<
   | 'agentInterfaceInput'
   | 'agentInterfaceOutput'
   | 'agentInterfaceTitle'
-  | 'useCaseGeneratorWizard'
   | 'useCaseBundleFeedback'
   | 'useCaseHighlightIds'
   | 'assistantPhraseStyleNewIds'
@@ -129,7 +128,6 @@ export function createReviewAgentDockStaticSlice(): Pick<
     agentInterfaceInput: [],
     agentInterfaceOutput: [],
     agentInterfaceTitle: 'Interface',
-    useCaseGeneratorWizard: null,
     useCaseBundleFeedback: null,
     useCaseHighlightIds: [],
     assistantPhraseStyleNewIds: [],
@@ -150,6 +148,6 @@ export function createReviewAgentDockStaticSlice(): Pick<
     useCasePropagatorProvider: '',
     useCasePropagatorModel: '',
     useCasePropagatorGlobalStyleContract: '',
-    reviewPortalMode: true,
+    reviewPortalMode: false,
   };
 }

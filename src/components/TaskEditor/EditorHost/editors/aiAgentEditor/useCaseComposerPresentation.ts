@@ -38,6 +38,9 @@ export const UC_SCENARIO_PANEL_SURFACE =
 export const UC_PARAMETRIC_EDITOR_SURFACE =
   'rounded-md border border-slate-300/80 bg-slate-50 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:border-slate-600/50 dark:bg-slate-900/60 dark:shadow-[inset_0_1px_0_rgba(0,0,0,0.15)]';
 
+/** Colonna numero catalogo (1..N) nella lista use case wizard. */
+export const UC_CATALOG_NUMBER_COL = 'mt-0.5 w-8 shrink-0 flex justify-center';
+
 /** Colonna icona fissa (messaggio agente + righe azioni nel response use case). */
 export const UC_RESPONSE_ICON_COL =
   'inline-flex h-6 w-6 shrink-0 items-center justify-center [&_svg]:shrink-0';

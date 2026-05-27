@@ -26,11 +26,15 @@ import {
   allReviewItemsConfirmed,
   countConfirmedReviewItems,
   createReviewSessionItems,
+  mergeKbAnalysisToolbarPresentations,
   observationsForFinalize,
   resolveKbAnalysisToolbarPresentation,
   shouldRunObservationReview,
   type KbAnalysisReviewSessionItem,
+  type KbAnalysisToolbarPresentation,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
+import { runMergedAnalysisToolbarAction } from '@domain/knowledgeBase/analysisToolbarExecute';
+import type { KbSectionToolbarBridge } from './KbDocumentAnalysisEditContext';
 import { clearKbRuntimeDistillCachePatch } from '@domain/analysisRuntime/analysisRuntimeDistill';
 import { buildKbSectionBaselinesFromMarkdown } from '@domain/knowledgeBase/kbDocumentAnalysisSections';
 import { KbDocumentAnalysisEditProvider } from './KbDocumentAnalysisEditContext';
@@ -359,8 +363,26 @@ export function KbDocumentAnalysisTab({
     canRunAgent,
   });
 
+  const [sectionToolbarBridge, setSectionToolbarBridge] =
+    React.useState<KbSectionToolbarBridge | null>(null);
+
+  const mergedToolbarPresentation = React.useMemo(
+    () =>
+      mergeKbAnalysisToolbarPresentations([
+        toolbarPresentation,
+        sectionToolbarBridge?.presentation ?? {
+          phase: 'hidden',
+          executeVisible: false,
+          executeLabel: 'Aggiorna',
+          executeEnabled: false,
+          executeEmphasized: false,
+        } satisfies KbAnalysisToolbarPresentation,
+      ]),
+    [toolbarPresentation, sectionToolbarBridge]
+  );
+
   const { executeVisible, executeLabel, executeEnabled, executeEmphasized } =
-    toolbarPresentation;
+    mergedToolbarPresentation;
 
   const onAgree = React.useCallback(
     (observationId: string) => {
@@ -447,18 +469,35 @@ export function KbDocumentAnalysisTab({
   onExecuteRef.current = onExecute;
   const onToggleReviewPanelRef = React.useRef(onToggleReviewPanel);
   onToggleReviewPanelRef.current = onToggleReviewPanel;
+  const sectionBridgeRef = React.useRef(sectionToolbarBridge);
+  sectionBridgeRef.current = sectionToolbarBridge;
+  const docToolbarRef = React.useRef(toolbarPresentation);
+  docToolbarRef.current = toolbarPresentation;
+
+  const onMergedExecute = React.useCallback(() => {
+    runMergedAnalysisToolbarAction(mergedToolbarPresentation, {
+      documentPresentation: docToolbarRef.current,
+      onDocumentExecute: () => onExecuteRef.current(),
+      sectionPresentation: sectionBridgeRef.current?.presentation ?? null,
+      onSectionExecute: sectionBridgeRef.current
+        ? () => sectionBridgeRef.current!.runAction()
+        : null,
+    });
+  }, [mergedToolbarPresentation]);
 
   React.useEffect(() => {
     if (!onToolbarStateChange) return;
+    const sectionInReview =
+      sectionToolbarBridge?.presentation.phase === 'review_observations';
     onToolbarStateChange({
       executeVisible,
       executeLabel,
       executeEnabled,
       executeEmphasized,
       analysisTabHighlight: executeEmphasized,
-      executeBusy: busy,
-      onExecute: () => onExecuteRef.current(),
-      reviewToggleVisible: inReviewSession,
+      executeBusy: busy || Boolean(sectionToolbarBridge && sectionInReview),
+      onExecute: onMergedExecute,
+      reviewToggleVisible: inReviewSession || sectionInReview,
       reviewPanelOpen,
       onToggleReviewPanel: () => onToggleReviewPanelRef.current(),
     });
@@ -471,6 +510,8 @@ export function KbDocumentAnalysisTab({
     busy,
     inReviewSession,
     reviewPanelOpen,
+    sectionToolbarBridge,
+    onMergedExecute,
   ]);
 
   React.useEffect(() => {
@@ -562,6 +603,7 @@ export function KbDocumentAnalysisTab({
                 model={model}
                 callMeta={callMeta}
                 disabled={!canEdit || busy}
+                onSectionToolbarBridgeChange={setSectionToolbarBridge}
               >
                 <KbDocumentAnalysisWorkspace
                   draft={draft}

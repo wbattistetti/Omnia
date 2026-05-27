@@ -5,14 +5,9 @@
  * fallback, the dialog/toolbar surface raw failures so users notice when the backend is down.
  */
 
-function getApiBase(): string {
-  const fromEnv = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_BACKEND_URL : '';
-  if (typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.replace(/\/$/, '');
-  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) return '';
-  return 'http://127.0.0.1:3100';
-}
+import { resolveOmniaApiBase } from './resolveOmniaApiBase';
 
-const API_BASE = getApiBase();
+const API_BASE = resolveOmniaApiBase();
 
 export interface AiCallRecord {
   id: string;

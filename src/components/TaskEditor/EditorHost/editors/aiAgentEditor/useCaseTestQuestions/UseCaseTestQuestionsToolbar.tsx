@@ -114,7 +114,7 @@ export function UseCaseTestQuestionsToolbar(): React.ReactElement | null {
         ) : (
           <FlaskConical size={14} aria-hidden />
         )}
-        <span>Genera Domande di Test</span>
+        <span>Gen. domande</span>
       </button>
 
       {showKpiCruscotto ? (

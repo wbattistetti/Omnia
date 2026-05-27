@@ -1,7 +1,8 @@
 import type { SchemaNode, Constraint } from './dataCollection';
+import { resolveOmniaApiBase } from '@services/resolveOmniaApiBase';
 import { buildStepPlan } from './stepPlan';
 
-const API_BASE = (import.meta as any)?.env?.VITE_BACKEND_URL || 'http://127.0.0.1:3100';
+const API_BASE = resolveOmniaApiBase();
 
 function isCountableConstraint(c?: Constraint) {
   return !!c && c.kind !== 'required';

@@ -5,6 +5,7 @@
 
 import React from 'react';
 import type { UseCaseTestQuestionStats } from '@domain/aiAgentUseCase/useCaseTestQuestions';
+import type { UseCaseOverlapReport } from '@domain/useCaseOverlap/useCaseOverlapApi';
 
 /** Filtro cruscotto domande di test (solo OK/KO; Validate è solo KPI). */
 export type TestQuestionLens = 'ok' | 'ko';
@@ -128,6 +129,15 @@ export interface UseCaseWizardListToolbarContextValue {
   generateTestQuestionsBusy: boolean;
   testQuestionsNotice: string | null;
   setTestQuestionsNotice: (message: string | null) => void;
+
+  overlapReportOpen: boolean;
+  setOverlapReportOpen: (open: boolean) => void;
+  overlapCheckBusy: boolean;
+  overlapReport: UseCaseOverlapReport | null;
+  setOverlapReport: (report: UseCaseOverlapReport | null) => void;
+  overlapCheckError: string | null;
+  registerCheckOverlapsHandler: (handler: (() => Promise<void>) | null) => void;
+  triggerCheckOverlaps: () => Promise<void>;
 }
 
 const UseCaseWizardListToolbarContext =
@@ -170,6 +180,7 @@ export function UseCaseWizardListToolbarProvider({
   const handlersRef = React.useRef<UseCaseWizardListHandlers | null>(null);
   const consolidateHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
   const generateTestQuestionsHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
+  const checkOverlapsHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
   const wasOverThresholdRef = React.useRef<boolean>(false);
   const [toolbarSelectedUseCaseId, setToolbarSelectedUseCaseId] = React.useState<string | null>(
     null
@@ -187,6 +198,10 @@ export function UseCaseWizardListToolbarProvider({
   const [testQuestionLens, setTestQuestionLens] = React.useState<TestQuestionLens | null>(null);
   const [generateTestQuestionsBusy, setGenerateTestQuestionsBusy] = React.useState(false);
   const [testQuestionsNotice, setTestQuestionsNotice] = React.useState<string | null>(null);
+  const [overlapReportOpen, setOverlapReportOpen] = React.useState(false);
+  const [overlapCheckBusy, setOverlapCheckBusy] = React.useState(false);
+  const [overlapReport, setOverlapReport] = React.useState<UseCaseOverlapReport | null>(null);
+  const [overlapCheckError, setOverlapCheckError] = React.useState<string | null>(null);
 
   /**
    * Rearm automatico del dismissal: appena il count torna a 0 (consolidamento
@@ -345,6 +360,27 @@ export function UseCaseWizardListToolbarProvider({
     }
   }, []);
 
+  const registerCheckOverlapsHandler = React.useCallback(
+    (handler: (() => Promise<void>) | null): void => {
+      checkOverlapsHandlerRef.current = handler;
+    },
+    []
+  );
+
+  const triggerCheckOverlaps = React.useCallback(async (): Promise<void> => {
+    const fn = checkOverlapsHandlerRef.current;
+    if (!fn) return;
+    setOverlapCheckBusy(true);
+    setOverlapCheckError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setOverlapCheckError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOverlapCheckBusy(false);
+    }
+  }, []);
+
   const value = React.useMemo<UseCaseWizardListToolbarContextValue>(
     () => ({
       listAccordionHeaderMode,
@@ -390,6 +426,14 @@ export function UseCaseWizardListToolbarProvider({
       generateTestQuestionsBusy,
       testQuestionsNotice,
       setTestQuestionsNotice,
+      overlapReportOpen,
+      setOverlapReportOpen,
+      overlapCheckBusy,
+      overlapReport,
+      setOverlapReport,
+      overlapCheckError,
+      registerCheckOverlapsHandler,
+      triggerCheckOverlaps,
     }),
     [
       listAccordionHeaderMode,
@@ -430,6 +474,13 @@ export function UseCaseWizardListToolbarProvider({
       triggerGenerateTestQuestions,
       generateTestQuestionsBusy,
       testQuestionsNotice,
+      overlapReportOpen,
+      overlapCheckBusy,
+      overlapReport,
+      setOverlapReport,
+      overlapCheckError,
+      registerCheckOverlapsHandler,
+      triggerCheckOverlaps,
     ]
   );
 

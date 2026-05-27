@@ -4,6 +4,8 @@
 
 import {
   KB_ANALYSIS_EXECUTE_BUTTON,
+  KB_ANALYSIS_REQUEST_REVIEW_BUTTON,
+  KB_ANALYSIS_REVIEW_OBSERVATIONS_BUTTON,
   KB_ANALYSIS_UPDATE_BUTTON,
 } from './kbDocumentAnalysisGuide';
 import {
@@ -203,18 +205,68 @@ export function observationsForFinalize(
 
 export type KbAnalysisActionLabel =
   | typeof KB_ANALYSIS_EXECUTE_BUTTON
+  | typeof KB_ANALYSIS_REQUEST_REVIEW_BUTTON
+  | typeof KB_ANALYSIS_REVIEW_OBSERVATIONS_BUTTON
   | typeof KB_ANALYSIS_UPDATE_BUTTON;
 
+/** Fase del ciclo modifica → review osservazioni → aggiorna analisi. */
+export type KbAnalysisActionPhase =
+  | 'hidden'
+  | 'request_review'
+  | 'review_observations'
+  | 'apply_update';
+
 export type KbAnalysisToolbarPresentation = {
+  phase: KbAnalysisActionPhase;
   executeVisible: boolean;
   executeLabel: KbAnalysisActionLabel;
   executeEnabled: boolean;
   executeEmphasized: boolean;
 };
 
+const PHASE_PRIORITY: Record<KbAnalysisActionPhase, number> = {
+  hidden: 0,
+  apply_update: 1,
+  request_review: 2,
+  review_observations: 3,
+};
+
 /**
- * Toolbar «Esegui» / «Aggiorna»: visibile solo dopo edit manuale o in review;
- * «Esegui» solo prima della prima analisi agente, poi sempre «Aggiorna».
+ * Unisce più presentazioni (documento + sezioni): prevale la fase più «bloccante».
+ */
+export function mergeKbAnalysisToolbarPresentations(
+  parts: readonly KbAnalysisToolbarPresentation[]
+): KbAnalysisToolbarPresentation {
+  const hidden: KbAnalysisToolbarPresentation = {
+    phase: 'hidden',
+    executeVisible: false,
+    executeLabel: KB_ANALYSIS_UPDATE_BUTTON,
+    executeEnabled: false,
+    executeEmphasized: false,
+  };
+  if (parts.length === 0) return hidden;
+
+  let best = parts[0]!;
+  for (let i = 1; i < parts.length; i++) {
+    const cur = parts[i]!;
+    if (PHASE_PRIORITY[cur.phase] > PHASE_PRIORITY[best.phase]) {
+      best = cur;
+      continue;
+    }
+    if (cur.phase === best.phase) {
+      best = {
+        ...best,
+        executeVisible: best.executeVisible || cur.executeVisible,
+        executeEnabled: best.executeEnabled || cur.executeEnabled,
+        executeEmphasized: best.executeEmphasized || cur.executeEmphasized,
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * Toolbar analisi: visibile dopo edit; label per fase (Rivedi → Review osservazioni → Aggiorna).
  */
 export function resolveKbAnalysisToolbarPresentation(input: {
   baseline: string;
@@ -230,25 +282,98 @@ export function resolveKbAnalysisToolbarPresentation(input: {
   const userEditedDraft =
     input.hasManualEdit || analysisDraftDiffersFromBaseline(input.draft, input.baseline);
 
-  const executeVisible =
-    input.inReviewSession || (userEditedDraft && draftTrimmed.length > 0);
+  if (input.inReviewSession) {
+    if (input.allConfirmed) {
+      return {
+        phase: 'apply_update',
+        executeVisible: true,
+        executeLabel: KB_ANALYSIS_UPDATE_BUTTON,
+        executeEnabled: input.canRunAgent && draftTrimmed.length > 0,
+        executeEmphasized: true,
+      };
+    }
+    return {
+      phase: 'review_observations',
+      executeVisible: true,
+      executeLabel: KB_ANALYSIS_REVIEW_OBSERVATIONS_BUTTON,
+      executeEnabled: false,
+      executeEmphasized: input.reviewHasDisagreement,
+    };
+  }
 
-  const executeLabel: KbAnalysisActionLabel =
-    hasBaseline || input.inReviewSession
-      ? KB_ANALYSIS_UPDATE_BUTTON
-      : KB_ANALYSIS_EXECUTE_BUTTON;
+  if (!userEditedDraft || draftTrimmed.length === 0) {
+    return {
+      phase: 'hidden',
+      executeVisible: false,
+      executeLabel: hasBaseline ? KB_ANALYSIS_UPDATE_BUTTON : KB_ANALYSIS_EXECUTE_BUTTON,
+      executeEnabled: false,
+      executeEmphasized: false,
+    };
+  }
 
-  const executeEnabled =
-    input.canRunAgent &&
-    draftTrimmed.length > 0 &&
-    (input.inReviewSession ? input.allConfirmed : true);
+  if (!hasBaseline) {
+    return {
+      phase: 'request_review',
+      executeVisible: true,
+      executeLabel: KB_ANALYSIS_EXECUTE_BUTTON,
+      executeEnabled: input.canRunAgent,
+      executeEmphasized: true,
+    };
+  }
 
-  const executeEmphasized =
-    executeVisible &&
-    (analysisDraftDiffersFromBaseline(input.draft, input.baseline) ||
-      input.reviewHasDisagreement ||
-      (input.inReviewSession && input.allConfirmed) ||
-      (!hasBaseline && input.hasManualEdit && draftTrimmed.length > 0));
+  return {
+    phase: 'request_review',
+    executeVisible: true,
+    executeLabel: KB_ANALYSIS_REQUEST_REVIEW_BUTTON,
+    executeEnabled: input.canRunAgent,
+    executeEmphasized:
+      analysisDraftDiffersFromBaseline(input.draft, input.baseline) || input.reviewHasDisagreement,
+  };
+}
 
-  return { executeVisible, executeLabel, executeEnabled, executeEmphasized };
+/** Presentazione toolbar da stato sezioni Monaco (analisi backend / KB per ###). */
+export function resolveSectionEditsToolbarPresentation(input: {
+  pendingSectionCount: number;
+  inReviewSession: boolean;
+  allConfirmed: boolean;
+  reviewHasDisagreement: boolean;
+  canRunReview: boolean;
+  readyToApplyCount: number;
+}): KbAnalysisToolbarPresentation {
+  if (input.inReviewSession) {
+    if (input.allConfirmed && input.readyToApplyCount > 0) {
+      return {
+        phase: 'apply_update',
+        executeVisible: true,
+        executeLabel: KB_ANALYSIS_UPDATE_BUTTON,
+        executeEnabled: input.canRunReview,
+        executeEmphasized: true,
+      };
+    }
+    return {
+      phase: 'review_observations',
+      executeVisible: true,
+      executeLabel: KB_ANALYSIS_REVIEW_OBSERVATIONS_BUTTON,
+      executeEnabled: false,
+      executeEmphasized: input.reviewHasDisagreement,
+    };
+  }
+
+  if (input.pendingSectionCount > 0) {
+    return {
+      phase: 'request_review',
+      executeVisible: true,
+      executeLabel: KB_ANALYSIS_REQUEST_REVIEW_BUTTON,
+      executeEnabled: input.canRunReview,
+      executeEmphasized: true,
+    };
+  }
+
+  return {
+    phase: 'hidden',
+    executeVisible: false,
+    executeLabel: KB_ANALYSIS_UPDATE_BUTTON,
+    executeEnabled: false,
+    executeEmphasized: false,
+  };
 }

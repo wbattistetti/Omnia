@@ -3,6 +3,7 @@ import {
   appendUniqueTestQuestions,
   computeTestQuestionStats,
   findFirstTestQuestionAnchor,
+  sortTestQuestionsByText,
   useCaseIdsWithTestQuestionStatus,
 } from '../useCaseTestQuestions';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
@@ -46,6 +47,14 @@ describe('useCaseTestQuestions', () => {
       useCaseId: 'b',
       questionId: 'q2',
     });
+  });
+
+  it('sortTestQuestionsByText orders alphabetically', () => {
+    const sorted = sortTestQuestionsByText([
+      { id: 'b', text: 'Zebra', expectedAnswer: '', status: 'pending' },
+      { id: 'a', text: 'alfa', expectedAnswer: '', status: 'pending' },
+    ]);
+    expect(sorted.map((q) => q.text)).toEqual(['alfa', 'Zebra']);
   });
 
   it('dedupes on append', () => {

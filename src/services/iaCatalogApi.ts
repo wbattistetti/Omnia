@@ -2,15 +2,10 @@
  * HTTP client for Express IA catalog (/api/ia-catalog). Nessun fallback: errori dal backend sono propagati.
  */
 
-/** In dev, relative URLs hit the Vite proxy; override with VITE_BACKEND_URL when needed. */
-function getCatalogApiBase(): string {
-  const fromEnv = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_BACKEND_URL : '';
-  if (typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.replace(/\/$/, '');
-  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) return '';
-  return 'http://127.0.0.1:3100';
-}
+import { resolveOmniaApiBase } from './resolveOmniaApiBase';
 
-const API_BASE = getCatalogApiBase();
+/** Relative URLs hit Vite proxy (dev) or same Express host (review portal on :3100). */
+const API_BASE = resolveOmniaApiBase();
 
 export interface CatalogVoice {
   voice_id: string;

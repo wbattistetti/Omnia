@@ -72,6 +72,7 @@ function ReviewAutoSaveEffect(): null {
   const knowledgeBase = useReviewStore((s) => s.knowledgeBase);
   const backends = useReviewStore((s) => s.backends);
   const designerLlm = useReviewStore((s) => s.designerLlm);
+  const agentUseCaseWizardStateJson = useReviewStore((s) => s.agentUseCaseWizardStateJson);
   const { provider, model } = useAIProvider();
 
   React.useEffect(() => {
@@ -88,6 +89,7 @@ function ReviewAutoSaveEffect(): null {
     knowledgeBase,
     backends,
     designerLlm,
+    agentUseCaseWizardStateJson,
     provider,
     model,
     session.projectId,
@@ -98,10 +100,9 @@ function ReviewAutoSaveEffect(): null {
   return null;
 }
 
-/** Must render under {@link ReviewOmniaProviders} — bridge calls `useAIProvider`. */
-function ReviewUseCaseWorkspaceInner({
+/** Must render under {@link ReviewOmniaProviders} and {@link ReviewSnapshotProjectProvider}. */
+function ReviewUseCaseWorkspaceDocked({
   session,
-  backends,
   activeStep,
   setActiveStep,
   stepBadges,
@@ -112,19 +113,7 @@ function ReviewUseCaseWorkspaceInner({
   saving,
   status,
   designerLlm,
-}: ReviewUseCaseWorkspaceInnerProps): React.ReactElement {
-  const setBackends = useReviewStore((s) => s.setBackends);
-  const backendPlaceholders = React.useMemo(
-    () => backendPlaceholdersFromReviewSnapshot(backends),
-    [backends]
-  );
-  const onBackendSnapshotChange = React.useCallback(
-    (snapshot: AgentReviewBackendSnapshot | null) => {
-      setBackends(snapshot);
-    },
-    [setBackends]
-  );
-
+}: Omit<ReviewUseCaseWorkspaceInnerProps, 'backends'>): React.ReactElement {
   const dockValue = useReviewAgentDockBridge({
     activeStep,
     composerError,
@@ -132,16 +121,8 @@ function ReviewUseCaseWorkspaceInner({
   });
 
   return (
-    <ReviewSnapshotProjectProvider
-      projectId={session.projectId}
-      taskInstanceId={session.taskId}
-      taskLabel={session.taskLabel}
-      backendSnapshot={backends}
-      backendPlaceholders={backendPlaceholders}
-      onBackendSnapshotChange={onBackendSnapshotChange}
-    >
-      <FontProvider>
-        <AIAgentEditorDockProvider value={dockValue}>
+    <FontProvider>
+      <AIAgentEditorDockProvider value={dockValue}>
           <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-slate-950 text-slate-100">
             <header className="shrink-0 border-b border-slate-800 px-4 py-2">
               <button
@@ -191,8 +172,60 @@ function ReviewUseCaseWorkspaceInner({
             <ReviewAutoSaveEffect />
             <DesignerLlmSetupOverlay scope="contained" />
           </div>
-        </AIAgentEditorDockProvider>
-      </FontProvider>
+      </AIAgentEditorDockProvider>
+    </FontProvider>
+  );
+}
+
+/** Must render under {@link ReviewOmniaProviders} — mounts isolated {@link ReviewSnapshotProjectProvider}. */
+function ReviewUseCaseWorkspaceInner({
+  session,
+  backends,
+  activeStep,
+  setActiveStep,
+  stepBadges,
+  composerError,
+  setComposerError,
+  closeSession,
+  lastSavedAt,
+  saving,
+  status,
+  designerLlm,
+}: ReviewUseCaseWorkspaceInnerProps): React.ReactElement {
+  const setBackends = useReviewStore((s) => s.setBackends);
+  const backendPlaceholders = React.useMemo(
+    () => backendPlaceholdersFromReviewSnapshot(backends),
+    [backends]
+  );
+  const onBackendSnapshotChange = React.useCallback(
+    (snapshot: AgentReviewBackendSnapshot | null) => {
+      setBackends(snapshot);
+    },
+    [setBackends]
+  );
+
+  return (
+    <ReviewSnapshotProjectProvider
+      projectId={session.projectId}
+      taskInstanceId={session.taskId}
+      taskLabel={session.taskLabel}
+      backendSnapshot={backends}
+      backendPlaceholders={backendPlaceholders}
+      onBackendSnapshotChange={onBackendSnapshotChange}
+    >
+      <ReviewUseCaseWorkspaceDocked
+        session={session}
+        activeStep={activeStep}
+        setActiveStep={setActiveStep}
+        stepBadges={stepBadges}
+        composerError={composerError}
+        setComposerError={setComposerError}
+        closeSession={closeSession}
+        lastSavedAt={lastSavedAt}
+        saving={saving}
+        status={status}
+        designerLlm={designerLlm}
+      />
     </ReviewSnapshotProjectProvider>
   );
 }

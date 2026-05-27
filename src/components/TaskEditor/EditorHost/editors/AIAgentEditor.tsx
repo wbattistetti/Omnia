@@ -130,6 +130,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       model?.trim() && (provider === 'openai' || provider === 'groq')
         ? { provider, model: model.trim() }
         : null,
+    agentUseCaseWizardStateJson: c.agentUseCaseWizardStateJson,
   });
 
   const onConfirmAdvanceWithoutEdits = React.useCallback(

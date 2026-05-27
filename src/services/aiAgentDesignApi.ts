@@ -72,6 +72,7 @@ import { emitDesignAiLlmBurstFromErrorResponse } from '../utils/aiAgentHighFrequ
 import { confirmAiAgentGenerateIfEnabled } from '../utils/aiAgentGenerateConfirmGate';
 import { parseDesignApiJsonResponse } from './designApiResponse';
 import { designAiFetch } from './designAiRequestPipeline';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 
 async function fetchAiAgentDesignAgentGenerate(init: RequestInit): Promise<Response> {
   await confirmAiAgentGenerateIfEnabled();
@@ -739,6 +740,104 @@ export async function generateUseCaseTestQuestionsApi(
     }
     if (rows.length === 0) throw new Error('Risposta non valida: test_questions vuoto.');
     return { test_questions: rows };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface AnalyzeUseCaseOverlapApiParams {
+  candidateUseCase: AIAgentUseCase;
+  catalogUseCases: readonly AIAgentUseCase[];
+  catalogNumberById: Record<string, number>;
+  threshold: number;
+  provider: string;
+  model: string;
+  callMeta?: AiCallMeta;
+}
+
+/** Analisi sovrapposizione singolo use case vs catalogo (design-time). */
+export async function analyzeUseCaseOverlapApi(
+  params: AnalyzeUseCaseOverlapApiParams
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'analyze_use_case_overlap',
+      candidateUseCase: params.candidateUseCase,
+      catalogUseCases: params.catalogUseCases,
+      catalogNumberById: params.catalogNumberById,
+      threshold: params.threshold,
+      provider: params.provider.toLowerCase(),
+      model: params.model,
+    };
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        applyCallMetaToBody(
+          { ...bodyPayload, purpose: AI_CALL_PURPOSE.USE_CASE_ANALYZE_OVERLAP },
+          params.callMeta
+        )
+      ),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | ({ success: true } & Record<string, unknown>)
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `analyze_use_case_overlap failed (${res.status})`);
+    }
+    return body;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface CheckUseCaseOverlapsApiParams {
+  useCases: readonly AIAgentUseCase[];
+  threshold: number;
+  provider: string;
+  model: string;
+  callMeta?: AiCallMeta;
+}
+
+/** Verifica sovrapposizioni su tutto il catalogo use case (design-time). */
+export async function checkUseCaseOverlapsApi(
+  params: CheckUseCaseOverlapsApiParams
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'check_use_case_overlaps',
+      useCases: params.useCases,
+      threshold: params.threshold,
+      provider: params.provider.toLowerCase(),
+      model: params.model,
+    };
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        applyCallMetaToBody(
+          { ...bodyPayload, purpose: AI_CALL_PURPOSE.USE_CASE_CHECK_OVERLAPS },
+          params.callMeta
+        )
+      ),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | ({ success: true } & Record<string, unknown>)
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `check_use_case_overlaps failed (${res.status})`);
+    }
+    return body;
   } finally {
     clearTimeout(timeout);
   }
