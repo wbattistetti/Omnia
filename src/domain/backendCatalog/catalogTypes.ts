@@ -3,6 +3,8 @@
  * Separati da persistence/UI; allineati semanticamente a Task (BackendCall) e ProjectData.
  */
 
+import type { AgentBackendAnalysisSnapshot } from '../backendAnalysis/backendAnalysisTypes';
+
 /** Origine voce nel catalogo aggregato (badge/iconcine). */
 export type CatalogBindingSource = 'graph' | 'tools' | 'manual';
 
@@ -139,6 +141,8 @@ export interface ProjectBackendCatalogBlob {
   /** Audit append-only in memoria progetto (subset whitelist). */
   auditLog: CatalogAuditEntry[];
   catalogVersion: number;
+  /** Analisi uso backend per task agente (chiave = agentTaskId). */
+  agentAnalysisByTaskId?: Record<string, AgentBackendAnalysisSnapshot>;
 }
 
 /** Voce audit serializzabile (no payload OpenAPI intero). */

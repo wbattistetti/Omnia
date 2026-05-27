@@ -83,6 +83,7 @@ export interface BackendMappingTreeProps {
   agentParamDragSource?: import('./backendMappingTreeContext').AgentParamDragSource;
   /** Altezza da righe visibili; scroll delegato al contenitore padre (workspace inspector). */
   scrollMappingInParent?: boolean;
+  onParameterAnalysisInfo?: (wireKey: string) => void;
 }
 
 export function BackendMappingTree({
@@ -105,6 +106,7 @@ export function BackendMappingTree({
   variableOptions,
   agentParamDragSource,
   scrollMappingInParent = false,
+  onParameterAnalysisInfo,
 }: BackendMappingTreeProps) {
   const treeRef = useRef<TreeApi<BackendArboristNodeData> | null>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -250,6 +252,7 @@ export function BackendMappingTree({
       agentParamDragSource,
       dropLineIndentPx,
       dropLineTone,
+      onParameterAnalysisInfo,
     }),
     [
       entries,
@@ -276,6 +279,7 @@ export function BackendMappingTree({
       agentParamDragSource,
       dropLineIndentPx,
       dropLineTone,
+      onParameterAnalysisInfo,
     ]
   );
 

@@ -6,7 +6,10 @@ import {
   KB_ANALYSIS_EXECUTE_BUTTON,
   KB_ANALYSIS_UPDATE_BUTTON,
 } from './kbDocumentAnalysisGuide';
-import { sanitizeDocumentExcerpt } from './kbDocumentExcerptValidation';
+import {
+  excerptDuplicatesDesignerNote,
+  sanitizeDocumentExcerpt,
+} from './kbDocumentExcerptValidation';
 
 export type KbAnalysisObservationKind =
   | 'aggiunta'
@@ -88,6 +91,21 @@ export function inferObservationPresentation(
   return 'osservazione';
 }
 
+/** Short chip label for designer note type (header, non-expandable). */
+export function observationPresentationChipLabel(
+  presentation: KbAnalysisObservationPresentation
+): string {
+  return presentation === 'domanda' ? 'Domanda' : 'Osservazione';
+}
+
+export function observationPresentationChipClassName(
+  presentation: KbAnalysisObservationPresentation
+): string {
+  return presentation === 'domanda'
+    ? 'border-amber-600/70 bg-amber-950/80 text-amber-100'
+    : 'border-violet-600/60 bg-violet-950/70 text-violet-100';
+}
+
 function parseOneObservation(
   row: unknown,
   index: number,
@@ -108,11 +126,14 @@ function parseOneObservation(
     typeof r.userCorrectionNote === 'string' && r.userCorrectionNote.trim()
       ? r.userCorrectionNote.trim()
       : undefined;
-  const documentExcerpt = documentSample
+  let documentExcerpt = documentSample
     ? sanitizeDocumentExcerpt(r.documentExcerpt, documentSample)
     : typeof r.documentExcerpt === 'string' && r.documentExcerpt.trim()
       ? r.documentExcerpt.trim().slice(0, 2_000)
       : undefined;
+  if (documentExcerpt && excerptDuplicatesDesignerNote(documentExcerpt, text)) {
+    documentExcerpt = undefined;
+  }
   const excerptRationale =
     documentExcerpt &&
     typeof r.excerptRationale === 'string' &&

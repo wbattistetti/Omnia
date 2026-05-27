@@ -21,6 +21,7 @@ import { monacoSelectionAdapter } from './backendPathSelectionAdapter';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
+import { useDesignerDraftInsertHighlight } from './useDesignerDraftInsertHighlight';
 
 const COMMIT_DEBOUNCE_MS = 280;
 
@@ -37,6 +38,8 @@ export interface StructuredSectionMarkdownMonacoEditorProps {
   onInsertBackendPathAtCaret?: (backendPath: string, rangeStart: number, rangeEnd?: number) => void;
   onUndoRequest?: () => void;
   onRedoRequest?: () => void;
+  /** Last agent-stabilized section text; designer additions vs this are highlighted inline. */
+  designerHighlightBaseline?: string;
 }
 
 export function StructuredSectionMarkdownMonacoEditor({
@@ -52,6 +55,7 @@ export function StructuredSectionMarkdownMonacoEditor({
   onInsertBackendPathAtCaret,
   onUndoRequest,
   onRedoRequest,
+  designerHighlightBaseline = '',
 }: StructuredSectionMarkdownMonacoEditorProps): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const editorRef = React.useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -67,6 +71,13 @@ export function StructuredSectionMarkdownMonacoEditor({
   );
 
   const [draft, setDraft] = React.useState(effectiveValue);
+
+  const { applyDecorations } = useDesignerDraftInsertHighlight({
+    editorRef,
+    agentBaseline: designerHighlightBaseline,
+    draft,
+    enabled: Boolean(designerHighlightBaseline.trim()),
+  });
 
   React.useEffect(() => {
     setDraft(effectiveValue);
@@ -128,6 +139,7 @@ export function StructuredSectionMarkdownMonacoEditor({
     (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
       editorRef.current = editor;
       applyMonacoEmbeddedEditorUi(editor);
+      applyDecorations();
 
       if (onUndoRequest) {
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {
@@ -146,7 +158,7 @@ export function StructuredSectionMarkdownMonacoEditor({
         });
       }
     },
-    [readOnly, onUndoRequest, onRedoRequest]
+    [readOnly, onUndoRequest, onRedoRequest, applyDecorations]
   );
 
   const handleChange = React.useCallback(

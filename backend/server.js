@@ -58,12 +58,22 @@ const {
   reviewAnalysisObservations,
   clarifyObservationResponse,
   finalizeDocumentAnalysis,
+  distillDocumentAnalysisRuntime,
 } = require('./services/kbDocumentAnalysisService');
 const {
   reviewTaskTextObservations,
   clarifyTaskTextObservation,
   finalizeTaskText,
 } = require('./services/agentTaskTextAnalysisService');
+const {
+  proposeBackendAnalysis,
+  refineBackendAnalysis,
+  reviewBackendAnalysisObservations,
+  clarifyBackendAnalysisObservation,
+  finalizeBackendAnalysis,
+  distillBackendAnalysisRuntime,
+} = require('./services/backendAnalysisService');
+const { generateUseCaseTestQuestions } = require('./services/useCaseTestQuestionsService');
 const {
   assertAiCallContract,
   aiCallContractErrorResponse,
@@ -6971,6 +6981,7 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         projectId,
         fieldId,
         sectionLabel,
+        agentBaselineMarkdown,
         userText,
         previousInterpretation,
         userCorrection,
@@ -6983,6 +6994,8 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         projectId: typeof projectId === 'string' ? projectId : '',
         fieldId: typeof fieldId === 'string' ? fieldId : '',
         sectionLabel: typeof sectionLabel === 'string' ? sectionLabel : 'task text',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
         userText: typeof userText === 'string' ? userText : '',
         previousInterpretation:
           typeof previousInterpretation === 'string' ? previousInterpretation : '',
@@ -7016,6 +7029,216 @@ app.post('/design/ai-agent-generate', async (req, res) => {
           typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
         userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
         observations: Array.isArray(observations) ? observations : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_propose_analysis') {
+      const { projectId, agentTaskId, referenceCorpus, agentTaskSummary, taskVariables, existingUseCaseSummaries } =
+        body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'BACKEND_PROPOSE_ANALYSIS' });
+      const result = await proposeBackendAnalysis({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        referenceCorpus: typeof referenceCorpus === 'string' ? referenceCorpus : '',
+        taskContext: {
+          agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+          taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+          existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+            ? existingUseCaseSummaries
+            : [],
+        },
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_refine_analysis') {
+      const {
+        projectId,
+        agentTaskId,
+        referenceCorpus,
+        draftMarkdown,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'BACKEND_REFINE_ANALYSIS' });
+      const result = await refineBackendAnalysis({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        referenceCorpus: typeof referenceCorpus === 'string' ? referenceCorpus : '',
+        draftMarkdown: typeof draftMarkdown === 'string' ? draftMarkdown : '',
+        taskContext: {
+          agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+          taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+          existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+            ? existingUseCaseSummaries
+            : [],
+        },
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_review_analysis_observations') {
+      const {
+        projectId,
+        agentTaskId,
+        referenceCorpus,
+        agentBaselineMarkdown,
+        userDraftMarkdown,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'BACKEND_REVIEW_ANALYSIS_OBSERVATIONS',
+      });
+      const result = await reviewBackendAnalysisObservations({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        referenceCorpus: typeof referenceCorpus === 'string' ? referenceCorpus : '',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_clarify_analysis_observation') {
+      const {
+        projectId,
+        agentTaskId,
+        referenceCorpus,
+        userText,
+        previousInterpretation,
+        userCorrection,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'BACKEND_CLARIFY_ANALYSIS_OBSERVATION',
+      });
+      const result = await clarifyBackendAnalysisObservation({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        referenceCorpus: typeof referenceCorpus === 'string' ? referenceCorpus : '',
+        userText: typeof userText === 'string' ? userText : '',
+        previousInterpretation:
+          typeof previousInterpretation === 'string' ? previousInterpretation : '',
+        userCorrection: typeof userCorrection === 'string' ? userCorrection : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_finalize_analysis') {
+      const {
+        projectId,
+        agentTaskId,
+        referenceCorpus,
+        agentBaselineMarkdown,
+        userDraftMarkdown,
+        observations,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'BACKEND_FINALIZE_ANALYSIS' });
+      const result = await finalizeBackendAnalysis({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        referenceCorpus: typeof referenceCorpus === 'string' ? referenceCorpus : '',
+        agentBaselineMarkdown:
+          typeof agentBaselineMarkdown === 'string' ? agentBaselineMarkdown : '',
+        userDraftMarkdown: typeof userDraftMarkdown === 'string' ? userDraftMarkdown : '',
+        observations: Array.isArray(observations) ? observations : [],
+        taskContext: {
+          agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+          taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+          existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+            ? existingUseCaseSummaries
+            : [],
+        },
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_distill_analysis_runtime') {
+      const {
+        agentTaskId,
+        analysisMarkdown,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'BACKEND_DISTILL_ANALYSIS_RUNTIME' });
+      const result = await distillBackendAnalysisRuntime({
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        analysisMarkdown: typeof analysisMarkdown === 'string' ? analysisMarkdown : '',
+        taskContext: {
+          agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+          taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+          existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+            ? existingUseCaseSummaries
+            : [],
+        },
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_distill_document_analysis_runtime') {
+      const {
+        documentName,
+        analysisMarkdown,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_DISTILL_DOCUMENT_ANALYSIS_RUNTIME' });
+      const result = await distillDocumentAnalysisRuntime({
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        analysisMarkdown: typeof analysisMarkdown === 'string' ? analysisMarkdown : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
         provider,
         model,
         aiProviderService,
@@ -7131,6 +7354,30 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         taskLabel: callMeta.taskLabel,
       });
       return sendKbMarkdownHttpResponse(res, markdown);
+    }
+
+    if (action === 'generate_use_case_test_questions') {
+      const { useCase, existingTestQuestions } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'USE_CASE_GENERATE_TEST_QUESTIONS',
+      });
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] generate_use_case_test_questions`, {
+        provider,
+        model,
+        useCaseId: useCase && typeof useCase === 'object' ? useCase.id : undefined,
+      });
+      const result = await generateUseCaseTestQuestions({
+        useCase,
+        existingTestQuestions: Array.isArray(existingTestQuestions) ? existingTestQuestions : [],
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
     }
 
     if (action === 'categorize_use_cases') {

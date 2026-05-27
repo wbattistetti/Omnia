@@ -130,7 +130,7 @@ export function AIAgentConstructionWizardShell({
               </p>
             ) : null}
           </header>
-          <main className="min-h-0 flex-1 overflow-hidden">{renderStepBody()}</main>
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{renderStepBody()}</main>
         </div>
       )}
     </div>

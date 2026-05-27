@@ -117,8 +117,9 @@ export function AgentSectionDockPanel(
             fieldId={sectionId}
             currentText={editorCtx.getTaskTextCurrentText(sectionId)}
             baseline={editorCtx.getTaskTextBaseline(sectionId)}
-            onApplyFinalText={(text) => editorCtx.applyTaskTextFieldText(sectionId, text)}
-            onCommitBaseline={(text) => editorCtx.setTaskTextBaseline(sectionId, text)}
+            onCommitAgentStabilizedText={(text) =>
+              editorCtx.commitAgentStabilizedTaskText(sectionId, text)
+            }
             projectId={editorCtx.projectId}
             buildCallMeta={editorCtx.buildCallMeta}
             offerDismissed={editorCtx.isTaskTextReviewOfferDismissed(sectionId)}
@@ -137,6 +138,7 @@ export function AgentSectionDockPanel(
                 deletedMask={activeSlice.deletedMask}
                 inserts={activeSlice.inserts}
                 onApplyRevisionOps={(ops) => onApplyRevisionOps(sectionId, ops)}
+                designerHighlightBaseline={editorCtx.getTaskTextBaseline(sectionId)}
                 readOnly={readOnly || reviewBlocksEdit}
                 iaRevisionDiff={
                   activeDiff

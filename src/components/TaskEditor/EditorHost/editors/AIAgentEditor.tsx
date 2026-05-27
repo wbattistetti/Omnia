@@ -1274,7 +1274,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     getTaskTextBaseline: c.getTaskTextBaseline,
     setTaskTextBaseline: c.setTaskTextBaseline,
     getTaskTextCurrentText: c.getTaskTextCurrentText,
-    applyTaskTextFieldText: c.applyTaskTextFieldText,
+    commitAgentStabilizedTaskText: c.commitAgentStabilizedTaskText,
     dismissTaskTextReviewOffer: c.dismissTaskTextReviewOffer,
     clearTaskTextReviewOfferDismissed: c.clearTaskTextReviewOfferDismissed,
     isTaskTextReviewOfferDismissed: c.isTaskTextReviewOfferDismissed,

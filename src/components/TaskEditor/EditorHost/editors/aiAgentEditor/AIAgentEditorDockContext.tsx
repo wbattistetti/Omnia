@@ -45,7 +45,8 @@ export interface AIAgentEditorDockContextValue {
   getTaskTextBaseline: (fieldId: AgentTaskTextFieldId) => string;
   setTaskTextBaseline: (fieldId: AgentTaskTextFieldId, text: string) => void;
   getTaskTextCurrentText: (fieldId: AgentTaskTextFieldId) => string;
-  applyTaskTextFieldText: (fieldId: AgentTaskTextFieldId, text: string) => void;
+  /** Applica testo concordato dall'IA e resetta baseline + stato sezione (senza accumulo revisioni). */
+  commitAgentStabilizedTaskText: (fieldId: AgentTaskTextFieldId, stabilizedText: string) => void;
   dismissTaskTextReviewOffer: (fieldId: AgentTaskTextFieldId) => void;
   clearTaskTextReviewOfferDismissed: (fieldId: AgentTaskTextFieldId) => void;
   isTaskTextReviewOfferDismissed: (fieldId: AgentTaskTextFieldId) => boolean;

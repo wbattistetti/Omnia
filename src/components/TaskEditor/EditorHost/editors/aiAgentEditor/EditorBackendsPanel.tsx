@@ -30,6 +30,7 @@ import type { ProjectData } from '@types/project';
 import type { Task } from '@types/taskTypes';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { getVisibleFields } from '@utils/iaAgentRuntime/platformHelpers';
+import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { EmbeddedBackendCallEditor } from './EmbeddedBackendCallEditor';
 import { AddBackendDropdown } from './AddBackendDropdown';
@@ -42,6 +43,10 @@ import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalC
 import { normalizePortalOrigin } from '@domain/portalAuth/normalizePortalOrigin';
 import { resolvePortalConnectionForUrl } from '@domain/portalAuth/resolvePortalConnectionId';
 import { PORTAL_AUTH_REQUIRED_CODE } from '@domain/portalAuth/portalConnectionTypes';
+import { BackendAnalysisTab } from './BackendAnalysisTab';
+import { AgentBackendAnalysisProvider } from './AgentBackendAnalysisContext';
+import { ParameterAnalysisDetailPanel } from './ParameterAnalysisDetailPanel';
+import { BackendParameterL1EditorSheet } from './BackendParameterL1EditorSheet';
 
 /** Canvas del flow per «Aggiungi da canvas» (stesso contratto della vecchia BackendToolsSection). */
 type ConvaiBackendToolsDiscoveryContext = {
@@ -726,6 +731,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   );
   const pdUpdate = useProjectDataUpdate();
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => new Set());
+  const [activeTab, setActiveTab] = React.useState<'catalog' | 'analysis'>('catalog');
 
   const manualEntries = data?.backendCatalog?.manualEntries ?? [];
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
@@ -991,10 +997,20 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
     });
   };
 
-  return (
+  const backendCatalog = data?.backendCatalog ?? {
+    schemaVersion: 1 as const,
+    manualEntries: [],
+    auditLog: [],
+    catalogVersion: 0,
+  };
+  const agentTaskId = String(dockCtx?.instanceId ?? '').trim();
+  const canShowAnalysisTab = Boolean(agentTaskId);
+  const showingCatalog = !canShowAnalysisTab || activeTab === 'catalog';
+
+  const panelChrome = (
     <div
       {...tutorIdProps(UI_IDS.backendList)}
-      className="h-full min-h-0 flex flex-col overflow-hidden bg-slate-950/50 p-2"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-950/50 p-2"
     >
       {/*
         Header in-panel: pulsante «Aggiungi backend» (wizard passo Backend: nascosto — stesso
@@ -1014,89 +1030,133 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
           ) : null}
         </div>
       ) : null}
-      <div
-        className={
-          interfaceOpen
-            ? 'flex min-h-0 flex-1 flex-row overflow-hidden'
-            : 'flex min-h-0 flex-1 flex-col overflow-hidden'
-        }
-      >
+      {canShowAnalysisTab ? (
+        <div className="mb-2 shrink-0 flex items-center gap-1 rounded-md border border-slate-700/70 bg-slate-900/40 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('catalog')}
+            className={
+              'rounded px-2.5 py-1 text-xs font-semibold ' +
+              (showingCatalog
+                ? 'bg-violet-800/70 text-violet-50'
+                : 'text-slate-300 hover:bg-slate-800/70')
+            }
+          >
+            Catalogo backend
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('analysis')}
+            className={
+              'rounded px-2.5 py-1 text-xs font-semibold ' +
+              (!showingCatalog
+                ? 'bg-violet-800/70 text-violet-50'
+                : 'text-slate-300 hover:bg-slate-800/70')
+            }
+          >
+            Analisi dei backend
+          </button>
+        </div>
+      ) : null}
+      {showingCatalog ? (
         <div
           className={
             interfaceOpen
-              ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
-              : wizardFillViewport
-                ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
-                : 'flex-1 min-h-0 space-y-2 overflow-y-auto pr-0.5'
+              ? 'flex min-h-0 flex-1 flex-row overflow-hidden'
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden'
           }
-          data-ia-runtime-focus="tools"
         >
-        {elevenLabsBackendToolsVisible && convaiBackendToolsDiscoveryContext ? (
-          <button
-            type="button"
-            onClick={() => mergeBackendsFromDownstreamFlow()}
-            className="inline-flex min-h-[2rem] w-fit max-w-full shrink-0 items-center gap-1.5 rounded border border-violet-600/70 bg-violet-950/40 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-violet-100 hover:bg-violet-900/55"
-            title="Aggiunge agli id tool ConvAI i Backend Call raggiungibili a valle sul grafo (archi uscenti)."
+          <div
+            className={
+              interfaceOpen
+                ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
+                : wizardFillViewport
+                  ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
+                  : 'flex-1 min-h-0 space-y-2 overflow-y-auto pr-0.5'
+            }
+            data-ia-runtime-focus="tools"
           >
-            <GitBranchPlus className="h-3 w-3 shrink-0" aria-hidden />
-            Aggiungi da canvas (a valle)
-          </button>
-        ) : null}
-        {manualEntries.length === 0 ? null : (
-          manualEntries.map((e) => {
-            const cfg = dockCtx?.iaRuntimeConfig;
-            const convaiToolToggle =
-              elevenLabsBackendToolsVisible && dockCtx && cfg
-                ? {
-                    checked: new Set(cfg.convaiBackendToolTaskIds ?? []).has(e.id),
-                    onChange: (checked: boolean) => {
-                      const next = new Set(cfg.convaiBackendToolTaskIds ?? []);
-                      if (checked) next.add(e.id);
-                      else next.delete(e.id);
-                      onIaRuntimeFromBackends({ ...cfg, convaiBackendToolTaskIds: [...next] });
-                    },
-                  }
-                : undefined;
-            return (
-              <ManualBackendAccordion
-                key={e.id}
-                entry={e}
-                expanded={expandedIds.has(e.id)}
-                projectId={projectId}
-                projectData={data}
-                creationMode={e.creationMode ?? 'import'}
-                wizardUi={wizardUi}
-                fillAvailableHeight={wizardFillViewport && soleExpandedManualId === e.id}
-                focusName={focusNameEntryId === e.id}
-                onNameFocused={() => setFocusNameEntryId(null)}
-                onToggle={() => toggleExpanded(e.id)}
-                onPatch={patchManual}
-                onRemove={removeManual}
-                onExpandEntry={(id) => setExpandedIds((s) => new Set(s).add(id))}
-                convaiToolToggle={convaiToolToggle}
-                onPortalAuthRequired={handlePortalAuthRequired}
-                onSyncPortalConnection={mergePortalConnections}
-                autoFetchAfterPortalEntryId={autoFetchAfterPortalEntryId}
-                onAutoFetchConsumed={() => setAutoFetchAfterPortalEntryId(null)}
-              />
-            );
-          })
-        )}
+          {elevenLabsBackendToolsVisible && convaiBackendToolsDiscoveryContext ? (
+            <button
+              type="button"
+              onClick={() => mergeBackendsFromDownstreamFlow()}
+              className="inline-flex min-h-[2rem] w-fit max-w-full shrink-0 items-center gap-1.5 rounded border border-violet-600/70 bg-violet-950/40 px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-violet-100 hover:bg-violet-900/55"
+              title="Aggiunge agli id tool ConvAI i Backend Call raggiungibili a valle sul grafo (archi uscenti)."
+            >
+              <GitBranchPlus className="h-3 w-3 shrink-0" aria-hidden />
+              Aggiungi da canvas (a valle)
+            </button>
+          ) : null}
+          {manualEntries.length === 0 ? null : (
+            manualEntries.map((e) => {
+              const cfg = dockCtx?.iaRuntimeConfig;
+              const convaiToolToggle =
+                elevenLabsBackendToolsVisible && dockCtx && cfg
+                  ? {
+                      checked: new Set(cfg.convaiBackendToolTaskIds ?? []).has(e.id),
+                      onChange: (checked: boolean) => {
+                        const next = new Set(cfg.convaiBackendToolTaskIds ?? []);
+                        if (checked) next.add(e.id);
+                        else next.delete(e.id);
+                        onIaRuntimeFromBackends({ ...cfg, convaiBackendToolTaskIds: [...next] });
+                      },
+                    }
+                  : undefined;
+              return (
+                <ManualBackendAccordion
+                  key={e.id}
+                  entry={e}
+                  expanded={expandedIds.has(e.id)}
+                  projectId={projectId}
+                  projectData={data}
+                  creationMode={e.creationMode ?? 'import'}
+                  wizardUi={wizardUi}
+                  fillAvailableHeight={wizardFillViewport && soleExpandedManualId === e.id}
+                  focusName={focusNameEntryId === e.id}
+                  onNameFocused={() => setFocusNameEntryId(null)}
+                  onToggle={() => toggleExpanded(e.id)}
+                  onPatch={patchManual}
+                  onRemove={removeManual}
+                  onExpandEntry={(id) => setExpandedIds((s) => new Set(s).add(id))}
+                  convaiToolToggle={convaiToolToggle}
+                  onPortalAuthRequired={handlePortalAuthRequired}
+                  onSyncPortalConnection={mergePortalConnections}
+                  autoFetchAfterPortalEntryId={autoFetchAfterPortalEntryId}
+                  onAutoFetchConsumed={() => setAutoFetchAfterPortalEntryId(null)}
+                />
+              );
+            })
+          )}
+          </div>
+          {interfaceOpen && dockCtx ? (
+            <AgentInterfacePanel
+              agentTitle={dockCtx.agentInterfaceTitle}
+              interfaceInput={[...dockCtx.agentInterfaceInput]}
+              interfaceOutput={[...dockCtx.agentInterfaceOutput]}
+              onInterfaceInputChange={dockCtx.setAgentInterfaceInput}
+              onInterfaceOutputChange={dockCtx.setAgentInterfaceOutput}
+              onClose={() => dockCtx.setAgentInterfacePanelOpen(false)}
+              projectId={projectId}
+              listIdPrefix={interfaceListIdPrefix}
+              className="w-[min(44%,520px)] shrink-0"
+            />
+          ) : null}
         </div>
-        {interfaceOpen && dockCtx ? (
-          <AgentInterfacePanel
-            agentTitle={dockCtx.agentInterfaceTitle}
-            interfaceInput={[...dockCtx.agentInterfaceInput]}
-            interfaceOutput={[...dockCtx.agentInterfaceOutput]}
-            onInterfaceInputChange={dockCtx.setAgentInterfaceInput}
-            onInterfaceOutputChange={dockCtx.setAgentInterfaceOutput}
-            onClose={() => dockCtx.setAgentInterfacePanelOpen(false)}
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-700/70 bg-slate-900/35 p-2">
+          <BackendAnalysisTab
             projectId={projectId}
-            listIdPrefix={interfaceListIdPrefix}
-            className="w-[min(44%,520px)] shrink-0"
+            agentTaskId={agentTaskId}
+            manualEntries={manualEntries}
+            backendCatalog={backendCatalog}
+            onPersistCatalog={(next) => mergeProject(next)}
+            taskContext={dockCtx?.knowledgeBaseTaskContext}
+            kbDocuments={dockCtx?.knowledgeBaseDocuments}
+            callMeta={dockCtx?.buildCallMeta(AI_CALL_PURPOSE.BACKEND_REFINE_ANALYSIS)}
+            disabled={false}
           />
-        ) : null}
-      </div>
+        </div>
+      )}
       {projectId ? (
         <ConnectPortalModal
           open={portalModal.open}
@@ -1110,5 +1170,24 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
         />
       ) : null}
     </div>
+  );
+
+  if (!canShowAnalysisTab) {
+    return panelChrome;
+  }
+
+  return (
+    <AgentBackendAnalysisProvider
+      agentTaskId={agentTaskId}
+      backendCatalog={backendCatalog}
+      manualEntries={manualEntries}
+      onPersistCatalog={(next) => mergeProject(next)}
+    >
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        {panelChrome}
+        <ParameterAnalysisDetailPanel />
+        <BackendParameterL1EditorSheet />
+      </div>
+    </AgentBackendAnalysisProvider>
   );
 }

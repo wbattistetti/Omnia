@@ -72,13 +72,16 @@ function excerptMatchesDraft(excerpt, draft) {
   return false;
 }
 
-function sanitizeTextExcerptField(excerpt, draft) {
+function sanitizeTextExcerptField(excerpt, referenceText, designerNote) {
   const t = String(excerpt || '').trim();
-  if (!t || !draft?.trim() || !excerptMatchesDraft(t, draft)) return undefined;
+  if (!t || !referenceText?.trim() || !excerptMatchesDraft(t, referenceText)) return undefined;
+  if (designerNote?.trim() && normalizeExcerptForMatch(t) === normalizeExcerptForMatch(designerNote)) {
+    return undefined;
+  }
   return t.slice(0, 2000);
 }
 
-function parseObservationRow(row, idx, draft) {
+function parseObservationRow(row, idx, referenceText, designerNote) {
   const id = typeof row?.id === 'string' && row.id.trim() ? row.id.trim() : String.fromCharCode(65 + idx);
   const kind = String(row?.kind || '').trim();
   const text = typeof row?.text === 'string' ? row.text.trim() : '';
@@ -90,7 +93,11 @@ function parseObservationRow(row, idx, draft) {
   const presentation = PRESENTATIONS.has(presentationRaw)
     ? presentationRaw
     : inferPresentation(kind, text);
-  const documentExcerpt = sanitizeTextExcerptField(row?.documentExcerpt, draft);
+  const documentExcerpt = sanitizeTextExcerptField(
+    row?.documentExcerpt,
+    referenceText,
+    designerNote
+  );
   const excerptRationale =
     documentExcerpt &&
     typeof row?.excerptRationale === 'string' &&
@@ -108,18 +115,24 @@ function parseObservationRow(row, idx, draft) {
   };
 }
 
-function validateObservationReview(parsed, draft) {
+function validateObservationReview(parsed, baseline, designerDraft) {
   if (!Array.isArray(parsed.observations) || parsed.observations.length === 0) {
     throw new Error('Invalid JSON: expected non-empty observations array');
   }
-  const observations = parsed.observations.map((row, idx) => parseObservationRow(row, idx, draft));
+  const observations = parsed.observations.map((row, idx) =>
+    parseObservationRow(row, idx, baseline, row?.text)
+  );
   return { observations };
 }
 
-function validateClarifyObservationResponse(parsed, draft) {
+function validateClarifyObservationResponse(parsed, baseline, designerNote) {
   const interpretation = typeof parsed.interpretation === 'string' ? parsed.interpretation.trim() : '';
   if (!interpretation) throw new Error('Invalid JSON: expected non-empty interpretation');
-  const documentExcerpt = sanitizeTextExcerptField(parsed.documentExcerpt, draft);
+  const documentExcerpt = sanitizeTextExcerptField(
+    parsed.documentExcerpt,
+    baseline,
+    designerNote
+  );
   const excerptRationale =
     documentExcerpt &&
     typeof parsed.excerptRationale === 'string' &&
@@ -156,7 +169,6 @@ async function reviewTaskTextObservations(params) {
     '--- Designer edited version ---',
     userDraft.slice(0, 48_000),
   ];
-  const draftForValidate = userDraft;
   return callJsonAnalysis({
     systemPrompt: REVIEW_OBSERVATIONS_SYSTEM,
     userContent: parts.join('\n'),
@@ -166,19 +178,21 @@ async function reviewTaskTextObservations(params) {
     purpose: params.purpose,
     taskId: params.taskId,
     taskLabel: params.taskLabel,
-    validate: (parsed) => validateObservationReview(parsed, draftForValidate),
+    validate: (parsed) => validateObservationReview(parsed, baseline, userDraft),
   });
 }
 
 async function clarifyTaskTextObservation(params) {
   const userCorrection = String(params.userCorrection || '').trim();
   if (!userCorrection) throw new Error('userCorrection is required');
+  const baseline = String(params.agentBaselineMarkdown || '').trim();
   const userDraft = String(params.userDraftMarkdown || '').trim();
+  const designerNote = String(params.userText || '').trim();
   const parts = [
     `Section: ${String(params.sectionLabel || 'task text').trim()}`,
     '',
     '--- Designer note ---',
-    String(params.userText || '').slice(0, 8_000),
+    designerNote.slice(0, 8_000),
     '',
     '--- Previous assistant response ---',
     String(params.previousInterpretation || '').slice(0, 8_000),
@@ -186,7 +200,10 @@ async function clarifyTaskTextObservation(params) {
     '--- Designer correction ---',
     userCorrection.slice(0, 4_000),
     '',
-    '--- Designer edited task text (reference for excerpts) ---',
+    '--- Agent baseline (reference for excerpts) ---',
+    baseline.slice(0, 24_000),
+    '',
+    '--- Designer edited task text (context only) ---',
     userDraft.slice(0, 24_000),
   ];
   return callJsonAnalysis({
@@ -198,7 +215,8 @@ async function clarifyTaskTextObservation(params) {
     purpose: params.purpose,
     taskId: params.taskId,
     taskLabel: params.taskLabel,
-    validate: (parsed) => validateClarifyObservationResponse(parsed, userDraft),
+    validate: (parsed) =>
+      validateClarifyObservationResponse(parsed, baseline, designerNote),
   });
 }
 

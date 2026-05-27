@@ -56,6 +56,13 @@ export const UC_WIZARD_BODY_MONO = 'font-mono text-sm leading-snug';
 export const UC_WIZARD_AGENT_MESSAGE_TEXT =
   `${UC_WIZARD_BODY_MONO} text-slate-950 dark:text-slate-50`;
 
+/** Domande di test: stesso corpo del messaggio agente, colore blu chiaro. */
+export const UC_WIZARD_TEST_QUESTION_TEXT =
+  `${UC_WIZARD_BODY_MONO} text-sky-300 dark:text-sky-200`;
+
+export const UC_TEST_QUESTION_TEXTAREA =
+  `min-w-0 flex-1 rounded-md border border-sky-500/45 bg-slate-900/95 px-2 py-1.5 ${UC_WIZARD_BODY_MONO} text-sky-200 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-sky-400/50 focus:outline-none focus:ring-2 focus:ring-sky-500/45 disabled:opacity-60`;
+
 /** Testo scenario in lista wizard: grigio smorzato (non nero pieno). */
 export const UC_WIZARD_SCENARIO_TEXT =
   `${UC_WIZARD_BODY_MONO} text-slate-500/95 dark:text-slate-400/95`;

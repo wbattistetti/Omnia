@@ -58,6 +58,7 @@ describe('virtualAgentRuntimeCatalog', () => {
     expect(entries[0].example_filled_output.slots[0].surface).toBe('sabato 21');
     expect(entries[0].example_filled_output.groups?.[0].values).toEqual(['8', '10', '14']);
     expect(entries[0].use_case_id).toBe('UC5');
+    expect(entries[0].catalog_number).toBe(1);
   });
 
   it('appendVirtualAgentCatalogToRulesString appends when catalog entries exist', () => {
@@ -67,6 +68,7 @@ describe('virtualAgentRuntimeCatalog', () => {
     expect(out).toContain('Instructions per Prompt Rendering');
     expect(out).toContain('### Catalogo Use Cases');
     expect(out).toContain('UC5');
+    expect(out).toContain('UC 1');
   });
 
   it('skips use case without motor snapshot', () => {

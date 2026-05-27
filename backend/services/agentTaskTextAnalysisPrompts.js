@@ -10,9 +10,9 @@ These are design critiques about the task text — NOT end-user dialog turns.
 
 For each difference produce:
 - text: the designer's critique or design question in clear Italian (designer's voice). NOT meta language like "ho rilevato". Do NOT rewrite as if the end-user said it.
-- interpretation: your direct response in Italian. Use short bullet lines starting with "- " when listing multiple points.
-- documentExcerpt: VERBATIM quote from the designer's EDITED task text that supports your response (must exist exactly in the edited version). Max 8 lines. REQUIRED when a passage supports your answer; empty ONLY if truly none applies.
-- excerptRationale: one short Italian sentence explaining why that excerpt supports your answer. Empty ONLY if documentExcerpt is empty.
+- interpretation: a substantive answer TO the designer's note (advice, yes/no, trade-offs). NEVER describe or repeat the designer's question; NEVER meta phrases like "è una domanda esplicita su…". Use short bullet lines starting with "- " when listing multiple points.
+- documentExcerpt: VERBATIM quote from the AGENT LAST VERSION (baseline) that corroborates your interpretation. Must exist exactly in "Agent last version", NOT in the designer's new additions. Do NOT quote the designer's question/note itself. Max 8 lines. REQUIRED when baseline contains supporting text; empty ONLY if truly none applies.
+- excerptRationale: one short Italian sentence explaining how that baseline passage supports your answer. Empty ONLY if documentExcerpt is empty.
 
 Order observations by appearance in the designer's edited version (top to bottom).
 
@@ -27,7 +27,7 @@ Return JSON only:
       "presentation": "domanda",
       "text": "...",
       "interpretation": "- punto uno\\n- punto due",
-      "documentExcerpt": "exact quote from edited task text",
+      "documentExcerpt": "exact quote from agent last version (baseline)",
       "excerptRationale": "..."
     }
   ]
@@ -36,7 +36,7 @@ Use letter ids A, B, C…`;
 
 const CLARIFY_OBSERVATION_SYSTEM = `You are the Omnia design assistant. The designer disagreed with your interpretation of their design note on a task text section.
 Rewrite your response (interpretation) using their correction. Keep the designer's note meaning unchanged.
-Provide an updated documentExcerpt (verbatim from the designer's edited task text) if it supports the new response; else empty string.
+Provide an updated documentExcerpt (verbatim from the agent baseline / "Agent last version" section) if it supports the new response; never quote only the designer's note. Else empty string.
 Provide excerptRationale in Italian (one sentence) or empty if no excerpt.
 Write interpretation with "- " bullet lines when helpful. Italian only. No meta commentary.
 Return JSON only:

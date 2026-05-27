@@ -66,7 +66,7 @@ export interface BuildConversationalPromptOptions {
  * `includeLog` è `true`. Tenuta come template costante, in italiano, coerente per stile
  * e tono con {@link PROMPT_HEADER_IT} (lo stesso motore esterno legge entrambi).
  *
- * Formato del trace nuovo intenzionalmente diverso dallo standard `USECASE: "<NOME>"`:
+ * Formato del trace nuovo intenzionalmente diverso dallo standard `USECASE: "<N> — <NOME>"`:
  * il prefisso `NUOVO_` permette al designer (che vede i log runtime) di riconoscere a
  * colpo d'occhio gli use case "non in catalogo" da promuovere in design-time. Tutto in
  * MAIUSCOLO e il nome tra virgolette doppie, allineato al formato del campo `log` nel
@@ -74,7 +74,7 @@ export interface BuildConversationalPromptOptions {
  */
 const PROMPT_LOG_INSTRUCTION_IT = `Logging use case
 Per ogni risposta, alla fine del testo restituisci anche il marker dello use case applicato:
-- Se hai riconosciuto uno dei casi del catalogo qui sotto, copia letteralmente il valore del campo \`log\` di quello use case (formato: \`USECASE: "<NOME>"\`, tutto MAIUSCOLO, nome tra virgolette doppie).
+- Se hai riconosciuto uno dei casi del catalogo qui sotto, copia letteralmente il valore del campo \`log\` di quello use case (formato: \`USECASE: "<NUMERO> — <NOME>"\`, es. \`USECASE: "3 — SALUTO CLIENTE"\`; numero e nome in MAIUSCOLO).
 - Se NESSUN use case del catalogo si applica all'input dell'utente, classificalo tu: scegli un titolo breve in SNAKE_CASE MAIUSCOLO che descriva l'intento, e termina la risposta con \`USECASE: "NUOVO_<TITOLO>"\` (esempio: \`USECASE: "NUOVO_RICHIESTA_RIMBORSO"\`).
 - Il marker va sempre alla fine, su nuova riga, senza altre parole prima o dopo.`;
 

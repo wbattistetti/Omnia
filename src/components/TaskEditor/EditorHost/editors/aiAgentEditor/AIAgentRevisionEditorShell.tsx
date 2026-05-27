@@ -24,6 +24,7 @@ export interface AIAgentRevisionEditorShellProps {
   onUndoRequest?: () => void;
   onRedoRequest?: () => void;
   onInsertBackendPathAtCaret?: (backendPath: string, rangeStart: number, rangeEnd?: number) => void;
+  designerHighlightBaseline?: string;
 }
 
 export function AIAgentRevisionEditorShell({
@@ -41,6 +42,7 @@ export function AIAgentRevisionEditorShell({
   onUndoRequest,
   onRedoRequest,
   onInsertBackendPathAtCaret,
+  designerHighlightBaseline = '',
 }: AIAgentRevisionEditorShellProps) {
   const suffix = instanceId || 'default';
   const [showIaDiff, setShowIaDiff] = React.useState(false);
@@ -65,6 +67,7 @@ export function AIAgentRevisionEditorShell({
         onInsertBackendPathAtCaret={onInsertBackendPathAtCaret}
         onUndoRequest={onUndoRequest}
         onRedoRequest={onRedoRequest}
+        designerHighlightBaseline={designerHighlightBaseline}
       />
     </div>
   );

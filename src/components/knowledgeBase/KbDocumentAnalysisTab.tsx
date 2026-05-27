@@ -4,7 +4,6 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import type * as Monaco from 'monaco-editor';
 import { useAIProvider } from '@context/AIProviderContext';
 import type { StagedKbDocument, KbDocumentPatch } from '@domain/knowledgeBase/kbDocumentTypes';
 import type { AiCallMeta } from '@services/aiAgentDesignApi';
@@ -32,7 +31,10 @@ import {
   shouldRunObservationReview,
   type KbAnalysisReviewSessionItem,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
-import { KbMarkdownMonaco } from '@components/workspaces/elevenlabs/kb/KbMarkdownMonaco';
+import { clearKbRuntimeDistillCachePatch } from '@domain/analysisRuntime/analysisRuntimeDistill';
+import { buildKbSectionBaselinesFromMarkdown } from '@domain/knowledgeBase/kbDocumentAnalysisSections';
+import { KbDocumentAnalysisEditProvider } from './KbDocumentAnalysisEditContext';
+import { KbDocumentAnalysisWorkspace } from './KbDocumentAnalysisWorkspace';
 import { KbAnalysisObservationReviewPanel } from './KbAnalysisObservationReviewPanel';
 import { useKbDocumentContent } from './useKbDocumentContent';
 import { TUTOR_ID_ATTR, UI_IDS } from '@domain/activeTutor/tutorUiIds';
@@ -91,7 +93,6 @@ export function KbDocumentAnalysisTab({
   onReviewPanelOpenChange,
 }: KbDocumentAnalysisTabProps): React.ReactElement {
   const { provider, model } = useAIProvider();
-  const editorRef = React.useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
   const [busy, setBusy] = React.useState(false);
   const [busyObservationId, setBusyObservationId] = React.useState<string | null>(null);
@@ -164,14 +165,12 @@ export function KbDocumentAnalysisTab({
       onUpdateDoc({
         documentAnalysisMarkdown: next,
         agentAnalysisBaselineMarkdown: next,
+        documentAnalysisSectionBaselines: buildKbSectionBaselinesFromMarkdown(next),
+        ...clearKbRuntimeDistillCachePatch(),
       });
     },
     [onUpdateDoc]
   );
-
-  const focusEditor = React.useCallback(() => {
-    editorRef.current?.focus();
-  }, []);
 
   const updateReviewItem = React.useCallback(
     (observationId: string, patch: Partial<KbAnalysisReviewSessionItem>) => {
@@ -223,7 +222,6 @@ export function KbDocumentAnalysisTab({
         )
       );
       applyAgentResult(result.documentAnalysisMarkdown);
-      focusEditor();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -240,7 +238,6 @@ export function KbDocumentAnalysisTab({
     model,
     callMeta,
     applyAgentResult,
-    focusEditor,
   ]);
 
   const onStartAnalysis = React.useCallback(async () => {
@@ -540,17 +537,44 @@ export function KbDocumentAnalysisTab({
           </div>
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-700/80 bg-slate-950/50">
-            <KbMarkdownMonaco
-              value={draft}
-              onChange={canEdit && !busy ? persistDraft : undefined}
-              readOnly={!canEdit || busy}
-              fillHeight
-              appearance="plain"
-              ariaLabel="Analisi del documento in Markdown"
-              editorDidMount={(editor) => {
-                editorRef.current = editor;
-              }}
-            />
+            {analysisStarted ? (
+              <p className="shrink-0 border-b border-slate-800/80 px-2 py-1 text-[10px] leading-snug text-slate-500">
+                Sezioni colorate:{' '}
+                <span className="text-cyan-300">Entities</span> ·{' '}
+                <span className="text-amber-200">Sinonimi</span> ·{' '}
+                <span className="text-violet-300">Dialogo</span> ·{' '}
+                <span className="text-pink-300">Disambiguazione</span> ·{' '}
+                <span className="text-orange-300">Dati mancanti</span> ·{' '}
+                <span className="text-emerald-300">Mapping</span> ·{' '}
+                <span className="text-stone-400 italic">Fonte:</span>
+              </p>
+            ) : null}
+            {analysisStarted && repoId ? (
+              <KbDocumentAnalysisEditProvider
+                doc={doc}
+                onUpdateDoc={onUpdateDoc}
+                projectId={projectId}
+                repositoryDocumentId={repoId}
+                documentName={doc.name}
+                documentSampleText={content.text ?? ''}
+                taskContext={taskContext}
+                provider={provider}
+                model={model}
+                callMeta={callMeta}
+                disabled={!canEdit || busy}
+              >
+                <KbDocumentAnalysisWorkspace
+                  draft={draft}
+                  agentBaseline={baseline}
+                  onDraftChange={canEdit && !busy ? persistDraft : () => {}}
+                  readOnly={!canEdit || busy}
+                />
+              </KbDocumentAnalysisEditProvider>
+            ) : (
+              <p className="p-3 text-sm text-slate-500">
+                Avvia l&apos;analisi con «clicca qui» o scrivi una bozza e premi Esegui.
+              </p>
+            )}
           </div>
         )}
       </div>

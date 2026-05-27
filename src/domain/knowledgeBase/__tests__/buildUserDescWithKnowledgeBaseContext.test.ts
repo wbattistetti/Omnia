@@ -70,9 +70,35 @@ describe('buildUserDescWithKnowledgeBaseContext', () => {
     });
 
     expect(kbDocCount).toBe(1);
-    expect(userDesc).toContain('KNOWLEDGE BASE');
+    expect(userDesc).toContain('analisi documenti');
     expect(userDesc).toContain('KB_test.md');
     expect(userDesc).toContain('# Regole');
+    expect(userDesc).toContain('testo grezzo');
+  });
+
+  it('prefers document analysis over repository fetch when baseline exists', async () => {
+    const analysis = [
+      '## Type: MIXED',
+      '',
+      '### Regole di dialogo',
+      '- Chiedere branca. — Fonte: «visita cardiologica»',
+    ].join('\n');
+
+    const { userDesc, kbWarnings } = await buildUserDescWithKnowledgeBaseContext({
+      projectId: 'proj-1',
+      baseUserDesc: 'Descrizione task.',
+      documents: [
+        stubDoc({
+          documentAnalysisMarkdown: analysis,
+          agentAnalysisBaselineMarkdown: analysis,
+        }),
+      ],
+    });
+
+    expect(fetchKbDocumentContent).not.toHaveBeenCalled();
+    expect(userDesc).toContain('sintesi analisi documento');
+    expect(userDesc).toContain('Regole di dialogo');
+    expect(kbWarnings.some((w) => w.includes('grezzo'))).toBe(false);
   });
 
   it('returns base only without projectId for upload docs', async () => {

@@ -11,9 +11,11 @@ const {
   CLARIFY_OBSERVATION_SYSTEM,
   FINALIZE_SYSTEM,
 } = require('./kbDocumentAnalysisPrompts');
+const { KB_DISTILL_RUNTIME_SYSTEM } = require('./analysisRuntimeDistillPrompts');
 
 const TIMEOUT_MS = Number.parseInt(process.env.KB_ANALYSIS_TIMEOUT_MS || '120000', 10);
 const MAX_MD = 120_000;
+const MAX_RUNTIME_DISTILL = 4_000;
 const PRESENTATIONS = new Set(['domanda', 'osservazione']);
 const KINDS = new Set(['aggiunta', 'correzione', 'contestazione', 'precisazione']);
 
@@ -83,6 +85,18 @@ function validateMarkdownField(parsed, field = 'documentAnalysisMarkdown') {
   if (!out) throw new Error(`Invalid JSON: expected non-empty ${field}`);
   if (out.length > MAX_MD) throw new Error(`Invalid response: ${field} exceeds maximum length`);
   return { documentAnalysisMarkdown: out };
+}
+
+function validateRuntimeDistillField(parsed) {
+  const out =
+    typeof parsed.runtimeDistilledMarkdown === 'string'
+      ? parsed.runtimeDistilledMarkdown.trim()
+      : '';
+  if (!out) throw new Error('Invalid JSON: expected non-empty runtimeDistilledMarkdown');
+  if (out.length > MAX_RUNTIME_DISTILL) {
+    throw new Error('Invalid response: runtimeDistilledMarkdown exceeds maximum length');
+  }
+  return { runtimeDistilledMarkdown: out };
 }
 
 function inferPresentation(kind, text) {
@@ -314,10 +328,34 @@ async function finalizeDocumentAnalysis(params) {
   });
 }
 
+async function distillDocumentAnalysisRuntime(params) {
+  const analysis = String(params.analysisMarkdown || '').trim();
+  if (!analysis) throw new Error('analysisMarkdown is required');
+  const parts = [
+    `Document name: ${params.documentName || 'document'}`,
+    '',
+    '--- Analysis to distill ---',
+    analysis.slice(0, 32_000),
+  ];
+  appendTaskContext(parts, params);
+  return callJsonAnalysis({
+    systemPrompt: KB_DISTILL_RUNTIME_SYSTEM,
+    userContent: parts.join('\n'),
+    provider: params.provider,
+    model: params.model,
+    aiProviderService: params.aiProviderService,
+    purpose: params.purpose,
+    taskId: params.taskId,
+    taskLabel: params.taskLabel,
+    validate: validateRuntimeDistillField,
+  });
+}
+
 module.exports = {
   proposeDocumentAnalysis,
   refineDocumentAnalysis,
   reviewAnalysisObservations,
   clarifyObservationResponse,
   finalizeDocumentAnalysis,
+  distillDocumentAnalysisRuntime,
 };

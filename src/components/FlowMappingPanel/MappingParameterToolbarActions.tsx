@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { Pencil, Trash2, StickyNote, Table2, Settings2 } from 'lucide-react';
+import { Pencil, Trash2, StickyNote, Table2, Settings2, Info } from 'lucide-react';
 
 const iconSm = 'w-3 h-3';
 
@@ -15,6 +15,8 @@ export interface MappingParameterToolbarActionsProps {
   onToggleValues: () => void;
   showConstraint?: boolean;
   onToggleConstraint?: () => void;
+  /** Analisi backend Livello 2 (read-only). */
+  onOpenParameterAnalysis?: () => void;
 }
 
 export function MappingParameterToolbarActions({
@@ -25,9 +27,21 @@ export function MappingParameterToolbarActions({
   onToggleValues,
   showConstraint = false,
   onToggleConstraint,
+  onOpenParameterAnalysis,
 }: MappingParameterToolbarActionsProps): React.ReactElement {
   return (
     <>
+      {onOpenParameterAnalysis ? (
+        <button
+          type="button"
+          className="rounded p-1 text-violet-300/90 hover:bg-violet-950/80 hover:text-violet-100"
+          title="Analisi parametro (sola lettura)"
+          aria-label="Analisi parametro"
+          onClick={onOpenParameterAnalysis}
+        >
+          <Info className={iconSm} strokeWidth={2} />
+        </button>
+      ) : null}
       <button
         type="button"
         className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-amber-200"

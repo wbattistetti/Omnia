@@ -16,7 +16,8 @@ import {
   AI_AGENT_MIN_INPUT_CHARS,
   DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID,
 } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/constants';
-import { buildUserDescWithKnowledgeBaseContext } from '@domain/knowledgeBase/buildUserDescWithKnowledgeBaseContext';
+import { buildAgentDesignUserDesc } from '@domain/agentDesign/buildAgentDesignUserDesc';
+import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import {
   generateAIAgentUseCases,
   generalizeAIAgentUseCaseMetaApi,
@@ -37,7 +38,7 @@ export type ReviewAgentIaDockSlice = Pick<
   | 'getTaskTextBaseline'
   | 'setTaskTextBaseline'
   | 'getTaskTextCurrentText'
-  | 'applyTaskTextFieldText'
+  | 'commitAgentStabilizedTaskText'
   | 'dismissTaskTextReviewOffer'
   | 'clearTaskTextReviewOfferDismissed'
   | 'isTaskTextReviewOfferDismissed'
@@ -77,6 +78,8 @@ export function useReviewAgentIaDockSlice(
   params: UseReviewAgentIaDockSliceParams
 ): ReviewAgentIaDockSlice {
   const { provider, model } = useAIProvider();
+  const { data: projectData } = useProjectData();
+  const { updateDataDirectly } = useProjectDataUpdate();
 
   const [taskTextBaselines, setTaskTextBaselines] = React.useState<Record<string, string>>({
     designDescription: '',
@@ -150,13 +153,6 @@ export function useReviewAgentIaDockSlice(
     [params.designDescription]
   );
 
-  const applyTaskTextFieldText = React.useCallback(
-    (fieldId: AgentTaskTextFieldId, text: string) => {
-      if (fieldId === 'designDescription') params.setDesignDescription(text);
-    },
-    [params.setDesignDescription]
-  );
-
   const dismissTaskTextReviewOffer = React.useCallback((fieldId: AgentTaskTextFieldId) => {
     setTaskTextReviewDismissed((prev) => ({ ...prev, [fieldId]: true }));
   }, []);
@@ -169,6 +165,17 @@ export function useReviewAgentIaDockSlice(
       return next;
     });
   }, []);
+
+  const commitAgentStabilizedTaskText = React.useCallback(
+    (fieldId: AgentTaskTextFieldId, text: string) => {
+      if (fieldId !== 'designDescription') return;
+      const stabilized = text.trim();
+      params.setDesignDescription(stabilized);
+      setTaskTextBaseline(fieldId, stabilized);
+      clearTaskTextReviewOfferDismissed(fieldId);
+    },
+    [params.setDesignDescription, setTaskTextBaseline, clearTaskTextReviewOfferDismissed]
+  );
 
   const isTaskTextReviewOfferDismissed = React.useCallback(
     (fieldId: AgentTaskTextFieldId) => Boolean(taskTextReviewDismissed[fieldId]),
@@ -356,11 +363,21 @@ export function useReviewAgentIaDockSlice(
 
     let userDesc = baseUserDesc;
     try {
-      const kbCtx = await buildUserDescWithKnowledgeBaseContext({
+      const kbCtx = await buildAgentDesignUserDesc({
         projectId: params.projectId,
+        agentTaskId: params.taskInstanceId,
         baseUserDesc,
         documents: params.knowledgeBaseDocuments,
+        backendCatalog: projectData?.backendCatalog,
+        runtimeDistill: {
+          provider,
+          model,
+          callMeta: buildCallMeta(AI_CALL_PURPOSE.RUNTIME_ANALYSIS_DISTILL),
+        },
       });
+      if (kbCtx.backendCatalogPatch && projectData) {
+        updateDataDirectly({ ...projectData, backendCatalog: kbCtx.backendCatalogPatch });
+      }
       userDesc = kbCtx.userDesc;
       if (kbCtx.kbWarnings.length > 0) {
         params.onComposerIaError(`Avvisi knowledge base: ${kbCtx.kbWarnings.join(' ')}`);
@@ -438,7 +455,14 @@ export function useReviewAgentIaDockSlice(
     params.designDescription,
     params.structuredRevision,
     params.projectId,
+    params.taskInstanceId,
     params.knowledgeBaseDocuments,
+    projectData,
+    projectData?.backendCatalog,
+    updateDataDirectly,
+    provider,
+    model,
+    buildCallMeta,
     params.useCases,
     params.setUseCases,
     params.useCaseGlobalStyleId,
@@ -454,7 +478,7 @@ export function useReviewAgentIaDockSlice(
     getTaskTextBaseline,
     setTaskTextBaseline,
     getTaskTextCurrentText,
-    applyTaskTextFieldText,
+    commitAgentStabilizedTaskText,
     dismissTaskTextReviewOffer,
     clearTaskTextReviewOfferDismissed,
     isTaskTextReviewOfferDismissed,

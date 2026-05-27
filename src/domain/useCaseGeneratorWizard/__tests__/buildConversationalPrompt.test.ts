@@ -111,12 +111,12 @@ describe('buildConversationalPrompt', () => {
       expect(prompt).toContain('USECASE: "UKS"');
     });
 
-    it("with includeLog=true: each JSON entry has 'log' with USECASE: \"<NOME>\" upper-cased", () => {
+    it("with includeLog=true: each JSON entry has 'log' with number and label", () => {
       const prompt = buildConversationalPrompt(
         [makeUseCase({ id: 'uc-a', label: 'Saluto cliente' })],
         { includeLog: true, catalogFormat: 'json-pretty' }
       );
-      expect(prompt).toContain('"log": "USECASE: \\"SALUTO CLIENTE\\""');
+      expect(prompt).toContain('"log": "USECASE: \\"1 — SALUTO CLIENTE\\""');
     });
 
     it('with includeLog=true: textual instruction is injected in front of the catalog blocks (not the global header)', () => {

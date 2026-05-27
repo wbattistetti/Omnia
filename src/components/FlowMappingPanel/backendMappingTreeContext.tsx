@@ -46,6 +46,8 @@ export interface BackendMappingTreeContextValue {
   agentParamDragSource?: AgentParamDragSource;
   dropLineIndentPx: (level: number) => number;
   dropLineTone: DropPreviewTone;
+  /** Livello 2: apre pannello analisi parametro (read-only da documento V2). */
+  onParameterAnalysisInfo?: (wireKey: string) => void;
 }
 
 const BackendMappingTreeContext = createContext<BackendMappingTreeContextValue | null>(null);

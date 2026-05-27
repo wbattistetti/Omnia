@@ -51,8 +51,9 @@ export function DesignDescriptionTextarea({
           fieldId={fieldId}
           currentText={editorCtx.designDescription}
           baseline={editorCtx.getTaskTextBaseline(fieldId)}
-          onApplyFinalText={(text) => editorCtx.applyTaskTextFieldText(fieldId, text)}
-          onCommitBaseline={(text) => editorCtx.setTaskTextBaseline(fieldId, text)}
+          onCommitAgentStabilizedText={(text) =>
+            editorCtx.commitAgentStabilizedTaskText(fieldId, text)
+          }
           projectId={editorCtx.projectId}
           buildCallMeta={editorCtx.buildCallMeta}
           offerDismissed={editorCtx.isTaskTextReviewOfferDismissed(fieldId)}
@@ -64,6 +65,11 @@ export function DesignDescriptionTextarea({
           {({ reviewBlocksEdit }) => (
             <AgentDescriptionMarkdownEditor
               value={editorCtx.designDescription}
+              designerHighlightBaseline={
+                editorCtx.hasAgentGeneration
+                  ? editorCtx.getTaskTextBaseline(fieldId)
+                  : ''
+              }
               onChange={(value) => {
                 editorCtx.setDesignDescription(value);
                 tutorNotifyUserEdit(0);

@@ -23,6 +23,7 @@ import {
   KB_ANALYSIS_CLARIFY_SUBMIT,
   KB_ANALYSIS_CONFIRMED_BADGE,
   KB_ANALYSIS_EXCERPT_RATIONALE_LABEL,
+  KB_ANALYSIS_RESPONSE_CHIP_LABEL,
   KB_ANALYSIS_STATUS_CLARIFYING,
   KB_ANALYSIS_STATUS_PENDING,
   KB_ANALYSIS_USER_OBSERVATION_LABEL,
@@ -45,6 +46,7 @@ const TASK_TEXT_REVIEW_COPY: KbAnalysisObservationReviewCopy = {
   clarifySubmit: KB_ANALYSIS_CLARIFY_SUBMIT,
   confirmedBadge: KB_ANALYSIS_CONFIRMED_BADGE,
   excerptRationaleLabel: KB_ANALYSIS_EXCERPT_RATIONALE_LABEL,
+  responseChipLabel: KB_ANALYSIS_RESPONSE_CHIP_LABEL,
   statusPending: KB_ANALYSIS_STATUS_PENDING,
   statusClarifying: KB_ANALYSIS_STATUS_CLARIFYING,
   userQuestionLabel: KB_ANALYSIS_USER_QUESTION_LABEL,
@@ -55,8 +57,7 @@ export type AgentTaskTextObservationReviewShellProps = {
   fieldId: AgentTaskTextFieldId;
   currentText: string;
   baseline: string;
-  onApplyFinalText: (text: string) => void;
-  onCommitBaseline: (text: string) => void;
+  onCommitAgentStabilizedText: (text: string) => void;
   projectId: string | undefined;
   buildCallMeta: (purpose: string) => AiCallMeta;
   offerDismissed: boolean;

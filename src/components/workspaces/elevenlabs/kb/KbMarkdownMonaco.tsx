@@ -14,6 +14,10 @@ import {
 } from '@components/knowledgeBase/kbMonacoTheme';
 import { TUTOR_ID_ATTR } from '@domain/activeTutor/tutorUiIds';
 import { ensureKbMarkdownLanguage } from '@components/knowledgeBase/kbMarkdownLanguage';
+import {
+  ensureKbAnalysisMarkdownMonaco,
+  OMNIA_KB_ANALYSIS_MD_LANG,
+} from '@components/knowledgeBase/kbAnalysisMarkdownLanguage';
 import { applyMonacoEmbeddedEditorUi } from '@utils/monacoEmbeddedSetup';
 
 const EDITOR_OPTIONS = {
@@ -60,10 +64,17 @@ export function KbMarkdownMonaco({
 }: KbMarkdownMonacoProps): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [editorHeight, setEditorHeight] = React.useState(heightPx);
-  const handleEditorWillMount = React.useCallback((monaco: typeof Monaco) => {
-    ensureKbMarkdownLanguage(monaco);
-    ensureKbReaderMonacoTheme(monaco);
-  }, []);
+  const handleEditorWillMount = React.useCallback(
+    (monaco: typeof Monaco) => {
+      if (language === OMNIA_KB_ANALYSIS_MD_LANG) {
+        ensureKbAnalysisMarkdownMonaco(monaco);
+      } else {
+        ensureKbMarkdownLanguage(monaco);
+        ensureKbReaderMonacoTheme(monaco);
+      }
+    },
+    [language]
+  );
 
   const handleEditorDidMount = React.useCallback(
     (editor: Monaco.editor.IStandaloneCodeEditor) => {
@@ -102,7 +113,7 @@ export function KbMarkdownMonaco({
       ref={hostRef}
       {...(tutorHostId ? { [TUTOR_ID_ATTR]: tutorHostId } : {})}
       className={
-        (fillHeight ? 'h-full min-h-0 ' : '') +
+        (fillHeight ? 'h-full min-h-0 flex-1 ' : '') +
         'overflow-hidden rounded-md border bg-slate-950/80 ' +
         (isPlain
           ? 'border-slate-700 focus-within:border-violet-500/60'

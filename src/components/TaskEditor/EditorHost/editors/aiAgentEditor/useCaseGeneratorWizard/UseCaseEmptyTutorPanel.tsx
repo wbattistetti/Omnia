@@ -62,7 +62,14 @@ export function UseCaseEmptyTutorPanel({
   const { hasModel } = useAiBusyLabel();
   const [showNoModelToast, setShowNoModelToast] = React.useState(false);
   const [pasteAreaVisible, setPasteAreaVisible] = React.useState(false);
-  const bundleBusy = generating || bundleGenerateBusy;
+  const [optimisticBundleBusy, setOptimisticBundleBusy] = React.useState(false);
+  const bundleBusy = generating || bundleGenerateBusy || optimisticBundleBusy;
+
+  React.useEffect(() => {
+    if (!generating && !bundleGenerateBusy) {
+      setOptimisticBundleBusy(false);
+    }
+  }, [generating, bundleGenerateBusy]);
   const canGenerateFromScratch = typeof onGenerateFromScratch === 'function';
   const progressMessage = formatUseCaseBundleProgressBanner(
     bundleGenerationCount,
@@ -82,6 +89,7 @@ export function UseCaseEmptyTutorPanel({
       setShowNoModelToast(true);
       return;
     }
+    setOptimisticBundleBusy(true);
     void onGenerateFromScratch?.();
   };
 

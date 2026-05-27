@@ -4,6 +4,7 @@ import {
   analysisDraftDiffersFromBaseline,
   createReviewSessionItems,
   inferObservationPresentation,
+  observationPresentationChipLabel,
   normalizeAnalysisText,
   parseKbAnalysisObservationReview,
   resolveKbAnalysisToolbarPresentation,
@@ -21,6 +22,11 @@ describe('kbDocumentAnalysisWorkflow', () => {
     expect(analysisDraftDiffersFromBaseline('x', '')).toBe(false);
     expect(shouldRunObservationReview('', 'user draft')).toBe(false);
     expect(shouldRunObservationReview('agent', 'user draft')).toBe(true);
+  });
+
+  it('maps presentation to chip labels', () => {
+    expect(observationPresentationChipLabel('domanda')).toBe('Domanda');
+    expect(observationPresentationChipLabel('osservazione')).toBe('Osservazione');
   });
 
   it('infers domanda vs osservazione', () => {
@@ -49,6 +55,26 @@ describe('kbDocumentAnalysisWorkflow', () => {
     );
     expect(parsed.observations[0]?.documentExcerpt).toBe('Il campo X è obbligatorio');
     expect(parsed.observations[0]?.excerptRationale).toContain('obbligatorietà');
+  });
+
+  it('strips excerpt that duplicates the designer note even if in sample', () => {
+    const sample = 'Non va sempre chiesta? Altro testo nel baseline.';
+    const parsed = parseKbAnalysisObservationReview(
+      {
+        observations: [
+          {
+            id: 'A',
+            kind: 'aggiunta',
+            presentation: 'domanda',
+            text: 'Non va sempre chiesta?',
+            interpretation: '- Meglio verificare prima nella KB.',
+            documentExcerpt: 'Non va sempre chiesta?',
+          },
+        ],
+      },
+      sample
+    );
+    expect(parsed.observations[0]?.documentExcerpt).toBeUndefined();
   });
 
   it('strips excerpt that does not match sample', () => {

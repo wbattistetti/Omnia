@@ -236,6 +236,8 @@ export interface InterfaceMappingEditorProps {
    * l’albero cresce e scrolla il pannello padre.
    */
   scrollMappingInParent?: boolean;
+  /** Livello 2: info analisi parametro (SEND/RECEIVE). */
+  onParameterAnalysisInfo?: (wireKey: string) => void;
 }
 
 export function InterfaceMappingEditor({
@@ -291,6 +293,7 @@ export function InterfaceMappingEditor({
   enableAgentBackendParamDrop = false,
   agentParamDragSource,
   scrollMappingInParent = false,
+  onParameterAnalysisInfo,
 }: InterfaceMappingEditorProps) {
   const interfaceInput = interfaceInputProp ?? [];
   const interfaceOutput = interfaceOutputProp ?? [];
@@ -679,6 +682,7 @@ export function InterfaceMappingEditor({
                         embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
                         agentParamDragSource={agentParamDragSource}
                         scrollMappingInParent={backendBlockGrow}
+                        onParameterAnalysisInfo={onParameterAnalysisInfo}
                       />
                     </div>
                   </div>
@@ -732,6 +736,7 @@ export function InterfaceMappingEditor({
                     embeddedSignatureSubToolbarOpen={embeddedSignatureSubToolbarOpen}
                     agentParamDragSource={agentParamDragSource}
                     scrollMappingInParent={backendBlockGrow}
+                    onParameterAnalysisInfo={onParameterAnalysisInfo}
                   />
                 </div>
               </MappingBlock>

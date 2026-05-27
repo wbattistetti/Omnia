@@ -41,4 +41,15 @@ describe('serializeKbDocuments', () => {
     expect(parsed[0]?.documentAnalysisMarkdown).toBe('');
     expect(parsed[0]?.agentAnalysisBaselineMarkdown).toBe('');
   });
+
+  it('roundtrips section baselines', () => {
+    const withSections: PersistedKbDocument[] = [
+      {
+        ...sample[0],
+        documentAnalysisSectionBaselines: { 'kbSection:entities': '- foo' },
+      },
+    ];
+    const json = serializeAgentKnowledgeBaseDocuments(withSections);
+    expect(parseAgentKnowledgeBaseDocumentsJson(json)).toEqual(withSections);
+  });
 });

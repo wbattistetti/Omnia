@@ -1821,7 +1821,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             setSearchTerm={setSearchTerm}
             onSelectProject={async (id: string) => {
               await handleOpenProjectById(id);
-              setAppState('mainApp');
+              /* mainApp: già impostato da ProjectManager.openProjectById in caso di successo */
             }}
           />
           <NewProjectModal

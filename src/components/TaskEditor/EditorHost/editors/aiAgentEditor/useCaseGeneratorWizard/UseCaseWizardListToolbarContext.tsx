@@ -4,6 +4,10 @@
  */
 
 import React from 'react';
+import type { UseCaseTestQuestionStats } from '@domain/aiAgentUseCase/useCaseTestQuestions';
+
+/** Filtro cruscotto domande di test (solo OK/KO; Validate è solo KPI). */
+export type TestQuestionLens = 'ok' | 'ko';
 
 export type WizardBulkFoldState = 'expanded' | 'collapsed' | 'mixed';
 
@@ -108,6 +112,22 @@ export interface UseCaseWizardListToolbarContextValue {
   setCorrectionPreviewState: React.Dispatch<
     React.SetStateAction<CorrectionPreviewState | null>
   >;
+
+  /** Use case selezionato in lista (per generazione domande di test). */
+  toolbarSelectedUseCaseId: string | null;
+  setToolbarSelectedUseCaseId: (id: string | null) => void;
+  /** KPI aggregate domande di test (cruscotto). */
+  testQuestionStats: UseCaseTestQuestionStats;
+  setTestQuestionStats: (stats: UseCaseTestQuestionStats) => void;
+  /** Lente OK/KO: espande ed evidenzia; secondo click = toggle off. */
+  testQuestionLens: TestQuestionLens | null;
+  toggleTestQuestionLens: (lens: TestQuestionLens) => void;
+  clearTestQuestionLens: () => void;
+  registerGenerateTestQuestionsHandler: (handler: (() => Promise<void>) | null) => void;
+  triggerGenerateTestQuestions: () => Promise<void>;
+  generateTestQuestionsBusy: boolean;
+  testQuestionsNotice: string | null;
+  setTestQuestionsNotice: (message: string | null) => void;
 }
 
 const UseCaseWizardListToolbarContext =
@@ -149,7 +169,24 @@ export function UseCaseWizardListToolbarProvider({
     React.useState<CorrectionPreviewState | null>(null);
   const handlersRef = React.useRef<UseCaseWizardListHandlers | null>(null);
   const consolidateHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
+  const generateTestQuestionsHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
   const wasOverThresholdRef = React.useRef<boolean>(false);
+  const [toolbarSelectedUseCaseId, setToolbarSelectedUseCaseId] = React.useState<string | null>(
+    null
+  );
+  const [testQuestionStats, setTestQuestionStatsRaw] =
+    React.useState<UseCaseTestQuestionStats>({
+      total: 0,
+      pending: 0,
+      ok: 0,
+      ko: 0,
+      reviewedPct: 0,
+      okPct: 0,
+      koPct: 0,
+    });
+  const [testQuestionLens, setTestQuestionLens] = React.useState<TestQuestionLens | null>(null);
+  const [generateTestQuestionsBusy, setGenerateTestQuestionsBusy] = React.useState(false);
+  const [testQuestionsNotice, setTestQuestionsNotice] = React.useState<string | null>(null);
 
   /**
    * Rearm automatico del dismissal: appena il count torna a 0 (consolidamento
@@ -278,6 +315,36 @@ export function UseCaseWizardListToolbarProvider({
     setCorrectionsDismissed(true);
   }, []);
 
+  const setTestQuestionStats = React.useCallback((stats: UseCaseTestQuestionStats) => {
+    setTestQuestionStatsRaw(stats);
+  }, []);
+
+  const toggleTestQuestionLens = React.useCallback((lens: TestQuestionLens) => {
+    setTestQuestionLens((prev) => (prev === lens ? null : lens));
+  }, []);
+
+  const clearTestQuestionLens = React.useCallback(() => {
+    setTestQuestionLens(null);
+  }, []);
+
+  const registerGenerateTestQuestionsHandler = React.useCallback(
+    (handler: (() => Promise<void>) | null): void => {
+      generateTestQuestionsHandlerRef.current = handler;
+    },
+    []
+  );
+
+  const triggerGenerateTestQuestions = React.useCallback(async (): Promise<void> => {
+    const fn = generateTestQuestionsHandlerRef.current;
+    if (!fn) return;
+    setGenerateTestQuestionsBusy(true);
+    try {
+      await fn();
+    } finally {
+      setGenerateTestQuestionsBusy(false);
+    }
+  }, []);
+
   const value = React.useMemo<UseCaseWizardListToolbarContextValue>(
     () => ({
       listAccordionHeaderMode,
@@ -311,6 +378,18 @@ export function UseCaseWizardListToolbarProvider({
       dismissCorrections,
       correctionPreviewState,
       setCorrectionPreviewState,
+      toolbarSelectedUseCaseId,
+      setToolbarSelectedUseCaseId,
+      testQuestionStats,
+      setTestQuestionStats,
+      testQuestionLens,
+      toggleTestQuestionLens,
+      clearTestQuestionLens,
+      registerGenerateTestQuestionsHandler,
+      triggerGenerateTestQuestions,
+      generateTestQuestionsBusy,
+      testQuestionsNotice,
+      setTestQuestionsNotice,
     }),
     [
       listAccordionHeaderMode,
@@ -342,6 +421,15 @@ export function UseCaseWizardListToolbarProvider({
       correctionsDismissed,
       dismissCorrections,
       correctionPreviewState,
+      toolbarSelectedUseCaseId,
+      testQuestionStats,
+      testQuestionLens,
+      toggleTestQuestionLens,
+      clearTestQuestionLens,
+      registerGenerateTestQuestionsHandler,
+      triggerGenerateTestQuestions,
+      generateTestQuestionsBusy,
+      testQuestionsNotice,
     ]
   );
 

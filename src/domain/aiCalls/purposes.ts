@@ -58,6 +58,20 @@ export const AI_CALL_PURPOSE = {
   KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION: 'KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION',
   /** Domanda libera al Tutor Attivo (solo manuale designer). */
   TUTOR_FREE_QUESTION: 'TUTOR_FREE_QUESTION',
+  /** Prima proposta analisi uso backend per agente. */
+  BACKEND_PROPOSE_ANALYSIS: 'BACKEND_PROPOSE_ANALYSIS',
+  /** Raffinamento bozza analisi backend. */
+  BACKEND_REFINE_ANALYSIS: 'BACKEND_REFINE_ANALYSIS',
+  /** Revisione osservazioni su analisi backend. */
+  BACKEND_REVIEW_ANALYSIS_OBSERVATIONS: 'BACKEND_REVIEW_ANALYSIS_OBSERVATIONS',
+  /** Analisi backend concordata dopo revisione. */
+  BACKEND_FINALIZE_ANALYSIS: 'BACKEND_FINALIZE_ANALYSIS',
+  /** Chiarimento risposta su osservazione analisi backend. */
+  BACKEND_CLARIFY_ANALYSIS_OBSERVATION: 'BACKEND_CLARIFY_ANALYSIS_OBSERVATION',
+  /** Distillazione estrema analisi KB/backend per contesto use case e runtime. */
+  RUNTIME_ANALYSIS_DISTILL: 'RUNTIME_ANALYSIS_DISTILL',
+  /** Domande di test semantiche per validazione use case. */
+  USE_CASE_GENERATE_TEST_QUESTIONS: 'USE_CASE_GENERATE_TEST_QUESTIONS',
 } as const;
 
 export type AiCallPurposeId = (typeof AI_CALL_PURPOSE)[keyof typeof AI_CALL_PURPOSE];
@@ -100,6 +114,17 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.KB_CLARIFY_DOCUMENT_ANALYSIS_OBSERVATION]:
     'Chiarimento risposta su osservazione analisi KB',
   [AI_CALL_PURPOSE.TUTOR_FREE_QUESTION]: 'Tutor attivo: domanda libera (manuale designer)',
+  [AI_CALL_PURPOSE.BACKEND_PROPOSE_ANALYSIS]: 'Prima proposta analisi uso backend',
+  [AI_CALL_PURPOSE.BACKEND_REFINE_ANALYSIS]: 'Raffinamento analisi uso backend',
+  [AI_CALL_PURPOSE.BACKEND_REVIEW_ANALYSIS_OBSERVATIONS]:
+    'Revisione osservazioni analisi backend',
+  [AI_CALL_PURPOSE.BACKEND_FINALIZE_ANALYSIS]: 'Analisi backend concordata',
+  [AI_CALL_PURPOSE.BACKEND_CLARIFY_ANALYSIS_OBSERVATION]:
+    'Chiarimento risposta su osservazione analisi backend',
+  [AI_CALL_PURPOSE.RUNTIME_ANALYSIS_DISTILL]:
+    'Distillazione estrema analisi KB/backend per runtime',
+  [AI_CALL_PURPOSE.USE_CASE_GENERATE_TEST_QUESTIONS]:
+    'Generazione domande di test per use case',
 });
 
 /** Human-readable label for a known purpose id; falls back to the id itself when unknown. */

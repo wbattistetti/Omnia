@@ -70,7 +70,8 @@ function serializeVariantDslStandard(variant: UseCaseConversationalVariantJson):
 }
 
 function serializeUseCaseDslStandard(uc: UseCaseConversationalJson, index: number): string {
-  const lines = [`[${index + 1}] ${uc.scenario.trim()}`];
+  const num = uc.catalogNumber ?? index + 1;
+  const lines = [`[${num}] ${uc.scenario.trim()}`];
   if (uc.tokens_stile && Object.keys(uc.tokens_stile).length > 0) {
     for (const [id, variants] of Object.entries(uc.tokens_stile)) {
       lines.push(`@ ${id}: ${variants.join('|')}`);

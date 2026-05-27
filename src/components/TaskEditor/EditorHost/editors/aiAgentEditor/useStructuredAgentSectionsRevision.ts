@@ -33,6 +33,8 @@ export interface UseStructuredAgentSectionsRevisionResult {
   effectiveBySection: Record<AgentStructuredSectionId, string>;
   composedRuntimeMarkdown: string;
   resetAllFromApiBases: (bases: Record<AgentStructuredSectionId, string>) => void;
+  /** After IA finalize on one section: clean base = stabilized text (no revision accumulation). */
+  resetSectionBaseFromAgent: (sectionId: AgentStructuredSectionId, baseText: string) => void;
   loadFromPersisted: (p: PersistedStructuredSections) => void;
   applyDeleteRange: (sectionId: AgentStructuredSectionId, start: number, end: number) => void;
   applyInsert: (sectionId: AgentStructuredSectionId, position: number, text: string) => void;
@@ -102,6 +104,21 @@ export function useStructuredAgentSectionsRevision(
       dispatch({ type: 'RESET_ALL', bases, structuredOt: structuredOtEnabled });
     },
     [clearAllHistory, structuredOtEnabled]
+  );
+
+  const resetSectionBaseFromAgent = React.useCallback(
+    (sectionId: AgentStructuredSectionId, baseText: string) => {
+      const past = pastRef.current[sectionId];
+      if (past) pastRef.current[sectionId] = [];
+      futureRef.current[sectionId] = [];
+      dispatch({
+        type: 'RESET_SECTION_BASE',
+        sectionId,
+        baseText,
+        structuredOt: structuredOtEnabled,
+      });
+    },
+    [structuredOtEnabled]
   );
 
   const loadFromPersisted = React.useCallback(
@@ -194,6 +211,7 @@ export function useStructuredAgentSectionsRevision(
       effectiveBySection,
       composedRuntimeMarkdown,
       resetAllFromApiBases,
+      resetSectionBaseFromAgent,
       loadFromPersisted,
       applyDeleteRange,
       applyInsert,
@@ -208,6 +226,7 @@ export function useStructuredAgentSectionsRevision(
       effectiveBySection,
       composedRuntimeMarkdown,
       resetAllFromApiBases,
+      resetSectionBaseFromAgent,
       loadFromPersisted,
       applyDeleteRange,
       applyInsert,

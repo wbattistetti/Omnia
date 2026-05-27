@@ -12,10 +12,11 @@ export const AGENT_TASK_TEXT_REVIEW_OFFER_ACCEPT = 'Sì, analizziamo';
 
 export const AGENT_TASK_TEXT_REVIEW_PANEL_TITLE = 'Revisione modifiche al testo';
 
-export const AGENT_TASK_TEXT_EXCERPT_LABEL = 'Passaggio dal testo';
+export const AGENT_TASK_TEXT_EXCERPT_LABEL =
+  'Passaggio dal testo su cui mi sono basato per darti la risposta';
 
 export const AGENT_TASK_TEXT_EXCERPT_EMPTY =
-  'Nessun passaggio citabile nel testo per questa risposta.';
+  'Nessun passaggio citabile nel testo di riferimento per questa risposta.';
 
 export const AGENT_TASK_TEXT_FINALIZE_BUTTON = 'Applica testo concordato';
 

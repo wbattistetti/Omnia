@@ -46,7 +46,7 @@ import type {
   AIAgentUseCaseCategory,
   AIAgentUseCaseTurn,
 } from '@types/aiAgentUseCases';
-import { parseUseCaseCategoriesFromBundle } from '@domain/aiAgentUseCase/useCaseCategories';
+import type { UseCaseTestQuestion } from '@domain/aiAgentUseCase/useCaseTestQuestions';
 import type {
   UseCaseGeneratorWizardConversation,
   UseCaseGeneratorWizardConversationOutcome,
@@ -662,6 +662,83 @@ export async function categorizeAIAgentUseCases(
         ? body.use_case_categorization_note.trim()
         : undefined;
     return { useCases: parsed, categories, useCaseCategorizationNote };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface GenerateUseCaseTestQuestionsParams {
+  useCase: AIAgentUseCase;
+  existingTestQuestions?: readonly UseCaseTestQuestion[];
+  provider: string;
+  model: string;
+  outputLanguage?: string;
+  callMeta?: AiCallMeta;
+}
+
+export type GeneratedUseCaseTestQuestionRow = {
+  text: string;
+  expectedAnswer: string;
+  kind?: UseCaseTestQuestion['kind'];
+};
+
+/** Genera domande di test semantiche per un use case (append-only lato UI). */
+export async function generateUseCaseTestQuestionsApi(
+  params: GenerateUseCaseTestQuestionsParams
+): Promise<{ test_questions: GeneratedUseCaseTestQuestionRow[] }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GENERATE_USE_CASES_TIMEOUT_MS);
+  try {
+    const bodyPayload: Record<string, unknown> = {
+      action: 'generate_use_case_test_questions',
+      useCase: params.useCase,
+      existingTestQuestions: params.existingTestQuestions ?? [],
+      provider: params.provider.toLowerCase(),
+      model: params.model,
+    };
+    if (typeof params.outputLanguage === 'string' && params.outputLanguage.trim()) {
+      bodyPayload.outputLanguage = params.outputLanguage.trim();
+    }
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(applyCallMetaToBody(bodyPayload, params.callMeta)),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | {
+          success: true;
+          test_questions: unknown;
+        }
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    if (!Array.isArray(body.test_questions) || body.test_questions.length === 0) {
+      throw new Error('Risposta non valida: test_questions vuoto.');
+    }
+    const rows: GeneratedUseCaseTestQuestionRow[] = [];
+    for (const row of body.test_questions) {
+      if (!row || typeof row !== 'object') continue;
+      const o = row as Record<string, unknown>;
+      const text = typeof o.text === 'string' ? o.text.trim() : '';
+      if (!text) continue;
+      rows.push({
+        text,
+        expectedAnswer: typeof o.expectedAnswer === 'string' ? o.expectedAnswer : '',
+        kind:
+          o.kind === 'direct' ||
+          o.kind === 'colloquial' ||
+          o.kind === 'abbreviated' ||
+          o.kind === 'ambiguous'
+            ? o.kind
+            : undefined,
+      });
+    }
+    if (rows.length === 0) throw new Error('Risposta non valida: test_questions vuoto.');
+    return { test_questions: rows };
   } finally {
     clearTimeout(timeout);
   }

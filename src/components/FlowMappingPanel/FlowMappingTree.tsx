@@ -257,6 +257,8 @@ export interface FlowMappingTreeProps {
   embeddedSignatureSubToolbarOpen?: boolean;
   /** Scroll verticale sul contenitore padre (workspace inspector). */
   scrollMappingInParent?: boolean;
+  /** Livello 2 analisi backend: apre pannello parametro (wireKey dot-notation). */
+  onParameterAnalysisInfo?: (wireKey: string) => void;
 }
 
 function updateEntry(entries: MappingEntry[], id: string, patch: Partial<MappingEntry>): MappingEntry[] {
@@ -1402,6 +1404,7 @@ function BackendMappingTreeView({
   embeddedSignatureSubToolbarOpen,
   agentParamDragSource,
   scrollMappingInParent = false,
+  onParameterAnalysisInfo,
 }: FlowMappingTreeProps) {
   return (
     <div
@@ -1441,6 +1444,7 @@ function BackendMappingTreeView({
         variableOptions={variableOptions}
         agentParamDragSource={agentParamDragSource}
         scrollMappingInParent={scrollMappingInParent}
+        onParameterAnalysisInfo={onParameterAnalysisInfo}
       />
     </div>
   );

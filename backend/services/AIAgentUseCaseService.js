@@ -797,6 +797,10 @@ async function reorderUseCasesNarratively({
 }
 
 const CATEGORIZE_USE_CASES_TIMEOUT_MS = 120000;
+const USE_CASE_CATEGORIZE_MAX_ATTEMPTS = 3;
+
+const CATEGORIZE_JSON_RETRY_SUFFIX =
+  '\n\nOUTPUT_RETRY: Rispondi solo con JSON valido. Includi "categories" (non vuoto) e "use_case_placements" con ogni use_case_id esattamente una volta.';
 
 const CATEGORIZE_SYSTEM = `You group design-time use cases into thematic categories for the OMNIA designer UI.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
@@ -996,33 +1000,42 @@ async function categorizeUseCases({
       categorization_note_it: 'Un solo use case: nessuna categoria.',
     };
   }
-  const messages = [
-    { role: 'system', content: CATEGORIZE_SYSTEM },
-    {
-      role: 'user',
-      content: buildCategorizeUserMessage(outputLanguage, useCases, logicalSteps || []),
-    },
-  ];
-  const response = await aiProviderService.callAI(provider, messages, {
-    model: model || undefined,
-    temperature: 0.35,
-    maxTokens: provider === 'openai' ? 4096 : 8192,
-    timeout: CATEGORIZE_USE_CASES_TIMEOUT_MS,
-    purpose: purpose || 'USE_CASE_CATEGORIZE',
-    taskId,
-    taskLabel,
-  });
-  const content = response?.choices?.[0]?.message?.content;
-  const jsonStr = extractJsonString(content);
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    const err = new Error(`Categorize returned non-JSON: ${e.message}`);
-    err.rawSnippet = jsonStr.slice(0, 500);
-    throw err;
+  const baseUser = buildCategorizeUserMessage(outputLanguage, useCases, logicalSteps || []);
+  let lastErr;
+  for (let attempt = 0; attempt < USE_CASE_CATEGORIZE_MAX_ATTEMPTS; attempt++) {
+    const userContent =
+      attempt === 0 ? baseUser : `${baseUser}${CATEGORIZE_JSON_RETRY_SUFFIX}`;
+    const messages = [
+      { role: 'system', content: CATEGORIZE_SYSTEM },
+      { role: 'user', content: userContent },
+    ];
+    try {
+      const response = await aiProviderService.callAI(provider, messages, {
+        model: model || undefined,
+        temperature: attempt === 0 ? 0.35 : 0.25,
+        maxTokens: provider === 'openai' ? 4096 : 8192,
+        timeout: CATEGORIZE_USE_CASES_TIMEOUT_MS,
+        purpose: purpose || 'USE_CASE_CATEGORIZE',
+        taskId,
+        taskLabel,
+      });
+      const content = response?.choices?.[0]?.message?.content;
+      const jsonStr = extractJsonString(content);
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch (e) {
+        const err = new Error(`Categorize returned non-JSON: ${e.message}`);
+        err.rawSnippet = jsonStr.slice(0, 500);
+        throw err;
+      }
+      return applyCategorizationFromModel(useCases, parsed);
+    } catch (e) {
+      lastErr = e;
+      if (attempt >= USE_CASE_CATEGORIZE_MAX_ATTEMPTS - 1) break;
+    }
   }
-  return applyCategorizationFromModel(useCases, parsed);
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 async function generateUseCaseBundle({

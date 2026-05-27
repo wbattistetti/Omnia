@@ -40,6 +40,12 @@ import {
   isUseCaseIncludedInConversations,
   type AIAgentUseCase,
 } from '@types/aiAgentUseCases';
+import {
+  buildUseCaseCatalogNumberById,
+  buildUseCaseLogValue,
+} from '@domain/aiAgentUseCase/useCaseCatalogNumber';
+
+export { buildUseCaseLogValue } from '@domain/aiAgentUseCase/useCaseCatalogNumber';
 
 /** Variante deploy (schema v2 prompt conversazionale). */
 export interface UseCaseConversationalVariantJson {
@@ -59,6 +65,8 @@ export type UseCaseConversationalTokensStile = Record<string, string[]>;
 
 export interface UseCaseConversationalJson {
   useCaseId: string;
+  /** Numero catalogo 1..N (deploy / log runtime). */
+  catalogNumber?: number;
   label: string;
   /** Testo scenario LLM; se ci sono token di stile include anche {@link STYLE_RULE_LLM_TEXT}. */
   scenario: string;
@@ -72,28 +80,15 @@ export interface UseCaseConversationalJson {
 
 /**
  * Opzioni del proiettore. `includeLog: true` aggiunge il campo `log` nel JSON con il
- * formato `USECASE: "<NOME>"` (label MAIUSCOLA, virgolette doppie) — vedi
- * `Task.agentLogUseCase` e {@link UseCaseConversationalJson.log}. Default: `false` (back-compat).
+ * formato `USECASE: "<N> — <NOME>"` — vedi {@link buildUseCaseLogValue},
+ * `Task.agentLogUseCase` e {@link UseCaseConversationalJson.log}. Default: `false`.
  */
 export interface ProjectUseCaseOptions {
   readonly includeLog?: boolean;
+  /** Numero catalogo 1..N (obbligatorio se `includeLog` e non passato dal batch). */
+  readonly catalogNumber?: number;
   /** Lessico progetto per compile on-the-fly se manca snapshot su variante. */
   readonly lexicon?: ProjectSlotLexicon;
-}
-
-/**
- * Costruisce il valore del campo `log` per uno use case. Esportato (anche se single-line)
- * perché il compositore del system prompt — quando inietta l'istruzione "non riconosciuto"
- * — deve mostrare lo stesso formato come esempio inline: tenerlo qui evita drift tra il
- * JSON e la documentazione testuale.
- *
- * Formato: `USECASE: "<NOME>"`. Sia `USECASE` sia il nome sono in MAIUSCOLO; il nome è
- * racchiuso in virgolette doppie. Il `toLocaleUpperCase()` (senza locale esplicita) usa
- * la locale di default del runtime; per Omnia il prompt è in italiano e la upper-case
- * standard ECMA è già corretta per i caratteri latini IT.
- */
-export function buildUseCaseLogValue(label: string): string {
-  return `USECASE: "${label.trim().toLocaleUpperCase()}"`;
 }
 
 export interface UseCaseConversationalCompilation {
@@ -322,8 +317,14 @@ export function projectUseCaseToConversationalJson(
   const label = typeof uc.label === 'string' ? uc.label.trim() : '';
   const styleFields = buildUseCaseStyleTokenJsonFields(uc);
 
+  const catalogNumber =
+    typeof options.catalogNumber === 'number' && options.catalogNumber > 0
+      ? Math.floor(options.catalogNumber)
+      : undefined;
+
   const projected: UseCaseConversationalJson = {
     useCaseId: uc.id,
+    ...(catalogNumber ? { catalogNumber } : {}),
     label,
     scenario,
     variants,
@@ -336,7 +337,7 @@ export function projectUseCaseToConversationalJson(
       : {}),
   };
   if (options.includeLog === true) {
-    projected.log = buildUseCaseLogValue(label);
+    projected.log = buildUseCaseLogValue(catalogNumber ?? 1, label);
   }
   return projected;
 }
@@ -356,15 +357,17 @@ export function projectAllUseCasesToConversationalJson(
   useCases: readonly AIAgentUseCase[],
   options: ProjectUseCaseOptions = {}
 ): UseCaseConversationalJson[] {
-  const sorted = [...useCases]
-    .filter(isUseCaseIncludedInConversations)
-    .sort((a, b) => {
-      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-      return (a.label ?? '').localeCompare(b.label ?? '', undefined, { sensitivity: 'base' });
-    });
+  const included = useCases.filter(isUseCaseIncludedInConversations);
+  const numberById = buildUseCaseCatalogNumberById(included);
+  const sorted = [...included].sort(
+    (a, b) => (numberById.get(a.id) ?? 0) - (numberById.get(b.id) ?? 0)
+  );
   const out: UseCaseConversationalJson[] = [];
   for (const uc of sorted) {
-    const projected = projectUseCaseToConversationalJson(uc, options);
+    const projected = projectUseCaseToConversationalJson(uc, {
+      ...options,
+      catalogNumber: numberById.get(uc.id),
+    });
     if (projected) out.push(projected);
   }
   return out;

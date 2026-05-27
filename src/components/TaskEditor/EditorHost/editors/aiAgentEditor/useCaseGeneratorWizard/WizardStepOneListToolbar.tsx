@@ -46,6 +46,7 @@ import {
   WizardAgentBehaviorSelect,
   WizardSlotMappingToggle,
 } from './WizardToolbarSlotMappingControls';
+import { UseCaseTestQuestionsToolbar } from '../useCaseTestQuestions/UseCaseTestQuestionsToolbar';
 
 /**
  * Glifo «token disattivati / mostra/nascondi tokenizzazione»: due parentesi quadre con
@@ -531,6 +532,7 @@ export function WizardStepOneListToolbarControls({
         riga è stretta (vedi container `flex` senza wrap in `ContextualToolbarRow`).
       */}
       <UseCaseListSearchInput ctx={ctx} />
+      <UseCaseTestQuestionsToolbar />
       {dock && projectSlotLexicon ? (
         <WizardSlotMappingToggle lexicon={projectSlotLexicon} useCases={catalogUseCases} />
       ) : null}

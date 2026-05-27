@@ -1,0 +1,7 @@
+/**
+ * Inline highlight for designer text added after the agent baseline (Monaco decorations).
+ */
+.monaco-editor .omnia-designer-insert-highlight {
+  background-color: rgba(251, 146, 60, 0.42);
+  border-radius: 2px;
+}

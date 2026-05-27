@@ -47,6 +47,10 @@ import {
   serializeUseCases,
 } from '@types/aiAgentUseCases';
 import {
+  formatCategorizationFailureBanner,
+  validateCategorizationResult,
+} from '@domain/aiAgentUseCase/useCaseCategorizationRun';
+import {
   loadProjectSlotLexicon,
   saveProjectSlotLexicon,
 } from '@domain/useCaseBundle/projectLexiconAccess';
@@ -63,7 +67,6 @@ import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexico
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import type { AgentTaskTextFieldId } from '@domain/aiAgent/agentTaskTextFieldIds';
-import { commitEffectiveTextChange } from './revisionCommitFromEffective';
 import {
   stripAssistantTurnsFromUseCase,
   stripAssistantTurnsFromUseCases,
@@ -106,7 +109,11 @@ import {
   buildKbExistingUseCaseSummaries,
   buildKbTaskVariablesWire,
 } from '@domain/knowledgeBase/kbAgentTaskContext';
-import { buildUserDescWithKnowledgeBaseContext } from '@domain/knowledgeBase/buildUserDescWithKnowledgeBaseContext';
+import { buildAgentDesignUserDesc } from '@domain/agentDesign/buildAgentDesignUserDesc';
+import {
+  buildAgentRuntimeAnalysisAppendix,
+  mergeRuntimeAnalysisIntoContext,
+} from '@domain/agentDesign/buildAgentRuntimeAnalysisAppendix';
 import {
   parseAgentKnowledgeBaseDocumentsJson,
   serializeAgentKnowledgeBaseDocuments,
@@ -191,7 +198,7 @@ import {
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import { iaConvaiTracePersistTaskRepository } from '@utils/debug/iaConvaiFlowTrace';
 import { withElevenLabsReprovisionAfterTtsChange } from '@utils/iaAgentRuntime/applyElevenLabsReprovisionFlag';
-import { useProjectData } from '@context/ProjectDataContext';
+import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import {
   appendUseCaseToSiblingGroup,
@@ -257,6 +264,31 @@ export interface GenerateUseCaseBundleOutcome {
   useCaseOrderingNote?: string;
 }
 
+/** Categorizzazione LLM post-bundle con validazione esito. */
+async function runBundleUseCaseCategorization(params: {
+  useCases: AIAgentUseCase[];
+  logicalSteps: AIAgentLogicalStep[];
+  provider: string;
+  model: string;
+  outputLanguage: string;
+  buildCallMeta: (purpose: string) => import('@services/aiAgentDesignApi').AiCallMeta;
+  normalizeGenerated: (ucs: AIAgentUseCase[]) => AIAgentUseCase[];
+}): Promise<{ useCases: AIAgentUseCase[]; categories: AIAgentUseCaseCategory[] }> {
+  const cat = await categorizeAIAgentUseCases({
+    useCases: params.useCases,
+    logicalSteps: params.logicalSteps,
+    provider: params.provider,
+    model: params.model,
+    outputLanguage: params.outputLanguage,
+    callMeta: params.buildCallMeta(AI_CALL_PURPOSE.USE_CASE_CATEGORIZE),
+  });
+  validateCategorizationResult(cat.useCases, cat.categories);
+  return {
+    useCases: params.normalizeGenerated(cat.useCases),
+    categories: cat.categories,
+  };
+}
+
 export interface UseAIAgentEditorControllerParams {
   instanceId: string | undefined;
   projectId: string | undefined;
@@ -283,6 +315,7 @@ export function useAIAgentEditorController({
   getDeferAgentMessages,
 }: UseAIAgentEditorControllerParams) {
   const { data: projectData } = useProjectData();
+  const { updateDataDirectly } = useProjectDataUpdate();
   const manualCatalogBackendTaskIds = React.useMemo(
     () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
     [projectData]
@@ -400,7 +433,7 @@ export function useAIAgentEditorController({
 
   /**
    * Toggle "Logga Use Case" del deploy menu. Quando true, il compilatore di prompt:
-   *  1. Aggiunge `log: "USECASE: \"<NOME>\""` a ogni elemento di `UseCaseConversationalJson`.
+   *  1. Aggiunge `log: "USECASE: \"<N> — <NOME>\""` a ogni elemento di `UseCaseConversationalJson`.
    *  2. Antepone in testa al blocco use cases l'istruzione testuale per il caso
    *     "non riconosciuto" (vedi `Task.agentLogUseCase`).
    *
@@ -523,11 +556,16 @@ export function useAIAgentEditorController({
 
   const compiledPlatformOutput = React.useMemo((): PlatformPromptOutput => {
     const e = structuredRev.effectiveBySection;
+    const runtimeAppendix = buildAgentRuntimeAnalysisAppendix({
+      documents: knowledgeBaseDocuments,
+      backendCatalog: projectData?.backendCatalog,
+      agentTaskId: instanceId,
+    });
     const ir = buildAgentStructuredSections(
       {
         goal: e.goal ?? '',
         operational_sequence: e.operational_sequence ?? '',
-        context: e.context ?? '',
+        context: mergeRuntimeAnalysisIntoContext(e.context ?? '', runtimeAppendix),
         constraints: e.constraints ?? '',
         personality: e.personality ?? '',
         tone: e.tone ?? '',
@@ -536,7 +574,14 @@ export function useAIAgentEditorController({
       backendPlaceholders
     );
     return compilePromptFromStructuredSections(ir, normalizeAgentPromptPlatformId(agentPromptTargetPlatform));
-  }, [structuredRev.effectiveBySection, backendPlaceholders, agentPromptTargetPlatform]);
+  }, [
+    structuredRev.effectiveBySection,
+    backendPlaceholders,
+    agentPromptTargetPlatform,
+    knowledgeBaseDocuments,
+    projectData?.backendCatalog,
+    instanceId,
+  ]);
 
   const compiledPromptForTargetPlatform = React.useMemo(
     () => formatPlatformPromptOutput(compiledPlatformOutput),
@@ -567,7 +612,8 @@ export function useAIAgentEditorController({
     [structuredRev, markPromptFinalMisaligned]
   );
 
-  const syncTaskTextBaselines = React.useCallback(() => {
+  /** Reset observation-review baselines to current agent output (Create/Refine), not designer deltas. */
+  const syncTaskTextBaselinesFromAgentOutput = React.useCallback(() => {
     const next: Record<string, string> = { designDescription: designDescription.trim() };
     for (const id of AGENT_STRUCTURED_SECTION_IDS) {
       next[id] = (structuredRev.effectiveBySection[id] ?? '').trim();
@@ -593,43 +639,6 @@ export function useAIAgentEditorController({
     [designDescription, structuredRev.effectiveBySection]
   );
 
-  const applyStructuredSectionEffectiveText = React.useCallback(
-    (sectionId: AgentStructuredSectionId, nextEffective: string) => {
-      const slice = structuredRev.sectionsState[sectionId];
-      if (!slice) return;
-      const isOt = Boolean(
-        structuredOtEnabled && slice.storageMode === 'ot' && slice.ot
-      );
-      const result = commitEffectiveTextChange({
-        baseText: slice.promptBaseText,
-        deletedMask: slice.deletedMask,
-        inserts: slice.inserts,
-        otMode: isOt,
-        otCurrentText: isOt ? slice.ot?.currentText : undefined,
-        targetEffective: nextEffective,
-      });
-      setDirty(true);
-      markPromptFinalMisaligned('structuredSectionRevision');
-      if (result.kind === 'ot') {
-        structuredRev.applyOtCommit(sectionId, result.ops);
-      } else if (result.kind === 'linear') {
-        structuredRev.applyRevisionOps(sectionId, result.ops);
-      }
-    },
-    [structuredRev, structuredOtEnabled, markPromptFinalMisaligned]
-  );
-
-  const applyTaskTextFieldText = React.useCallback(
-    (fieldId: AgentTaskTextFieldId, text: string) => {
-      if (fieldId === 'designDescription') {
-        setDesignDescriptionUser(text);
-        return;
-      }
-      applyStructuredSectionEffectiveText(fieldId, text);
-    },
-    [setDesignDescriptionUser, applyStructuredSectionEffectiveText]
-  );
-
   const dismissTaskTextReviewOffer = React.useCallback((fieldId: AgentTaskTextFieldId) => {
     setTaskTextReviewDismissed((prev) => ({ ...prev, [fieldId]: true }));
   }, []);
@@ -642,6 +651,32 @@ export function useAIAgentEditorController({
       return next;
     });
   }, []);
+
+  /**
+   * After IA finalize (observation review): apply stabilized markdown and reset baseline for this field.
+   * Structured sections replace revision state with a clean base (no accumulated mask/inserts).
+   */
+  const commitAgentStabilizedTaskText = React.useCallback(
+    (fieldId: AgentTaskTextFieldId, stabilizedText: string) => {
+      const text = stabilizedText.trim();
+      if (fieldId === 'designDescription') {
+        setDesignDescriptionUser(text);
+      } else {
+        structuredRev.resetSectionBaseFromAgent(fieldId, text);
+        markPromptFinalMisaligned('structuredSectionAgentStabilize');
+      }
+      setTaskTextBaseline(fieldId, text);
+      clearTaskTextReviewOfferDismissed(fieldId);
+      setDirty(true);
+    },
+    [
+      setDesignDescriptionUser,
+      structuredRev,
+      markPromptFinalMisaligned,
+      setTaskTextBaseline,
+      clearTaskTextReviewOfferDismissed,
+    ]
+  );
 
   const isTaskTextReviewOfferDismissed = React.useCallback(
     (fieldId: AgentTaskTextFieldId) => Boolean(taskTextReviewDismissed[fieldId]),
@@ -1694,7 +1729,7 @@ export function useAIAgentEditorController({
       setOutputVariableMappings((prev) => applied.mergeOutputMappings(prev));
       setHasAgentGeneration(true);
       setCommittedDesignDescription(designDescription);
-      syncTaskTextBaselines();
+      syncTaskTextBaselinesFromAgentOutput();
       if (refining) {
         const diff: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> = {};
         for (const id of AGENT_STRUCTURED_SECTION_IDS) {
@@ -1725,6 +1760,7 @@ export function useAIAgentEditorController({
     backendPlaceholders,
     agentPromptTargetPlatform,
     markPromptFinalMisaligned,
+    syncTaskTextBaselinesFromAgentOutput,
   ]);
 
   const updateProposedField = React.useCallback(
@@ -1774,6 +1810,10 @@ export function useAIAgentEditorController({
   const handleGenerateUseCaseBundle = React.useCallback(async (): Promise<
     GenerateUseCaseBundleOutcome | null
   > => {
+    setUseCaseBundleGenerationBusy(true);
+    setUseCaseBundleGenerationCount(null);
+    setUseCaseBundleGenerationOrdering(false);
+
     const baseUserDesc = hasAgentGeneration
       ? `${designDescription.trim()}\n\n---\n\n${buildRefineUserDescFromSections(structuredRev.effectiveBySection).trim()}`.trim()
       : designDescription.trim();
@@ -1781,33 +1821,46 @@ export function useAIAgentEditorController({
     let userDesc = baseUserDesc;
     let kbContextWarning: string | null = null;
     try {
-      const kbCtx = await buildUserDescWithKnowledgeBaseContext({
-        projectId,
-        baseUserDesc,
-        documents: knowledgeBaseDocuments,
-      });
-      userDesc = kbCtx.userDesc;
-      if (kbCtx.kbWarnings.length > 0) {
-        kbContextWarning = `Avvisi knowledge base: ${kbCtx.kbWarnings.join(' ')}`;
+      try {
+        const kbCtx = await buildAgentDesignUserDesc({
+          projectId,
+          agentTaskId: instanceId,
+          baseUserDesc,
+          documents: knowledgeBaseDocuments,
+          backendCatalog: projectData?.backendCatalog,
+          runtimeDistill: {
+            provider,
+            model,
+            callMeta: buildCallMeta(AI_CALL_PURPOSE.RUNTIME_ANALYSIS_DISTILL),
+          },
+          runtimeDistillCallbacks: {
+            applyKbDocumentPatch: (docId, patch) => knowledgeBaseUpdateInternal(docId, patch),
+          },
+        });
+        userDesc = kbCtx.userDesc;
+        if (kbCtx.backendCatalogPatch && projectData) {
+          updateDataDirectly({
+            ...projectData,
+            backendCatalog: kbCtx.backendCatalogPatch,
+          });
+        }
+        if (kbCtx.kbWarnings.length > 0) {
+          kbContextWarning = `Avvisi knowledge base: ${kbCtx.kbWarnings.join(' ')}`;
+        }
+      } catch (err) {
+        setUseCaseComposerError(
+          err instanceof Error ? err.message : 'Lettura knowledge base non riuscita.'
+        );
+        return null;
       }
-    } catch (err) {
-      setUseCaseComposerError(
-        err instanceof Error ? err.message : 'Lettura knowledge base non riuscita.'
-      );
-      return null;
-    }
 
-    if (userDesc.length < AI_AGENT_MIN_INPUT_CHARS) {
-      setUseCaseComposerError(
-        `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri nella descrizione (o carica documenti KB leggibili nel repository).`
-      );
-      return null;
-    }
-    setUseCaseComposerError(kbContextWarning);
-    setUseCaseBundleGenerationBusy(true);
-    setUseCaseBundleGenerationCount(null);
-    setUseCaseBundleGenerationOrdering(false);
-    try {
+      if (userDesc.length < AI_AGENT_MIN_INPUT_CHARS) {
+        setUseCaseComposerError(
+          `Inserisci almeno ${AI_AGENT_MIN_INPUT_CHARS} caratteri nella descrizione (o carica documenti KB leggibili nel repository).`
+        );
+        return null;
+      }
+      setUseCaseComposerError(kbContextWarning);
       const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
       const extendMode = useCases.length > 0;
 
@@ -1850,18 +1903,22 @@ export function useAIAgentEditorController({
         if (mergedFinal.length >= 2) {
           setUseCaseBundleGenerationCategorizing(true);
           try {
-            const cat = await categorizeAIAgentUseCases({
+            const cat = await runBundleUseCaseCategorization({
               useCases: mergedFinal,
               logicalSteps,
               provider,
               model,
               outputLanguage,
-              callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_CATEGORIZE),
+              buildCallMeta,
+              normalizeGenerated: normalizeGeneratedUseCases,
             });
-            mergedFinal = normalizeGeneratedUseCases(cat.useCases);
+            mergedFinal = cat.useCases;
             setUseCaseCategories(cat.categories);
-          } catch {
-            /* mantieni lista e categorie precedenti */
+          } catch (catErr) {
+            console.warn('[useCaseBundle] categorize (extend) failed:', catErr);
+            setUseCaseComposerError(
+              formatCategorizationFailureBanner(mergedFinal.length, catErr)
+            );
           } finally {
             setUseCaseBundleGenerationCategorizing(false);
           }
@@ -1955,23 +2012,23 @@ export function useAIAgentEditorController({
       if (normalized.length >= 2) {
         setUseCaseBundleGenerationCategorizing(true);
         try {
-          const cat = await categorizeAIAgentUseCases({
+          const cat = await runBundleUseCaseCategorization({
             useCases: normalized,
             logicalSteps: ls,
             provider,
             model,
             outputLanguage,
-            callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_CATEGORIZE),
+            buildCallMeta,
+            normalizeGenerated: normalizeGeneratedUseCases,
           });
-          normalized = normalizeGeneratedUseCases(cat.useCases);
+          normalized = cat.useCases;
           setUseCaseCategories(cat.categories);
-        } catch {
-          const catNote =
-            ' Categorizzazione non applicata; puoi riordinare manualmente sotto le intestazioni.';
+        } catch (catErr) {
+          console.warn('[useCaseBundle] categorize failed:', catErr);
+          const catBanner = formatCategorizationFailureBanner(normalized.length, catErr);
           extendBatchWarning = extendBatchWarning
-            ? `${extendBatchWarning}${catNote}`
-            : `Generati ${normalized.length} scenari.${catNote}`;
-          /* mantieni categorie precedenti se la categorizzazione fallisce */
+            ? `${extendBatchWarning} ${catBanner}`
+            : catBanner;
         } finally {
           setUseCaseBundleGenerationCategorizing(false);
         }
@@ -2015,6 +2072,12 @@ export function useAIAgentEditorController({
     logicalSteps,
     knowledgeBaseDocuments,
     projectId,
+    instanceId,
+    projectData,
+    projectData?.backendCatalog,
+    updateDataDirectly,
+    knowledgeBaseUpdateInternal,
+    buildCallMeta,
   ]);
 
   const handleRegenerateUseCase = React.useCallback(
@@ -2853,9 +2916,9 @@ export function useAIAgentEditorController({
     setDesignDescription: setDesignDescriptionUser,
     getTaskTextBaseline,
     setTaskTextBaseline,
-    syncTaskTextBaselines,
+    syncTaskTextBaselinesFromAgentOutput,
+    commitAgentStabilizedTaskText,
     getTaskTextCurrentText,
-    applyTaskTextFieldText,
     dismissTaskTextReviewOffer,
     clearTaskTextReviewOfferDismissed,
     isTaskTextReviewOfferDismissed,

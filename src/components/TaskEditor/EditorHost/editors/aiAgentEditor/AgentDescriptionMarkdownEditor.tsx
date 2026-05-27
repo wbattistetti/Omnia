@@ -8,10 +8,13 @@ import { KbMarkdownMonaco } from '@components/workspaces/elevenlabs/kb/KbMarkdow
 import { AI_AGENT_TASK_DESCRIPTION_PLACEHOLDER } from './constants';
 import { monacoSelectionAdapter } from './backendPathSelectionAdapter';
 import { useBackendPathInsertMenu } from './useBackendPathInsertMenu';
+import { useDesignerDraftInsertHighlight } from './useDesignerDraftInsertHighlight';
 
 export interface AgentDescriptionMarkdownEditorProps {
   value: string;
   onChange?: (value: string) => void;
+  /** Last agent-stabilized text; designer additions vs this are highlighted inline. */
+  designerHighlightBaseline?: string;
   readOnly?: boolean;
   ariaLabel?: string;
   containerClassName?: string;
@@ -23,6 +26,7 @@ export interface AgentDescriptionMarkdownEditorProps {
 export function AgentDescriptionMarkdownEditor({
   value,
   onChange,
+  designerHighlightBaseline = '',
   readOnly = false,
   ariaLabel = 'Descrizione',
   containerClassName = 'relative flex min-h-0 flex-1 flex-col',
@@ -31,6 +35,13 @@ export function AgentDescriptionMarkdownEditor({
   tutorHostId,
 }: AgentDescriptionMarkdownEditorProps): React.ReactElement {
   const editorRef = React.useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+
+  const { applyDecorations } = useDesignerDraftInsertHighlight({
+    editorRef,
+    agentBaseline: designerHighlightBaseline,
+    draft: value,
+    enabled: Boolean(designerHighlightBaseline.trim()),
+  });
 
   const onDesignInsert = React.useCallback(
     (path: string, s: number, e: number) => {
@@ -57,6 +68,7 @@ export function AgentDescriptionMarkdownEditor({
         readOnly={readOnly}
         editorDidMount={(editor) => {
           editorRef.current = editor;
+          applyDecorations();
         }}
         onHostContextMenu={onContextMenu}
         tutorHostId={tutorHostId}

@@ -20,10 +20,12 @@ export const KB_ANALYSIS_AGREE_NO = 'No';
 export const KB_ANALYSIS_USER_QUESTION_LABEL = 'Domanda del designer';
 export const KB_ANALYSIS_USER_OBSERVATION_LABEL = 'Nota del designer';
 export const KB_ANALYSIS_AGENT_RESPONSE_LABEL = 'Risposta dell\'assistente';
-export const KB_ANALYSIS_DOCUMENT_EXCERPT_LABEL = 'Passaggio dal documento';
+export const KB_ANALYSIS_DOCUMENT_EXCERPT_LABEL =
+  'Passaggio dal testo su cui mi sono basato per darti la risposta';
 export const KB_ANALYSIS_DOCUMENT_EXCERPT_EMPTY =
-  'Nessun passaggio citabile nel documento sorgente per questa risposta.';
+  'Nessun passaggio citabile nel testo di riferimento per questa risposta.';
 export const KB_ANALYSIS_EXCERPT_RATIONALE_LABEL = 'Perché questo passaggio';
+export const KB_ANALYSIS_RESPONSE_CHIP_LABEL = 'Risposta';
 
 export const KB_ANALYSIS_STATUS_PENDING = 'In attesa';
 export const KB_ANALYSIS_STATUS_CLARIFYING = 'Da chiarire';

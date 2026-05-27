@@ -5,6 +5,10 @@
 
 import { parseAgentUseCasesJson, type AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { AgentMessageMotorPayload, AgentMotorGroup, AgentMotorSlotBinding } from './splitAgentMessageTemplate';
+import {
+  buildUseCaseCatalogNumberById,
+  formatUseCaseCatalogNumberLabel,
+} from './useCaseCatalogNumber';
 
 /** JSON shape matching motor slots/groups without segments (runtime contract). */
 export interface VirtualAgentMotorContractJson {
@@ -16,6 +20,8 @@ export interface VirtualAgentMotorContractJson {
 }
 
 export interface VirtualAgentCatalogEntry {
+  /** Numero catalogo 1..N (ordine deploy / lista designer). */
+  catalog_number: number;
   use_case_id: string;
   label: string;
   template: string;
@@ -40,13 +46,6 @@ export interface VirtualAgentPromptAppendixOptions {
 }
 
 const CATALOG_VERSION = 1 as const;
-
-function sortUseCasesForCatalog(useCases: readonly AIAgentUseCase[]): AIAgentUseCase[] {
-  return [...useCases].sort((a, b) => {
-    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
-    return (a.label ?? '').localeCompare(b.label ?? '', undefined, { sensitivity: 'base' });
-  });
-}
 
 function emptySurfacesSlots(slots: AgentMotorSlotBinding[]): AgentMotorSlotBinding[] {
   return slots.map((s) => ({
@@ -95,7 +94,10 @@ function toContractJson(m: AgentMessageMotorPayload, slots: AgentMotorSlotBindin
 /**
  * Reads assistant turn + motor snapshot and produces one catalog row; skips when motor is missing.
  */
-export function buildVirtualAgentCatalogEntry(uc: AIAgentUseCase): VirtualAgentCatalogEntry | null {
+export function buildVirtualAgentCatalogEntry(
+  uc: AIAgentUseCase,
+  catalogNumber: number
+): VirtualAgentCatalogEntry | null {
   const assistant = uc.dialogue.find((t) => t.role === 'assistant');
   if (!assistant) {
     return null;
@@ -127,6 +129,7 @@ export function buildVirtualAgentCatalogEntry(uc: AIAgentUseCase): VirtualAgentC
   const payoff = typeof uc.payoff === 'string' && uc.payoff.trim() ? uc.payoff.trim() : undefined;
 
   return {
+    catalog_number: catalogNumber,
     use_case_id: uc.id,
     label: motor.label,
     template: motor.template,
@@ -143,12 +146,15 @@ export function buildVirtualAgentCatalogEntry(uc: AIAgentUseCase): VirtualAgentC
 export function buildVirtualAgentRuntimeCatalogFromUseCases(
   useCases: readonly AIAgentUseCase[]
 ): VirtualAgentRuntimeCatalogBuildResult {
-  const sorted = sortUseCasesForCatalog(useCases);
+  const numberById = buildUseCaseCatalogNumberById(useCases);
+  const sorted = [...useCases].sort(
+    (a, b) => (numberById.get(a.id) ?? 0) - (numberById.get(b.id) ?? 0)
+  );
   const entries: VirtualAgentCatalogEntry[] = [];
   const skipped: { use_case_id: string; reason: string }[] = [];
 
   for (const uc of sorted) {
-    const row = buildVirtualAgentCatalogEntry(uc);
+    const row = buildVirtualAgentCatalogEntry(uc, numberById.get(uc.id) ?? 0);
     if (row) {
       entries.push(row);
     } else {
@@ -209,11 +215,13 @@ L'agente virtuale deve riconoscere quale use case si applica alla frase dell'ute
 
 `;
 
-  const blocks = entries.map((e, i) => {
+  const blocks = entries.map((e) => {
+    const numLabel = formatUseCaseCatalogNumberLabel(e.catalog_number);
     const payoffLine = e.scenario_payoff ? `\nContesto scenario (design): ${e.scenario_payoff}` : '';
     return `
-### Use case ${i + 1} — ${e.use_case_id}
+### ${numLabel} — ${e.use_case_id}
 Label: ${e.label}${payoffLine}
+Log runtime (se abilitato): USECASE: "${e.catalog_number} — <NOME>"
 Template (guida linguistica): ${e.template}
 
 Schema JSON (struttura vincolante):

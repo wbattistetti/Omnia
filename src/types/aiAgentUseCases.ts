@@ -14,6 +14,10 @@ import {
 } from '@domain/useCaseBundle/parseSerializeBundle';
 import type { AIAgentUseCaseResponse } from '@domain/aiAgentUseCase/useCaseResponseTasks';
 import {
+  parseTestQuestionsField,
+  type UseCaseTestQuestion,
+} from '@domain/aiAgentUseCase/useCaseTestQuestions';
+import {
   ensureUseCaseResponse,
   parseUseCaseResponseField,
 } from '@domain/aiAgentUseCase/useCaseResponseTasks';
@@ -160,7 +164,16 @@ export interface AIAgentUseCase {
    * Absent on legacy rows → {@link ensureUseCaseResponse} at read time.
    */
   response?: AIAgentUseCaseResponse;
+
+  /** Domande di test designer (validazione routing / disambiguazione). */
+  testQuestions?: UseCaseTestQuestion[];
 }
+
+export type {
+  UseCaseTestQuestion,
+  UseCaseTestQuestionStatus,
+  UseCaseTestQuestionKind,
+} from '@domain/aiAgentUseCase/useCaseTestQuestions';
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
 export function newAgentUseCaseTurnId(): string {
@@ -438,6 +451,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
           : undefined;
       const phrases = parsePhrasesField(o.phrases);
       const response = parseUseCaseResponseField(o.response);
+      const testQuestions = parseTestQuestionsField(o.testQuestions);
       out.push({
         id,
         label,
@@ -467,6 +481,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
           : {}),
         ...(phrases.length > 0 ? { phrases } : {}),
         ...(response ? { response } : {}),
+        ...(testQuestions.length > 0 ? { testQuestions } : {}),
       });
     }
   return out.map((uc) => ensureUseCaseResponse(ensureUseCasePhrases(uc)));

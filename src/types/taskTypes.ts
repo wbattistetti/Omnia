@@ -554,8 +554,8 @@ export interface Task {
   /**
    * **Logga Use Case**: quando `true`, il compilatore del prompt di deploy:
    *  1. Aggiunge a ogni elemento di `UseCaseConversationalJson` il campo
-   *     `log: "USECASE: \"<NOME>\""` (MAIUSCOLO, virgolette doppie) — l'agente runtime
-   *     lo concatena alla risposta.
+   *     `log: "USECASE: \"<N> — <NOME>\""` (numero catalogo + label MAIUSCOLO) — l'agente
+   *     runtime lo concatena alla risposta.
    *  2. Antepone in testa al blocco use cases del system prompt un'istruzione
    *     testuale che spiega come gestire il caso "non riconosciuto":
    *     classificare l'input, dare un titolo breve in SNAKE_CASE MAIUSCOLO, scrivere

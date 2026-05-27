@@ -26,8 +26,8 @@ export type UseAgentTaskTextObservationReviewParams = {
   fieldId: AgentTaskTextFieldId;
   currentText: string;
   baseline: string;
-  onApplyFinalText: (text: string) => void;
-  onCommitBaseline: (text: string) => void;
+  /** Testo finale IA: applica al campo e resetta baseline (snapshot, no accumulo). */
+  onCommitAgentStabilizedText: (text: string) => void;
   projectId: string | undefined;
   buildCallMeta: (purpose: string) => AiCallMeta;
   offerDismissed: boolean;
@@ -189,8 +189,7 @@ export function useAgentTaskTextObservationReview(
           callMeta: params.buildCallMeta(AI_CALL_PURPOSE.AGENT_FINALIZE_TASK_TEXT),
         });
         const next = result.taskTextMarkdown.trim();
-        params.onApplyFinalText(next);
-        params.onCommitBaseline(next);
+        params.onCommitAgentStabilizedText(next);
         setReviewItems(null);
         setReviewPanelOpen(false);
       } catch (e) {
@@ -239,6 +238,7 @@ export function useAgentTaskTextObservationReview(
           const res = await clarifyAgentTaskTextObservation({
             projectId: params.projectId?.trim() ?? '',
             fieldId: params.fieldId,
+            agentBaselineMarkdown: params.baseline,
             userText: item.observation.text,
             previousInterpretation: item.observation.interpretation,
             userCorrection: correction,

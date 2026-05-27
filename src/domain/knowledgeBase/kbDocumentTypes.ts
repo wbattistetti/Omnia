@@ -41,6 +41,11 @@ export type StagedKbDocument = KbStagedFileBase & {
   documentAnalysisMarkdown: string;
   /** Ultima versione proposta/concordata dall'agente (base esplicita per il diff). */
   agentAnalysisBaselineMarkdown: string;
+  /** Baseline per sezione ### (chiave = kbSection:…). */
+  documentAnalysisSectionBaselines?: Record<string, string>;
+  /** Distillazione estrema LLM per runtime (cache; hash su input euristico). */
+  documentAnalysisRuntimeDistillMarkdown?: string;
+  documentAnalysisRuntimeDistillSourceHash?: string;
   /** Default `upload` per documenti caricati; note invalidazione scenario = `invalidated_use_case_note`. */
   kbDocumentKind?: KbDocumentKind;
   /** Use case collegato (note invalidazione scenario). */
@@ -109,8 +114,26 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
       typeof raw.agentAnalysisBaselineMarkdown === 'string'
         ? raw.agentAnalysisBaselineMarkdown
         : '',
-    kbDocumentKind:
-      raw.kbDocumentKind === 'invalidated_use_case_note' ? 'invalidated_use_case_note' : 'upload',
+    documentAnalysisSectionBaselines:
+      raw.documentAnalysisSectionBaselines &&
+      typeof raw.documentAnalysisSectionBaselines === 'object'
+        ? Object.fromEntries(
+            Object.entries(raw.documentAnalysisSectionBaselines).filter(
+              (entry): entry is [string, string] => typeof entry[1] === 'string'
+            )
+          )
+        : undefined,
+    documentAnalysisRuntimeDistillMarkdown:
+      typeof raw.documentAnalysisRuntimeDistillMarkdown === 'string'
+        ? raw.documentAnalysisRuntimeDistillMarkdown
+        : undefined,
+    documentAnalysisRuntimeDistillSourceHash:
+      typeof raw.documentAnalysisRuntimeDistillSourceHash === 'string'
+        ? raw.documentAnalysisRuntimeDistillSourceHash
+        : undefined,
+    ...(raw.kbDocumentKind === 'invalidated_use_case_note'
+      ? { kbDocumentKind: 'invalidated_use_case_note' as const }
+      : {}),
     linkedUseCaseId:
       typeof raw.linkedUseCaseId === 'string' && raw.linkedUseCaseId.trim()
         ? raw.linkedUseCaseId.trim()
@@ -118,9 +141,12 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
   };
 }
 
+/** Persisted JSON: omit optional fields when unset (stable roundtrip). */
 export function stagedKbToPersisted(d: StagedKbDocument): PersistedKbDocument {
   const { file: _file, ...rest } = d;
-  return rest;
+  return Object.fromEntries(
+    Object.entries(rest).filter(([, value]) => value !== undefined)
+  ) as PersistedKbDocument;
 }
 
 export type KbDocumentPatch = Partial<
@@ -130,6 +156,9 @@ export type KbDocumentPatch = Partial<
     | 'markdownSnippet'
     | 'documentAnalysisMarkdown'
     | 'agentAnalysisBaselineMarkdown'
+    | 'documentAnalysisSectionBaselines'
+    | 'documentAnalysisRuntimeDistillMarkdown'
+    | 'documentAnalysisRuntimeDistillSourceHash'
     | 'repositoryDocumentId'
     | 'parseStatus'
     | 'parseError'

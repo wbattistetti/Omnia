@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
+import { useOptionalAgentBackendAnalysis } from './aiAgentEditor/AgentBackendAnalysisContext';
 import {
   backendInputsToMappingEntries,
   backendOutputsToMappingEntries,
@@ -298,6 +299,20 @@ export default function BackendCallEditor({
   useProjectTranslations();
   const activeFlowTranslations = useActiveFlowMetaTranslationsFlattened();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
+  const backendAnalysisCtx = useOptionalAgentBackendAnalysis();
+  const onParameterAnalysisInfo = React.useCallback(
+    (wireKey: string) => {
+      if (!backendAnalysisCtx) return;
+      const paramKey = wireKey.trim();
+      if (!paramKey) return;
+      const catalogEntryId = task.id;
+      const entry = backendAnalysisCtx.manualEntries.find((e) => e.id === catalogEntryId);
+      const displayLabel =
+        entry?.label?.trim() || String(task.label ?? '').trim() || catalogEntryId;
+      backendAnalysisCtx.openParameterPanel({ catalogEntryId, paramKey, displayLabel });
+    },
+    [backendAnalysisCtx, task.id, task.label]
+  );
   const variableStoreProjectId = React.useMemo(
     () => resolveVariableStoreProjectId(projectId),
     [projectId, projectData]
@@ -1852,6 +1867,9 @@ export default function BackendCallEditor({
             backendSendReceiveSplitRatio={sendReceiveSplitRatio}
             onBackendSendReceiveSplitRatioChange={persistSendReceiveSplitRatio}
             backendSendReceiveSplitClamp={backendSendReceiveSplitClamp}
+            onParameterAnalysisInfo={
+              backendAnalysisCtx ? onParameterAnalysisInfo : undefined
+            }
           />
         </div>
         )}

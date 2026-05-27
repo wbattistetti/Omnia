@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   documentExcerptMatchesSample,
+  excerptDuplicatesDesignerNote,
   observationHeaderPreview,
   sanitizeDocumentExcerpt,
 } from '../kbDocumentExcerptValidation';
@@ -19,6 +20,18 @@ describe('kbDocumentExcerptValidation', () => {
   it('rejects excerpt not in sample', () => {
     expect(documentExcerptMatchesSample('testo inventato dal modello', sample)).toBe(false);
     expect(sanitizeDocumentExcerpt('testo inventato dal modello', sample)).toBeUndefined();
+  });
+
+  it('detects excerpt that repeats the designer note', () => {
+    expect(
+      excerptDuplicatesDesignerNote(
+        'Non va sempre chiesta?',
+        'Non va sempre chiesta?'
+      )
+    ).toBe(true);
+    expect(
+      excerptDuplicatesDesignerNote('Il campo X è obbligatorio', 'Il campo X è obbligatorio?')
+    ).toBe(false);
   });
 
   it('truncates long header preview with ellipsis', () => {

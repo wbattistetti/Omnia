@@ -110,6 +110,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [loadingProjectId, setLoadingProjectId] = useState<string | null>(null);
+
+  /** Apre un progetto dalla griglia; resetta lo spinner anche se l'apertura fallisce o il server non risponde. */
+  const openProjectFromRow = useCallback(
+    async (projectId: string) => {
+      if (loadingProjectId) return;
+      setLoadingProjectId(projectId);
+      try {
+        const result = onSelectProject(projectId);
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          await result;
+        }
+      } catch {
+        /* ProjectManager / AppContent mostrano già l'errore */
+      } finally {
+        setLoadingProjectId(null);
+      }
+    },
+    [loadingProjectId, onSelectProject],
+  );
+
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [toolbarPosition, setToolbarPosition] = useState<{ top: number; left: number; projectId: string } | null>(null);
   const [openVersionMenuId, setOpenVersionMenuId] = useState<string | null>(null);
@@ -821,13 +841,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }}
                           onClick={async () => {
                             if (!isLoading) {
-                              setLoadingProjectId(projectId);
-                              try {
-                                const maybe = onSelectProject(projectId);
-                                if ((maybe as any)?.then) await (maybe as any);
-                              } catch (e) {
-                                setLoadingProjectId(null);
-                              }
+                              void openProjectFromRow(projectId);
                             }
                           }}
                         >
@@ -875,13 +889,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                               return;
                             }
                             if (!isLoading) {
-                              setLoadingProjectId(projectId);
-                              try {
-                                const maybe = onSelectProject(projectId);
-                                if ((maybe as any)?.then) await (maybe as any);
-                              } catch (e) {
-                                setLoadingProjectId(null);
-                              }
+                              void openProjectFromRow(projectId);
                             }
                           }}
                         >
@@ -997,13 +1005,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }}
                           onClick={async () => {
                             if (!isLoading) {
-                              setLoadingProjectId(projectId);
-                              try {
-                                const maybe = onSelectProject(projectId);
-                                if ((maybe as any)?.then) await (maybe as any);
-                              } catch (e) {
-                                setLoadingProjectId(null);
-                              }
+                              void openProjectFromRow(projectId);
                             }
                           }}
                         >
@@ -1049,13 +1051,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }}
                           onClick={async () => {
                             if (!isLoading) {
-                              setLoadingProjectId(projectId);
-                              try {
-                                const maybe = onSelectProject(projectId);
-                                if ((maybe as any)?.then) await (maybe as any);
-                              } catch (e) {
-                                setLoadingProjectId(null);
-                              }
+                              void openProjectFromRow(projectId);
                             }
                           }}
                         >
@@ -1101,13 +1097,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }}
                           onClick={async () => {
                             if (!isLoading) {
-                              setLoadingProjectId(projectId);
-                              try {
-                                const maybe = onSelectProject(projectId);
-                                if ((maybe as any)?.then) await (maybe as any);
-                              } catch (e) {
-                                setLoadingProjectId(null);
-                              }
+                              void openProjectFromRow(projectId);
                             }
                           }}
                         >
@@ -1151,13 +1141,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           }}
                           onClick={async () => {
                             if (!isLoading) {
-                              setLoadingProjectId(projectId);
-                              try {
-                                const maybe = onSelectProject(projectId);
-                                if ((maybe as any)?.then) await (maybe as any);
-                              } catch (e) {
-                                setLoadingProjectId(null);
-                              }
+                              void openProjectFromRow(projectId);
                             }
                           }}
                         >
@@ -1245,14 +1229,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 onClick={async (e) => {
                   e.stopPropagation();
                   const projectId = toolbarPosition.projectId;
-                  setLoadingProjectId(projectId);
                   setToolbarPosition(null);
-                  try {
-                    const maybe = onSelectProject(projectId);
-                    if ((maybe as any)?.then) await (maybe as any);
-                  } catch (e) {
-                    setLoadingProjectId(null);
-                  }
+                  void openProjectFromRow(projectId);
                 }}
               >
                 <ExternalLink className="w-3 h-3" />

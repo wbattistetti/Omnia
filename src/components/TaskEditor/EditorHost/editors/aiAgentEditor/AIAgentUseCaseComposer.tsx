@@ -56,7 +56,12 @@ import { usePatchUseCaseResponseTasks } from './usePatchUseCaseResponseTasks';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { UseCaseRowDeployChips } from './useCaseBundle/UseCaseRowDeployChips';
+import { UseCaseCatalogNumberBadge } from './useCaseBundle/UseCaseCatalogNumberBadge';
 import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeployStats';
+import {
+  buildUseCaseCatalogNumberById,
+  formatUseCaseCatalogListLabel,
+} from '@domain/aiAgentUseCase/useCaseCatalogNumber';
 import {
   AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
 } from '@types/aiAgentPreview';
@@ -116,6 +121,15 @@ import {
   serializeVirtualAgentRuntimeCatalog,
 } from '@domain/aiAgentUseCase/virtualAgentRuntimeCatalog';
 import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
+import { useAIProvider } from '@context/AIProviderContext';
+import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
+import {
+  computeTestQuestionStats,
+  findFirstTestQuestionAnchor,
+  useCaseIdsWithTestQuestionStatus,
+} from '@domain/aiAgentUseCase/useCaseTestQuestions';
+import { UseCaseTestQuestionsPanel } from './useCaseTestQuestions/UseCaseTestQuestionsPanel';
+import { buildGenerateTestQuestionsHandler } from './useCaseTestQuestions/UseCaseTestQuestionsToolbar';
 import {
   type AiTripletFieldBaseline,
   UC_USE_CASE_LIST_SCROLL,
@@ -189,7 +203,6 @@ import {
   propagateCorrectionStylePreviewApi,
 } from '@services/aiAgentDesignApi';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
-import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
 import { getTextareaCaretViewportPoint } from './textareaCaretViewport';
 import {
   buildTokenPopoverAnchorBelowCaret,
@@ -432,6 +445,10 @@ export function AIAgentUseCaseComposer({
     [onClearUseCaseHighlight]
   );
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
+  const editorDock = useOptionalAIAgentEditorDock();
+  const { provider, model } = useAIProvider();
+  const useCasesRef = React.useRef(useCases);
+  useCasesRef.current = useCases;
   const dock = useOptionalAIAgentEditorDock();
   /** Portale review: stile globale / runtime catalog nel composer (in Omnia wizard sono nel pannello DX). */
   const showComposerClassicChrome =
@@ -515,6 +532,22 @@ export function AIAgentUseCaseComposer({
     }
     return map;
   }, [filteredOrdered, projectSlotLexicon]);
+
+  /** Numeri 1..N come in deploy / log `USECASE: "N — …"` (solo UC inclusi). */
+  const catalogNumberById = React.useMemo(() => {
+    const included = useCases.filter(isUseCaseIncludedInConversations);
+    return buildUseCaseCatalogNumberById(included);
+  }, [useCases]);
+
+  const useCaseCatalogForTestQuestions = React.useMemo(
+    () =>
+      useCases.map((entry) => ({
+        id: entry.id,
+        label: entry.label?.trim() || entry.id,
+        catalogNumber: catalogNumberById.get(entry.id),
+      })),
+    [useCases, catalogNumberById]
+  );
 
   const messageSpellLang = resolveAiAgentOutputLanguage().tag;
 
@@ -688,6 +721,34 @@ export function AIAgentUseCaseComposer({
     () => (effectiveSelectedId ? useCases.find((u) => u.id === effectiveSelectedId) : undefined),
     [effectiveSelectedId, useCases]
   );
+
+  React.useEffect(() => {
+    listToolbarCtx?.setToolbarSelectedUseCaseId(effectiveSelectedId);
+  }, [listToolbarCtx, effectiveSelectedId]);
+
+  React.useEffect(() => {
+    listToolbarCtx?.setTestQuestionStats(computeTestQuestionStats(useCases));
+  }, [listToolbarCtx, useCases]);
+
+  const effectiveSelectedIdRef = React.useRef(effectiveSelectedId);
+  effectiveSelectedIdRef.current = effectiveSelectedId;
+
+  React.useEffect(() => {
+    if (!listToolbarCtx || !editorDock) return;
+    const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+    listToolbarCtx.registerGenerateTestQuestionsHandler(
+      buildGenerateTestQuestionsHandler({
+        getUseCases: () => useCasesRef.current,
+        setUseCases,
+        provider,
+        model,
+        buildCallMeta: editorDock.buildCallMeta,
+        outputLanguage,
+        onProgress: (message) => listToolbarCtx.setTestQuestionsNotice(message),
+      })
+    );
+    return () => listToolbarCtx.registerGenerateTestQuestionsHandler(null);
+  }, [listToolbarCtx, editorDock, provider, model, setUseCases]);
 
   const [editingTitleId, setEditingTitleId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
@@ -1299,6 +1360,57 @@ export function AIAgentUseCaseComposer({
     setCardExpandedById(expandedById);
     setAccordionFoldMode(mode);
   }, [wizardSearchSeed, filteredOrdered, orderedIds]);
+
+  const prevTestQuestionLensRef = React.useRef<
+    import('./useCaseGeneratorWizard/UseCaseWizardListToolbarContext').TestQuestionLens | null
+  >(null);
+
+  /** Cruscotto OK/KO: espande UC con match, evidenzia domande, scroll alla prima riga. */
+  React.useEffect(() => {
+    if (!listToolbarCtx) return;
+    const lens = listToolbarCtx.testQuestionLens;
+    const prev = prevTestQuestionLensRef.current;
+
+    if (!lens && prev) {
+      const { expandedById, mode } = collapseAllUseCaseCards(orderedIds);
+      accordionFoldModeRef.current = mode;
+      setCardExpandedById(expandedById);
+      setAccordionFoldMode(mode);
+      prevTestQuestionLensRef.current = null;
+      return;
+    }
+
+    if (!lens) {
+      prevTestQuestionLensRef.current = null;
+      return;
+    }
+
+    const openIds = useCaseIdsWithTestQuestionStatus(useCases, lens);
+    if (openIds.length === 0) {
+      prevTestQuestionLensRef.current = lens;
+      return;
+    }
+    const { expandedById, mode } = expandOnlyUseCaseCards(openIds, orderedIds);
+    accordionFoldModeRef.current = mode;
+    setCardExpandedById(expandedById);
+    setAccordionFoldMode(mode);
+    prevTestQuestionLensRef.current = lens;
+
+    const anchor = findFirstTestQuestionAnchor(useCases, orderedIds, lens);
+    if (!anchor) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const row = document.querySelector(
+          `[data-test-question-id="${CSS.escape(anchor.questionId)}"]`
+        );
+        if (row instanceof HTMLElement) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        scheduleScrollExpandedUseCaseCardIntoView(anchor.useCaseId);
+      });
+    });
+  }, [listToolbarCtx?.testQuestionLens, useCases, orderedIds, listToolbarCtx, scheduleScrollExpandedUseCaseCardIntoView]);
 
   const commitTitleEdit = React.useCallback(
     (useCaseId: string) => {
@@ -2762,9 +2874,13 @@ export function AIAgentUseCaseComposer({
                     return null;
                   }
                   const u = row.useCase;
+                  const includedInConv = isUseCaseIncludedInConversations(u);
+                  const catalogNumber = catalogNumberById.get(u.id);
                   const listDisplayLabel = row.category
                     ? displayUseCaseLabelForCategory(u, row.category)
-                    : u.label || u.id;
+                    : includedInConv
+                      ? formatUseCaseCatalogListLabel(catalogNumber, u.label || u.id)
+                      : u.label || u.id;
                   const rowBaseline = fieldBaselineByUseCaseId[u.id];
                   const active = u.id === effectiveSelectedId;
                   const editingTitle = editingTitleId === u.id;
@@ -2779,7 +2895,6 @@ export function AIAgentUseCaseComposer({
                    * Esclusione conversazioni: attenuazione titolo solo su voto verde + checkbox off
                    * (vedi useCaseHeaderExcludedDimClass). Rosso/arancione restano in vista normale.
                    */
-                  const includedInConv = isUseCaseIncludedInConversations(u);
                   const searchHighlight = highlightIdSet.has(u.id);
                   const reviewHighlight = useCaseHasDesignerReviewVote(u);
                   const stripeStable = u.id.split('').reduce((h, ch) => h + ch.charCodeAt(0), 0);
@@ -2887,6 +3002,10 @@ export function AIAgentUseCaseComposer({
                             <ChevronRight size={14} aria-hidden />
                           )}
                         </button>
+                        <UseCaseCatalogNumberBadge
+                          catalogNumber={catalogNumber}
+                          included={includedInConv}
+                        />
                         {searchHighlight ? (
                           <span
                             className="mt-[2px] shrink-0 rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide bg-sky-500/25 text-sky-200 ring-1 ring-sky-400/40"
@@ -3336,6 +3455,16 @@ export function AIAgentUseCaseComposer({
                                   </button>
                                 </div>
                               )}
+                              <UseCaseTestQuestionsPanel
+                                useCase={u}
+                                useCaseCatalog={useCaseCatalogForTestQuestions}
+                                disabled={busy}
+                                onPatchUseCase={(updater) =>
+                                  setUseCases((prev) =>
+                                    prev.map((x) => (x.id === u.id ? updater(x) : x))
+                                  )
+                                }
+                              />
                             </div>
                           ) : null}
                         </div>

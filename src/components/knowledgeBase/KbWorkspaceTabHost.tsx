@@ -29,8 +29,8 @@ export type KbWorkspaceTabHostProps = {
 };
 
 const TAB_DEFS: { id: KbWorkspaceTabId; label: string; Icon: typeof FileSearch }[] = [
-  { id: 'analysis', label: 'Analisi del documento', Icon: FileSearch },
   { id: 'document', label: 'Documento', Icon: FileText },
+  { id: 'analysis', label: 'Analisi del documento', Icon: FileSearch },
 ];
 
 type KbTabChromeProps = {
@@ -141,9 +141,9 @@ export function KbWorkspaceTabHost({
   onUpdateDoc,
   tutorAnalysisResultId,
 }: KbWorkspaceTabHostProps): React.ReactElement {
-  const [tabOrder, setTabOrder] = React.useState<readonly KbWorkspaceTabId[]>(['analysis', 'document']);
+  const [tabOrder, setTabOrder] = React.useState<readonly KbWorkspaceTabId[]>(['document', 'analysis']);
   const [activeTab, setActiveTab] = React.useState<KbWorkspaceTabId>('document');
-  const [splitView, setSplitView] = React.useState(false);
+  const [splitView, setSplitView] = React.useState(true);
   const [analysisToolbar, setAnalysisToolbar] = React.useState<KbAnalysisToolbarState | null>(null);
   const [reviewPanelOpen, setReviewPanelOpen] = React.useState(true);
   const dragTabRef = React.useRef<KbWorkspaceTabId | null>(null);
@@ -290,21 +290,13 @@ export function KbWorkspaceTabHost({
       >
         {splitView ? (
           <div className="flex min-h-0 flex-1 divide-x divide-slate-800">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{analysisPane}</div>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               {documentPane}
             </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{analysisPane}</div>
           </div>
         ) : (
           <>
-            <div
-              className={
-                'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ' +
-                (activeTab === 'analysis' ? '' : 'hidden')
-              }
-            >
-              {analysisPane}
-            </div>
             <div
               className={
                 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ' +
@@ -312,6 +304,14 @@ export function KbWorkspaceTabHost({
               }
             >
               {documentPane}
+            </div>
+            <div
+              className={
+                'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ' +
+                (activeTab === 'analysis' ? '' : 'hidden')
+              }
+            >
+              {analysisPane}
             </div>
           </>
         )}

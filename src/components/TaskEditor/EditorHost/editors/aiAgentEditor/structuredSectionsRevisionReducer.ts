@@ -36,6 +36,13 @@ export type StructuredSectionsRevisionState = Record<
 
 export type StructuredSectionsRevisionAction =
   | { type: 'RESET_ALL'; bases: Record<AgentStructuredSectionId, string>; structuredOt?: boolean }
+  /** Single section: new IA-stabilized base (no accumulated deletedMask/inserts). */
+  | {
+      type: 'RESET_SECTION_BASE';
+      sectionId: AgentStructuredSectionId;
+      baseText: string;
+      structuredOt?: boolean;
+    }
   | { type: 'RESET_FROM_PERSISTED'; persisted: PersistedStructuredSections }
   | { type: 'DELETE_RANGE'; sectionId: AgentStructuredSectionId; start: number; end: number }
   | { type: 'INSERT'; sectionId: AgentStructuredSectionId; position: number; text: string }
@@ -217,6 +224,20 @@ export function structuredSectionsRevisionReducer(
         next[id] = useOt ? emptyOtSlice(b) : emptySlice(b);
       }
       return next;
+    }
+    case 'RESET_SECTION_BASE': {
+      const { sectionId, baseText } = action;
+      const useOt = action.structuredOt === true;
+      let b = baseText;
+      if (sectionId === 'operational_sequence') {
+        b = formatOperationalSequenceNewlines(b);
+      } else if (sectionId === 'constraints') {
+        b = formatConstraintsBullets(b);
+      }
+      return {
+        ...state,
+        [sectionId]: useOt ? emptyOtSlice(b) : emptySlice(b),
+      };
     }
     case 'RESET_FROM_PERSISTED': {
       const next = {} as StructuredSectionsRevisionState;

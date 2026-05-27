@@ -123,6 +123,7 @@ export function BackendMappingTreeNode({
     agentParamDragSource,
     dropLineIndentPx,
     dropLineTone,
+    onParameterAnalysisInfo,
   } = ctx;
 
   useEffect(() => {
@@ -459,6 +460,14 @@ export function BackendMappingTreeNode({
                 onToggleValues={() => setRowExtra((x) => (x === 'values' ? 'none' : 'values'))}
                 showConstraint={backendColumn === 'send'}
                 onToggleConstraint={() => setRowExtra((x) => (x === 'config' ? 'none' : 'config'))}
+                onOpenParameterAnalysis={
+                  onParameterAnalysisInfo && treeNode.entry
+                    ? () =>
+                        onParameterAnalysisInfo(
+                          unwrapSessionTreeWireKey(treeNode.entry!.wireKey)
+                        )
+                    : undefined
+                }
               />
             ) : null
           }

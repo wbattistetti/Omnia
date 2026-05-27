@@ -5,7 +5,10 @@
 import type { AiCallMeta } from '@services/aiAgentDesignApi';
 import { parseDesignApiJsonResponse } from '@services/designApiResponse';
 import { designAiFetch } from '@services/designAiRequestPipeline';
-import { sanitizeDocumentExcerpt } from '@domain/knowledgeBase/kbDocumentExcerptValidation';
+import {
+  excerptDuplicatesDesignerNote,
+  sanitizeDocumentExcerpt,
+} from '@domain/knowledgeBase/kbDocumentExcerptValidation';
 import {
   parseKbAnalysisObservationReview,
   type KbAnalysisObservation,
@@ -91,13 +94,14 @@ export async function reviewAgentTaskTextObservations(
       params.callMeta,
       params.purposeOverride ?? 'AGENT_REVIEW_TASK_TEXT_OBSERVATIONS'
     ),
-    (body) => parseKbAnalysisObservationReview(body, draft)
+    (body) => parseKbAnalysisObservationReview(body, params.agentBaselineMarkdown)
   );
 }
 
 /** Riscrive la risposta agente dopo correzione designer su un punto. */
 export async function clarifyAgentTaskTextObservation(
   params: AgentTaskTextApiBase & {
+    agentBaselineMarkdown: string;
     userText: string;
     previousInterpretation: string;
     userCorrection: string;
@@ -118,6 +122,7 @@ export async function clarifyAgentTaskTextObservation(
         userText: params.userText,
         previousInterpretation: params.previousInterpretation,
         userCorrection: params.userCorrection,
+        agentBaselineMarkdown: params.agentBaselineMarkdown,
         userDraftMarkdown: params.userDraftMarkdown,
         provider: params.provider.toLowerCase(),
         model: params.model,
@@ -131,10 +136,16 @@ export async function clarifyAgentTaskTextObservation(
       if (!interpretation) {
         throw new Error('Risposta non valida: interpretation mancante.');
       }
-      const documentExcerpt = sanitizeDocumentExcerpt(
+      let documentExcerpt = sanitizeDocumentExcerpt(
         body.documentExcerpt,
-        params.userDraftMarkdown
+        params.agentBaselineMarkdown
       );
+      if (
+        documentExcerpt &&
+        excerptDuplicatesDesignerNote(documentExcerpt, params.userText)
+      ) {
+        documentExcerpt = undefined;
+      }
       const excerptRationale =
         documentExcerpt &&
         typeof body.excerptRationale === 'string' &&
