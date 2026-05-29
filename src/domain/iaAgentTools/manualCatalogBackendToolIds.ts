@@ -3,6 +3,8 @@
  * sono la fonte UX della tab Dock «Backends» e devono concorrere ai tool ConvAI insieme a `convaiBackendToolTaskIds`.
  */
 
+import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
+
 /** Ordine: prima `primary`, poi `secondary`; dedup preservando l’ordine di prima apparizione. */
 export function mergeConvaiBackendToolIdLists(
   primary: readonly string[],
@@ -37,4 +39,13 @@ export function extractManualCatalogBackendTaskIdsFromProjectData(projectData: u
     out.push(id);
   }
   return out;
+}
+
+/** Catalogo backend persistito su `ProjectData` (analisi IA, manualEntries, …). */
+export function extractBackendCatalogFromProjectData(
+  projectData: unknown
+): ProjectBackendCatalogBlob | undefined {
+  if (!projectData || typeof projectData !== 'object') return undefined;
+  const bc = (projectData as { backendCatalog?: ProjectBackendCatalogBlob }).backendCatalog;
+  return bc && typeof bc === 'object' ? bc : undefined;
 }

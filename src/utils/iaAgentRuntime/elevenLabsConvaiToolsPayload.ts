@@ -8,6 +8,10 @@ import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import {
+  toElevenLabsQueryParamsSchema,
+  toElevenLabsRequestBodySchema,
+} from '@domain/openApi/adaptOpenApiJsonSchemaToElevenLabsToolSchema';
+import {
   deriveBackendToolDefinition,
   sanitizeConvaiToolName,
 } from '@domain/iaAgentTools/backendToolDerivation';
@@ -22,153 +26,6 @@ function usesQueryParamsForMethod(method: string): boolean {
 
 function defaultObjectSchema(): Record<string, unknown> {
   return { type: 'object', properties: {} };
-}
-
-/** Tipi JSON Schema ammessi su `query_params_schema.properties.*.type` (ElevenLabs). */
-const ELEVENLABS_QUERY_PARAM_JSON_TYPES = new Set([
-  'string',
-  'number',
-  'integer',
-  'boolean',
-  'array',
-  'object',
-]);
-
-function jsonSchemaPrimitiveTypeFromProperty(src: Record<string, unknown>): string {
-  const t = src.type;
-  if (typeof t === 'string' && ELEVENLABS_QUERY_PARAM_JSON_TYPES.has(t)) return t;
-  return 'string';
-}
-
-/** Valore singolo in `enum` / da normalizzare per string enum ConvAI EU. */
-function enumMemberToElevenLabsString(v: unknown): string {
-  if (v === true) return 'true';
-  if (v === false) return 'false';
-  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
-  if (typeof v === 'string') return v;
-  return String(v);
-}
-
-/**
- * ConvAI EU (`agents/create`): **enum è consentito solo con `type: "string"`** (value_error se enum + boolean).
- * Converte `enum` in array di stringhe e imposta `type: "string"`. Per boolean JSON nel modello sorgente usa
- * `"true"` / `"false"`; il backend Omnia (OpenAPI coerce) accetta ancora stringhe per `forceRefresh`.
- */
-function adaptEnumsAndConstsForElevenLabsConvai(row: Record<string, unknown>): void {
-  const en = row.enum;
-  if (Array.isArray(en) && en.length > 0) {
-    row.type = 'string';
-    row.enum = en.map((v) => enumMemberToElevenLabsString(v));
-    return;
-  }
-  if (Object.prototype.hasOwnProperty.call(row, 'const')) {
-    const c = row.const;
-    if (c === true || c === false) {
-      row.type = 'string';
-      row.const = c === true ? 'true' : 'false';
-    }
-  }
-}
-
-/**
- * `request_body_schema.properties.*` (ConvAI EU): serve `description` e **`type`** JSON primitives per ogni
- * proprietà — solo `{ description }` produce `union_tag_not_found` sul discriminatore API ElevenLabs.
- */
-function propertiesToElevenLabsParamDefs(
-  props: Record<string, unknown> | undefined
-): Record<string, unknown> {
-  if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
-  const converted: Record<string, unknown> = {};
-  for (const [name, raw] of Object.entries(props)) {
-    const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-    const descRaw = src.description;
-    const desc =
-      typeof descRaw === 'string' && descRaw.trim().length > 0
-        ? descRaw.trim()
-        : `Parametro ${name}`;
-    const row: Record<string, unknown> = {
-      description: desc,
-      type: jsonSchemaPrimitiveTypeFromProperty(src),
-    };
-    const enumRaw = src.enum;
-    if (Array.isArray(enumRaw) && enumRaw.length > 0) {
-      row.enum = enumRaw;
-    }
-    if (Object.prototype.hasOwnProperty.call(src, 'const')) {
-      row.const = src.const;
-    }
-    adaptEnumsAndConstsForElevenLabsConvai(row);
-    converted[name] = row;
-  }
-  return converted;
-}
-
-/**
- * `query_params_schema.properties.*`: ElevenLabs richiede sia metadati ConvAI (`description`) sia `type`
- * per ogni proprietà (422 se manca `type`).
- */
-function propertiesToElevenLabsQueryParamDefs(
-  props: Record<string, unknown> | undefined
-): Record<string, unknown> {
-  if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
-  const converted: Record<string, unknown> = {};
-  for (const [name, raw] of Object.entries(props)) {
-    const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-    const descRaw = src.description;
-    const desc =
-      typeof descRaw === 'string' && descRaw.trim().length > 0
-        ? descRaw.trim()
-        : `Parametro ${name}`;
-    const row: Record<string, unknown> = {
-      description: desc,
-      type: jsonSchemaPrimitiveTypeFromProperty(src),
-    };
-    const enumRaw = src.enum;
-    if (Array.isArray(enumRaw) && enumRaw.length > 0) {
-      row.enum = enumRaw;
-    }
-    if (Object.prototype.hasOwnProperty.call(src, 'const')) {
-      row.const = src.const;
-    }
-    adaptEnumsAndConstsForElevenLabsConvai(row);
-    converted[name] = row;
-  }
-  return converted;
-}
-
-/**
- * `request_body_schema` ElevenLabs: object con `properties` convertite e `required` se presente nello schema.
- */
-function toElevenLabsRequestBodySchema(inputSchema: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    type: 'object',
-    properties: propertiesToElevenLabsParamDefs(
-      inputSchema.properties as Record<string, unknown> | undefined
-    ),
-  };
-  const req = inputSchema.required;
-  if (Array.isArray(req) && req.every((x) => typeof x === 'string')) {
-    out.required = req;
-  }
-  return out;
-}
-
-/**
- * `QueryParamsJsonSchema`: solo `properties` + `required` — niente `type` in radice
- * (vedi errore API extra_forbidden su `query_params_schema.type`).
- * Ogni `properties.*`: `{ description, type }` (ConvAI + JSON Schema).
- */
-function toElevenLabsQueryParamsSchema(inputSchema: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    properties: propertiesToElevenLabsQueryParamDefs(
-      inputSchema.properties as Record<string, unknown> | undefined
-    ),
-  };
-  const req = inputSchema.required;
-  if (Array.isArray(req) && req.every((x) => typeof x === 'string')) {
-    out.required = req;
-  }
-  return out;
 }
 
 function dedupeElevenLabsToolNames(tools: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -282,6 +139,51 @@ export function buildElevenLabsConvaiPromptTools(
   }
 
   return dedupeElevenLabsToolNames(out);
+}
+
+export type BuildConvaiWebhookFromBackendTaskResult =
+  | { ok: true; tool: Record<string, unknown> }
+  | { ok: false; error: string };
+
+/**
+ * Un singolo tool `webhook` ConvAI da Backend Call (stesso payload di {@link buildElevenLabsConvaiPromptTools}).
+ */
+export function buildConvaiWebhookToolFromBackendTask(
+  task: Task
+): BuildConvaiWebhookFromBackendTaskResult {
+  if (task.type !== TaskType.BackendCall) {
+    return { ok: false, error: 'Il task non è un Backend Call.' };
+  }
+  const dr = deriveBackendToolDefinition(task);
+  if (!dr.ok) return { ok: false, error: dr.error };
+  const { url, method, headers } = readBackendCallEndpoint(task);
+  if (!url.trim()) {
+    return { ok: false, error: 'URL operativo obbligatorio sul Backend Call.' };
+  }
+
+  const apiSchema: Record<string, unknown> = { url, method };
+  if (Object.keys(headers).length > 0) {
+    apiSchema.request_headers = headers;
+  }
+  const schema =
+    dr.tool.inputSchema && typeof dr.tool.inputSchema === 'object'
+      ? dr.tool.inputSchema
+      : defaultObjectSchema();
+  if (usesQueryParamsForMethod(method)) {
+    apiSchema.query_params_schema = toElevenLabsQueryParamsSchema(schema);
+  } else {
+    apiSchema.request_body_schema = toElevenLabsRequestBodySchema(schema);
+  }
+
+  const tool: Record<string, unknown> = {
+    type: 'webhook',
+    name: dr.tool.name,
+    description: dr.tool.description,
+    api_schema: apiSchema,
+    response_timeout_secs: 20,
+  };
+  const [deduped] = dedupeElevenLabsToolNames([tool]);
+  return { ok: true, tool: deduped ?? tool };
 }
 
 /** Diagnostica webhook post-tunnel: {@link collectConvaiWebhookDiagnosticsFromMergedTasks}. */

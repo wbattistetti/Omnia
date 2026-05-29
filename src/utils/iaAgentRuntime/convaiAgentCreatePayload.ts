@@ -52,6 +52,8 @@ export type ConversationConfigFragmentOptions = {
   task?: Task | null;
   /** Backend catalogo progetto (`manualEntries`): stessi tool della tab Backends dell’editor. */
   manualCatalogBackendTaskIds?: readonly string[];
+  /** Catalogo backend progetto (analisi IA → sezione USE OF BACKENDS nel prompt). */
+  backendCatalog?: import('@domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob;
 };
 
 function primaryVoiceId(cfg: IAAgentConfig): string {
@@ -64,17 +66,70 @@ function primaryVoiceId(cfg: IAAgentConfig): string {
  * Risolve `tts.model_id` per ConvAI: scelta esplicita in UI, altrimenti default per lingua agente.
  * Per `language !== en` senza override, ElevenLabs richiede Flash/Turbo v2.5 (errore noto in runtime).
  */
+export function isConvaiNonEnglishLanguage(lang: string): boolean {
+  const langCode = lang.trim().toLowerCase().split('-')[0] || 'en';
+  return langCode !== 'en';
+}
+
 export function resolveConvaiTtsModelId(cfg: IAAgentConfig, lang: string): string {
   const raw = typeof cfg.ttsModel === 'string' ? cfg.ttsModel.trim() : '';
+  const langCode = lang.trim().toLowerCase().split('-')[0] || 'en';
+  if (langCode !== 'en') {
+    if (raw === 'eleven_turbo_v2_5' || raw === 'eleven_flash_v2_5' || raw === 'eleven_turbo_v2') {
+      return raw;
+    }
+    if (raw === 'eleven_flash_v2' || raw === 'eleven_turbo_v2') {
+      return raw.replace(/_v2$/, '_v2_5');
+    }
+    if (raw.length > 0) return 'eleven_flash_v2_5';
+    return 'eleven_flash_v2_5';
+  }
   if (raw.length > 0) return raw;
-  return lang === 'en' ? 'eleven_flash_v2' : 'eleven_flash_v2_5';
+  return 'eleven_flash_v2';
+}
+
+/**
+ * Blocco `conversation_config.tts` per create/patch ConvAI.
+ * Lingua ≠ en: ElevenLabs richiede `model_id` turbo/flash v2_5 anche senza `voice_id`.
+ * Con `omitTts` si omette solo `voice_id` (evita 422 voce EU), non il `model_id` obbligatorio.
+ */
+export function buildConvaiTtsBlockForApi(
+  cfg: IAAgentConfig,
+  lang: string,
+  options?: { voiceId?: string; omitTts?: boolean }
+): Record<string, unknown> | undefined {
+  const voiceId = String(options?.voiceId ?? '').trim();
+  const modelId = resolveConvaiTtsModelId(cfg, lang);
+  const nonEn = isConvaiNonEnglishLanguage(lang);
+
+  if (options?.omitTts === true) {
+    return nonEn ? { model_id: modelId } : undefined;
+  }
+
+  if (nonEn) {
+    const block: Record<string, unknown> = { model_id: modelId };
+    if (voiceId) block.voice_id = voiceId;
+    return block;
+  }
+
+  if (!voiceId) return undefined;
+  return { voice_id: voiceId, model_id: modelId };
+}
+
+/**
+ * `conversation_config.agent.prompt.llm` accetta solo modelli chat (gpt-*, gemini-*, …).
+ * Per agenti non inglesi il vincolo «turbo or flash v2_5» riguarda {@link resolveConvaiTtsModelId}
+ * (`tts.model_id`), non questo campo.
+ */
+export function mapConvaiLlmForAgentLanguage(_lang: string, rawLlm: string): string {
+  return mapLlmModelForElevenLabsResidencyCreate(rawLlm.trim() || 'gpt-4o');
 }
 
 /**
  * ElevenLabs EU residency often rejects LLM ids that are valid on the global API.
  * Map known mismatches before POST /v1/convai/agents/create (see API 422 + `detail`).
  */
-function mapLlmModelForElevenLabsResidencyCreate(raw: string): string {
+export function mapLlmModelForElevenLabsResidencyCreate(raw: string): string {
   const t = raw.trim();
   if (t === 'gpt-4o-mini') return 'gpt-4o';
   return t;
@@ -87,11 +142,13 @@ function mapLlmModelForElevenLabsResidencyCreate(raw: string): string {
 function resolveConvaiAgentPromptText(
   cfg: IAAgentConfig,
   task: Task | null | undefined,
-  manualCatalogBackendTaskIds: readonly string[] | undefined
+  manualCatalogBackendTaskIds: readonly string[] | undefined,
+  backendCatalog?: import('@domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob
 ): string {
   if (task != null) {
     const fromEditor = resolveElevenLabsAgentPromptFromTask(task, {
       manualCatalogBackendTaskIds,
+      backendCatalog,
     }).trim();
     if (fromEditor.length > 0) {
       return fromEditor;
@@ -135,7 +192,8 @@ export function conversationConfigFragmentFromIaAgentConfig(
       : 'en';
   const lang = normalizeLanguage(langRaw) ?? 'en';
 
-  const llmModel = mapLlmModelForElevenLabsResidencyCreate(
+  const llmModel = mapConvaiLlmForAgentLanguage(
+    lang,
     typeof llm.model === 'string' && llm.model.trim().length > 0 ? llm.model.trim() : 'gpt-4o'
   );
   const manualCatalogBackendTaskIds = options?.manualCatalogBackendTaskIds ?? [];
@@ -145,7 +203,12 @@ export function conversationConfigFragmentFromIaAgentConfig(
     manualCatalogBackendTaskIds,
   });
 
-  let promptText = resolveConvaiAgentPromptText(cfg, options?.task, manualCatalogBackendTaskIds);
+  let promptText = resolveConvaiAgentPromptText(
+    cfg,
+    options?.task,
+    manualCatalogBackendTaskIds,
+    options?.backendCatalog
+  );
   if (elevenTools.length > 0 && fragmentUsesBookFromAgendaWebhook(elevenTools)) {
     promptText = `${promptText.trim()}\n\n${BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND}`;
   }
@@ -177,13 +240,8 @@ export function conversationConfigFragmentFromIaAgentConfig(
     agent,
   };
 
-  const omitTts = options?.omitTts === true;
-  if (!omitTts && voiceId) {
-    out.tts = {
-      voice_id: voiceId,
-      model_id: resolveConvaiTtsModelId(cfg, lang),
-    };
-  }
+  const tts = buildConvaiTtsBlockForApi(cfg, lang, { voiceId, omitTts: options?.omitTts });
+  if (tts) out.tts = tts;
 
   return out;
 }
@@ -209,12 +267,16 @@ export function buildConvaiProvisionKey(
   cfg: IAAgentConfig,
   task: Task | null | undefined,
   omitTts: boolean,
-  options?: Pick<ConversationConfigFragmentOptions, 'manualCatalogBackendTaskIds'>
+  options?: Pick<
+    ConversationConfigFragmentOptions,
+    'manualCatalogBackendTaskIds' | 'backendCatalog'
+  >
 ): string {
   const fragment = conversationConfigFragmentFromIaAgentConfig(cfg, {
     omitTts,
     task: task ?? undefined,
     manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+    backendCatalog: options?.backendCatalog,
   });
   if (!fragment) return '';
   try {

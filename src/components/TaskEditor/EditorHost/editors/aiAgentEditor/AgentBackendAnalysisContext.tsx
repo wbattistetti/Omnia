@@ -17,6 +17,8 @@ import {
 } from '@domain/backendAnalysis/migrateToBackendAnalysisV2';
 import { resolveParameterAnalysis } from '@domain/backendAnalysis/parameterAnalysisResolve';
 import { normalizeBackendAnalysisUxDocument } from '@domain/backendAnalysis/backendAnalysisUxNormalize';
+import { catalogEntryHasSubstantiveAnalysis } from '@domain/backendAnalysis/mergeCatalogEntryAnalysis';
+import { realignBackendParametersFromOpenApiTask } from '@domain/backendAnalysis/realignBackendParametersFromOpenApiTask';
 import { taskRepository } from '@services/TaskRepository';
 
 export type ParameterAnalysisPanelTarget = {
@@ -32,7 +34,12 @@ type AgentBackendAnalysisContextValue = {
   /** Prima analisi completata (baseline agente impostata). */
   analysisLaunched: boolean;
   manualEntries: readonly ManualCatalogEntry[];
-  persistDocument: (next: BackendAnalysisDocumentV2) => void;
+  persistDocument: (
+    next: BackendAnalysisDocumentV2,
+    options?: { sectionBaselines?: Record<string, string> }
+  ) => void;
+  /** Dopo Read API: allinea parametri analisi alla firma OpenAPI sul task. */
+  syncAfterOpenApiRefresh: (catalogEntryId: string) => void;
   parameterPanel: ParameterAnalysisPanelTarget | null;
   openParameterPanel: (target: ParameterAnalysisPanelTarget) => void;
   closeParameterPanel: () => void;
@@ -81,45 +88,113 @@ export function AgentBackendAnalysisProvider({
     paramKey: string;
   } | null>(null);
 
+  const catalogRef = React.useRef(backendCatalog);
+  catalogRef.current = backendCatalog;
+
+  const buildDocumentFromBundle = React.useCallback((): BackendAnalysisDocumentV2 => {
+    const tasks = taskRepository.getAllTasks();
+    const bundleNow = readAgentBackendAnalysisBundle(catalogRef.current, agentTaskId);
+    let raw: ReturnType<typeof ensureCatalogBackendsOnDocument>;
+    if (bundleNow.analysisDocument && Object.keys(bundleNow.analysisDocument.backends).length > 0) {
+      raw = ensureCatalogBackendsOnDocument(bundleNow.analysisDocument, manualEntries, tasks);
+    } else if (bundleNow.analysisMarkdown.trim()) {
+      raw = markdownToBackendAnalysisV2(bundleNow.analysisMarkdown, manualEntries, tasks);
+    } else {
+      raw = ensureCatalogBackendsOnDocument(bundleNow.analysisDocument, manualEntries, tasks);
+    }
+    const sourceMarkdown =
+      bundleNow.analysisMarkdown.trim() || bundleNow.agentAnalysisBaselineMarkdown.trim();
+    return normalizeBackendAnalysisUxDocument(raw, { sourceMarkdown });
+  }, [agentTaskId, manualEntries]);
+
   const bundle = React.useMemo(
     () => readAgentBackendAnalysisBundle(backendCatalog, agentTaskId),
     [backendCatalog, agentTaskId]
   );
 
+  const [tasksIoRevision, setTasksIoRevision] = React.useState(0);
+
   const document = React.useMemo(() => {
-    const tasks = taskRepository.getAllTasks();
-    let raw: ReturnType<typeof ensureCatalogBackendsOnDocument>;
-    if (bundle.analysisDocument && Object.keys(bundle.analysisDocument.backends).length > 0) {
-      raw = ensureCatalogBackendsOnDocument(bundle.analysisDocument, manualEntries, tasks);
-    } else if (bundle.analysisMarkdown.trim()) {
-      raw = markdownToBackendAnalysisV2(bundle.analysisMarkdown, manualEntries, tasks);
-    } else {
-      raw = ensureCatalogBackendsOnDocument(bundle.analysisDocument, manualEntries, tasks);
-    }
-    const sourceMarkdown =
-      bundle.analysisMarkdown.trim() || bundle.agentAnalysisBaselineMarkdown.trim();
-    return normalizeBackendAnalysisUxDocument(raw, { sourceMarkdown });
-  }, [bundle, manualEntries]);
+    void tasksIoRevision;
+    return buildDocumentFromBundle();
+  }, [buildDocumentFromBundle, bundle, tasksIoRevision]);
 
   const analysisLaunched = Boolean(bundle.agentAnalysisBaselineMarkdown.trim());
   const analysisMarkdown =
     bundle.analysisMarkdown.trim() || exportBackendAnalysisV2Markdown(document);
 
   const persistDocument = React.useCallback(
-    (next: BackendAnalysisDocumentV2) => {
+    (
+      next: BackendAnalysisDocumentV2,
+      options?: { sectionBaselines?: Record<string, string> }
+    ) => {
       const tasks = taskRepository.getAllTasks();
       const aligned = ensureCatalogBackendsOnDocument(next, manualEntries, tasks);
       const md = exportBackendAnalysisV2Markdown(aligned);
       const normalized = normalizeBackendAnalysisUxDocument(aligned, { sourceMarkdown: md });
+      const bundleNow = readAgentBackendAnalysisBundle(catalogRef.current, agentTaskId);
+      const bootstrapBaseline =
+        !bundleNow.agentAnalysisBaselineMarkdown.trim() && md.trim()
+          ? { agentAnalysisBaselineMarkdown: md }
+          : {};
       onPersistCatalog(
-        patchAgentBackendAnalysisBundle(backendCatalog, agentTaskId, {
+        patchAgentBackendAnalysisBundle(catalogRef.current, agentTaskId, {
           analysisDocument: normalized,
           analysisMarkdown: md,
+          ...bootstrapBaseline,
+          ...(options?.sectionBaselines
+            ? { sectionBaselines: options.sectionBaselines }
+            : {}),
         })
       );
     },
-    [backendCatalog, agentTaskId, manualEntries, onPersistCatalog]
+    [agentTaskId, manualEntries, onPersistCatalog]
   );
+
+  const syncAfterOpenApiRefresh = React.useCallback(
+    (catalogEntryId: string) => {
+      const task = taskRepository.getTask(catalogEntryId);
+      if (!task) return;
+      const entry = manualEntries.find((e) => e.id === catalogEntryId);
+      const baseDoc = buildDocumentFromBundle();
+      const realigned = realignBackendParametersFromOpenApiTask(
+        baseDoc,
+        catalogEntryId,
+        task,
+        entry?.label?.trim()
+      );
+      const prevBackend = baseDoc.backends[catalogEntryId];
+      const invalidateAnalysisHash =
+        prevBackend && catalogEntryHasSubstantiveAnalysis(prevBackend);
+      const nextBackend = realigned.backends[catalogEntryId];
+      const docToPersist =
+        invalidateAnalysisHash && nextBackend
+          ? {
+              ...realigned,
+              backends: {
+                ...realigned.backends,
+                [catalogEntryId]: {
+                  ...nextBackend,
+                  analysisOpenApiContentHash: null,
+                },
+              },
+            }
+          : realigned;
+      persistDocument(docToPersist);
+      setTasksIoRevision((r) => r + 1);
+    },
+    [buildDocumentFromBundle, manualEntries, persistDocument]
+  );
+
+  React.useEffect(() => {
+    const onComplete = (ev: Event) => {
+      const taskId = (ev as CustomEvent<{ taskId?: string }>).detail?.taskId?.trim();
+      if (!taskId || !manualEntries.some((e) => e.id === taskId)) return;
+      syncAfterOpenApiRefresh(taskId);
+    };
+    window.addEventListener('omnia:backend-read-api-complete', onComplete);
+    return () => window.removeEventListener('omnia:backend-read-api-complete', onComplete);
+  }, [manualEntries, syncAfterOpenApiRefresh]);
 
   const openParameterPanel = React.useCallback((target: ParameterAnalysisPanelTarget) => {
     setParameterPanel(target);
@@ -143,6 +218,7 @@ export function AgentBackendAnalysisProvider({
       analysisLaunched,
       manualEntries,
       persistDocument,
+      syncAfterOpenApiRefresh,
       parameterPanel,
       openParameterPanel,
       closeParameterPanel,
@@ -157,6 +233,7 @@ export function AgentBackendAnalysisProvider({
       analysisLaunched,
       manualEntries,
       persistDocument,
+      syncAfterOpenApiRefresh,
       parameterPanel,
       openParameterPanel,
       closeParameterPanel,

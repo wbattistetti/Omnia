@@ -72,6 +72,13 @@ For each difference produce:
 Order observations by appearance in the designer's edited version (top to bottom).
 Classify kind: aggiunta | correzione | contestazione | precisazione.
 Set presentation to "domanda" if text is a design question, else "osservazione".
+
+When the designer's note implies MISSING API fields, new SEND/RECEIVE parameters, or contract extension on an EXISTING backend (not a whole new backend):
+- Set suggestsApiExtension to true.
+- Include suggestedFeature with a COMPLETE draft spec (not just a label): title, purposeMarkdown (2-5 sentences), parameters array with paramKey, direction (input|output), kind, dataType, role, descriptionShort.
+- Use dot-notation paramKey for nested fields (e.g. constraints.excludeWeekdays). Do not invent parameters already fully covered by the catalog unless extending them.
+When suggestsApiExtension is false, omit suggestedFeature and set suggestsApiExtension to false.
+
 Return JSON only:
 {
   "observations": [
@@ -82,7 +89,22 @@ Return JSON only:
       "text": "...",
       "interpretation": "- punto uno",
       "documentExcerpt": "exact quote from reference corpus",
-      "excerptRationale": "..."
+      "excerptRationale": "...",
+      "suggestsApiExtension": true,
+      "suggestedFeature": {
+        "title": "Titolo breve",
+        "purposeMarkdown": "Scopo e uso per agente/backend.",
+        "parameters": [
+          {
+            "paramKey": "constraints.excludeWeekdays",
+            "direction": "input",
+            "kind": "optional",
+            "dataType": "string[]",
+            "role": "Giorni esclusi",
+            "descriptionShort": "..."
+          }
+        ]
+      }
     }
   ]
 }
@@ -106,10 +128,43 @@ Honor every confirmed observation, documentExcerpt context, and any userCorrecti
 Use the # Analisi backend template with per-backend tables and PayoffData JSON blocks. Italian only unless clearly otherwise.
 Return JSON only: { "backendAnalysisMarkdown": "<final markdown>" }`;
 
+const CREATE_SUGGESTED_FEATURE_SYSTEM = `You are the Omnia design assistant.
+The designer is formalizing a new API extension for an EXISTING backend (not a new backend).
+
+Inputs:
+- Backend label and reference corpus (current OpenAPI/catalog)
+- Designer observation (short original note from review)
+- Designer brief (authoritative instructions: what to add to the contract — may include edits, parameters, constraints)
+Follow the designer brief as the source of truth; use the observation only for context.
+
+Output a structured proposal for functionality to ADD to the existing API contract:
+- title: short Italian title (max 80 chars)
+- purposeMarkdown: 2-6 sentences explaining why and how the agent/backend should use this extension
+- parameters: array of NEW parameters to add (SEND inputs / RECEIVE outputs). Use dot-notation keys when nested (e.g. constraints.excludeWeekdays).
+Do NOT repeat parameters that already exist in the catalog unless you are extending them with new subfields (use object paths).
+Italian only.
+
+Return JSON only:
+{
+  "title": "...",
+  "purposeMarkdown": "...",
+  "parameters": [
+    {
+      "paramKey": "constraints.excludeWeekdays",
+      "direction": "input",
+      "kind": "optional",
+      "dataType": "string[]",
+      "role": "Giorni da escludere",
+      "descriptionShort": "ISO weekday numbers or names the user cannot book"
+    }
+  ]
+}`;
+
 module.exports = {
   PROPOSE_SYSTEM,
   REFINE_SYSTEM,
   REVIEW_OBSERVATIONS_SYSTEM,
   CLARIFY_OBSERVATION_SYSTEM,
   FINALIZE_SYSTEM,
+  CREATE_SUGGESTED_FEATURE_SYSTEM,
 };

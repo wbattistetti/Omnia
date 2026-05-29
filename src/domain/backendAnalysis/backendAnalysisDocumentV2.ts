@@ -12,6 +12,10 @@ import {
   syncProposedBackendRecord,
   type ProposedBackendRecord,
 } from './proposedBackendSpec';
+import {
+  syncSuggestedFeatureRecord,
+  type BackendSuggestedFeatureRecord,
+} from './suggestedFeatureSpec';
 
 
 
@@ -67,7 +71,17 @@ export type BackendAnalysisBackendRecord = {
 
   parameters: Record<string, BackendParameterAnalysisRecord>;
 
+  /** Estensioni API / funzionalità emerse in review (non ancora in OpenAPI). */
+
+  suggestedFeatures: BackendSuggestedFeatureRecord[];
+
+  /** Hash OpenAPI al momento dell’ultima analisi IA catalogo (per «Aggiorna analisi»). */
+
+  analysisOpenApiContentHash?: string | null;
+
 };
+
+export type { BackendSuggestedFeatureRecord } from './suggestedFeatureSpec';
 
 
 
@@ -179,6 +193,64 @@ export function normalizeBackendAnalysisDocumentV2(raw: unknown): BackendAnalysi
 
       String(b.generalNotesMarkdown ?? '').trim();
 
+    const suggestedRaw = b.suggestedFeatures;
+    let suggestedFeatures: BackendSuggestedFeatureRecord[] = [];
+    if (Array.isArray(suggestedRaw)) {
+      suggestedFeatures = suggestedRaw
+        .map((item, index) => {
+          if (!item || typeof item !== 'object') return null;
+          const o = item as Record<string, unknown>;
+          const title = String(o.title ?? '').trim();
+          const purposeMarkdown =
+            String(o.purposeMarkdown ?? '').trim() ||
+            parsePurposeFromSpecMarkdown(String(o.specMarkdown ?? ''));
+          const specMarkdown = String(o.specMarkdown ?? '');
+          const paramsRaw = o.parameters;
+          let parameters: BackendSuggestedFeatureRecord['parameters'] = {};
+          if (paramsRaw && typeof paramsRaw === 'object' && !Array.isArray(paramsRaw)) {
+            for (const [pk, pr] of Object.entries(paramsRaw as Record<string, unknown>)) {
+              if (!pr || typeof pr !== 'object') continue;
+              const p = pr as Record<string, unknown>;
+              const paramKey = String(p.paramKey ?? pk).trim();
+              if (!paramKey) continue;
+              parameters[paramKey] = {
+                paramKey,
+                direction: p.direction === 'output' ? 'output' : 'input',
+                kind: parseKind(p.kind),
+                dataType: String(p.dataType ?? 'string'),
+                role: String(p.role ?? ''),
+                descriptionShort: String(p.descriptionShort ?? ''),
+              };
+            }
+          } else if (specMarkdown.trim()) {
+            for (const p of parseParametersFromSpecMarkdown(specMarkdown)) {
+              parameters[p.paramKey] = p;
+            }
+          }
+          if (!title && !purposeMarkdown && Object.keys(parameters).length === 0) {
+            return null;
+          }
+          return syncSuggestedFeatureRecord({
+            id: String(o.id ?? `sf_${index}`).trim(),
+            title: title || 'Funzionalità suggerita',
+            purposeMarkdown,
+            parameters,
+            specMarkdown,
+            sourceObservationId: String(o.sourceObservationId ?? '').trim() || undefined,
+            createdAt: String(o.createdAt ?? new Date(0).toISOString()),
+          });
+        })
+        .filter((x): x is BackendSuggestedFeatureRecord => x !== null);
+    }
+
+    const analysisOpenApiContentHashRaw = b.analysisOpenApiContentHash;
+    const analysisOpenApiContentHash =
+      typeof analysisOpenApiContentHashRaw === 'string' && analysisOpenApiContentHashRaw.trim()
+        ? analysisOpenApiContentHashRaw.trim()
+        : analysisOpenApiContentHashRaw === null
+          ? null
+          : undefined;
+
     backends[id] = {
 
       catalogEntryId: String(b.catalogEntryId ?? id),
@@ -188,6 +260,12 @@ export function normalizeBackendAnalysisDocumentV2(raw: unknown): BackendAnalysi
       howToUseMarkdown: howToUse,
 
       parameters,
+
+      suggestedFeatures,
+
+      ...(analysisOpenApiContentHash !== undefined
+        ? { analysisOpenApiContentHash }
+        : {}),
 
     };
 

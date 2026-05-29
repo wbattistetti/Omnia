@@ -27,7 +27,10 @@ import { iaAgentConfigWithEditorSystemPrompt } from '@utils/iaAgentRuntime/iaAge
 import { resolveTaskIaConfig } from '@utils/iaAgentRuntime/resolveTaskIaConfig';
 import { mergeResolvedAndLiveIaConfig } from '@utils/iaAgentRuntime/convaiLiveIaConfigBridge';
 import { mergeEffectiveIaAgentTools } from '@domain/iaAgentTools/backendToolDerivation';
-import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import {
+  extractBackendCatalogFromProjectData,
+  extractManualCatalogBackendTaskIdsFromProjectData,
+} from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { taskRepository } from '@services/TaskRepository';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useAIAgentEditorDock } from './AIAgentEditorDockContext';
@@ -47,6 +50,10 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
   const { data: projectData } = useProjectData();
   const manualCatalogBackendTaskIds = React.useMemo(
     () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
+    [projectData]
+  );
+  const backendCatalog = React.useMemo(
+    () => extractBackendCatalogFromProjectData(projectData),
     [projectData]
   );
   const baseline = React.useMemo(() => loadGlobalIaAgentConfig(), []);
@@ -153,6 +160,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
       const cfgMerged = mergeResolvedAndLiveIaConfig(resolved, iaRuntimeConfig);
       const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(cfgMerged, task, {
         manualCatalogBackendTaskIds,
+        backendCatalog,
       });
       const effectiveTools = mergeEffectiveIaAgentTools(cfgForCreate, (id) => taskRepository.getTask(id), {
         manualCatalogBackendTaskIds,
@@ -162,6 +170,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
         fragment = conversationConfigFragmentFromIaAgentConfig(cfgForCreate, {
           task: task ?? undefined,
           manualCatalogBackendTaskIds,
+          backendCatalog,
         })!;
       } catch (buildErr) {
         console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);
@@ -193,6 +202,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
       );
       const provisionKey = buildConvaiProvisionKey(cfgForCreate, task ?? undefined, false, {
         manualCatalogBackendTaskIds,
+        backendCatalog,
       });
       const matches = await listAllConvaiAgentsMatchingTaskGuid(instanceId);
       for (const m of matches) {

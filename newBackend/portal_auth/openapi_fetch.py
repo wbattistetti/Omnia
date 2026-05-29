@@ -52,8 +52,13 @@ async def probe_openapi_url(
     client: httpx.AsyncClient,
     url: str,
     extra_headers: dict[str, str] | None = None,
+    *,
+    no_cache: bool = False,
 ) -> tuple[dict[str, Any] | None, str, int | None]:
     headers = {**_BASE_HEADERS, **(extra_headers or {})}
+    if no_cache:
+        headers["Cache-Control"] = "no-cache"
+        headers["Pragma"] = "no-cache"
     try:
         r = await client.get(url, headers=headers)
         status = r.status_code

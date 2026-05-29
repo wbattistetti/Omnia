@@ -54,6 +54,11 @@ export interface BackendCallSpecMeta {
     inputs: Record<string, string>;
     outputs: Record<string, string>;
   };
+  /** Hint per path dotted (wireKey): descrizione, esempio, tipo/formato da OpenAPI inline. */
+  openapiParamHintsByPath?: {
+    inputs: Record<string, import('../../services/openApiParamPathHints').OpenApiParamPathHint>;
+    outputs: Record<string, import('../../services/openApiParamPathHints').OpenApiParamPathHint>;
+  };
   /**
    * Dopo Read API: tipo UI suggerito per parametro/property body (chiave = nome API come in SEND).
    * Valori: `text` | `number` | `boolean` | `date` | `time` | `datetime-local` | `uri` | `enum` (allineati a controlli SEND/mock).
@@ -65,6 +70,8 @@ export interface BackendCallSpecMeta {
    * Frammenti JSON Schema per proprietà top-level del body (Read API), `$ref` risolti — schema tool ConvAI fedele a OpenAPI.
    */
   openapiInputJsonSchemaByApiName?: Record<string, Record<string, unknown>>;
+  /** Frammenti JSON Schema top-level risposta 2xx (Read API). */
+  openapiOutputJsonSchemaByApiName?: Record<string, Record<string, unknown>>;
   /** OpenAPI `operationId` dell’operazione scelta al Read API (per naming tool verso ConvAI). */
   openapiOperationId?: string | null;
   /** Regole obbligatorietà SEND da `x-omnia.sendBinding` (se presenti nello spec). `null` = assenti dopo import. */
@@ -78,6 +85,11 @@ export interface BackendCallSpecMeta {
   openApiMethodLockUrlSnapshot?: string | null;
   /** Metodo HTTP risolto dallo spec quando il lock è attivo (es. POST). */
   openApiLockedHttpMethod?: string | null;
+  /**
+   * Ultimo Read API: errori compilazione schema (tipi/format mancanti) per Monaco in tab Backends.
+   * Vuoto = nessun problema rilevato sullo snapshot materializzato.
+   */
+  openapiCompileErrors?: string[];
 }
 
 /** Come è stata creata la riga nel catalogo (wizard passo Backend). */
@@ -119,6 +131,10 @@ export interface ManualCatalogEntry {
   importSpecRevealed?: boolean;
   /** Presente se la voce è un tool draft dal workspace ElevenLabs (non dal wizard Agente AI). */
   elevenLabsWorkspaceTool?: ElevenLabsWorkspaceToolMeta;
+  /** Id tool ConvAI dopo «Pubblica su ElevenLabs» (POST /convai/tools). */
+  elevenLabsConvaiToolId?: string;
+  /** Ultimo agente ConvAI a cui il tool è stato agganciato (`tool_ids`). */
+  elevenLabsConvaiAgentId?: string;
 }
 
 export interface CatalogFrozenMeta {

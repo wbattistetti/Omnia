@@ -4,6 +4,7 @@
  */
 
 import type { AIAgentRuntimeCompact } from '@types/aiAgentDesign';
+import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import { resolveAiAgentPlatformRulesString, type TaskLikeForPlatformRules } from './resolveAiAgentPlatformRulesString';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { normalizeIAAgentConfig } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
@@ -127,6 +128,8 @@ export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForComp
 export interface BuildMinimalAiAgentCompileTaskOptions {
   /** @deprecated Removed; compile always uses full structured sections → platform string. */
   rulesVariant?: never;
+  manualCatalogBackendTaskIds?: readonly string[];
+  backendCatalog?: ProjectBackendCatalogBlob;
 }
 
 /** Payload POST compile per VB: default LLM-only; estensioni opzionali per ElevenLabs. */
@@ -262,9 +265,15 @@ function resolveElevenLabsMinimalCompileExtension(
 
 export function buildMinimalAiAgentCompileTask(
   task: MinimalAiAgentCompileTaskInput,
-  _options?: BuildMinimalAiAgentCompileTaskOptions
+  options?: BuildMinimalAiAgentCompileTaskOptions
 ): MinimalAiAgentCompilePayload {
-  const rules = resolveAiAgentPlatformRulesString(task as TaskLikeForPlatformRules);
+  const rules = resolveAiAgentPlatformRulesString(
+    { ...task, id: task.id } as TaskLikeForPlatformRules,
+    {
+      manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+      backendCatalog: options?.backendCatalog,
+    }
+  );
   const immediateStart = task.agentImmediateStart === true;
   /** Keep in sync with `CONVAI_DEFAULT_FIRST_MESSAGE` in convaiAgentCreatePayload.ts (avoid import cycle). */
   const defaultConvaiFirst = 'Hello! How can I help you today?';

@@ -17,3 +17,29 @@ export type KbAnalysisToolbarState = {
   readonly reviewPanelOpen: boolean;
   readonly onToggleReviewPanel: () => void;
 };
+
+/** Firma JSON dei campi toolbar (esclude callback) per evitare loop setState. */
+export function kbAnalysisToolbarStateSnapshot(
+  state: Pick<
+    KbAnalysisToolbarState,
+    | 'executeVisible'
+    | 'executeLabel'
+    | 'executeEnabled'
+    | 'executeEmphasized'
+    | 'analysisTabHighlight'
+    | 'executeBusy'
+    | 'reviewToggleVisible'
+    | 'reviewPanelOpen'
+  >
+): string {
+  return JSON.stringify({
+    executeVisible: state.executeVisible,
+    executeLabel: state.executeLabel,
+    executeEnabled: state.executeEnabled,
+    executeEmphasized: state.executeEmphasized,
+    analysisTabHighlight: state.analysisTabHighlight,
+    executeBusy: state.executeBusy,
+    reviewToggleVisible: state.reviewToggleVisible,
+    reviewPanelOpen: state.reviewPanelOpen,
+  });
+}

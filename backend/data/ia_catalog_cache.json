@@ -27,13 +27,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2_5": "failed",
-            "eleven_turbo_v2": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -59,12 +59,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "classy",
-          "gender": "male",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "Easy going and perfect for casual conversations.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/58ee3ff5-f6f2-4628-93b8-e38eb31806b0.mp3",
@@ -222,12 +222,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "professional",
-          "gender": "female",
+          "language": "en",
           "use_case": "entertainment_tv",
-          "accent": "american"
+          "age": "young",
+          "accent": "american",
+          "gender": "female"
         },
         "description": "Young adult woman with a confident and warm, mature quality and a reassuring, professional tone.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2216a32186.mp3",
@@ -346,13 +346,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -378,12 +378,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "sassy",
-          "gender": "female",
+          "language": "en",
           "use_case": "social_media",
-          "accent": "american"
+          "age": "young",
+          "accent": "american",
+          "gender": "female"
         },
         "description": "This young adult female voice delivers sunny enthusiasm with a quirky attitude.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/FGY2WhTYpPnrIDTdsKH5/67341759-ad08-41a5-be6e-de12fe448618.mp3",
@@ -529,9 +529,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -546,9 +546,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -558,12 +558,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "hyped",
-          "gender": "male",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "australian"
+          "age": "young",
+          "accent": "australian",
+          "gender": "male"
         },
         "description": "A young Australian male with a confident and energetic voice.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/IKne3meq5aSn9XLyUdCD/102de6f2-22ed-43e0-a1f1-111fa75c5481.mp3",
@@ -715,9 +715,9 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -728,9 +728,9 @@
             "eleven_v2_flash": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_v2_flash": "Done!"
+            "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -740,12 +740,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "mature",
-          "gender": "male",
+          "language": "en",
           "use_case": "narrative_story",
-          "accent": "british"
+          "age": "middle_aged",
+          "accent": "british",
+          "gender": "male"
         },
         "description": "Warm resonance that instantly captivates listeners.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/JBFqnCBsd6RMkjVDRZzb/e6206d1a-0721-4787-aafb-06a6e705cac5.mp3",
@@ -912,9 +912,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -929,9 +929,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -941,11 +941,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
           "language": "en",
-          "gender": "male",
           "use_case": "characters_animation",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "Deceptively gravelly, yet unsettling edge.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/ac833bd8-ffda-4938-9ebc-b0f99ca25481.mp3",
@@ -1085,12 +1085,12 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1116,12 +1116,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "calm",
-          "gender": "neutral",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "neutral"
         },
         "description": "A relaxed, neutral voice ready for narrations or conversational projects.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/e6c95f0b-2227-491a-b3d7-2249240decb7.mp3",
@@ -1275,9 +1275,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1290,13 +1290,13 @@
             "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
-            "eleven_v2_flash": "Done!",
-            "eleven_multilingual_v2": "",
             "eleven_turbo_v2_5": "",
-            "eleven_turbo_v2": "",
+            "eleven_multilingual_v2": "",
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1306,12 +1306,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "rough",
-          "gender": "male",
+          "language": "en",
           "use_case": "characters_animation",
-          "accent": "american"
+          "age": "young",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "An animated warrior ready to charge forward.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SOYHLrjzK2X1ezoPC6cr/86d178f6-f4b6-4e0e-85be-3de19f490794.mp3",
@@ -1435,9 +1435,9 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1448,9 +1448,9 @@
             "eleven_v2_flash": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_v2_flash": "Done!"
+            "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1460,12 +1460,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "confident",
-          "gender": "male",
+          "language": "en",
           "use_case": "social_media",
-          "accent": "american"
+          "age": "young",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "A young adult with energy and warmth - suitable for reels and shorts.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3",
@@ -1633,9 +1633,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1650,9 +1650,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1662,12 +1662,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "professional",
-          "gender": "female",
+          "language": "en",
           "use_case": "informative_educational",
-          "accent": "british"
+          "age": "middle_aged",
+          "accent": "british",
+          "gender": "female"
         },
         "description": "Clear and engaging, friendly woman with a British accent suitable for e-learning.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/d10f7534-11f6-41fe-a012-2de1e482d336.mp3",
@@ -1825,9 +1825,9 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1838,9 +1838,9 @@
             "eleven_v2_flash": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_v2_flash": "Done!"
+            "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1850,12 +1850,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "upbeat",
-          "gender": "female",
+          "language": "en",
           "use_case": "informative_educational",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "female"
         },
         "description": "A professional woman with a pleasing alto pitch. Suitable for many use cases.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/b930e18d-6b4d-466e-bab2-0ae97c6d8535.mp3",
@@ -2014,13 +2014,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2046,12 +2046,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "chill",
-          "gender": "male",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "american"
+          "age": "young",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "Conversational and laid back.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/8caf8f3d-ad29-4980-af41-53f20c72d7a4.mp3",
@@ -2230,13 +2230,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2262,12 +2262,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "young",
-          "language": "en",
           "descriptive": "cute",
-          "gender": "female",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "american"
+          "age": "young",
+          "accent": "american",
+          "gender": "female"
         },
         "description": "Young and popular, this playful American female voice is perfect for trendy content.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/56a97bf8-b69b-448f-846c-c3a11683d45a.mp3",
@@ -2432,13 +2432,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2464,12 +2464,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "classy",
-          "gender": "male",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "A smooth tenor pitch from a man in his 40s - perfect for agentic use cases.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/d098fda0-6456-4030-b3d8-63aa048c9070.mp3",
@@ -2621,12 +2621,12 @@
           "is_allowed_to_fine_tune": true,
           "state": {
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2635,12 +2635,12 @@
           "progress": {},
           "message": {
             "eleven_flash_v2": "",
-            "eleven_flash_v2_5": "",
             "eleven_multilingual_v2": "",
-            "eleven_turbo_v2": "",
-            "eleven_turbo_v2_5": "",
             "eleven_v2_5_flash": "",
-            "eleven_v2_flash": ""
+            "eleven_flash_v2_5": "",
+            "eleven_turbo_v2_5": "",
+            "eleven_v2_flash": "",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2650,12 +2650,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "professional",
-          "gender": "female",
+          "language": "en",
           "use_case": "informative_educational",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "female"
         },
         "description": "This voice is warm, bright, and professional, characterized by a Standard American accent and a polished, narrative quality. It features a medium-high pitch with crisp diction and a deliberate, rhythmic pace that makes it highly intelligible and engaging for long-form listening.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/hpp4J3VqNfWAUOO0d1Us/dab0f5ba-3aa4-48a8-9fad-f138fea1126d.mp3",
@@ -2773,9 +2773,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2790,9 +2790,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2802,12 +2802,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "casual",
-          "gender": "male",
+          "language": "en",
           "use_case": "conversational",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "Natural and real, this down-to-earth voice is great across many use-cases.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/3f4bde72-cc48-40dd-829f-57fbf906f4d7.mp3",
@@ -2960,9 +2960,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2977,9 +2977,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2989,12 +2989,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "classy",
-          "gender": "male",
+          "language": "en",
           "use_case": "social_media",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "Middle-aged man with a resonant and comforting tone. Great for narrations and advertisements.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/nPczCjzI2devNBz1zQrb/2dd3e72c-4fd3-42f1-93ea-abc5d4e5aa1d.mp3",
@@ -3168,9 +3168,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3185,9 +3185,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3197,12 +3197,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "formal",
-          "gender": "male",
+          "language": "en",
           "use_case": "informative_educational",
-          "accent": "british"
+          "age": "middle_aged",
+          "accent": "british",
+          "gender": "male"
         },
         "description": "A strong voice perfect for delivering a professional broadcast or news story.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/onwK4e9ZLuTAKqWW03F9/7eee0236-1a72-4b86-b303-5dcadc007ba9.mp3",
@@ -3342,9 +3342,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3359,9 +3359,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3371,12 +3371,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "language": "en",
           "descriptive": "confident",
-          "gender": "female",
+          "language": "en",
           "use_case": "informative_educational",
-          "accent": "british"
+          "age": "middle_aged",
+          "accent": "british",
+          "gender": "female"
         },
         "description": "Velvety British female voice delivers news and narrations with warmth and clarity.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/89b68b35-b3dd-4348-a84a-a3c13a3c2b30.mp3",
@@ -3548,11 +3548,11 @@
           "next_max_verification_attempts_reset_unix_ms": null
         },
         "labels": {
-          "age": "middle_aged",
           "language": "en",
-          "gender": "male",
           "use_case": "social_media",
-          "accent": "american"
+          "age": "middle_aged",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "A bright tenor pitch that immediately cuts through. The delivery is brash and openly confident, speaking with unwavering certainty and a slightly aggressive self-assurance.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pNInz6obpgDQGcFmaJgB/d6905d7a-dd26-4187-bfff-1bd3a5ea7cac.mp3",
@@ -3612,9 +3612,9 @@
           "state": {
             "eleven_flash_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3629,9 +3629,9 @@
           "message": {
             "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2_5": "Done!",
+            "eleven_turbo_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3641,12 +3641,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "old",
-          "language": "en",
           "descriptive": "crisp",
-          "gender": "male",
+          "language": "en",
           "use_case": "advertisement",
-          "accent": "american"
+          "age": "old",
+          "accent": "american",
+          "gender": "male"
         },
         "description": "Friendly and comforting voice ready to narrate your stories.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/d782b3ff-84ba-4029-848c-acf01285524d.mp3",
@@ -3771,140 +3771,6 @@
       }
     },
     {
-      "voice_id": "iLelOQ6m5mpSeNH8fRob",
-      "name": "Maria - Anxious, Serious and Urgent",
-      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
-      "language": "pt",
-      "gender": "female",
-      "category": "professional",
-      "accent": "european",
-      "age_group": "middle_aged",
-      "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
-      "voice_description": null,
-      "style": null,
-      "provider": "elevenlabs",
-      "tags": [
-        "european",
-        "narrative_story"
-      ],
-      "tts_family": "ElevenLabs",
-      "expressive_tags": [],
-      "raw": {
-        "voice_id": "iLelOQ6m5mpSeNH8fRob",
-        "name": "Maria - Anxious, Serious and Urgent",
-        "samples": null,
-        "category": "professional",
-        "fine_tuning": {
-          "is_allowed_to_fine_tune": true,
-          "state": {
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned"
-          },
-          "verification_failures": [],
-          "verification_attempts_count": 0,
-          "manual_verification_requested": false,
-          "language": "pt",
-          "progress": {},
-          "message": {
-            "eleven_flash_v2_5": "",
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": "",
-            "eleven_turbo_v2_5": ""
-          },
-          "dataset_duration_seconds": null,
-          "verification_attempts": null,
-          "slice_ids": null,
-          "manual_verification": null,
-          "max_verification_attempts": 0,
-          "next_max_verification_attempts_reset_unix_ms": 0
-        },
-        "labels": {
-          "use_case": "narrative_story",
-          "descriptive": "calm",
-          "age": "middle_aged",
-          "accent": "european",
-          "language": "pt",
-          "gender": "female"
-        },
-        "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
-        "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
-        "available_for_tiers": [],
-        "settings": null,
-        "sharing": {
-          "status": "copied",
-          "history_item_sample_id": null,
-          "date_unix": 1776440230,
-          "whitelisted_emails": [],
-          "public_owner_id": "cd7e9982c847258eda1ec2d8bfd396b5e7f3af4ac0d02b1b2f70149a2a2ec2be",
-          "original_voice_id": "iLelOQ6m5mpSeNH8fRob",
-          "financial_rewards_enabled": false,
-          "free_users_allowed": false,
-          "live_moderation_enabled": false,
-          "rate": 1,
-          "fiat_rate": null,
-          "notice_period": 730,
-          "disable_at_unix": null,
-          "voice_mixing_allowed": false,
-          "featured": false,
-          "category": "professional",
-          "reader_app_enabled": true,
-          "image_url": "",
-          "ban_reason": null,
-          "liked_by_count": 0,
-          "cloned_by_count": 0,
-          "name": "Maria - Anxious, Serious and Urgent",
-          "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
-          "labels": {
-            "use_case": "narrative_story",
-            "descriptive": "calm",
-            "age": "middle_aged",
-            "language": "pt",
-            "accent": "european",
-            "gender": "female",
-            "locale": "pt-PT"
-          },
-          "review_status": "not_requested",
-          "review_message": null,
-          "enabled_in_library": false,
-          "instagram_username": null,
-          "twitter_username": null,
-          "youtube_username": null,
-          "tiktok_username": null,
-          "moderation_check": null,
-          "reader_restricted_on": null
-        },
-        "high_quality_base_model_ids": [
-          "eleven_turbo_v2_5",
-          "eleven_v2_5_flash",
-          "eleven_flash_v2_5",
-          "eleven_multilingual_v2"
-        ],
-        "verified_languages": [],
-        "collection_ids": [],
-        "safety_control": null,
-        "voice_verification": {
-          "requires_verification": false,
-          "is_verified": false,
-          "verification_failures": [],
-          "verification_attempts_count": 0,
-          "language": null,
-          "verification_attempts": null
-        },
-        "permission_on_resource": "viewer",
-        "is_owner": false,
-        "is_legacy": false,
-        "is_mixed": false,
-        "favorited_at_unix": null,
-        "created_at_unix": 1776440230,
-        "is_bookmarked": false,
-        "recording_quality": null,
-        "labelling_status": null,
-        "recording_quality_reason": null
-      }
-    },
-    {
       "voice_id": "JfznbVXrGXYh0gZo9Lcp",
       "name": "Antonio - Natural, Balanced and Calm",
       "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/ce9b70089f524a4d8a519bbfcd0bd217/voices/JfznbVXrGXYh0gZo9Lcp/d0693720-4116-47d5-a76c-769441c5a55f.mp3",
@@ -3931,11 +3797,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3943,11 +3809,11 @@
           "language": "it",
           "progress": {},
           "message": {
-            "eleven_flash_v2_5": "",
             "eleven_v2_5_flash": "",
+            "eleven_turbo_v2_5": "",
             "eleven_multilingual_v2": "",
             "eleven_multilingual_sts_v2": "",
-            "eleven_turbo_v2_5": ""
+            "eleven_flash_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3957,12 +3823,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "use_case": "narrative_story",
           "descriptive": "gentle",
+          "language": "it",
+          "gender": "male",
           "age": "middle_aged",
           "accent": "standard",
-          "language": "it",
-          "gender": "male"
+          "use_case": "narrative_story"
         },
         "description": "Antonio",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/ce9b70089f524a4d8a519bbfcd0bd217/voices/JfznbVXrGXYh0gZo9Lcp/d0693720-4116-47d5-a76c-769441c5a55f.mp3",
@@ -3993,12 +3859,12 @@
           "name": "Antonio - Natural, Balanced and Calm",
           "description": "Antonio",
           "labels": {
-            "use_case": "narrative_story",
             "descriptive": "gentle",
-            "age": "middle_aged",
             "language": "it",
-            "accent": "standard",
             "gender": "male",
+            "age": "middle_aged",
+            "accent": "standard",
+            "use_case": "narrative_story",
             "locale": "it-IT"
           },
           "review_status": "not_requested",
@@ -4068,11 +3934,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2_5": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -4080,11 +3946,11 @@
           "language": "it",
           "progress": {},
           "message": {
-            "eleven_flash_v2_5": "",
             "eleven_v2_5_flash": "",
+            "eleven_turbo_v2_5": "",
             "eleven_multilingual_v2": "",
             "eleven_multilingual_sts_v2": "",
-            "eleven_turbo_v2_5": ""
+            "eleven_flash_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -4094,12 +3960,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "use_case": "narrative_story",
           "descriptive": "professional",
+          "language": "it",
+          "gender": "female",
           "age": "middle_aged",
           "accent": "standard",
-          "language": "it",
-          "gender": "female"
+          "use_case": "narrative_story"
         },
         "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/b3290375d9f7402daf26d0139c290f2d/voices/gfKKsLN1k0oYYN9n2dXX/Z2oJ1Jb0O555Pu7XDZv4.mp3",
@@ -4130,12 +3996,12 @@
           "name": "Violetta - Ringing, Bright and Joyful",
           "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
           "labels": {
-            "use_case": "narrative_story",
             "descriptive": "professional",
-            "age": "middle_aged",
             "language": "it",
-            "accent": "standard",
             "gender": "female",
+            "age": "middle_aged",
+            "accent": "standard",
+            "use_case": "narrative_story",
             "locale": "it-IT"
           },
           "review_status": "not_requested",
@@ -4322,6 +4188,140 @@
         "is_mixed": false,
         "favorited_at_unix": null,
         "created_at_unix": 1776342081,
+        "is_bookmarked": false,
+        "recording_quality": null,
+        "labelling_status": null,
+        "recording_quality_reason": null
+      }
+    },
+    {
+      "voice_id": "iLelOQ6m5mpSeNH8fRob",
+      "name": "Maria - Anxious, Serious and Urgent",
+      "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
+      "language": "pt",
+      "gender": "female",
+      "category": "professional",
+      "accent": "european",
+      "age_group": "middle_aged",
+      "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
+      "voice_description": null,
+      "style": null,
+      "provider": "elevenlabs",
+      "tags": [
+        "european",
+        "narrative_story"
+      ],
+      "tts_family": "ElevenLabs",
+      "expressive_tags": [],
+      "raw": {
+        "voice_id": "iLelOQ6m5mpSeNH8fRob",
+        "name": "Maria - Anxious, Serious and Urgent",
+        "samples": null,
+        "category": "professional",
+        "fine_tuning": {
+          "is_allowed_to_fine_tune": true,
+          "state": {
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
+          },
+          "verification_failures": [],
+          "verification_attempts_count": 0,
+          "manual_verification_requested": false,
+          "language": "pt",
+          "progress": {},
+          "message": {
+            "eleven_v2_5_flash": "",
+            "eleven_turbo_v2_5": "",
+            "eleven_multilingual_v2": "",
+            "eleven_flash_v2_5": ""
+          },
+          "dataset_duration_seconds": null,
+          "verification_attempts": null,
+          "slice_ids": null,
+          "manual_verification": null,
+          "max_verification_attempts": 0,
+          "next_max_verification_attempts_reset_unix_ms": 0
+        },
+        "labels": {
+          "descriptive": "calm",
+          "language": "pt",
+          "gender": "female",
+          "age": "middle_aged",
+          "accent": "european",
+          "use_case": "narrative_story"
+        },
+        "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
+        "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
+        "available_for_tiers": [],
+        "settings": null,
+        "sharing": {
+          "status": "copied",
+          "history_item_sample_id": null,
+          "date_unix": 1776440230,
+          "whitelisted_emails": [],
+          "public_owner_id": "cd7e9982c847258eda1ec2d8bfd396b5e7f3af4ac0d02b1b2f70149a2a2ec2be",
+          "original_voice_id": "iLelOQ6m5mpSeNH8fRob",
+          "financial_rewards_enabled": false,
+          "free_users_allowed": false,
+          "live_moderation_enabled": false,
+          "rate": 1,
+          "fiat_rate": null,
+          "notice_period": 730,
+          "disable_at_unix": null,
+          "voice_mixing_allowed": false,
+          "featured": false,
+          "category": "professional",
+          "reader_app_enabled": true,
+          "image_url": "",
+          "ban_reason": null,
+          "liked_by_count": 0,
+          "cloned_by_count": 0,
+          "name": "Maria - Anxious, Serious and Urgent",
+          "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
+          "labels": {
+            "descriptive": "calm",
+            "language": "pt",
+            "gender": "female",
+            "age": "middle_aged",
+            "accent": "european",
+            "use_case": "narrative_story",
+            "locale": "pt-PT"
+          },
+          "review_status": "not_requested",
+          "review_message": null,
+          "enabled_in_library": false,
+          "instagram_username": null,
+          "twitter_username": null,
+          "youtube_username": null,
+          "tiktok_username": null,
+          "moderation_check": null,
+          "reader_restricted_on": null
+        },
+        "high_quality_base_model_ids": [
+          "eleven_turbo_v2_5",
+          "eleven_v2_5_flash",
+          "eleven_flash_v2_5",
+          "eleven_multilingual_v2"
+        ],
+        "verified_languages": [],
+        "collection_ids": [],
+        "safety_control": null,
+        "voice_verification": {
+          "requires_verification": false,
+          "is_verified": false,
+          "verification_failures": [],
+          "verification_attempts_count": 0,
+          "language": null,
+          "verification_attempts": null
+        },
+        "permission_on_resource": "viewer",
+        "is_owner": false,
+        "is_legacy": false,
+        "is_mixed": false,
+        "favorited_at_unix": null,
+        "created_at_unix": 1776440230,
         "is_bookmarked": false,
         "recording_quality": null,
         "labelling_status": null,
@@ -4578,8 +4578,8 @@
           "next_max_verification_attempts_reset_unix_ms": null
         },
         "labels": {
-          "language": "it",
-          "gender": "female"
+          "gender": "female",
+          "language": "it"
         },
         "description": "",
         "preview_url": "https://storage.googleapis.com/eleven-isolated-be-public-prod/database/workspace/2a71776ced594d908c078e498773a297/voices/Qh8EG6cnbgBZzfAs6Jk1/fe309408-f52e-4d0a-8bf9-f63b2474e040.mp3",
@@ -9443,12 +9443,12 @@
     ]
   },
   "meta": {
-    "updatedAt": "2026-05-27T18:50:25.386Z",
-    "lastLanguagesSync": "2026-05-27T18:50:25.386Z",
-    "lastModelsSync": "2026-05-26T06:20:26.078Z",
+    "updatedAt": "2026-05-29T05:19:10.076Z",
+    "lastLanguagesSync": "2026-05-29T05:19:10.076Z",
+    "lastModelsSync": "2026-05-28T12:20:25.054Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-27T18:50:25.321Z",
+      "at": "2026-05-29T05:19:10.034Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

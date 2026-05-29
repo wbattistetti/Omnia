@@ -23,7 +23,7 @@ import { ConvaiWebhookTunnelHintCard } from './ConvaiWebhookTunnelHintCard';
 
 function detectIaEngineTypeLabel(message: string, code?: string): 'LLM' | 'TTS' | null {
   if (shouldShowElevenLabsLlmEnumAssist(message, code)) return 'LLM';
-  if (/non-english agents must use turbo or flash v2_5/i.test(message)) return 'LLM';
+  if (/non-english agents must use turbo or flash v2_5/i.test(message)) return 'TTS';
   return null;
 }
 

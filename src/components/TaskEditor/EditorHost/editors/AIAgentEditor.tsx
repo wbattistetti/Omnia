@@ -40,6 +40,7 @@ import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCas
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
+import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { createPortal } from 'react-dom';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
@@ -945,6 +946,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     () => setConversationalPromptDialogOpen(false),
     []
   );
+  const manualCatalogBackendTaskIds = React.useMemo(
+    () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
+    [projectData]
+  );
 
   /**
    * ───────────────────────────────────────────────────────────────────────────────────────────
@@ -1618,6 +1623,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           agentBehavior={c.agentBehavior}
           catalogFormat={conversationalCatalogFormat}
           onCatalogFormatChange={setConversationalCatalogFormat}
+          agentTaskId={instanceId}
+          backendCatalog={projectData?.backendCatalog}
+          manualCatalogBackendTaskIds={manualCatalogBackendTaskIds}
+          knowledgeBaseDocuments={c.knowledgeBaseDocuments}
           onClose={onCloseConversationalPromptDialog}
         />
       </div>

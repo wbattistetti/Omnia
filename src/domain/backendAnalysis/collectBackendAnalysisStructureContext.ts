@@ -13,15 +13,15 @@ import type { BackendAnalysisStructureContext } from './backendAnalysisDocumentT
 function paramNamesFromTask(task: Task): Array<{ name: string; direction: 'input' | 'output' }> {
   const out: Array<{ name: string; direction: 'input' | 'output' }> = [];
   const t = task as Task & {
-    inputs?: Array<{ internalName?: string; apiName?: string }>;
-    outputs?: Array<{ internalName?: string; apiName?: string }>;
+    inputs?: Array<{ internalName?: string; apiParam?: string; apiName?: string }>;
+    outputs?: Array<{ internalName?: string; apiField?: string; apiName?: string }>;
   };
   for (const inp of t.inputs ?? []) {
-    const name = String(inp.apiName ?? inp.internalName ?? '').trim();
+    const name = String(inp.apiParam ?? inp.apiName ?? inp.internalName ?? '').trim();
     if (name) out.push({ name, direction: 'input' });
   }
   for (const o of t.outputs ?? []) {
-    const name = String(o.apiName ?? o.internalName ?? '').trim();
+    const name = String(o.apiField ?? o.apiName ?? o.internalName ?? '').trim();
     if (name) out.push({ name, direction: 'output' });
   }
   return out;

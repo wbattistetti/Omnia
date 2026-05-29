@@ -6,6 +6,7 @@ Optional `connection_id` adds Bearer token from a PortalConnection (OAuth).
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -111,8 +112,14 @@ async def proxy_openapi(
         None,
         description="PortalConnection id — aggiunge Authorization Bearer",
     ),
+    refresh: str | None = Query(
+        None,
+        alias="_refresh",
+        description="Se presente, evita cache HTTP verso l'origine (Recupera specifiche)",
+    ),
 ) -> JSONResponse:
     raw = url.strip()
+    force_refresh = bool((refresh or "").strip())
     parsed = urlparse(raw)
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(
@@ -143,7 +150,13 @@ async def proxy_openapi(
             if u in tried:
                 return None
             tried.add(u)
-            doc, reason, http_status = await probe_openapi_url(client, u, auth_headers)
+            fetch_url = u
+            if force_refresh:
+                sep = "&" if "?" in fetch_url else "?"
+                fetch_url = f"{fetch_url}{sep}_omniaRefresh={int(time.time() * 1000)}"
+            doc, reason, http_status = await probe_openapi_url(
+                client, fetch_url, auth_headers, no_cache=force_refresh
+            )
             attempts.append((u, reason))
             if attempt_indicates_auth_required(reason, http_status):
                 auth_required = True

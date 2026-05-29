@@ -39,6 +39,10 @@ import {
 import { useAgentBackendAnalysis } from './AgentBackendAnalysisContext';
 import { BackendAnalysisWorkspace } from './BackendAnalysisWorkspace';
 import { useRegisterBackendAnalysisDocumentActions } from './backendAnalysis/BackendAnalysisDocumentActionsContext';
+import {
+  useOptionalBackendAnalysisEdit,
+} from './backendAnalysis/BackendAnalysisEditContext';
+import { resolveCatalogEntryIdForObservation } from '@domain/backendAnalysis/resolveCatalogEntryIdForObservation';
 import { buildSectionBaselinesFromDocument } from '@domain/backendAnalysis/backendAnalysisSectionBaselines';
 import { buildBackendReferenceCorpus } from '@domain/backendAnalysis/buildBackendReferenceCorpus';
 import { collectBackendAnalysisStructureContext } from '@domain/backendAnalysis/collectBackendAnalysisStructureContext';
@@ -88,6 +92,13 @@ const REVIEW_COPY: KbAnalysisObservationReviewCopy = {
   statusClarifying: KB_ANALYSIS_STATUS_CLARIFYING,
   userQuestionLabel: 'Domanda',
   userObservationLabel: 'Osservazione',
+  createSpecLabel: 'Crea nuove specifiche',
+  createSpecAlreadyLabel: 'Specifica già creata',
+  specExtensionChipLabel: 'Bozza IA (review)',
+  createSpecComposePrompt:
+    'Indica cosa formalizzare nella specifica API (modifica il testo, poi genera).',
+  createSpecComposeSubmit: 'Genera specifica',
+  createSpecComposeCancel: 'Annulla',
 };
 
 function hasReviewDisagreement(items: readonly KbAnalysisReviewSessionItem[]): boolean {
@@ -132,7 +143,9 @@ export function BackendAnalysisTab({
   disabled = false,
 }: BackendAnalysisTabProps): React.ReactElement {
   const { provider, model } = useAIProvider();
-  const { analysisMarkdown: contextMarkdown } = useAgentBackendAnalysis();
+  const { analysisMarkdown: contextMarkdown, document: analysisDocument } =
+    useAgentBackendAnalysis();
+  const backendEdit = useOptionalBackendAnalysisEdit();
 
   const stored = readAgentBackendAnalysisBundle(backendCatalog, agentTaskId);
   const [busy, setBusy] = React.useState(false);
@@ -479,6 +492,32 @@ export function BackendAnalysisTab({
     [projectId, reviewItems, apiBase, updateObservation, updateReviewItem]
   );
 
+  const onCreateSuggestedFeature = React.useCallback(
+    (observationId: string, designerBrief: string) => {
+      if (!backendEdit || !reviewItems) return;
+      const item = reviewItems.find((i) => i.observation.id === observationId);
+      if (!item) return;
+      const catalogEntryId = resolveCatalogEntryIdForObservation(
+        item.observation.text,
+        manualEntries,
+        analysisDocument
+      );
+      if (!catalogEntryId) return;
+      void backendEdit.createSuggestedFeatureForCatalogEntry(
+        catalogEntryId,
+        item.observation,
+        designerBrief
+      );
+    },
+    [backendEdit, reviewItems, manualEntries, analysisDocument]
+  );
+
+  const observationHasSuggestedFeature = React.useCallback(
+    (observationId: string) =>
+      backendEdit?.hasSuggestedFeatureForObservationAnyBackend(observationId) ?? false,
+    [backendEdit]
+  );
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -551,6 +590,15 @@ export function BackendAnalysisTab({
                 updateReviewItem(id, { clarificationDraft: text })
               }
               onSubmitClarification={(id) => void onSubmitClarification(id)}
+              onCreateSuggestedFeature={
+                backendEdit ? onCreateSuggestedFeature : undefined
+              }
+              createSpecBusyObservationId={
+                backendEdit?.createSpecBusyObservationId ?? busyObservationId
+              }
+              observationHasSuggestedFeature={
+                backendEdit ? observationHasSuggestedFeature : undefined
+              }
             />
             <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-violet-900/40 px-3 py-2">
               <button

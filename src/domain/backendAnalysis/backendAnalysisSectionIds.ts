@@ -44,6 +44,32 @@ export function paramDetailSectionId(
 
 }
 
+/** Sezione Monaco appartiene a un backend del catalogo (howToUse o paramDetail). */
+export function sectionIdBelongsToCatalogEntry(
+  sectionId: string,
+  catalogEntryId: string
+): boolean {
+  return (
+    sectionId === `howToUse:${catalogEntryId}` ||
+    sectionId.startsWith(`paramDetail:${catalogEntryId}:`)
+  );
+}
+
+/** catalogEntryId da sectionId howToUse o paramDetail; null se sezione globale/proposed. */
+export function catalogEntryIdFromSectionId(
+  sectionId: BackendAnalysisSectionId
+): string | null {
+  if (sectionId.startsWith('howToUse:')) {
+    return sectionId.slice('howToUse:'.length) || null;
+  }
+  if (sectionId.startsWith('paramDetail:')) {
+    const rest = sectionId.slice('paramDetail:'.length);
+    const sep = rest.indexOf(':');
+    return sep >= 0 ? rest.slice(0, sep) : null;
+  }
+  return null;
+}
+
 
 
 export function proposedBackendAccordionTitle(suggestedName: string): string {

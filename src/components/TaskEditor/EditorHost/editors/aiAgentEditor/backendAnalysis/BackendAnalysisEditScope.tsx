@@ -64,9 +64,11 @@ export function BackendAnalysisEditScope({
     <BackendAnalysisEditProvider
       projectId={projectId}
       agentTaskId={agentTaskId}
+      manualEntries={manualEntries}
       backendCatalog={backendCatalog}
       onPersistCatalog={onPersistCatalog}
       referenceCorpus={referenceCorpus}
+      kbContextMarkdown={buildKbContextMarkdown(kbDocuments)}
       taskContext={taskContext}
       provider={provider}
       model={model}

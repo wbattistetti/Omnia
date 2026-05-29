@@ -68,6 +68,7 @@ function normalizeBackendRecord(
     displayLabel: b.displayLabel,
     howToUseMarkdown: howToUse,
     parameters: b.parameters,
+    suggestedFeatures: b.suggestedFeatures ?? [],
   };
 }
 

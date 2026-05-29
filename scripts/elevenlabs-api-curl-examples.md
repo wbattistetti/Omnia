@@ -47,12 +47,12 @@ Smoke **diretto** ElevenLabs (payload reale da documentazione ConvAI; adatta i c
 curl -sS -X POST "https://api.elevenlabs.io/v1/convai/agents/create" \
   -H "xi-api-key: <API_KEY>" \
   -H "Content-Type: application/json" \
-  -d "{\"conversation_config\":{\"agent\":{\"prompt\":{\"llm\":\"eleven_flash_v2_5\",\"prompt\":\"test\"},\"language\":\"it\"}}}}"
+  -d "{\"conversation_config\":{\"agent\":{\"prompt\":{\"llm\":\"gpt-4o\",\"prompt\":\"test\"},\"language\":\"it\"},\"tts\":{\"model_id\":\"eleven_flash_v2_5\",\"voice_id\":\"<VOICE_ID>\"}}}}"
 ```
 
-**Modello valido (non‑EN):** tipicamente `eleven_flash_v2_5` o `eleven_turbo_v2` (messaggio errore ElevenLabs: *Non-english Agents must use turbo or flash v2_5*).
+**`prompt.llm` (non‑EN):** usa un id chat dall’enum ConvAI (`gpt-4o`, `gemini-2.5-flash`, …). **Non** mettere `eleven_flash_v2_5` qui (è un modello TTS → 422 enum).
 
-**Modello non valido (esempio):** `gpt-4-turbo` nel campo `prompt.llm` → errore di validazione ConvAI.
+**`tts.model_id` (non‑EN):** `eleven_flash_v2_5` o `eleven_turbo_v2_5` (errore *Non-english Agents must use turbo or flash v2_5* se manca o è `eleven_flash_v2`).
 
 ## 5. Salvataggio `config/llmMapping.json` da UI
 

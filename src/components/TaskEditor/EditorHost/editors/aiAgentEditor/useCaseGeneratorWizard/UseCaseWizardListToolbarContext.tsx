@@ -182,9 +182,12 @@ export function UseCaseWizardListToolbarProvider({
   const generateTestQuestionsHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
   const checkOverlapsHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
   const wasOverThresholdRef = React.useRef<boolean>(false);
-  const [toolbarSelectedUseCaseId, setToolbarSelectedUseCaseId] = React.useState<string | null>(
+  const [toolbarSelectedUseCaseId, setToolbarSelectedUseCaseIdRaw] = React.useState<string | null>(
     null
   );
+  const setToolbarSelectedUseCaseId = React.useCallback((id: string | null) => {
+    setToolbarSelectedUseCaseIdRaw((prev) => (prev === id ? prev : id));
+  }, []);
   const [testQuestionStats, setTestQuestionStatsRaw] =
     React.useState<UseCaseTestQuestionStats>({
       total: 0,
@@ -295,11 +298,8 @@ export function UseCaseWizardListToolbarProvider({
    * loop nel `useEffect` del composer che chiama questo setter ad ogni cambio dati.
    */
   const setPendingCorrectionsCount = React.useCallback((next: number): void => {
-    if (!Number.isFinite(next) || next < 0) {
-      setPendingCorrectionsCountRaw(0);
-      return;
-    }
-    setPendingCorrectionsCountRaw(Math.floor(next));
+    const v = !Number.isFinite(next) || next < 0 ? 0 : Math.floor(next);
+    setPendingCorrectionsCountRaw((prev) => (prev === v ? prev : v));
   }, []);
 
   const registerConsolidateCorrectionsHandler = React.useCallback(
@@ -330,7 +330,11 @@ export function UseCaseWizardListToolbarProvider({
     setCorrectionsDismissed(true);
   }, []);
 
+  const lastTestQuestionStatsSigRef = React.useRef<string>('');
   const setTestQuestionStats = React.useCallback((stats: UseCaseTestQuestionStats) => {
+    const sig = JSON.stringify(stats);
+    if (lastTestQuestionStatsSigRef.current === sig) return;
+    lastTestQuestionStatsSigRef.current = sig;
     setTestQuestionStatsRaw(stats);
   }, []);
 

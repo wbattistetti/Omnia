@@ -26,6 +26,10 @@ export interface MappingEntry {
   openapiDescriptionDrift?: boolean;
   /** Solo UI: testo OpenAPI corrente per tooltip / pannello confronto. */
   openapiDescriptionHint?: string;
+  /** Solo UI: tooltip cella valore (formato, enum, esempio). */
+  openapiValueHint?: string;
+  /** Solo UI: etichetta tipo/formato accanto al nome parametro. */
+  openapiFormatLabel?: string;
   /** SEND: parametro opzionale per compile (`x-omnia.sendBinding`). */
   sendBindingOptional?: boolean;
   /** SEND: obbligatorio a compile (`designTimeRequiredApiParams`). */
@@ -56,6 +60,8 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(partial.sampleValues != null ? { sampleValues: partial.sampleValues } : {}),
     ...(partial.openapiDescriptionDrift !== undefined ? { openapiDescriptionDrift: partial.openapiDescriptionDrift } : {}),
     ...(partial.openapiDescriptionHint !== undefined ? { openapiDescriptionHint: partial.openapiDescriptionHint } : {}),
+    ...(partial.openapiValueHint !== undefined ? { openapiValueHint: partial.openapiValueHint } : {}),
+    ...(partial.openapiFormatLabel !== undefined ? { openapiFormatLabel: partial.openapiFormatLabel } : {}),
     ...(partial.sendBindingOptional !== undefined ? { sendBindingOptional: partial.sendBindingOptional } : {}),
     ...(partial.sendBindingDesignTimeRequired !== undefined
       ? { sendBindingDesignTimeRequired: partial.sendBindingDesignTimeRequired }

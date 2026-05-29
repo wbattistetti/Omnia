@@ -127,6 +127,14 @@ export function KnowledgeBaseWorkspace({
     [documents, selectedId]
   );
 
+  const handleSelectedDocUpdate = React.useCallback(
+    (patch: KbDocumentPatch) => {
+      if (!selectedId) return;
+      onUpdateDocument(selectedId, patch);
+    },
+    [selectedId, onUpdateDocument]
+  );
+
   const imageDocIds = React.useMemo(
     () => documents.filter((d) => d.format === 'image').map((d) => d.id),
     [documents]
@@ -253,7 +261,7 @@ export function KnowledgeBaseWorkspace({
                 taskContext={taskContext}
                 imageDocIds={imageDocIds}
                 onSelectDocumentId={setSelectedId}
-                onUpdateDoc={(patch) => onUpdateDocument(selectedDoc.id, patch)}
+                onUpdateDoc={handleSelectedDocUpdate}
                 tutorAnalysisResultId={tutorAnalysisResultId}
               />
             ) : null}

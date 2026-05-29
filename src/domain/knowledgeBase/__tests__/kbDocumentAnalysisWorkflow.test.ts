@@ -19,8 +19,8 @@ describe('kbDocumentAnalysisWorkflow', () => {
   it('detects diff only when baseline is non-empty and differs', () => {
     expect(analysisDraftDiffersFromBaseline('b', 'a')).toBe(true);
     expect(analysisDraftDiffersFromBaseline('same', 'same')).toBe(false);
-    expect(analysisDraftDiffersFromBaseline('x', '')).toBe(false);
-    expect(shouldRunObservationReview('', 'user draft')).toBe(false);
+    expect(analysisDraftDiffersFromBaseline('x', '')).toBe(true);
+    expect(shouldRunObservationReview('', 'user draft')).toBe(true);
     expect(shouldRunObservationReview('agent', 'user draft')).toBe(true);
   });
 

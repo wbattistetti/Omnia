@@ -7,8 +7,11 @@ import {
   buildOperationDocBlurbFromOpenApiFields,
   extractNestedSpecUrlsFromEndpoint,
   extractOperationFields,
+  materializeJsonSchemaFragmentForTool,
+  schemaPropertyJsonSchemaFragmentsForTool,
   fetchOpenApiDocument,
   matchOpenApiPath,
+  matchOpenApiPathBySuffix,
   parseOpenApiViewerHash,
   pickOpenApiPathForReadApi,
   slugInternalName,
@@ -18,6 +21,72 @@ describe('openApiBackendCallSpec', () => {
   it('matchOpenApiPath matches template', () => {
     const paths = { '/users/{id}': { get: {} } };
     expect(matchOpenApiPath(paths as any, '/users/42')).toBe('/users/{id}');
+  });
+
+  it('matchOpenApiPathBySuffix maps Supabase deploy URL to relative OpenAPI path', () => {
+    const paths = {
+      '/import': { post: {} },
+      '/next-window': { post: {} },
+    };
+    expect(
+      matchOpenApiPathBySuffix(
+        paths as any,
+        '/functions/v1/agenda-solver/next-window'
+      )
+    ).toBe('/next-window');
+    expect(
+      matchOpenApiPathBySuffix(paths as any, '/functions/v1/agenda-solver/import')
+    ).toBe('/import');
+  });
+
+  it('pickOpenApiPathForReadApi prefers /next-window over /import for Supabase operational URL', () => {
+    const doc = {
+      openapi: '3.0.0',
+      paths: {
+        '/import': {
+          post: {
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: { days: { type: 'array' }, schemaVersion: { type: 'integer' } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        '/next-window': {
+          post: {
+            requestBody: {
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      forbiddenMonths: { type: 'array' },
+                      projectId: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+    const url =
+      'https://gbqdapomdtxbhmftkbir.supabase.co/functions/v1/agenda-solver/next-window';
+    const picked = pickOpenApiPathForReadApi(url, doc as any, 'POST');
+    expect(picked).toEqual({
+      pathKey: '/next-window',
+      method: 'post',
+      operationalPathMatched: true,
+    });
+    const fields = extractOperationFields(doc as any, '/next-window', 'post');
+    expect(fields?.requestBodyPropertyNames).toContain('forbiddenMonths');
+    expect(fields?.requestBodyPropertyNames).not.toContain('days');
   });
 
   it('extractOperationFields supports Swagger 2 body + response schema', () => {
@@ -378,6 +447,49 @@ describe('openApiBackendCallSpec', () => {
     expect(f?.inputEnumByApiName['agenda.url']).toBeUndefined();
   });
 
+  it('schemaPropertyJsonSchemaFragmentsForTool dereferences requestBody $ref', () => {
+    const doc = {
+      openapi: '3.0.0',
+      components: {
+        schemas: {
+          NextWindowRequest: {
+            type: 'object',
+            properties: {
+              windowDays: { type: 'integer', minimum: 1, maximum: 30 },
+              constraints: {
+                allOf: [{ $ref: '#/components/schemas/SchedulingQueryConstraints' }],
+              },
+            },
+          },
+          SchedulingQueryConstraints: {
+            type: 'object',
+            properties: {
+              allowedMonths: {
+                type: 'array',
+                items: { type: 'integer', minimum: 1, maximum: 12 },
+              },
+            },
+          },
+        },
+      },
+    };
+    const fragments = schemaPropertyJsonSchemaFragmentsForTool(doc, {
+      $ref: '#/components/schemas/NextWindowRequest',
+    });
+    expect(fragments.windowDays?.type).toBe('integer');
+    const c = fragments.constraints;
+    expect(c?.type).toBe('object');
+    const months = (c?.properties as Record<string, unknown>)?.allowedMonths as Record<
+      string,
+      unknown
+    >;
+    expect(months?.type).toBe('array');
+    expect((months?.items as Record<string, unknown>)?.type).toBe('integer');
+    expect(materializeJsonSchemaFragmentForTool(doc, { $ref: '#/missing/X' }, new Set(), 0)[
+      'x-omnia-unresolvedRef'
+    ]).toBe('#/missing/X');
+  });
+
   it('extractOperationFields reads x-omnia sendBinding from bookFromAgenda.openapi.json', () => {
     const doc = JSON.parse(
       readFileSync(join(process.cwd(), 'backend/services/bookFromAgenda.openapi.json'), 'utf-8')
@@ -412,5 +524,19 @@ describe('openApiBackendCallSpec', () => {
     const [url] = fetchMock.mock.calls[0];
     expect(String(url)).toContain('/api/openapi-proxy?');
     expect(String(url)).toContain(encodeURIComponent('https://example.com/v1/foo'));
+  });
+
+  it('fetchOpenApiDocument forceRefresh busts proxy cache query', async () => {
+    const doc = { openapi: '3.0.0', paths: {} };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => doc,
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await fetchOpenApiDocument('https://example.com/openapi.json', { forceRefresh: true });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('_refresh=');
+    expect((init as RequestInit).cache).toBe('no-store');
   });
 });

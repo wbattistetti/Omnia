@@ -8,6 +8,10 @@ import type {
 } from './backendAnalysisDocumentV2';
 import { isPlaceholderProposedSpec } from './proposedBackendFromAnalysis';
 import { proposedBackendHasSubstance } from './proposedBackendSpec';
+import {
+  suggestedFeatureHasSubstance,
+  type BackendSuggestedFeatureRecord,
+} from './suggestedFeatureSpec';
 
 export function hasCompletedFirstBackendAnalysis(agentBaselineMarkdown: string): boolean {
   return Boolean(String(agentBaselineMarkdown ?? '').trim());
@@ -37,4 +41,14 @@ export function filterProposedForDisplay(
 
 export function systemPromptHasContent(doc: BackendAnalysisDocumentV2): boolean {
   return Boolean(doc.global.agentSystemPromptMarkdown.trim());
+}
+
+export function filterSuggestedFeaturesForDisplay(
+  features: readonly BackendSuggestedFeatureRecord[] | undefined
+): BackendSuggestedFeatureRecord[] {
+  return (features ?? []).filter((f) => suggestedFeatureHasSubstance(f));
+}
+
+export function backendHasSuggestedFeatures(backend: BackendAnalysisBackendRecord): boolean {
+  return filterSuggestedFeaturesForDisplay(backend.suggestedFeatures).length > 0;
 }

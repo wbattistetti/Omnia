@@ -60,7 +60,7 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     expect(out).not.toMatch(/### Context\n\nmissing/m);
   });
 
-  it('adds appendix from manualCatalogBackendTaskIds when override JSON has no backend ids', () => {
+  it('adds USE OF BACKENDS from manualCatalogBackendTaskIds when override JSON has no backend ids', () => {
     getTask.mockImplementation((id: string) =>
       id === 'catBk'
         ? ({
@@ -74,6 +74,7 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     );
 
     const task = {
+      id: 'agent1',
       agentStructuredSectionsJson: minimalStructured,
       agentPrompt: '',
       agentPromptTargetPlatform: 'elevenlabs',
@@ -83,8 +84,9 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     const out = resolveElevenLabsAgentPromptFromTask(task, {
       manualCatalogBackendTaskIds: ['catBk'],
     });
-    expect(out).toContain('Contratto tool backend');
+    expect(out).toContain('USE OF BACKENDS');
     expect(out).toContain('Catalog API');
+    expect(out).toContain('Chiama il catalogo');
     expect(out).not.toMatch(/### Context\n\nmissing/m);
   });
 

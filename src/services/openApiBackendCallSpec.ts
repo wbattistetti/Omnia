@@ -1,9 +1,13 @@
 /**
  * Fetches OpenAPI/Swagger JSON and extracts request/response field names for a Backend Call operation.
- * Shallow $ref resolution via #/components/schemas/... only.
+ * Risoluzione `$ref` inline (#/components/…) per schema tool, prompt e validazione compile.
  */
 
 import type { OpenApiSendBindingRules } from '../domain/backendCatalog/catalogTypes';
+import {
+  schemaPropertyParamHintsByPath,
+  type OpenApiParamPathHint,
+} from './openApiParamPathHints';
 
 /** Kind per `input` HTML5 nelle celle mock / SEND (chiave = nome campo API). */
 export type OpenApiInputUiKind =
@@ -47,6 +51,11 @@ export type OpenApiOperationFields = {
    * Frammenti JSON Schema (inline, `$ref` risolti) per ogni proprietà top-level del body — tool LLM fedeli a OpenAPI.
    */
   inputJsonSchemaByApiName?: Record<string, Record<string, unknown>>;
+  /** Frammenti JSON Schema per proprietà top-level risposta 2xx. */
+  outputJsonSchemaByApiName?: Record<string, Record<string, unknown>>;
+  /** Hint per path dotted (wireKey interno): descrizione, esempio, tipo/formato. */
+  inputParamHintsByPath?: Record<string, import('./openApiParamPathHints').OpenApiParamPathHint>;
+  outputParamHintsByPath?: Record<string, import('./openApiParamPathHints').OpenApiParamPathHint>;
 };
 
 function isRecord(x: unknown): x is Record<string, unknown> {
@@ -90,6 +99,12 @@ export function materializeJsonSchemaFragmentForTool(
     refStack.add(ref);
     try {
       const resolved = resolveRef(root, ref);
+      if (resolved === undefined || resolved === null) {
+        return {
+          description: `Spec incompleta: ref non risolto (${ref})`,
+          'x-omnia-unresolvedRef': ref,
+        };
+      }
       return materializeJsonSchemaFragmentForTool(root, resolved, refStack, depth + 1);
     } finally {
       refStack.delete(ref);
@@ -107,7 +122,14 @@ export function materializeJsonSchemaFragmentForTool(
       if (typeof m.description === 'string' && m.description && !desc) desc = m.description;
       if (typeof m.type === 'string' && m.type && !type) type = m.type;
       if (isRecord(m.properties)) {
-        Object.assign(propsAcc, m.properties as Record<string, unknown>);
+        for (const [pk, pv] of Object.entries(m.properties as Record<string, unknown>)) {
+          propsAcc[pk] = materializeJsonSchemaFragmentForTool(
+            root,
+            pv,
+            new Set(refStack),
+            depth + 1
+          );
+        }
       }
     }
     const out: Record<string, unknown> = {};
@@ -389,6 +411,17 @@ function mergeDescriptionMaps(target: Record<string, string>, source: Record<str
     if (!key || target[key]) continue;
     const t = v.trim();
     if (t) target[key] = t;
+  }
+}
+
+function mergeParamHintMaps(
+  target: Record<string, OpenApiParamPathHint>,
+  source: Record<string, OpenApiParamPathHint>
+): void {
+  for (const [k, v] of Object.entries(source)) {
+    const key = k.trim();
+    if (!key) continue;
+    target[key] = { ...(target[key] ?? {}), ...v };
   }
 }
 
@@ -723,7 +756,28 @@ export function matchOpenApiPath(
   return null;
 }
 
-/** Path della risorsa swagger/openapi (non è un path di operazione API). */
+/**
+ * Abbina un pathname “deploy” (es. Supabase `/functions/v1/.../next-window`) a una chiave
+ * OpenAPI relativa (es. `/next-window`) quando il suffisso coincide con un path dello spec.
+ * Preferisce la chiave più lunga in caso di più candidati.
+ */
+export function matchOpenApiPathBySuffix(
+  paths: Record<string, unknown> | undefined,
+  requestPathname: string
+): string | null {
+  if (!paths || typeof paths !== 'object') return null;
+  const norm = normalizePathname(requestPathname);
+  const candidates: string[] = [];
+  for (const p of Object.keys(paths)) {
+    const pk = normalizePathname(p);
+    if (!pk || pk === '/') continue;
+    const ends = norm === pk || (pk.startsWith('/') && norm.endsWith(pk));
+    if (ends) candidates.push(p);
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => normalizePathname(b).length - normalizePathname(a).length);
+  return candidates[0] ?? null;
+}
 function isOpenApiSpecResourcePathname(pathname: string): boolean {
   const lower = pathname.toLowerCase();
   if (lower.endsWith('.json')) {
@@ -916,6 +970,15 @@ export function pickOpenApiPathForReadApi(
       }
       return { pathKey: key, method, operationalPathMatched: true };
     }
+    const suffixKey = matchOpenApiPathBySuffix(paths, norm);
+    if (suffixKey) {
+      const item = paths[suffixKey];
+      const method = pickHttpMethodForPathItem(item, hint);
+      if (!method) {
+        return { error: `Il path ${suffixKey} non definisce operazioni HTTP riconosciute.` };
+      }
+      return { pathKey: suffixKey, method, operationalPathMatched: true };
+    }
   }
 
   let pathKeysForMethod = pathKeysForVerb(paths, m);
@@ -1000,6 +1063,9 @@ export function extractOperationFields(
   let sendBindingRules: OpenApiSendBindingRules | undefined;
 
   const inputJsonSchemaByApiName: Record<string, Record<string, unknown>> = {};
+  const outputJsonSchemaByApiName: Record<string, Record<string, unknown>> = {};
+  const inputParamHintsByPath: Record<string, OpenApiParamPathHint> = {};
+  const outputParamHintsByPath: Record<string, OpenApiParamPathHint> = {};
 
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
@@ -1013,6 +1079,12 @@ export function extractOperationFields(
         if (name) {
           requestParamNames.push(name);
           setFirstDescription(inputDescriptionsByApiName, name, p.description);
+          if (typeof p.description === 'string' && p.description.trim()) {
+            inputParamHintsByPath[name] = {
+              ...(inputParamHintsByPath[name] ?? {}),
+              description: p.description.trim(),
+            };
+          }
           if (isRecord(p.schema)) {
             setFirstUiKind(inputUiKindByApiName, name, doc, p.schema);
           } else if (p.type !== undefined || p.format !== undefined) {
@@ -1029,6 +1101,7 @@ export function extractOperationFields(
         const keys = schemaPropertyKeys(doc, p.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
+        mergeParamHintMaps(inputParamHintsByPath, schemaPropertyParamHintsByPath(doc, p.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, p.schema));
         mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, p.schema));
         mergeBindingPhaseMaps(bindingPhaseByApiName, schemaPropertyBindingPhases(doc, p.schema));
@@ -1067,6 +1140,7 @@ export function extractOperationFields(
         const keys = schemaPropertyKeys(doc, json.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
+        mergeParamHintMaps(inputParamHintsByPath, schemaPropertyParamHintsByPath(doc, json.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, json.schema));
         mergeEnumMaps(inputEnumByApiName, schemaPropertyEnums(doc, json.schema));
         mergeBindingPhaseMaps(bindingPhaseByApiName, schemaPropertyBindingPhases(doc, json.schema));
@@ -1094,12 +1168,22 @@ export function extractOperationFields(
         if (isRecord(json) && isRecord(json.schema)) {
           responsePropertyNames = schemaPropertyKeys(doc, json.schema);
           mergeDescriptionMaps(outputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
+          mergeParamHintMaps(outputParamHintsByPath, schemaPropertyParamHintsByPath(doc, json.schema));
+          mergeJsonSchemaFragmentMaps(
+            outputJsonSchemaByApiName,
+            schemaPropertyJsonSchemaFragmentsForTool(doc, json.schema)
+          );
         }
       }
       /** Swagger 2.0: schema direttamente sulla risposta */
       if (responsePropertyNames.length === 0 && isRecord(code.schema)) {
         responsePropertyNames = schemaPropertyKeys(doc, code.schema);
         mergeDescriptionMaps(outputDescriptionsByApiName, schemaPropertyDescriptions(doc, code.schema));
+        mergeParamHintMaps(outputParamHintsByPath, schemaPropertyParamHintsByPath(doc, code.schema));
+        mergeJsonSchemaFragmentMaps(
+          outputJsonSchemaByApiName,
+          schemaPropertyJsonSchemaFragmentsForTool(doc, code.schema)
+        );
       }
     }
   }
@@ -1118,6 +1202,9 @@ export function extractOperationFields(
     ...(sendBindingRules ? { sendBindingRules } : {}),
     ...(Object.keys(bindingPhaseByApiName).length > 0 ? { bindingPhaseByApiName } : {}),
     ...(Object.keys(inputJsonSchemaByApiName).length > 0 ? { inputJsonSchemaByApiName } : {}),
+    ...(Object.keys(outputJsonSchemaByApiName).length > 0 ? { outputJsonSchemaByApiName } : {}),
+    ...(Object.keys(inputParamHintsByPath).length > 0 ? { inputParamHintsByPath } : {}),
+    ...(Object.keys(outputParamHintsByPath).length > 0 ? { outputParamHintsByPath } : {}),
   };
 }
 
@@ -1262,7 +1349,29 @@ const OPENAPI_PROXY_PATH = '/api/openapi-proxy';
 export type FetchOpenApiDocumentOptions = {
   /** PortalConnection id — proxy aggiunge Authorization Bearer. */
   connectionId?: string;
+  /** Evita cache locale e rigenera SEND/RECEIVE da zero (Recupera specifiche). */
+  forceRefresh?: boolean;
 };
+
+/** Query param anti-cache su URL OpenAPI diretti (non altera path operativo sul proxy). */
+function openApiDirectFetchUrl(url: string, forceRefresh?: boolean): string {
+  if (!forceRefresh) return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.set('_omniaRefresh', String(Date.now()));
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+function openApiFetchInit(url: string, forceRefresh?: boolean): RequestInit {
+  return {
+    credentials: 'omit',
+    headers: openApiFetchHeadersForUrl(url),
+    ...(forceRefresh ? { cache: 'no-store' as RequestCache } : {}),
+  };
+}
 
 /**
  * FastAPI scarica lo spec lato server (niente CORS). Se il backend non risponde, si torna al fetch diretto.
@@ -1274,9 +1383,10 @@ async function tryFetchOpenApiViaBackendProxy(
   const qs = new URLSearchParams({ url: endpointUrl });
   const cid = (options?.connectionId || '').trim();
   if (cid) qs.set('connection_id', cid);
+  if (options?.forceRefresh) qs.set('_refresh', String(Date.now()));
   let res: Response;
   try {
-    res = await fetch(`${OPENAPI_PROXY_PATH}?${qs.toString()}`, { credentials: 'omit' });
+    res = await fetch(`${OPENAPI_PROXY_PATH}?${qs.toString()}`, openApiFetchInit(endpointUrl, options?.forceRefresh));
   } catch {
     return null;
   }
@@ -1341,7 +1451,8 @@ async function tryFetchOpenApiViaBackendProxy(
  * Fetch dal browser: stesso host o server con CORS abilitato.
  */
 async function fetchOpenApiDocumentDirect(
-  endpointUrl: string
+  endpointUrl: string,
+  options?: FetchOpenApiDocumentOptions
 ): Promise<{ doc: Record<string, unknown>; sourceUrl: string }> {
   try {
     new URL(endpointUrl);
@@ -1350,10 +1461,8 @@ async function fetchOpenApiDocumentDirect(
   }
 
   const tryParse = async (url: string): Promise<Record<string, unknown>> => {
-    const res = await fetch(url, {
-      credentials: 'omit',
-      headers: openApiFetchHeadersForUrl(url),
-    });
+    const fetchUrl = openApiDirectFetchUrl(url, options?.forceRefresh);
+    const res = await fetch(fetchUrl, openApiFetchInit(fetchUrl, options?.forceRefresh));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as unknown;
     if (!isRecord(data)) throw new Error('Risposta non JSON');
@@ -1393,7 +1502,7 @@ export async function fetchOpenApiDocument(
     return viaProxy;
   }
 
-  return fetchOpenApiDocumentDirect(trimmed);
+  return fetchOpenApiDocumentDirect(trimmed, options);
 }
 
 /**

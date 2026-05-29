@@ -150,7 +150,7 @@ export default defineConfig(({ mode }) => {
        */
       '/elevenlabs/agents': expressProxy(),
       '/elevenlabs/tools': expressProxy(),
-      '/elevenlabs/createAgent': { target: 'http://localhost:5000', changeOrigin: true },
+      '/elevenlabs/createAgent': expressProxy(),
       '/elevenlabs/startAgent': { target: 'http://localhost:5000', changeOrigin: true },
       '/elevenlabs/sendUserTurn': { target: 'http://localhost:5000', changeOrigin: true },
       '/elevenlabs/agentTurn': { target: 'http://localhost:5000', changeOrigin: true },

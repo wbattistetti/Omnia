@@ -43,12 +43,27 @@ import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalC
 import { normalizePortalOrigin } from '@domain/portalAuth/normalizePortalOrigin';
 import { resolvePortalConnectionForUrl } from '@domain/portalAuth/resolvePortalConnectionId';
 import { PORTAL_AUTH_REQUIRED_CODE } from '@domain/portalAuth/portalConnectionTypes';
+import { openApiFieldNamesFromTask } from '@reviewPortal/reviewBackendCallTaskWire';
 import { BackendAnalysisTab } from './BackendAnalysisTab';
 import { AgentBackendAnalysisProvider } from './AgentBackendAnalysisContext';
+import {
+  patchAgentBackendAnalysisBundle,
+  readAgentBackendAnalysisBundle,
+} from '@domain/backendAnalysis/agentBackendAnalysisBundle';
+import { exportBackendAnalysisV2Markdown } from '@domain/backendAnalysis/exportBackendAnalysisV2Markdown';
+import { pruneBackendAnalysisDocumentToManualCatalog } from '@domain/backendAnalysis/pruneBackendAnalysisToCatalog';
+import { hasCompletedFirstBackendAnalysis } from '@domain/backendAnalysis/backendAnalysisDisplayRules';
 import { ParameterAnalysisDetailPanel } from './ParameterAnalysisDetailPanel';
 import { BackendAnalysisEditScope } from './backendAnalysis/BackendAnalysisEditScope';
 import { BackendAnalysisDocumentActionsProvider } from './backendAnalysis/BackendAnalysisDocumentActionsContext';
+import { BackendCatalogEntryAnalysisPanel } from './backendAnalysis/BackendCatalogEntryAnalysisPanel';
+import { OpenApiCompileErrorsMonaco } from './backendAnalysis/OpenApiCompileErrorsMonaco';
+import { openApiCompileErrorsFromTask } from '@domain/openApi/openApiCompileErrorsFromTask';
 import { BackendsAnalysisSubTabs } from './backendAnalysis/BackendsAnalysisSubTabs';
+import { useOptionalAgentBackendAnalysis } from './AgentBackendAnalysisContext';
+import { useOptionalBackendAnalysisEdit } from './backendAnalysis/BackendAnalysisEditContext';
+import { catalogEntryNeedsIaAnalysis } from '@domain/backendAnalysis/mergeCatalogEntryAnalysis';
+import { catalogEntryAnalysisStaleAfterSpecRefresh } from '@domain/backendAnalysis/catalogEntryAnalysisStaleAfterSpecRefresh';
 
 /** Canvas del flow per «Aggiungi da canvas» (stesso contratto della vecchia BackendToolsSection). */
 type ConvaiBackendToolsDiscoveryContext = {
@@ -87,6 +102,8 @@ export function ManualBackendAccordion({
   embedInWorkspaceInspector = false,
   focusName,
   onNameFocused,
+  analysisPanelOpen = false,
+  onOpenAnalysisPanel,
 }: {
   entry: ManualCatalogEntry;
   expanded: boolean;
@@ -115,10 +132,14 @@ export function ManualBackendAccordion({
   embedInWorkspaceInspector?: boolean;
   focusName?: boolean;
   onNameFocused?: () => void;
+  analysisPanelOpen?: boolean;
+  onOpenAnalysisPanel?: () => void;
 }) {
   const [endpointRev, setEndpointRev] = React.useState(0);
+  const [openApiErrorsRev, setOpenApiErrorsRev] = React.useState(0);
   const [readBusy, setReadBusy] = React.useState(false);
   const [headerToolDescription, setHeaderToolDescription] = React.useState('');
+  const [descriptionAccordionOpen, setDescriptionAccordionOpen] = React.useState(false);
   /** Dopo un tentativo «Recupera specifiche» fallito: URL in rosso finché l’utente non modifica l’URL. */
   const [urlMarkedUnreachable, setUrlMarkedUnreachable] = React.useState(false);
   const urlInputRef = React.useRef<HTMLInputElement>(null);
@@ -127,6 +148,20 @@ export function ManualBackendAccordion({
   const showIdentity = showBackendIdentityFields(entry);
   /** Import: pannello SEND/RECEIVE solo dopo import validato; emulate: sempre se espanso. */
   const canShowParameterPanel = creationMode === 'emulate' || showIdentity;
+  const agentAnalysisCtx = useOptionalAgentBackendAnalysis();
+  const backendAnalysisEdit = useOptionalBackendAnalysisEdit();
+  const backendAnalysisRecord = agentAnalysisCtx?.document.backends[entry.id];
+  const entryNeedsIaAnalysis =
+    !backendAnalysisRecord || catalogEntryNeedsIaAnalysis(backendAnalysisRecord);
+  const liveTaskForStale = taskRepository.getTask(entry.id);
+  const entryAnalysisStale =
+    Boolean(backendAnalysisRecord) &&
+    catalogEntryAnalysisStaleAfterSpecRefresh(entry, backendAnalysisRecord!, liveTaskForStale);
+  const showRowAnalizza =
+    Boolean(agentAnalysisCtx) &&
+    canShowParameterPanel &&
+    (entryNeedsIaAnalysis || entryAnalysisStale);
+  const analizzaBusy = backendAnalysisEdit?.catalogEntryAnalysisBusyId === entry.id;
   const fieldCls = wizardUi ? 'text-sm' : 'text-xs';
   const fieldPad = wizardUi ? 'px-2 py-1' : 'px-2 py-1';
   const monoCls = wizardUi ? 'text-sm font-mono' : 'text-xs font-mono';
@@ -143,8 +178,24 @@ export function ManualBackendAccordion({
 
   const editorTask = React.useMemo(() => {
     if (!expanded || !canShowParameterPanel) return null;
-    return ensureManualCatalogBackendTask(entry, projectId);
-  }, [expanded, canShowParameterPanel, entry, projectId]);
+    ensureManualCatalogBackendTask(entry, projectId);
+    return taskRepository.getTask(entry.id);
+  }, [expanded, canShowParameterPanel, entry, projectId, endpointRev]);
+
+  const openApiCompileErrors = React.useMemo(() => {
+    void openApiErrorsRev;
+    void endpointRev;
+    return openApiCompileErrorsFromTask(taskRepository.getTask(entry.id));
+  }, [entry.id, endpointRev, openApiErrorsRev]);
+
+  React.useEffect(() => {
+    const onReadComplete = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ taskId?: string }>).detail;
+      if (detail?.taskId === entry.id) setOpenApiErrorsRev((r) => r + 1);
+    };
+    window.addEventListener('omnia:backend-read-api-complete', onReadComplete);
+    return () => window.removeEventListener('omnia:backend-read-api-complete', onReadComplete);
+  }, [entry.id]);
 
   const applyHeaderEndpoint = React.useCallback(
     (url: string, method: string) => {
@@ -191,9 +242,15 @@ export function ManualBackendAccordion({
   }, []);
 
   React.useLayoutEffect(() => {
-    if (!expanded || !showIdentity) return;
+    if (!expanded || !showIdentity || !descriptionAccordionOpen) return;
     resizeDescriptionTextarea();
-  }, [expanded, headerToolDescription, resizeDescriptionTextarea, showIdentity]);
+  }, [
+    expanded,
+    showIdentity,
+    descriptionAccordionOpen,
+    headerToolDescription,
+    resizeDescriptionTextarea,
+  ]);
 
   React.useEffect(() => {
     if (!focusName) return;
@@ -242,6 +299,7 @@ export function ManualBackendAccordion({
       const res = await runBackendCallReadApiForTask(entry.id, projectId, url, method, {
         openapiSpecUrl: spec || undefined,
         portalConnectionId,
+        forceRefresh: true,
       });
       if (!res.ok) {
         if (
@@ -278,17 +336,23 @@ export function ManualBackendAccordion({
       const derivedLabel =
         entry.label.trim() || deriveBackendLabelFromUrl(url);
       const toolDesc = String((tAfter as Task)?.backendToolDescription ?? '').trim();
+      const openApiFieldNames = openApiFieldNamesFromTask(tAfter);
+      const specMeta = (tAfter as Task & { backendCallSpecMeta?: BackendCallSpecMeta })
+        ?.backendCallSpecMeta;
       onPatch(entry.id, {
         importSpecRevealed: true,
         label: derivedLabel,
+        ...(openApiFieldNames ? { openApiFieldNames } : {}),
         frozenMeta: {
           ...entry.frozenMeta,
           importState: 'ok',
           lastImportedAt: new Date().toISOString(),
+          ...(specMeta?.contentHash ? { contentHash: specMeta.contentHash } : {}),
         },
       });
       if (toolDesc) setHeaderToolDescription(toolDesc);
       setEndpointRev((r) => r + 1);
+      setOpenApiErrorsRev((r) => r + 1);
       onExpandEntry(entry.id);
     } catch {
       setUrlMarkedUnreachable(true);
@@ -400,6 +464,28 @@ export function ManualBackendAccordion({
   const recuperaSpecTooltip =
     'Scarica OpenAPI dall’URL (swagger/openapi.json) e compila i parametri SEND e RECEIVE del backend.';
   const recuperaSpecBtnCls = `inline-flex ${barH} w-9 shrink-0 items-center justify-center rounded border border-violet-600/70 bg-violet-950/40 text-violet-100 hover:bg-violet-900/60 disabled:pointer-events-none disabled:opacity-45`;
+  const analizzaBtnCls = `inline-flex ${barH} shrink-0 items-center justify-center rounded border border-cyan-700/60 bg-cyan-950/40 px-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-900/50 disabled:pointer-events-none disabled:opacity-45`;
+  const handleOpenAnalizza = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canShowParameterPanel || !onOpenAnalysisPanel || analizzaBusy) return;
+    onExpandEntry(entry.id);
+    onOpenAnalysisPanel();
+    if ((entryNeedsIaAnalysis || entryAnalysisStale) && backendAnalysisEdit) {
+      void backendAnalysisEdit.runCatalogEntryAnalysis(entry.id, {
+        force:
+          entryAnalysisStale ||
+          backendAnalysisEdit.catalogEntryAnalysisErrorId === entry.id,
+      });
+    } else if (!entryNeedsIaAnalysis && !entryAnalysisStale && import.meta.env.DEV) {
+      console.warn(
+        '[Omnia BackendAnalysis] Analizza in riga: analisi già presente; usa l’accordion Analisi e «Rivedi modifiche».'
+      );
+    } else if (entryNeedsIaAnalysis && !backendAnalysisEdit && import.meta.env.DEV) {
+      console.warn(
+        '[Omnia BackendAnalysis] Analizza ignorato: BackendAnalysisEditProvider assente (provider/modello IA?).'
+      );
+    }
+  };
   const chevronWrapCls = `flex ${barH} w-9 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-800`;
   const headerPadX = wizardUi ? 'px-3' : 'px-2';
   /** URL: larghezza legata al contenuto dove supportato (field-sizing). */
@@ -455,6 +541,22 @@ export function ManualBackendAccordion({
                   title="Internal backend name (manual specs; no OpenAPI URL required)."
                   aria-label="Internal backend name"
                 />
+                {showRowAnalizza ? (
+                  <button
+                    type="button"
+                    disabled={analizzaBusy}
+                    onClick={handleOpenAnalizza}
+                    className={analizzaBtnCls}
+                    title="Avvia analisi IA parametri di questo backend"
+                    aria-label="Analizza backend"
+                  >
+                    {analizzaBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      'Analizza'
+                    )}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
@@ -513,6 +615,22 @@ export function ManualBackendAccordion({
                     <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
                   )}
                 </button>
+                {showRowAnalizza ? (
+                  <button
+                    type="button"
+                    disabled={analizzaBusy}
+                    onClick={handleOpenAnalizza}
+                    className={analizzaBtnCls}
+                    title="Avvia analisi IA parametri di questo backend"
+                    aria-label="Analizza backend"
+                  >
+                    {analizzaBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      'Analizza'
+                    )}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
@@ -597,6 +715,22 @@ export function ManualBackendAccordion({
                     <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
                   )}
                 </button>
+                {showRowAnalizza ? (
+                  <button
+                    type="button"
+                    disabled={analizzaBusy}
+                    onClick={handleOpenAnalizza}
+                    className={analizzaBtnCls}
+                    title="Avvia analisi IA parametri di questo backend"
+                    aria-label="Analizza backend"
+                  >
+                    {analizzaBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      'Analizza'
+                    )}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`${chevronWrapCls} shrink-0 text-red-400 hover:bg-slate-800/80 hover:text-red-300`}
@@ -634,23 +768,48 @@ export function ManualBackendAccordion({
               }`}
             >
               {showIdentity ? (
-                <div className="min-w-0 shrink-0">
-                  <textarea
-                    ref={descriptionTextareaRef}
-                    rows={1}
-                    spellCheck
-                    wrap="soft"
-                    aria-label="Descrizione backend (ConvAI / tool)"
-                    className={`box-border w-full min-h-0 max-h-[42vh] resize-y overflow-y-auto border-0 bg-transparent px-0 py-0 ${fieldCls} whitespace-pre-wrap break-words text-slate-100 shadow-none outline-none ring-0 transition-[height] duration-75 ease-out placeholder:text-slate-600 focus:ring-0 focus-visible:ring-0`}
-                    value={headerToolDescription}
-                    onChange={(e) => {
-                      applyHeaderToolDescription(e.target.value);
-                      requestAnimationFrame(() => resizeDescriptionTextarea());
-                    }}
-                    placeholder="Descrizione del backend (ConvAI / tool)…"
-                    title="Editable description of the backend; expands automatically when text grows."
-                  />
+                <div className="min-w-0 shrink-0 rounded-md border border-slate-800/80 bg-slate-950/30">
+                  <button
+                    type="button"
+                    className={`flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-slate-900/40 ${fieldCls} font-semibold text-slate-300`}
+                    onClick={() => setDescriptionAccordionOpen((v) => !v)}
+                    aria-expanded={descriptionAccordionOpen}
+                  >
+                    {descriptionAccordionOpen ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+                    )}
+                    Descrizione del backend
+                  </button>
+                  {descriptionAccordionOpen ? (
+                    <div className="border-t border-slate-800/80 px-2 pb-2 pt-1">
+                      <textarea
+                        ref={descriptionTextareaRef}
+                        rows={1}
+                        spellCheck
+                        wrap="soft"
+                        aria-label="Descrizione backend (ConvAI / tool)"
+                        className={`box-border w-full min-h-0 max-h-[42vh] resize-y overflow-y-auto border-0 bg-transparent px-0 py-0 ${fieldCls} whitespace-pre-wrap break-words text-slate-100 shadow-none outline-none ring-0 transition-[height] duration-75 ease-out placeholder:text-slate-600 focus:ring-0 focus-visible:ring-0`}
+                        value={headerToolDescription}
+                        onChange={(e) => {
+                          applyHeaderToolDescription(e.target.value);
+                          requestAnimationFrame(() => resizeDescriptionTextarea());
+                        }}
+                        placeholder="Descrizione del backend (ConvAI / tool)…"
+                        title="Descrizione per ConvAI / tool; l'altezza si adatta al testo."
+                      />
+                    </div>
+                  ) : null}
                 </div>
+              ) : null}
+
+              {expanded && canShowParameterPanel && openApiCompileErrors.length > 0 ? (
+                <OpenApiCompileErrorsMonaco errors={openApiCompileErrors} />
+              ) : null}
+
+              {expanded && canShowParameterPanel && agentAnalysisCtx ? (
+                <BackendCatalogEntryAnalysisPanel catalogEntryId={entry.id} />
               ) : null}
 
               {convaiToolToggle ? (
@@ -679,7 +838,7 @@ export function ManualBackendAccordion({
                   }
                 >
                   <EmbeddedBackendCallEditor
-                    key={editorTask.id}
+                    key={`${editorTask.id}-${endpointRev}`}
                     task={editorTask}
                     endpointExternalRevision={endpointRev}
                     hideEndpointRow={creationMode === 'import'}
@@ -734,6 +893,9 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   const pdUpdate = useProjectDataUpdate();
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(() => new Set());
   const [activeTab, setActiveTab] = React.useState<'catalog' | 'analysis'>('catalog');
+  const [analysisPanelEntryIds, setAnalysisPanelEntryIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
 
   const manualEntries = data?.backendCatalog?.manualEntries ?? [];
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;
@@ -829,11 +991,29 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
       kind: 'manual_catalog_crud',
       payload: { op: 'delete', entryId: id },
     });
-    mergeProject({
+    const agentTaskId = String(dockCtx?.instanceId ?? '').trim();
+    let catalogPatch: Partial<NonNullable<ProjectData['backendCatalog']>> = {
       manualEntries: manualEntriesNext,
       auditLog,
       catalogVersion: (data.backendCatalog.catalogVersion ?? 0) + 1,
-    });
+    };
+    if (agentTaskId) {
+      const bundle = readAgentBackendAnalysisBundle(data.backendCatalog, agentTaskId);
+      const prunedDoc = pruneBackendAnalysisDocumentToManualCatalog(
+        bundle.analysisDocument,
+        manualEntriesNext
+      );
+      const prunedMarkdown = exportBackendAnalysisV2Markdown(prunedDoc);
+      const catalogWithAnalysis = patchAgentBackendAnalysisBundle(data.backendCatalog, agentTaskId, {
+        analysisDocument: prunedDoc,
+        analysisMarkdown: prunedMarkdown,
+      });
+      catalogPatch = {
+        ...catalogPatch,
+        agentAnalysisByTaskId: catalogWithAnalysis.agentAnalysisByTaskId,
+      };
+    }
+    mergeProject(catalogPatch);
     setExpandedIds((s) => {
       const n = new Set(s);
       n.delete(id);
@@ -1007,7 +1187,17 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   };
   const agentTaskId = String(dockCtx?.instanceId ?? '').trim();
   const canShowAnalysisTab = Boolean(agentTaskId);
-  const showingCatalog = !canShowAnalysisTab || activeTab === 'catalog';
+  const analysisLaunched = hasCompletedFirstBackendAnalysis(
+    readAgentBackendAnalysisBundle(backendCatalog, agentTaskId).agentAnalysisBaselineMarkdown
+  );
+  const showGlobalAnalysisTab = canShowAnalysisTab && !analysisLaunched;
+  const showingCatalog =
+    !canShowAnalysisTab || !showGlobalAnalysisTab || activeTab === 'catalog';
+
+  React.useEffect(() => {
+    if (showGlobalAnalysisTab) return;
+    if (activeTab === 'analysis') setActiveTab('catalog');
+  }, [showGlobalAnalysisTab, activeTab]);
 
   const panelChrome = (
     <div
@@ -1035,9 +1225,20 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
       {canShowAnalysisTab ? (
         <BackendsAnalysisSubTabs
           showingCatalog={showingCatalog}
+          showGlobalAnalysisTab={showGlobalAnalysisTab}
           onSelectCatalog={() => setActiveTab('catalog')}
           onSelectAnalysis={() => setActiveTab('analysis')}
         />
+      ) : null}
+      {canShowAnalysisTab && analysisLaunched && !showGlobalAnalysisTab ? (
+        <p className="mb-2 shrink-0 text-[11px] leading-snug text-slate-500">
+          Analisi per backend: recupera le specifiche, poi «Analizza» sulla riga o nell’accordion Analisi.
+        </p>
+      ) : !analysisLaunched && canShowAnalysisTab && showingCatalog ? (
+        <p className="mb-2 shrink-0 text-[11px] leading-snug text-amber-100/85">
+          Recupera le specifiche, poi «Analizza» su ogni backend. Salva il progetto per conservare
+          l’analisi.
+        </p>
       ) : null}
       {showingCatalog ? (
         <div
@@ -1099,6 +1300,11 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
                   onPatch={patchManual}
                   onRemove={removeManual}
                   onExpandEntry={(id) => setExpandedIds((s) => new Set(s).add(id))}
+                  analysisPanelOpen={analysisPanelEntryIds.has(e.id)}
+                  onOpenAnalysisPanel={() => {
+                    setExpandedIds((s) => new Set(s).add(e.id));
+                    setAnalysisPanelEntryIds((s) => new Set(s).add(e.id));
+                  }}
                   convaiToolToggle={convaiToolToggle}
                   onPortalAuthRequired={handlePortalAuthRequired}
                   onSyncPortalConnection={mergePortalConnections}

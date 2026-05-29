@@ -11,6 +11,10 @@ import { DialogueTaskService } from '../../services/DialogueTaskService';
 import { taskTemplateService } from '../../services/TaskTemplateService';
 import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 import { buildMinimalAiAgentCompileTask } from '../TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import {
+  extractBackendCatalogFromProjectData,
+  extractManualCatalogBackendTaskIdsFromProjectData,
+} from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { FlowWorkspaceSnapshot } from '../../flows/FlowWorkspaceSnapshot';
 import { loadGlobalIaAgentConfig } from '../../utils/iaAgentRuntime/globalIaAgentPersistence';
 import {
@@ -239,6 +243,9 @@ export async function backendCompileFlowGraph(
 
   const allTasksWithTemplates = [...referencedInstances, ...referencedTemplates];
   const instanceRowCount = referencedInstances.length;
+  const manualCatalogBackendTaskIds = extractManualCatalogBackendTaskIdsFromProjectData(projectData);
+  const backendCatalog = extractBackendCatalogFromProjectData(projectData);
+  const compileBackendOpts = { manualCatalogBackendTaskIds, backendCatalog };
   const tasksForCompile = allTasksWithTemplates.map((t: Record<string, unknown>, index: number) => {
     if (t.type === TaskType.AIAgent) {
       const taskId = String(t.id ?? '').trim() || '(no-id)';
@@ -276,7 +283,7 @@ export async function backendCompileFlowGraph(
             : 0,
         hasAgentIaRuntimeOverrideKey: typeof compileInput.agentIaRuntimeOverrideJson === 'string',
       });
-      return buildMinimalAiAgentCompileTask(compileInput);
+      return buildMinimalAiAgentCompileTask(compileInput, compileBackendOpts);
     }
     if (t.type === TaskType.Subflow) {
       const fid = resolveSubflowFlowIdFromTask(t);

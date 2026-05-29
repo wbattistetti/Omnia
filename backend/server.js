@@ -71,6 +71,7 @@ const {
   reviewBackendAnalysisObservations,
   clarifyBackendAnalysisObservation,
   finalizeBackendAnalysis,
+  createSuggestedFeatureFromObservation,
   distillBackendAnalysisRuntime,
 } = require('./services/backendAnalysisService');
 const { generateUseCaseTestQuestions } = require('./services/useCaseTestQuestionsService');
@@ -7149,6 +7150,36 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         previousInterpretation:
           typeof previousInterpretation === 'string' ? previousInterpretation : '',
         userCorrection: typeof userCorrection === 'string' ? userCorrection : '',
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'backend_create_suggested_feature') {
+      const {
+        projectId,
+        agentTaskId,
+        referenceCorpus,
+        backendLabel,
+        designerQuestion,
+        confirmedInterpretation,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'BACKEND_CREATE_SUGGESTED_FEATURE',
+      });
+      const result = await createSuggestedFeatureFromObservation({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        agentTaskId: typeof agentTaskId === 'string' ? agentTaskId : '',
+        referenceCorpus: typeof referenceCorpus === 'string' ? referenceCorpus : '',
+        backendLabel: typeof backendLabel === 'string' ? backendLabel : '',
+        designerQuestion: typeof designerQuestion === 'string' ? designerQuestion : '',
+        confirmedInterpretation:
+          typeof confirmedInterpretation === 'string' ? confirmedInterpretation : '',
         provider,
         model,
         aiProviderService,

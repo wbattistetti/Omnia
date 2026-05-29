@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractElevenLabsUpstreamDetail,
   formatDeleteAgentHttpError,
   formatListAgentsHttpError,
 } from '../convaiProvisionHttpError';
@@ -36,6 +37,25 @@ describe('convaiProvisionHttpError', () => {
     });
   });
 
+  describe('extractElevenLabsUpstreamDetail', () => {
+    it('reads message from nested detail object', () => {
+      const msg = extractElevenLabsUpstreamDetail({
+        detail: {
+          type: 'not_found',
+          message: 'Document with id agent_x not found.',
+        },
+      });
+      expect(msg).toContain('not found');
+    });
+
+    it('joins validation detail array', () => {
+      const msg = extractElevenLabsUpstreamDetail({
+        detail: [{ loc: ['path', 'agent_id'], msg: 'field required', type: 'value_error' }],
+      });
+      expect(msg).toBe('field required');
+    });
+  });
+
   describe('formatDeleteAgentHttpError', () => {
     it('formats non-JSON body', () => {
       const res = fakeRes(404, 'Not Found');
@@ -50,13 +70,42 @@ describe('convaiProvisionHttpError', () => {
       const res = fakeRes(403, 'Forbidden');
       const body = JSON.stringify({ error: 'forbidden' });
       const msg = formatDeleteAgentHttpError(res, 'ag_z', body);
-      expect(msg).toBe('deleteAgent: forbidden');
+      expect(msg).toBe('deleteAgent: forbidden [agent ag_z]');
     });
 
-    it('includes detail when present', () => {
+    it('includes string detail when present', () => {
       const res = fakeRes(400, 'Bad Request');
       const body = JSON.stringify({ error: 'bad', detail: 'reason' });
-      expect(formatDeleteAgentHttpError(res, 'id', body)).toBe('deleteAgent: bad — reason');
+      expect(formatDeleteAgentHttpError(res, 'id', body)).toBe('deleteAgent: bad — reason [agent id]');
+    });
+
+    it('includes nested ElevenLabs detail.message (not only HTTP 400)', () => {
+      const res = fakeRes(400, 'Bad Request');
+      const body = JSON.stringify({
+        detail: {
+          type: 'invalid_request',
+          message: 'Agent cannot be deleted while assigned to a phone number.',
+        },
+      });
+      const msg = formatDeleteAgentHttpError(res, 'agent_abc', body);
+      expect(msg).toContain('phone number');
+      expect(msg).not.toBe('deleteAgent: HTTP 400 [agent agent_abc]');
+    });
+
+    it('parses proxy-wrapped upstream body in details', () => {
+      const res = fakeRes(400, 'Bad Request');
+      const upstream = JSON.stringify({
+        detail: { message: 'Permission denied for shared agent.' },
+      });
+      const body = JSON.stringify({
+        error: 'ElevenLabs agents/delete failed.',
+        statusCode: 400,
+        details: upstream,
+        phase: 'delete',
+      });
+      const msg = formatDeleteAgentHttpError(res, 'agent_abc', body);
+      expect(msg).toContain('Permission denied');
+      expect(msg).toContain('deleteAgent: ElevenLabs agents/delete failed.');
     });
   });
 });

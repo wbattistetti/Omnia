@@ -228,13 +228,14 @@ function withElevenLabsReprovisionWhenTaskEditorPromptChanged(
     agentPromptTargetPlatform: AgentPromptPlatformId;
     agentImmediateStart: boolean;
   },
-  manualCatalogBackendTaskIds?: readonly string[]
+  manualCatalogBackendTaskIds?: readonly string[],
+  backendCatalog?: import('@domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob
 ): IAAgentConfig {
   const hasConvaiSession = Boolean(getConvaiSessionBinding(taskBefore.id)?.agentId?.trim());
   if (iaRuntime.platform !== 'elevenlabs' || !hasConvaiSession) {
     return iaRuntime;
   }
-  const appendixOpts = { manualCatalogBackendTaskIds };
+  const appendixOpts = { manualCatalogBackendTaskIds, backendCatalog };
   const prevText = resolveElevenLabsAgentPromptFromTask(taskBefore, appendixOpts);
   const nextTask: Task = {
     ...taskBefore,
@@ -560,6 +561,7 @@ export function useAIAgentEditorController({
       documents: knowledgeBaseDocuments,
       backendCatalog: projectData?.backendCatalog,
       agentTaskId: instanceId,
+      manualCatalogBackendTaskIds,
     });
     const ir = buildAgentStructuredSections(
       {
@@ -581,6 +583,7 @@ export function useAIAgentEditorController({
     knowledgeBaseDocuments,
     projectData?.backendCatalog,
     instanceId,
+    manualCatalogBackendTaskIds,
   ]);
 
   const compiledPromptForTargetPlatform = React.useMemo(
@@ -1299,7 +1302,8 @@ export function useAIAgentEditorController({
           agentPromptTargetPlatform: normalizeAgentPromptPlatformId(agentPromptTargetPlatform),
           agentImmediateStart,
         },
-        manualCatalogBackendTaskIds
+        manualCatalogBackendTaskIds,
+        projectData?.backendCatalog
       );
     }
     const patch = buildAIAgentTaskPersistPatch({

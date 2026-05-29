@@ -24,6 +24,8 @@ import {
 
   backendHasParameterAnalysis,
 
+  backendHasSuggestedFeatures,
+
   backendHowToUseHasContent,
 
   filterProposedForDisplay,
@@ -31,6 +33,8 @@ import {
   systemPromptHasContent,
 
 } from '@domain/backendAnalysis/backendAnalysisDisplayRules';
+
+import { catalogEntryHasCompleteIaAnalysis } from '@domain/backendAnalysis/mergeCatalogEntryAnalysis';
 
 import { defaultIncompleteAgentSystemPrompt } from '@domain/backendAnalysis/backendAnalysisUxNormalize';
 import {
@@ -51,6 +55,9 @@ import { useAgentBackendAnalysis } from './AgentBackendAnalysisContext';
 import { BackendAnalysisAccordion } from './backendAnalysis/BackendAnalysisAccordion';
 
 import { BackendAnalysisSectionWithReview } from './backendAnalysis/BackendAnalysisSectionWithReview';
+import { BackendSuggestedFeaturesAccordion } from './backendAnalysis/BackendSuggestedFeaturesAccordion';
+import { paramDetailSectionText } from '@domain/backendAnalysis/backendAnalysisSectionBaselines';
+import { useBackendAnalysisEdit } from './backendAnalysis/BackendAnalysisEditContext';
 
 import { BackendParameterKindIcon } from './backendAnalysis/BackendParameterKindIcon';
 
@@ -81,13 +88,15 @@ function ParameterTable({
   editingParamKey,
   onToggleEditParam,
   onOpenInfo,
-  onSaveDetail,
+  getDetailEditorValue,
+  draftOnly = false,
 }: {
   backend: BackendAnalysisBackendRecord;
   editingParamKey: string | null;
   onToggleEditParam: (paramKey: string) => void;
   onOpenInfo: (row: BackendParameterAnalysisRecord) => void;
-  onSaveDetail: (paramKey: string, analysisDetailMarkdown: string) => void;
+  getDetailEditorValue: (row: BackendParameterAnalysisRecord) => string;
+  draftOnly?: boolean;
 }): React.ReactElement {
 
   const rows = Object.values(backend.parameters).sort((a, b) =>
@@ -141,11 +150,7 @@ function ParameterTable({
           {rows.map((row) => {
             const isEditing = editingParamKey === row.paramKey;
             const sectionId = paramDetailSectionId(backend.catalogEntryId, row.paramKey);
-            const preview =
-              row.analysisDetailMarkdown.trim() ||
-              row.descriptionShort ||
-              row.analysisSummary ||
-              '';
+            const preview = getDetailEditorValue(row);
 
             return (
               <React.Fragment key={row.paramKey}>
@@ -168,11 +173,7 @@ function ParameterTable({
                   </td>
                   <td className="px-2 py-1.5 text-slate-300">{row.role || '—'}</td>
                   <td className="px-2 py-1.5">
-                    {isEditing ? (
-                      <span className="text-[11px] text-emerald-300/80">Modifica in corso…</span>
-                    ) : (
-                      <ParameterDescriptionCell text={preview} />
-                    )}
+                    <ParameterDescriptionCell text={preview} />
                   </td>
                   <td className="px-1 py-1.5">
                     <div className="flex items-center justify-center gap-0.5">
@@ -203,10 +204,16 @@ function ParameterTable({
                 {isEditing ? (
                   <tr className="border-b border-emerald-900/40 bg-slate-950/80">
                     <td colSpan={6} className="px-2 py-2">
+                      <p className="mb-1.5 text-[11px] font-medium text-emerald-200/90">
+                        Editor analisi — parametro{' '}
+                        <code className="font-mono text-emerald-100">{row.paramKey}</code>
+                        . Dopo le modifiche usa «Rivedi modifiche» in alto.
+                      </p>
                       <BackendAnalysisSectionWithReview
                         sectionId={sectionId}
-                        value={row.analysisDetailMarkdown}
-                        onValueChange={(v) => onSaveDetail(row.paramKey, v)}
+                        value={preview}
+                        onValueChange={() => {}}
+                        draftOnly={draftOnly}
                         minHeightPx={220}
                         ariaLabel={`Analisi dettaglio ${row.paramKey}`}
                       />
@@ -229,11 +236,13 @@ function ParameterTable({
 
 
 
-function CatalogBackendAccordion({
+export function CatalogBackendAccordion({
 
   backend,
 
   defaultOpen,
+
+  embedInCatalog = false,
 
 }: {
 
@@ -241,112 +250,86 @@ function CatalogBackendAccordion({
 
   defaultOpen?: boolean;
 
+  /** Nel catalogo: mostra sempre editor analisi (anche senza testo IA). */
+  embedInCatalog?: boolean;
+
 }): React.ReactElement {
 
   const { persistDocument, document, editingParam, setEditingParam, openParameterPanel } =
     useAgentBackendAnalysis();
+  const edit = useBackendAnalysisEdit();
 
   const editingParamKey =
     editingParam?.catalogEntryId === backend.catalogEntryId ? editingParam.paramKey : null;
 
-  const saveParamDetail = React.useCallback(
-    (paramKey: string, analysisDetailMarkdown: string) => {
-      const param = backend.parameters[paramKey];
-      if (!param) return;
-      persistDocument({
-        ...document,
-        backends: {
-          ...document.backends,
-          [backend.catalogEntryId]: {
-            ...backend,
-            parameters: {
-              ...backend.parameters,
-              [paramKey]: { ...param, analysisDetailMarkdown },
-            },
-          },
-        },
-      });
+  const getDetailEditorValue = React.useCallback(
+    (row: BackendParameterAnalysisRecord) => {
+      const sid = paramDetailSectionId(backend.catalogEntryId, row.paramKey);
+      const fallback = paramDetailSectionText(row);
+      return embedInCatalog ? edit.getSectionDraft(sid, fallback) : fallback;
     },
-    [backend, document, persistDocument]
+    [backend.catalogEntryId, edit, embedInCatalog]
   );
 
   const chipCls = backendChipClassForCatalogEntry();
 
   const sectionId = howToUseSectionId(backend.catalogEntryId);
 
-  const showHowTo = backendHowToUseHasContent(backend);
+  const showHowTo = embedInCatalog || backendHowToUseHasContent(backend);
 
-  const showParams = backendHasParameterAnalysis(backend);
+  const showParams =
+    embedInCatalog
+      ? Object.keys(backend.parameters).length > 0
+      : backendHasParameterAnalysis(backend);
 
 
 
   const patchBackend = (patch: Partial<BackendAnalysisBackendRecord>) => {
-
+    if (embedInCatalog) return;
     persistDocument({
-
       ...document,
-
       backends: {
-
         ...document.backends,
-
         [backend.catalogEntryId]: { ...backend, ...patch },
-
       },
-
     });
-
   };
 
+  const howToEditorValue = embedInCatalog
+    ? edit.getSectionDraft(sectionId, backend.howToUseMarkdown)
+    : backend.howToUseMarkdown;
 
 
-  return (
 
-    <BackendAnalysisAccordion
-
-      level={1}
-
-      defaultOpen={defaultOpen}
-
-      title={<span className={chipCls}>{backend.displayLabel}</span>}
-
-    >
-
+  const analysisBody = (
+    <>
       {showHowTo ? (
-
         <div>
-
           <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-300/90">
-
             Come usare il backend
-
           </h4>
-
+          {embedInCatalog && !backend.howToUseMarkdown.trim() ? (
+            <p className="mb-2 text-[11px] leading-snug text-slate-500">
+              Vuoto: avvia «Analizza» sulla riga del backend o compila qui dopo l’analisi IA.
+            </p>
+          ) : null}
           <BackendAnalysisSectionWithReview
-
             sectionId={sectionId}
-
-            value={backend.howToUseMarkdown}
-
+            value={howToEditorValue}
             onValueChange={(v) => patchBackend({ howToUseMarkdown: v })}
-
+            draftOnly={embedInCatalog}
             ariaLabel={`Come usare ${backend.displayLabel}`}
-
           />
-
         </div>
-
       ) : null}
 
-
-
       {showParams ? (
-
         <BackendAnalysisAccordion level={2} title="Analisi parametro per parametro" defaultOpen>
-
           <ParameterTable
             backend={backend}
             editingParamKey={editingParamKey}
+            draftOnly={embedInCatalog}
+            getDetailEditorValue={getDetailEditorValue}
             onToggleEditParam={(paramKey) =>
               setEditingParam(
                 editingParamKey === paramKey
@@ -354,7 +337,6 @@ function CatalogBackendAccordion({
                   : { catalogEntryId: backend.catalogEntryId, paramKey }
               )
             }
-            onSaveDetail={saveParamDetail}
             onOpenInfo={(row) =>
               openParameterPanel({
                 catalogEntryId: backend.catalogEntryId,
@@ -363,15 +345,45 @@ function CatalogBackendAccordion({
               })
             }
           />
-
         </BackendAnalysisAccordion>
-
       ) : null}
-
-    </BackendAnalysisAccordion>
-
+    </>
   );
 
+  const editHighlight =
+    embedInCatalog && edit.highlightSuggestedFeature?.catalogEntryId === backend.catalogEntryId
+      ? edit.highlightSuggestedFeature.featureId
+      : null;
+
+  const showSuggestedFeatures =
+    embedInCatalog &&
+    (backendHasSuggestedFeatures(backend) ||
+      catalogEntryHasCompleteIaAnalysis(backend) ||
+      Boolean(editHighlight));
+
+  if (embedInCatalog) {
+    return (
+      <div className="space-y-3">
+        {analysisBody}
+        {showSuggestedFeatures ? (
+          <BackendSuggestedFeaturesAccordion
+            features={backend.suggestedFeatures ?? []}
+            highlightFeatureId={editHighlight}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <BackendAnalysisAccordion
+      level={1}
+      defaultOpen={defaultOpen}
+      title={<span className={chipCls}>{backend.displayLabel}</span>}
+    >
+      {analysisBody}
+    </BackendAnalysisAccordion>
+  );
 }
 
 

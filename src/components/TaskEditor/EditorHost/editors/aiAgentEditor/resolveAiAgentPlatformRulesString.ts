@@ -6,6 +6,7 @@
 
 import type { Task } from '@types/taskTypes';
 import { TaskType } from '@types/taskTypes';
+import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import { taskRepository } from '@services/TaskRepository';
 import {
   AgentPlatform,
@@ -13,6 +14,10 @@ import {
   compileAgentPromptToPlatform,
   normalizeAgentPromptPlatformId,
 } from '@domain/agentPrompt';
+import {
+  buildUseOfBackendsPromptSection,
+  mergeUseOfBackendsIntoContext,
+} from '@domain/backendAnalysis/buildUseOfBackendsPromptSection';
 import { deriveExportedToolName } from '@domain/iaAgentTools/backendToolDerivation';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { parsePersistedStructuredSectionsJson } from './structuredSectionPersist';
@@ -26,7 +31,7 @@ import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
 
 export type TaskLikeForPlatformRules = Pick<
   Task,
-  'agentStructuredSectionsJson' | 'agentPrompt' | 'agentPromptTargetPlatform'
+  'agentStructuredSectionsJson' | 'agentPrompt' | 'agentPromptTargetPlatform' | 'id'
 > & {
   /** When set, append constrained use-case catalog (motor schemas) to compiled rules. */
   agentUseCasesJson?: string | null;
@@ -57,16 +62,42 @@ function structuredSectionsToIr(task: TaskLikeForPlatformRules) {
 }
 
 /** VB compile `rules` + runtime preview: same shape as Prompt finale for selected platform. */
-export function resolveAiAgentPlatformRulesString(task: TaskLikeForPlatformRules): string {
-  const ir = structuredSectionsToIr(task);
+export type ResolvePlatformPromptOptions = {
+  manualCatalogBackendTaskIds?: readonly string[];
+  backendCatalog?: ProjectBackendCatalogBlob;
+};
+
+function applyUseOfBackendsToIrContext<T extends { context?: string }>(
+  ir: T,
+  task: TaskLikeForPlatformRules,
+  options?: ResolvePlatformPromptOptions
+): T {
+  const agentTaskId = String(task.id ?? '').trim();
+  if (!agentTaskId) return ir;
+  const section = buildUseOfBackendsPromptSection({
+    catalog: options?.backendCatalog,
+    agentTaskId,
+    manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+  });
+  if (!section) return ir;
+  return {
+    ...ir,
+    context: mergeUseOfBackendsIntoContext(ir.context ?? '', section),
+  };
+}
+
+/** VB compile `rules` + runtime preview: same shape as Prompt finale for selected platform. */
+export function resolveAiAgentPlatformRulesString(
+  task: TaskLikeForPlatformRules,
+  options?: ResolvePlatformPromptOptions
+): string {
+  const ir = applyUseOfBackendsToIrContext(structuredSectionsToIr(task), task, options);
   const platform = normalizeAgentPromptPlatformId(task.agentPromptTargetPlatform);
   const base = compileAgentPromptToPlatform(ir, platform);
   return appendVirtualAgentCatalogToRulesString(base, task.agentUseCasesJson ?? undefined);
 }
 
-export type ResolveElevenLabsAgentPromptOptions = {
-  manualCatalogBackendTaskIds?: readonly string[];
-};
+export type ResolveElevenLabsAgentPromptOptions = ResolvePlatformPromptOptions;
 
 function buildConvaiBackendToolContractAppendix(
   task: TaskLikeForPlatformRules & { agentIaRuntimeOverrideJson?: string | null },
@@ -118,16 +149,29 @@ export function resolveElevenLabsAgentPromptFromTask(
       ? ir.examples ?? ''
       : mergeUseCaseExamplesIntoExamplesBody(ir.examples ?? '', task);
   const irWithUseCases = { ...ir, examples: examplesMerged };
-  const appendix = buildConvaiBackendToolContractAppendix(task, options?.manualCatalogBackendTaskIds);
-  const ctxRaw = (ir.context ?? '').trim();
-  let context = ctxRaw;
-  if (appendix) {
-    if (!ctxRaw || /^missing$/i.test(ctxRaw)) {
-      context = appendix;
-    } else {
-      context = `${ctxRaw}\n\n${appendix}`;
+
+  let context = (irWithUseCases.context ?? '').trim();
+  const useOfBackends = buildUseOfBackendsPromptSection({
+    catalog: options?.backendCatalog,
+    agentTaskId: String(task.id ?? '').trim(),
+    manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+  });
+  if (useOfBackends) {
+    context = mergeUseOfBackendsIntoContext(context, useOfBackends);
+  } else {
+    const appendix = buildConvaiBackendToolContractAppendix(task, options?.manualCatalogBackendTaskIds);
+    if (appendix) {
+      if (!context || /^missing$/i.test(context)) {
+        context = appendix;
+      } else {
+        context = `${context}\n\n${appendix}`;
+      }
     }
   }
-  const elBase = compileAgentPromptToPlatform({ ...irWithUseCases, context }, AgentPlatform.ElevenLabs);
+
+  const elBase = compileAgentPromptToPlatform(
+    { ...irWithUseCases, context },
+    AgentPlatform.ElevenLabs
+  );
   return appendVirtualAgentCatalogToRulesString(elBase, task.agentUseCasesJson ?? undefined);
 }

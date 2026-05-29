@@ -108,6 +108,8 @@ export function MappingRowFields({
     const sendEnum =
       backendColumn === 'send' ? backendSendParamEnumByWireKey?.[wireMetaKey] : undefined;
     const apiRef = (entry.apiField || '').trim();
+    const valueEmpty = !entry.variableRefId?.trim() && !entry.literalConstant?.trim();
+    const valueTooltip = entry.openapiValueHint?.trim() || undefined;
     return (
       <div className="flex min-w-0 shrink-0 items-center gap-0">
         {showApiFields && !hideApiFieldColumn ? (
@@ -141,6 +143,8 @@ export function MappingRowFields({
             onCreateVariable={onCreateOutputVariable}
             onVariableCreated={onOutputVariableCreated}
             compactTypography={compactTypography}
+            valueTooltip={valueTooltip}
+            valueEmpty={valueEmpty}
           />
         ) : (
           <SendParameterValueEditor
@@ -153,6 +157,8 @@ export function MappingRowFields({
             openApiEnumValues={sendEnum}
             apiField={entry.apiField}
             compactTypography={compactTypography}
+            valueTooltip={valueTooltip}
+            valueEmpty={valueEmpty}
           />
         )}
       </div>

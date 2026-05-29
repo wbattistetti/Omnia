@@ -277,7 +277,10 @@ export function BackendMappingTreeNode({
   );
 
   const descTitle =
-    treeNode.entry?.fieldDescription?.trim() ? treeNode.entry.fieldDescription.trim() : undefined;
+    treeNode.entry?.fieldDescription?.trim() ||
+    treeNode.entry?.openapiDescriptionHint?.trim() ||
+    undefined;
+  const openApiFormatLabel = treeNode.entry?.openapiFormatLabel?.trim() || undefined;
 
   const receiveOptional =
     backendColumn === 'receive' && treeNode.entry && !isGroupOnly
@@ -400,6 +403,14 @@ export function BackendMappingTreeNode({
         textSizeClass={ROW_TEXT}
         hoverHighlight={Boolean(treeNode.entry && !isGroupOnly)}
       />
+      {openApiFormatLabel && !isGroupOnly ? (
+        <span
+          className={`shrink-0 whitespace-nowrap font-normal text-slate-500 ${ROW_TEXT}`}
+          title={`Formato OpenAPI: ${openApiFormatLabel}`}
+        >
+          ({openApiFormatLabel})
+        </span>
+      ) : null}
     </>
   );
 

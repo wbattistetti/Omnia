@@ -7,12 +7,24 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   isLoading?: boolean;
+  /** Classe z-index overlay (default `z-50`; usare `z-[70]` se annidato in dialog `z-[60]`). */
+  overlayClassName?: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, isLoading }) => {
+const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  footer,
+  isLoading,
+  overlayClassName = 'z-50',
+}) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div
+      className={`fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 ${overlayClassName}`}
+    >
       <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative">
         {isLoading && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-50 rounded-2xl">

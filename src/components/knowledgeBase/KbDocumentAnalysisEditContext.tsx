@@ -108,14 +108,24 @@ export function KbDocumentAnalysisEditProvider({
   const [sectionDrafts, setSectionDrafts] = React.useState<Record<string, string>>({});
   const [sectionHeadings, setSectionHeadings] = React.useState<Record<string, string>>({});
   const [pendingSectionIds, setPendingSectionIds] = React.useState<Set<string>>(() => new Set());
+  const lastSectionBaselinesJsonRef = React.useRef<string>('');
+  const autoBaselinesPersistedForRef = React.useRef<string | null>(null);
+
+  const docSectionBaselinesJson = React.useMemo(
+    () => JSON.stringify(doc.documentAnalysisSectionBaselines ?? {}),
+    [doc.documentAnalysisSectionBaselines]
+  );
 
   React.useEffect(() => {
+    if (lastSectionBaselinesJsonRef.current === docSectionBaselinesJson) return;
+    lastSectionBaselinesJsonRef.current = docSectionBaselinesJson;
     setSectionBaselines({ ...(doc.documentAnalysisSectionBaselines ?? {}) });
     setReviewsBySection({});
     setSectionDrafts({});
     setSectionHeadings({});
     setPendingSectionIds(new Set());
-  }, [doc.id, doc.documentAnalysisSectionBaselines]);
+    autoBaselinesPersistedForRef.current = null;
+  }, [doc.id, docSectionBaselinesJson, doc.documentAnalysisSectionBaselines]);
 
   const persistBaselines = React.useCallback(
     (next: Record<string, string>) => {
@@ -126,11 +136,20 @@ export function KbDocumentAnalysisEditProvider({
   );
 
   React.useEffect(() => {
+    const persistKey = `${doc.id}\0${doc.documentAnalysisMarkdown}`;
+    if (autoBaselinesPersistedForRef.current === persistKey) return;
+
     const stored = doc.documentAnalysisSectionBaselines ?? {};
     const hasStored = Object.values(stored).some((v) => v.trim());
-    if (hasStored) return;
+    if (hasStored) {
+      autoBaselinesPersistedForRef.current = persistKey;
+      return;
+    }
+
     const built = buildKbSectionBaselinesFromMarkdown(doc.documentAnalysisMarkdown);
     if (!Object.values(built).some((v) => v.trim())) return;
+
+    autoBaselinesPersistedForRef.current = persistKey;
     persistBaselines(built);
   }, [doc.id, doc.documentAnalysisMarkdown, doc.documentAnalysisSectionBaselines, persistBaselines]);
 
@@ -258,6 +277,11 @@ export function KbDocumentAnalysisEditProvider({
     }
   }, [pendingSectionIds, sectionDrafts, sectionHeadings, runSectionReview]);
 
+  const stableReviewsBySectionJson = React.useMemo(
+    () => JSON.stringify(reviewsBySection),
+    [reviewsBySection]
+  );
+
   const sectionReviewMeta = React.useMemo(() => {
     const entries = Object.entries(reviewsBySection).filter(
       (pair): pair is [string, KbAnalysisReviewSessionItem[]] => {
@@ -281,7 +305,7 @@ export function KbDocumentAnalysisEditProvider({
       if (allReviewItemsConfirmed(items)) readyToApplyCount += 1;
     }
     return { inReviewSession, allConfirmed, reviewHasDisagreement, readyToApplyCount };
-  }, [reviewsBySection]);
+  }, [stableReviewsBySectionJson]);
 
   const sectionToolbarPresentation = React.useMemo(
     () =>
@@ -293,7 +317,19 @@ export function KbDocumentAnalysisEditProvider({
         canRunReview,
         readyToApplyCount: sectionReviewMeta.readyToApplyCount,
       }),
-    [pendingSectionIds.size, sectionReviewMeta, canRunReview]
+    [
+      pendingSectionIds.size,
+      sectionReviewMeta.inReviewSession,
+      sectionReviewMeta.allConfirmed,
+      sectionReviewMeta.reviewHasDisagreement,
+      sectionReviewMeta.readyToApplyCount,
+      canRunReview,
+    ]
+  );
+
+  const sectionToolbarPresentationJson = React.useMemo(
+    () => JSON.stringify(sectionToolbarPresentation),
+    [sectionToolbarPresentation]
   );
 
   const applyConfirmedSections = React.useCallback(() => {
@@ -318,6 +354,15 @@ export function KbDocumentAnalysisEditProvider({
     runPendingSectionReviews,
     applyConfirmedSections,
   ]);
+
+  const runSectionToolbarActionRef = React.useRef(runSectionToolbarAction);
+  runSectionToolbarActionRef.current = runSectionToolbarAction;
+
+  const stableRunSectionToolbarAction = React.useCallback(() => {
+    runSectionToolbarActionRef.current();
+  }, []);
+
+  const lastSectionBridgeSnapshotRef = React.useRef<string | null>(null);
 
   const updateReviewItem = React.useCallback(
     (
@@ -447,17 +492,22 @@ export function KbDocumentAnalysisEditProvider({
   React.useEffect(() => {
     if (!onSectionToolbarBridgeChange) return;
     if (sectionToolbarPresentation.phase === 'hidden') {
+      if (lastSectionBridgeSnapshotRef.current === null) return;
+      lastSectionBridgeSnapshotRef.current = null;
       onSectionToolbarBridgeChange(null);
       return;
     }
+    if (lastSectionBridgeSnapshotRef.current === sectionToolbarPresentationJson) return;
+    lastSectionBridgeSnapshotRef.current = sectionToolbarPresentationJson;
     onSectionToolbarBridgeChange({
       presentation: sectionToolbarPresentation,
-      runAction: runSectionToolbarAction,
+      runAction: stableRunSectionToolbarAction,
     });
   }, [
     onSectionToolbarBridgeChange,
     sectionToolbarPresentation,
-    runSectionToolbarAction,
+    sectionToolbarPresentationJson,
+    stableRunSectionToolbarAction,
   ]);
 
   React.useEffect(() => {

@@ -467,6 +467,18 @@ export function AIAgentUseCaseComposer({
    * dell'effect anteprima → abort in loop e UI bloccata su «sto analizzando…».
    */
   const setCorrectionPreviewState = listToolbarCtx?.setCorrectionPreviewState ?? null;
+  const setToolbarSelectedUseCaseId = listToolbarCtx?.setToolbarSelectedUseCaseId ?? null;
+  const setTestQuestionStats = listToolbarCtx?.setTestQuestionStats ?? null;
+  const setPendingCorrectionsCount = listToolbarCtx?.setPendingCorrectionsCount ?? null;
+  const registerGenerateTestQuestionsHandler =
+    listToolbarCtx?.registerGenerateTestQuestionsHandler ?? null;
+  const registerCheckOverlapsHandler = listToolbarCtx?.registerCheckOverlapsHandler ?? null;
+  const registerConsolidateCorrectionsHandler =
+    listToolbarCtx?.registerConsolidateCorrectionsHandler ?? null;
+  const registerWizardListHandlers = listToolbarCtx?.registerHandlers ?? null;
+  const setOverlapReport = listToolbarCtx?.setOverlapReport ?? null;
+  const setTestQuestionsNotice = listToolbarCtx?.setTestQuestionsNotice ?? null;
+  const testQuestionLens = listToolbarCtx?.testQuestionLens ?? null;
   const pendingCorrectionsCountToolbar = listToolbarCtx?.pendingCorrectionsCount ?? 0;
   const correctionsDismissedToolbar = listToolbarCtx?.correctionsDismissed ?? false;
   /**
@@ -728,20 +740,32 @@ export function AIAgentUseCaseComposer({
   );
 
   React.useEffect(() => {
-    listToolbarCtx?.setToolbarSelectedUseCaseId(effectiveSelectedId);
-  }, [listToolbarCtx, effectiveSelectedId]);
+    setToolbarSelectedUseCaseId?.(effectiveSelectedId);
+  }, [setToolbarSelectedUseCaseId, effectiveSelectedId]);
+
+  const useCasesTestStatsSig = React.useMemo(
+    () =>
+      JSON.stringify(
+        useCases.map((uc) => ({
+          id: uc.id,
+          q: (uc.testQuestions ?? []).map((item) => `${item.id}:${item.status}`),
+        }))
+      ),
+    [useCases]
+  );
 
   React.useEffect(() => {
-    listToolbarCtx?.setTestQuestionStats(computeTestQuestionStats(useCases));
-  }, [listToolbarCtx, useCases]);
+    if (!setTestQuestionStats) return;
+    setTestQuestionStats(computeTestQuestionStats(useCases));
+  }, [setTestQuestionStats, useCasesTestStatsSig, useCases]);
 
   const effectiveSelectedIdRef = React.useRef(effectiveSelectedId);
   effectiveSelectedIdRef.current = effectiveSelectedId;
 
   React.useEffect(() => {
-    if (!listToolbarCtx || !editorDock) return;
+    if (!registerGenerateTestQuestionsHandler || !editorDock) return;
     const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-    listToolbarCtx.registerGenerateTestQuestionsHandler(
+    registerGenerateTestQuestionsHandler(
       buildGenerateTestQuestionsHandler({
         getUseCases: () => useCasesRef.current,
         setUseCases,
@@ -749,25 +773,32 @@ export function AIAgentUseCaseComposer({
         model,
         buildCallMeta: editorDock.buildCallMeta,
         outputLanguage,
-        onProgress: (message) => listToolbarCtx.setTestQuestionsNotice(message),
+        onProgress: (message) => setTestQuestionsNotice?.(message),
       })
     );
-    return () => listToolbarCtx.registerGenerateTestQuestionsHandler(null);
-  }, [listToolbarCtx, editorDock, provider, model, setUseCases]);
+    return () => registerGenerateTestQuestionsHandler(null);
+  }, [
+    registerGenerateTestQuestionsHandler,
+    editorDock,
+    provider,
+    model,
+    setUseCases,
+    setTestQuestionsNotice,
+  ]);
 
   React.useEffect(() => {
-    if (!listToolbarCtx || !editorDock) return;
-    listToolbarCtx.registerCheckOverlapsHandler(
+    if (!registerCheckOverlapsHandler || !editorDock) return;
+    registerCheckOverlapsHandler(
       buildCheckOverlapsHandler({
         getUseCases: () => useCasesRef.current,
         provider,
         model,
         buildCallMeta: editorDock.buildCallMeta,
-        onReport: (report) => listToolbarCtx.setOverlapReport(report),
+        onReport: (report) => setOverlapReport?.(report),
       })
     );
-    return () => listToolbarCtx.registerCheckOverlapsHandler(null);
-  }, [listToolbarCtx, editorDock, provider, model]);
+    return () => registerCheckOverlapsHandler(null);
+  }, [registerCheckOverlapsHandler, editorDock, provider, model, setOverlapReport]);
 
   const [overlapAnalyzingIds, setOverlapAnalyzingIds] = React.useState<ReadonlySet<string>>(
     () => new Set()
@@ -989,7 +1020,7 @@ export function AIAgentUseCaseComposer({
    * l'edit. Solo nella vista wizard (layout accordion inline): fuori wizard no-op.
    */
   React.useEffect(() => {
-    if (!listToolbarCtx) return;
+    if (!setPendingCorrectionsCount) return;
     const items = ordered.map((u) => {
       const ast = u.dialogue.find((t) => t.role === 'assistant');
       const committedAgent = ast?.content ?? '';
@@ -1005,9 +1036,9 @@ export function AIAgentUseCaseComposer({
         baseline: fieldBaselineByUseCaseId[u.id],
       };
     });
-    listToolbarCtx.setPendingCorrectionsCount(countSubstantialEditsAcrossUseCases(items));
+    setPendingCorrectionsCount(countSubstantialEditsAcrossUseCases(items));
   }, [
-    listToolbarCtx,
+    setPendingCorrectionsCount,
     ordered,
     useCases,
     fieldBaselineByUseCaseId,
@@ -1035,7 +1066,7 @@ export function AIAgentUseCaseComposer({
    * che li espone via `useCaseComposerError`.
    */
   React.useEffect(() => {
-    if (!listToolbarCtx) return;
+    if (!registerConsolidateCorrectionsHandler) return;
     /**
      * Handler **async**: il context wrappa la chiamata e gestisce il busy flag
      * (`triggerConsolidateCorrections` setta `correctionsBusy` true → false a
@@ -1132,12 +1163,12 @@ export function AIAgentUseCaseComposer({
         setAgentMsgEditUseCaseId(null);
       })();
     };
-    listToolbarCtx.registerConsolidateCorrectionsHandler(handler);
+    registerConsolidateCorrectionsHandler(handler);
     return () => {
-      listToolbarCtx.registerConsolidateCorrectionsHandler(null);
+      registerConsolidateCorrectionsHandler(null);
     };
   }, [
-    listToolbarCtx,
+    registerConsolidateCorrectionsHandler,
     ordered,
     fieldBaselineByUseCaseId,
     onCompleteCorrection,
@@ -1361,17 +1392,13 @@ export function AIAgentUseCaseComposer({
   }, []);
 
   React.useEffect(() => {
-    if (!listToolbarCtx) return;
-    listToolbarCtx.registerHandlers({
+    if (!registerWizardListHandlers) return;
+    registerWizardListHandlers({
       expandAll: expandAllWizardCards,
       collapseAll: collapseAllWizardCards,
     });
-    return () => listToolbarCtx.registerHandlers(null);
-  }, [
-    listToolbarCtx,
-    expandAllWizardCards,
-    collapseAllWizardCards,
-  ]);
+    return () => registerWizardListHandlers(null);
+  }, [registerWizardListHandlers, expandAllWizardCards, collapseAllWizardCards]);
 
   /** Filtro ricerca / lente Slot Mapping: espandi solo i match visibili. */
   React.useEffect(() => {
@@ -1390,8 +1417,7 @@ export function AIAgentUseCaseComposer({
 
   /** Cruscotto OK/KO: espande UC con match, evidenzia domande, scroll alla prima riga. */
   React.useEffect(() => {
-    if (!listToolbarCtx) return;
-    const lens = listToolbarCtx.testQuestionLens;
+    const lens = testQuestionLens;
     const prev = prevTestQuestionLensRef.current;
 
     if (!lens && prev) {
@@ -1433,7 +1459,7 @@ export function AIAgentUseCaseComposer({
         scheduleScrollExpandedUseCaseCardIntoView(anchor.useCaseId);
       });
     });
-  }, [listToolbarCtx?.testQuestionLens, useCases, orderedIds, listToolbarCtx, scheduleScrollExpandedUseCaseCardIntoView]);
+  }, [testQuestionLens, useCases, orderedIds, scheduleScrollExpandedUseCaseCardIntoView]);
 
   const commitTitleEdit = React.useCallback(
     (useCaseId: string) => {

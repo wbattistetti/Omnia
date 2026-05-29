@@ -26,6 +26,8 @@ export interface ReceiveVariableMenuProps {
   onCreateVariable?: (displayName: string) => { id: string; label: string } | null;
   onVariableCreated?: () => void;
   compactTypography?: boolean;
+  valueTooltip?: string;
+  valueEmpty?: boolean;
 }
 
 export function ReceiveVariableMenu({
@@ -37,6 +39,8 @@ export function ReceiveVariableMenu({
   onCreateVariable,
   onVariableCreated,
   compactTypography = false,
+  valueTooltip,
+  valueEmpty = false,
 }: ReceiveVariableMenuProps) {
   const textSm = compactTypography ? 'text-xs' : 'text-[10px]';
   const flowTr = useActiveFlowMetaTranslationsFlattened();
@@ -62,6 +66,13 @@ export function ReceiveVariableMenu({
   const skipNextDocumentCloseClickRef = useRef(false);
 
   const displayText = variableRefId ? menuLabel(variableRefId) : '';
+  const showEmpty = !variableRefId?.trim();
+  const emptyClass = 'text-slate-500 italic font-normal';
+  const receiveValueTitle =
+    valueTooltip?.trim() ||
+    (valueEmpty || showEmpty
+      ? 'Valore mancante: collega una variabile di output.'
+      : displayText || placeholder);
 
   useEffect(() => {
     if (!open) return;
@@ -100,9 +111,6 @@ export function ReceiveVariableMenu({
     if (!open) return;
     receiveSearchRef.current?.focus();
   }, [open]);
-
-  const showEmpty = !variableRefId?.trim();
-  const emptyClass = 'text-slate-500 italic font-normal';
 
   const pickExisting = useCallback(
     (varId: string) => {
@@ -209,10 +217,10 @@ export function ReceiveVariableMenu({
             setOpen(true);
             setDraft('');
           }}
-          title={displayText || placeholder}
+          title={receiveValueTitle}
         >
           <span className="truncate">
-            {showEmpty ? placeholder : displayText}
+            {showEmpty || valueEmpty ? 'Valore mancante' : displayText || placeholder}
           </span>
           <ChevronDown className="w-3 h-3 shrink-0 opacity-60" aria-hidden />
         </button>

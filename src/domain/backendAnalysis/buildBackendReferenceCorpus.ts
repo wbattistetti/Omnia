@@ -62,6 +62,8 @@ export function buildBackendReferenceCorpus(params: {
   tasks: readonly Task[];
   agentTaskSummary?: string;
   kbContextMarkdown?: string;
+  /** Se impostato, include solo quella voce catalogo (+ contesto agente/KB). */
+  catalogEntryId?: string;
 }): string {
   const parts: string[] = [];
   const summary = String(params.agentTaskSummary ?? '').trim();
@@ -73,7 +75,12 @@ export function buildBackendReferenceCorpus(params: {
     parts.push('', '--- Knowledge base context ---', kb.slice(0, 12_000));
   }
 
-  for (const entry of params.manualEntries) {
+  const catalogEntryId = String(params.catalogEntryId ?? '').trim();
+  const entries = catalogEntryId
+    ? params.manualEntries.filter((e) => e.id === catalogEntryId)
+    : params.manualEntries;
+
+  for (const entry of entries) {
     const label = entry.label?.trim() || entry.id;
     parts.push('', `--- Backend: ${label} ---`);
     parts.push(`URL: ${entry.endpointUrl}`);

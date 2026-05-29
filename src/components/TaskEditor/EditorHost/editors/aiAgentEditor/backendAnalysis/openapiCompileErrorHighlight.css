@@ -1,0 +1,7 @@
+/**
+ * Evidenziazione rossa errori compilazione OpenAPI in Monaco (tab Backends).
+ */
+.monaco-editor .omnia-openapi-compile-error-line {
+  color: #fecaca !important;
+  background-color: rgba(127, 29, 29, 0.45);
+}

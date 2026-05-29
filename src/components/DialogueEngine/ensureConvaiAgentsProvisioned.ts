@@ -37,6 +37,7 @@ import {
   isConvaiPayloadPreviewOnRunDebugEnabled,
   type ConvaiProvisionPayloadPreviewItem,
 } from '@utils/iaAgentRuntime/convaiPayloadPreviewEvents';
+import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
 import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
@@ -49,6 +50,8 @@ export type ConvaiProvisionContext = {
   nodeLabelByTaskId: Record<string, string>;
   /** Allinea payload/tool alla tab Backends (`backendCatalog.manualEntries`). */
   manualCatalogBackendTaskIds?: readonly string[];
+  /** Analisi backend per agente → sezione USE OF BACKENDS nel prompt ConvAI. */
+  backendCatalog?: ProjectBackendCatalogBlob;
   /** ProjectData.clientName / ownerClient — prefisso deterministico agent name. */
   omniaClientLabel?: string;
   /** ProjectData.version */
@@ -289,11 +292,13 @@ export async function ensureConvaiAgentsProvisioned(
       const manualCatalogBackendTaskIds = context.manualCatalogBackendTaskIds ?? [];
       const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(cfg, task, {
         manualCatalogBackendTaskIds,
+        backendCatalog: context.backendCatalog,
       });
       let provisionKey: string;
       try {
         provisionKey = buildConvaiProvisionKey(cfgForCreate, task, OMIT_TTS_ON_CREATE, {
           manualCatalogBackendTaskIds,
+          backendCatalog: context.backendCatalog,
         });
       } catch {
         failed.push(taskId);
@@ -388,6 +393,7 @@ export async function ensureConvaiAgentsProvisioned(
           omitTts: OMIT_TTS_ON_CREATE,
           task,
           manualCatalogBackendTaskIds,
+          backendCatalog: context.backendCatalog,
         })!;
       } catch (buildErr) {
         failed.push(taskId);

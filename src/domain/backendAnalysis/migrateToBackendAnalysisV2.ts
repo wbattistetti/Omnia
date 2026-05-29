@@ -19,15 +19,41 @@ import {
   normalizeBackendAnalysisUxDocument,
 } from './backendAnalysisUxNormalize';
 
+function normalizeSectionKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function endpointSlugFromUrl(url: string | undefined): string {
+  const raw = String(url ?? '').trim();
+  if (!raw) return '';
+  try {
+    const parts = new URL(raw).pathname.split('/').filter(Boolean);
+    return (parts[parts.length - 1] ?? '').toLowerCase();
+  } catch {
+    return (raw.split('/').filter(Boolean).pop() ?? '').toLowerCase();
+  }
+}
+
 function resolveEntryForSection(
   sectionName: string,
   entries: readonly ManualCatalogEntry[]
 ): ManualCatalogEntry | undefined {
   const lower = sectionName.toLowerCase();
-  return (
+  const sectionNorm = normalizeSectionKey(sectionName);
+  const direct =
     entries.find((e) => e.id.toLowerCase() === lower) ??
-    entries.find((e) => (e.label?.trim() || '').toLowerCase() === lower)
-  );
+    entries.find((e) => (e.label?.trim() || '').toLowerCase() === lower);
+  if (direct) return direct;
+
+  return entries.find((e) => {
+    const label = (e.label?.trim() || '').toLowerCase();
+    const labelNorm = normalizeSectionKey(label);
+    const slug = endpointSlugFromUrl(e.endpointUrl);
+    return (
+      (label && (lower.includes(label) || label.includes(lower) || sectionNorm.includes(labelNorm))) ||
+      (slug && (lower.includes(slug) || sectionNorm.includes(normalizeSectionKey(slug))))
+    );
+  });
 }
 
 function sectionsToBackendRecords(
@@ -70,6 +96,7 @@ function sectionsToBackendRecords(
       displayLabel: entry?.label?.trim() || section.name,
       howToUseMarkdown: '',
       parameters,
+      suggestedFeatures: [],
     };
   }
   return backends;
@@ -162,7 +189,19 @@ export function ensureCatalogBackendsOnDocument(
         legacyBackend?.generalNotesMarkdown?.trim() ||
         '',
       parameters,
+      suggestedFeatures: existing?.suggestedFeatures ?? [],
+      ...(existing?.analysisOpenApiContentHash !== undefined
+        ? { analysisOpenApiContentHash: existing.analysisOpenApiContentHash }
+        : {}),
     };
+  }
+
+  const allowed = new Set(manualEntries.map((e) => String(e.id ?? '').trim()).filter(Boolean));
+  for (const key of Object.keys(next.backends)) {
+    const entryId = String(next.backends[key]?.catalogEntryId ?? key).trim();
+    if (!allowed.has(entryId) && !allowed.has(key)) {
+      delete next.backends[key];
+    }
   }
 
   return normalizeBackendAnalysisUxDocument(next);

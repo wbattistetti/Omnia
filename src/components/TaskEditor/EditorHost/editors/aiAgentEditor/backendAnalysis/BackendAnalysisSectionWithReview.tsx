@@ -25,9 +25,13 @@ import {
   KB_ANALYSIS_STATUS_CLARIFYING,
   KB_ANALYSIS_STATUS_PENDING,
 } from '@domain/knowledgeBase/kbDocumentAnalysisGuide';
-import type { BackendAnalysisSectionId } from '@domain/backendAnalysis/backendAnalysisSectionIds';
+import {
+  catalogEntryIdFromSectionId,
+  type BackendAnalysisSectionId,
+} from '@domain/backendAnalysis/backendAnalysisSectionIds';
 import { BackendAnalysisEditableMonaco } from './BackendAnalysisEditableMonaco';
 import { useBackendAnalysisEdit } from './BackendAnalysisEditContext';
+import { useDebouncedCallback } from './useDebouncedCallback';
 
 const REVIEW_COPY = {
   panelTitle: BACKEND_ANALYSIS_REVIEW_PANEL_TITLE,
@@ -46,6 +50,13 @@ const REVIEW_COPY = {
   statusClarifying: KB_ANALYSIS_STATUS_CLARIFYING,
   userQuestionLabel: 'Domanda',
   userObservationLabel: 'Osservazione',
+  createSpecLabel: 'Crea nuove specifiche',
+  createSpecAlreadyLabel: 'Specifica già creata',
+  specExtensionChipLabel: 'Bozza IA (review)',
+  createSpecComposePrompt:
+    'Indica cosa formalizzare nella specifica API (modifica il testo, poi genera).',
+  createSpecComposeSubmit: 'Genera specifica',
+  createSpecComposeCancel: 'Annulla',
 };
 
 export type BackendAnalysisSectionWithReviewProps = {
@@ -55,6 +66,8 @@ export type BackendAnalysisSectionWithReviewProps = {
   ariaLabel: string;
   minHeightPx?: number;
   readOnly?: boolean;
+  /** Non persiste su catalogo a ogni tasto: solo bozza + revisione; persist su Aggiorna. */
+  draftOnly?: boolean;
 };
 
 export function BackendAnalysisSectionWithReview({
@@ -64,6 +77,7 @@ export function BackendAnalysisSectionWithReview({
   ariaLabel,
   minHeightPx = 140,
   readOnly = false,
+  draftOnly = false,
 }: BackendAnalysisSectionWithReviewProps): React.ReactElement {
   const edit = useBackendAnalysisEdit();
   const baseline = edit.getSectionBaseline(sectionId);
@@ -71,13 +85,33 @@ export function BackendAnalysisSectionWithReview({
   const hasReview = reviewItems !== null && reviewItems.length > 0;
   const allConfirmed = reviewItems ? allReviewItemsConfirmed(reviewItems) : false;
   const confirmedCount = reviewItems ? countConfirmedReviewItems(reviewItems) : 0;
+  const catalogEntryId = catalogEntryIdFromSectionId(sectionId);
+  const observationHasSuggestedFeature =
+    catalogEntryId != null
+      ? (observationId: string) =>
+          edit.hasSuggestedFeatureForObservation(catalogEntryId, observationId)
+      : undefined;
+  const onCreateSuggestedFeature =
+    catalogEntryId != null
+      ? (observationId: string, designerBrief: string) =>
+          void edit.onCreateSuggestedFeature(sectionId, observationId, designerBrief)
+      : undefined;
+
+  const notifyDraftDebounced = useDebouncedCallback((next: string) => {
+    if (!readOnly) edit.notifySectionDraftChange(sectionId, next);
+  }, 400);
 
   const handleChange = React.useCallback(
     (next: string) => {
+      if (draftOnly) {
+        edit.setSectionDraft(sectionId, next);
+        notifyDraftDebounced(next);
+        return;
+      }
       onValueChange(next);
       if (!readOnly) edit.notifySectionDraftChange(sectionId, next);
     },
-    [edit, onValueChange, readOnly, sectionId]
+    [draftOnly, edit, notifyDraftDebounced, onValueChange, readOnly, sectionId]
   );
 
   return (
@@ -114,6 +148,9 @@ export function BackendAnalysisSectionWithReview({
                 edit.onClarificationDraftChange(sectionId, id, text)
               }
               onSubmitClarification={(id) => void edit.onSubmitClarification(sectionId, id)}
+              onCreateSuggestedFeature={onCreateSuggestedFeature}
+              createSpecBusyObservationId={edit.createSpecBusyObservationId}
+              observationHasSuggestedFeature={observationHasSuggestedFeature}
             />
           </div>
           {allConfirmed ? (

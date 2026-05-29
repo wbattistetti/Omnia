@@ -15,6 +15,10 @@ import {
   type KbAnalysisObservation,
   type KbAnalysisObservationReview,
 } from './backendAnalysisWorkflow';
+import {
+  buildSuggestedFeatureFromApiPayload,
+  type BackendSuggestedFeatureRecord,
+} from './suggestedFeatureSpec';
 
 type BackendAnalysisApiBase = {
   projectId: string;
@@ -203,6 +207,39 @@ export async function clarifyBackendAnalysisObservation(
           ? body.excerptRationale.trim()
           : undefined;
       return { interpretation, documentExcerpt, excerptRationale };
+    }
+  );
+}
+
+export async function createSuggestedFeatureFromObservation(
+  params: BackendAnalysisApiBase & {
+    backendLabel: string;
+    designerQuestion: string;
+    confirmedInterpretation: string;
+  }
+): Promise<BackendSuggestedFeatureRecord> {
+  return postBackendAnalysisAction(
+    'backend_create_suggested_feature',
+    applyCallMeta(
+      {
+        projectId: params.projectId,
+        agentTaskId: params.agentTaskId,
+        referenceCorpus: params.referenceCorpus,
+        backendLabel: params.backendLabel,
+        designerQuestion: params.designerQuestion,
+        confirmedInterpretation: params.confirmedInterpretation,
+        provider: params.provider.toLowerCase(),
+        model: params.model,
+      },
+      params.callMeta,
+      params.purposeOverride ?? 'BACKEND_CREATE_SUGGESTED_FEATURE'
+    ),
+    (body) => {
+      const built = buildSuggestedFeatureFromApiPayload(body);
+      if (!built) {
+        throw new Error('Risposta non valida: specifica funzionalità vuota.');
+      }
+      return built;
     }
   );
 }

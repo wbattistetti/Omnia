@@ -684,8 +684,9 @@ function MappingTreeRow({
   }, [node.pathKey]);
 
   const descTitle =
-    variant === 'backend' && node.entry?.fieldDescription?.trim()
-      ? node.entry.fieldDescription.trim()
+    variant === 'backend' &&
+    (node.entry?.fieldDescription?.trim() || node.entry?.openapiDescriptionHint?.trim())
+      ? node.entry.fieldDescription?.trim() || node.entry.openapiDescriptionHint?.trim()
       : undefined;
 
   /** Solo descrizione campo: niente didascalie one-of nel tooltip (restano in compile / doc OpenAPI). */

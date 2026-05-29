@@ -22,12 +22,15 @@ const HIDDEN_TOOLBAR: KbAnalysisToolbarPresentation = {
 
 export type BackendsAnalysisSubTabsProps = {
   showingCatalog: boolean;
+  /** Tab analisi globale (prima analisi agente): nascosta dopo la prima analisi completata. */
+  showGlobalAnalysisTab: boolean;
   onSelectCatalog: () => void;
   onSelectAnalysis: () => void;
 };
 
 export function BackendsAnalysisSubTabs({
   showingCatalog,
+  showGlobalAnalysisTab,
   onSelectCatalog,
   onSelectAnalysis,
 }: BackendsAnalysisSubTabsProps): React.ReactElement {
@@ -42,7 +45,7 @@ export function BackendsAnalysisSubTabs({
     [docPresentation, sectionPresentation]
   );
 
-  const showAction = !showingCatalog && merged.executeVisible;
+  const showAction = showGlobalAnalysisTab && !showingCatalog && merged.executeVisible;
   const busy = Boolean(docActions?.busy || sectionEdit?.sectionReviewBusy);
 
   const onActionClick = React.useCallback(
@@ -72,44 +75,46 @@ export function BackendsAnalysisSubTabs({
         onClick={onSelectCatalog}
         className={
           'rounded px-2.5 py-1 text-xs font-semibold ' +
-          (showingCatalog
+          (showingCatalog || !showGlobalAnalysisTab
             ? 'bg-violet-800/70 text-violet-50'
             : 'text-slate-300 hover:bg-slate-800/70')
         }
       >
         Catalogo backend
       </button>
-      <div
-        className={
-          'inline-flex overflow-hidden rounded ' +
-          (!showingCatalog ? 'bg-violet-800/70' : '')
-        }
-      >
-        <button
-          type="button"
-          onClick={onSelectAnalysis}
+      {showGlobalAnalysisTab ? (
+        <div
           className={
-            'px-2.5 py-1 text-xs font-semibold ' +
-            (!showingCatalog
-              ? 'text-violet-50'
-              : 'text-slate-300 hover:bg-slate-800/70 rounded')
+            'inline-flex overflow-hidden rounded ' +
+            (!showingCatalog ? 'bg-violet-800/70' : '')
           }
         >
-          Analisi dei backend
-        </button>
-        {showAction ? (
           <button
             type="button"
-            disabled={!merged.executeEnabled || busy}
-            onClick={onActionClick}
-            title="Ciclo modifica: rivedi osservazioni, poi aggiorna l'analisi"
-            className={actionClass}
+            onClick={onSelectAnalysis}
+            className={
+              'px-2.5 py-1 text-xs font-semibold ' +
+              (!showingCatalog
+                ? 'text-violet-50'
+                : 'text-slate-300 hover:bg-slate-800/70 rounded')
+            }
           >
-            {busy ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : null}
-            {merged.executeLabel}
+            Analisi di tutti i backend
           </button>
-        ) : null}
-      </div>
+          {showAction ? (
+            <button
+              type="button"
+              disabled={!merged.executeEnabled || busy}
+              onClick={onActionClick}
+              title="Ciclo modifica: rivedi osservazioni, poi aggiorna l'analisi"
+              className={actionClass}
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : null}
+              {merged.executeLabel}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

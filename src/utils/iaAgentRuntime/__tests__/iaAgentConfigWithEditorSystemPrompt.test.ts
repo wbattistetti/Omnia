@@ -47,11 +47,18 @@ describe('iaAgentConfigWithEditorSystemPrompt', () => {
     expect(out.systemPrompt).toBe('Hello from editor');
   });
 
-  it('forwards manualCatalogBackendTaskIds to the resolver (options pass-through)', () => {
+  it('forwards manualCatalogBackendTaskIds and backendCatalog to the resolver (options pass-through)', () => {
     resolveElevenLabs.mockReturnValue('ok');
     const task = minimalTask({ agentPrompt: 'x' });
-    iaAgentConfigWithEditorSystemPrompt(baseCfg, task, { manualCatalogBackendTaskIds: ['a'] });
-    expect(resolveElevenLabs).toHaveBeenCalledWith(task, { manualCatalogBackendTaskIds: ['a'] });
+    const catalog = { catalogVersion: 1, manualEntries: [], auditLog: [] };
+    iaAgentConfigWithEditorSystemPrompt(baseCfg, task, {
+      manualCatalogBackendTaskIds: ['a'],
+      backendCatalog: catalog,
+    });
+    expect(resolveElevenLabs).toHaveBeenCalledWith(task, {
+      manualCatalogBackendTaskIds: ['a'],
+      backendCatalog: catalog,
+    });
   });
 
   it('leaves cfg unchanged when editor yields empty string', () => {

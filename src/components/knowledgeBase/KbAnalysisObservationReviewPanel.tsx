@@ -9,6 +9,9 @@ import {
   observationPresentationChipClassName,
   observationPresentationChipLabel,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
+import { observationSuggestsApiExtension } from '@domain/backendAnalysis/backendAnalysisObservationExtensions';
+import { buildDesignerSpecBrief } from '@domain/backendAnalysis/buildDesignerSpecBrief';
+import { SuggestedFeatureDraftPreview } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/backendAnalysis/SuggestedFeatureDraftPreview';
 import {
   KB_ANALYSIS_AGENT_RESPONSE_LABEL,
   KB_ANALYSIS_AGREE_NO,
@@ -45,6 +48,12 @@ export type KbAnalysisObservationReviewCopy = {
   statusClarifying: string;
   userQuestionLabel: string;
   userObservationLabel: string;
+  createSpecLabel: string;
+  createSpecAlreadyLabel: string;
+  specExtensionChipLabel: string;
+  createSpecComposePrompt: string;
+  createSpecComposeSubmit: string;
+  createSpecComposeCancel: string;
 };
 
 export const KB_ANALYSIS_OBSERVATION_REVIEW_DEFAULT_COPY: KbAnalysisObservationReviewCopy = {
@@ -64,6 +73,13 @@ export const KB_ANALYSIS_OBSERVATION_REVIEW_DEFAULT_COPY: KbAnalysisObservationR
   statusClarifying: KB_ANALYSIS_STATUS_CLARIFYING,
   userQuestionLabel: KB_ANALYSIS_USER_QUESTION_LABEL,
   userObservationLabel: KB_ANALYSIS_USER_OBSERVATION_LABEL,
+  createSpecLabel: 'Crea nuove specifiche',
+  createSpecAlreadyLabel: 'Specifica già creata',
+  specExtensionChipLabel: 'Bozza IA (review)',
+  createSpecComposePrompt:
+    'Indica cosa formalizzare nella specifica API (modifica il testo, poi genera).',
+  createSpecComposeSubmit: 'Genera specifica',
+  createSpecComposeCancel: 'Annulla',
 };
 
 export type KbAnalysisObservationReviewPanelProps = {
@@ -78,6 +94,10 @@ export type KbAnalysisObservationReviewPanelProps = {
   onDisagree: (observationId: string) => void;
   onClarificationDraftChange: (observationId: string, text: string) => void;
   onSubmitClarification: (observationId: string) => void;
+  /** Analisi backend: genera specifica da brief designer (solo se fornito dal parent). */
+  onCreateSuggestedFeature?: (observationId: string, designerBrief: string) => void;
+  createSpecBusyObservationId?: string | null;
+  observationHasSuggestedFeature?: (observationId: string) => boolean;
 };
 
 function statusBadgeLabel(
@@ -133,6 +153,9 @@ function ObservationAccordionItem({
   onDisagree,
   onClarificationDraftChange,
   onSubmitClarification,
+  onCreateSuggestedFeature,
+  createSpecBusyObservationId,
+  observationHasSuggestedFeature,
 }: {
   item: KbAnalysisReviewSessionItem;
   expanded: boolean;
@@ -145,14 +168,43 @@ function ObservationAccordionItem({
   onDisagree: (id: string) => void;
   onClarificationDraftChange: (id: string, text: string) => void;
   onSubmitClarification: (id: string) => void;
+  onCreateSuggestedFeature?: (observationId: string, designerBrief: string) => void;
+  createSpecBusyObservationId?: string | null;
+  observationHasSuggestedFeature?: (observationId: string) => boolean;
 }): React.ReactElement {
   const { observation, status, clarificationDraft } = item;
   const confirmed = status === 'confirmed';
   const clarifying = status === 'clarifying';
   const canInteract = !globalBusy && !confirmed;
+  const hasSpecExtension = observationSuggestsApiExtension(observation);
+  const specAlreadyAdded = observationHasSuggestedFeature?.(observation.id) ?? false;
+  const showCreateSpec = Boolean(onCreateSuggestedFeature);
+  const [composingSpec, setComposingSpec] = React.useState(false);
+  const [specBriefDraft, setSpecBriefDraft] = React.useState('');
+  const specBusy = createSpecBusyObservationId === observation.id;
   const headerId = `kb-obs-header-${observation.id}`;
   const panelId = `kb-obs-panel-${observation.id}`;
   const clarifyRef = React.useRef<HTMLTextAreaElement>(null);
+  const specBriefRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const openSpecComposer = React.useCallback(() => {
+    setSpecBriefDraft(buildDesignerSpecBrief(observation));
+    setComposingSpec(true);
+  }, [observation]);
+
+  React.useEffect(() => {
+    if (composingSpec && expanded) {
+      specBriefRef.current?.focus();
+    }
+  }, [composingSpec, expanded]);
+
+  React.useEffect(() => {
+    if (!expanded) setComposingSpec(false);
+  }, [expanded]);
+
+  React.useEffect(() => {
+    if (specAlreadyAdded) setComposingSpec(false);
+  }, [specAlreadyAdded]);
 
   React.useEffect(() => {
     if (clarifying && expanded) {
@@ -202,6 +254,11 @@ function ObservationAccordionItem({
           >
             {observationPresentationChipLabel(observation.presentation)}
           </span>
+          {hasSpecExtension ? (
+            <span className="inline-flex shrink-0 items-center rounded-md border border-amber-600/60 bg-amber-950/70 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100">
+              {copy.specExtensionChipLabel}
+            </span>
+          ) : null}
           <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-amber-50/95">
             {observation.text}
           </span>
@@ -229,20 +286,34 @@ function ObservationAccordionItem({
               </div>
             </div>
 
-            {!confirmed ? (
-              <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-700/40 pb-3">
-                <span className="text-xs font-medium text-slate-300">{copy.agreePrompt}</span>
-                <button
-                  type="button"
-                  disabled={!canInteract || busy}
-                  onClick={() => onAgree(observation.id)}
-                  className="rounded-md border border-emerald-700/70 bg-emerald-950/40 px-3 py-1 text-sm font-medium text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-50"
-                >
-                  {busy ? (
-                    <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" aria-hidden />
-                  ) : null}
-                  {copy.agreeYes}
-                </button>
+            <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-700/40 pb-3">
+              <span className="text-xs font-medium text-slate-300">{copy.agreePrompt}</span>
+              <button
+                type="button"
+                disabled={!canInteract || busy}
+                onClick={() => onAgree(observation.id)}
+                className="rounded-md border border-emerald-700/70 bg-emerald-950/40 px-3 py-1 text-sm font-medium text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-50"
+              >
+                {busy ? (
+                  <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : null}
+                {copy.agreeYes}
+              </button>
+              {showCreateSpec ? (
+                specAlreadyAdded ? (
+                  <span className="text-xs text-emerald-200/80">{copy.createSpecAlreadyLabel}</span>
+                ) : composingSpec ? null : (
+                  <button
+                    type="button"
+                    disabled={globalBusy || specBusy}
+                    onClick={openSpecComposer}
+                    className="rounded-md border border-amber-600/70 bg-amber-950/40 px-3 py-1 text-sm font-medium text-amber-100 hover:bg-amber-900/40 disabled:opacity-50"
+                  >
+                    {copy.createSpecLabel}
+                  </button>
+                )
+              ) : null}
+              {!confirmed ? (
                 <button
                   type="button"
                   disabled={!canInteract || busy}
@@ -251,7 +322,56 @@ function ObservationAccordionItem({
                 >
                   {copy.agreeNo}
                 </button>
+              ) : null}
+            </div>
+
+            {showCreateSpec && composingSpec && !specAlreadyAdded ? (
+              <div
+                className={`mb-3 space-y-2 rounded-md border border-amber-800/50 bg-amber-950/20 p-3 ${RESPONSE_CONTENT_INDENT}`}
+              >
+                <label
+                  htmlFor={`kb-spec-brief-${observation.id}`}
+                  className="block text-xs font-medium text-amber-100/95"
+                >
+                  {copy.createSpecComposePrompt}
+                </label>
+                <textarea
+                  ref={specBriefRef}
+                  id={`kb-spec-brief-${observation.id}`}
+                  value={specBriefDraft}
+                  disabled={specBusy}
+                  rows={8}
+                  onChange={(e) => setSpecBriefDraft(e.target.value)}
+                  className="w-full resize-y rounded-md border border-amber-800/60 bg-slate-950 px-2 py-1.5 font-mono text-xs leading-relaxed text-slate-100 placeholder:text-slate-500 focus:border-amber-500/60 focus:outline-none disabled:opacity-60"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={specBusy || !specBriefDraft.trim()}
+                    onClick={() =>
+                      onCreateSuggestedFeature?.(observation.id, specBriefDraft.trim())
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md border border-amber-600/70 bg-amber-950/50 px-3 py-1 text-sm font-medium text-amber-50 hover:bg-amber-900/40 disabled:opacity-50"
+                  >
+                    {specBusy ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : null}
+                    {copy.createSpecComposeSubmit}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={specBusy}
+                    onClick={() => setComposingSpec(false)}
+                    className="rounded-md border border-slate-600/80 bg-slate-900/60 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-800/80 disabled:opacity-50"
+                  >
+                    {copy.createSpecComposeCancel}
+                  </button>
+                </div>
               </div>
+            ) : null}
+
+            {hasSpecExtension && observation.suggestedFeatureDraft ? (
+              <SuggestedFeatureDraftPreview draft={observation.suggestedFeatureDraft} />
             ) : null}
           </div>
 
@@ -339,6 +459,9 @@ export function KbAnalysisObservationReviewPanel({
   onDisagree,
   onClarificationDraftChange,
   onSubmitClarification,
+  onCreateSuggestedFeature,
+  createSpecBusyObservationId = null,
+  observationHasSuggestedFeature,
 }: KbAnalysisObservationReviewPanelProps): React.ReactElement {
   const copy = copyProp ?? KB_ANALYSIS_OBSERVATION_REVIEW_DEFAULT_COPY;
   const surfaceBg = opaqueSurface ? 'bg-slate-950' : '';
@@ -397,6 +520,9 @@ export function KbAnalysisObservationReviewPanel({
             onDisagree={onDisagree}
             onClarificationDraftChange={onClarificationDraftChange}
             onSubmitClarification={onSubmitClarification}
+            onCreateSuggestedFeature={onCreateSuggestedFeature}
+            createSpecBusyObservationId={createSpecBusyObservationId}
+            observationHasSuggestedFeature={observationHasSuggestedFeature}
           />
         ))}
       </div>

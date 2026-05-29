@@ -20,7 +20,13 @@ import {
   Columns2,
   Calculator,
   FileJson,
+  Bot,
 } from 'lucide-react';
+import { SyncElevenLabsAgentDialog } from './aiAgentEditor/SyncElevenLabsAgentDialog';
+import { buildConvaiAgentSyncParams } from '@domain/convai/buildConvaiAgentSyncParams';
+import type { ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
+import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
+import { useOptionalAIAgentEditorDock } from './aiAgentEditor/AIAgentEditorDockContext';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
 import { useOptionalAgentBackendAnalysis } from './aiAgentEditor/AgentBackendAnalysisContext';
@@ -326,17 +332,31 @@ export default function BackendCallEditor({
     inputs: Record<string, string>;
     outputs: Record<string, string>;
   } | null>(null);
+  const [openapiParamHintsByPath, setOpenapiParamHintsByPath] = React.useState<{
+    inputs: Record<string, import('../../../../services/openApiParamPathHints').OpenApiParamPathHint>;
+    outputs: Record<string, import('../../../../services/openApiParamPathHints').OpenApiParamPathHint>;
+  } | null>(null);
 
   React.useEffect(() => {
     if (!instanceId) {
       setOpenapiDescriptionSnapshots(null);
+      setOpenapiParamHintsByPath(null);
       return;
     }
     const t = taskRepository.getTask(instanceId) as
-      | { backendCallSpecMeta?: { openapiDescriptionSnapshots?: { inputs: Record<string, string>; outputs: Record<string, string> } } }
+      | {
+          backendCallSpecMeta?: {
+            openapiDescriptionSnapshots?: { inputs: Record<string, string>; outputs: Record<string, string> };
+            openapiParamHintsByPath?: {
+              inputs: Record<string, import('../../../../services/openApiParamPathHints').OpenApiParamPathHint>;
+              outputs: Record<string, import('../../../../services/openApiParamPathHints').OpenApiParamPathHint>;
+            };
+          };
+        }
       | null;
-    const snap = t?.backendCallSpecMeta?.openapiDescriptionSnapshots;
-    setOpenapiDescriptionSnapshots(snap ?? null);
+    const meta = t?.backendCallSpecMeta;
+    setOpenapiDescriptionSnapshots(meta?.openapiDescriptionSnapshots ?? null);
+    setOpenapiParamHintsByPath(meta?.openapiParamHintsByPath ?? null);
   }, [instanceId]);
 
   // Show/hide API column (tree: Campo API inputs)
@@ -564,6 +584,58 @@ export default function BackendCallEditor({
     open: false,
     origin: '',
   });
+  const [syncElevenLabsOpen, setSyncElevenLabsOpen] = React.useState(false);
+  const dockCtx = useOptionalAIAgentEditorDock();
+
+  const manualCatalogBackendTaskIds = React.useMemo(
+    () => (projectData?.backendCatalog?.manualEntries ?? []).map((e) => e.id),
+    [projectData?.backendCatalog?.manualEntries]
+  );
+
+  const convaiSyncParams = React.useMemo(() => {
+    const agentTaskId = String(dockCtx?.instanceId ?? '').trim();
+    if (!agentTaskId || !dockCtx) return null;
+    return buildConvaiAgentSyncParams({
+      agentTaskId,
+      projectId: projectId ?? projectData?.projectId ?? undefined,
+      useCases: dockCtx.useCases,
+      conversationalRules: dockCtx.conversationalRules,
+      includeLog: dockCtx.agentLogUseCase,
+      agentBehavior: dockCtx.agentBehavior,
+      catalogFormat: DEFAULT_CONVERSATIONAL_CATALOG_FORMAT,
+      backendCatalog: projectData?.backendCatalog,
+      manualCatalogBackendTaskIds,
+      knowledgeBaseDocuments: dockCtx.knowledgeBaseDocuments,
+    });
+  }, [dockCtx, manualCatalogBackendTaskIds, projectData?.backendCatalog]);
+
+  const persistElevenLabsSyncResult = React.useCallback(
+    (result: ConvaiAgentSyncResult) => {
+      if (!projectData || !pdUpdate?.updateDataDirectly) return;
+      const catalog = projectData.backendCatalog;
+      const prev = catalog?.manualEntries ?? [];
+      if (prev.length === 0) return;
+      const toolByBackend = new Map(result.tools.map((t) => [t.backendTaskId, t.toolId]));
+      const next = prev.map((e) => {
+        const toolId = toolByBackend.get(e.id);
+        return {
+          ...e,
+          elevenLabsConvaiAgentId: result.agentId,
+          ...(toolId ? { elevenLabsConvaiToolId: toolId } : {}),
+        };
+      });
+      pdUpdate.updateDataDirectly({
+        ...projectData,
+        backendCatalog: {
+          schemaVersion: 1,
+          manualEntries: next,
+          auditLog: catalog?.auditLog ?? [],
+          catalogVersion: (catalog?.catalogVersion ?? 0) + 1,
+        },
+      });
+    },
+    [pdUpdate, projectData]
+  );
 
   const mergePortalConnections = React.useCallback(
     (meta: PortalConnectionMeta) => {
@@ -764,6 +836,7 @@ export default function BackendCallEditor({
       const result = await runBackendCallReadApiForTask(instanceId, projectId, op, config.endpoint.method, {
         openapiSpecUrl: spec || undefined,
         portalConnectionId: resolvePortalConnectionId(),
+        forceRefresh: true,
       });
       if (!result.ok) {
         if (result.portalAuth?.origin) {
@@ -782,15 +855,10 @@ export default function BackendCallEditor({
       });
       const storedTask = taskRepository.getTask(instanceId);
       if (storedTask) {
+        const meta = (storedTask as Task).backendCallSpecMeta;
+        setOpenapiParamHintsByPath(meta?.openapiParamHintsByPath ?? null);
         setConfig(buildConfigFromTask(storedTask));
         setBackendToolDescription(String((storedTask as Task).backendToolDescription ?? ''));
-      }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent<{ taskId: string }>('omnia:backend-read-api-complete', {
-            detail: { taskId: instanceId },
-          })
-        );
       }
     } finally {
       setReadApiBusy(false);
@@ -935,9 +1003,10 @@ export default function BackendCallEditor({
       enrichBackendMappingEntriesOpenApi(
         backendInputsToMappingEntries(config.inputs, knownBackendVariableIdSet),
         'send',
-        openapiDescriptionSnapshots
+        openapiDescriptionSnapshots,
+        openapiParamHintsByPath?.inputs
       ),
-    [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
+    [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots, openapiParamHintsByPath]
   );
 
   /** BookFromAgenda: cartella Session (solo UI); persistenza senza prefisso tramite adapter. */
@@ -1224,9 +1293,10 @@ export default function BackendCallEditor({
       enrichBackendMappingEntriesOpenApi(
         backendOutputsToMappingEntries(config.outputs, knownBackendVariableIdSet),
         'receive',
-        openapiDescriptionSnapshots
+        openapiDescriptionSnapshots,
+        openapiParamHintsByPath?.outputs
       ),
-    [config.outputs, knownBackendVariableIdSet, openapiDescriptionSnapshots]
+    [config.outputs, knownBackendVariableIdSet, openapiDescriptionSnapshots, openapiParamHintsByPath]
   );
 
   /** Fallback Test API: solo letterali SEND (variabile di flusso → valorizza la cella mock o runtime). */
@@ -1354,7 +1424,8 @@ export default function BackendCallEditor({
           enrichBackendMappingEntriesOpenApi(
             backendInputsToMappingEntries(prev.inputs, knownBackendVariableIdSet),
             'send',
-            openapiDescriptionSnapshots
+            openapiDescriptionSnapshots,
+            openapiParamHintsByPath?.inputs
           )
         );
         const nextTable = ensureMockTablePrefilledFromSendLiterals(
@@ -1397,17 +1468,19 @@ export default function BackendCallEditor({
   /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
   const inputTooltipByInternalName = React.useMemo(() => {
     const out: Record<string, string> = {};
+    const hints = openapiParamHintsByPath?.inputs ?? {};
     for (const inp of config.inputs || []) {
       const internal = inp.internalName?.trim();
       if (!internal) continue;
       const api = inp.apiParam?.trim();
       const local = inp.fieldDescription?.trim();
       const snap = api ? openapiDescriptionSnapshots?.inputs?.[api]?.trim() : undefined;
-      const desc = local || snap || '';
+      const pathHint = hints[internal] ?? (api ? hints[api] : undefined);
+      const desc = local || pathHint?.description?.trim() || snap || '';
       out[internal] = desc ? `${desc}. Clicca per editare.` : 'Clicca per editare.';
     }
     return out;
-  }, [config.inputs, openapiDescriptionSnapshots]);
+  }, [config.inputs, openapiDescriptionSnapshots, openapiParamHintsByPath]);
 
   const outputValueTooltipByInternalName = React.useMemo(() => {
     const out: Record<string, string> = {};
@@ -1550,6 +1623,18 @@ export default function BackendCallEditor({
         visible: readApiToolbarVisible,
       },
       {
+        buttonId: 'publish-elevenlabs',
+        icon: <Bot size={16} />,
+        label: 'Aggiorna agente',
+        onClick: () => setSyncElevenLabsOpen(true),
+        title:
+          'Sincronizza su ElevenLabs prompt completo, webhook catalogo e documenti KB (dal task AI Agent)',
+        visible:
+          operationalUrlNonEmpty &&
+          Boolean(String(backendToolDescription ?? '').trim()) &&
+          Boolean(convaiSyncParams),
+      },
+      {
         buttonId: 'test-backend',
         icon: <FlaskConical size={16} />,
         label: bulkApiTestBusy ? 'Testing…' : 'Test Backend',
@@ -1632,6 +1717,8 @@ export default function BackendCallEditor({
     advancementEditorWireKey,
     embeddedSignatureSubToolbarOpen,
     embeddedCloseSignatureToolbar,
+    backendToolDescription,
+    convaiSyncParams,
   ]);
 
   // Update toolbar when it changes (for docking mode)
@@ -1667,6 +1754,13 @@ export default function BackendCallEditor({
   return (
     <div className="h-full bg-slate-900 flex flex-col min-h-0" style={{ color: '#e5e7eb' }}>
       {/* ✅ ARCHITECTURE: No local header - icon/title/toolbar are injected into main header */}
+
+      <SyncElevenLabsAgentDialog
+        open={syncElevenLabsOpen}
+        onClose={() => setSyncElevenLabsOpen(false)}
+        syncParams={convaiSyncParams}
+        onSynced={persistElevenLabsSyncResult}
+      />
 
       <div
         className={

@@ -1,6 +1,22 @@
 {
   "items": [
     {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.8-fast",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 50,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.8-fast"
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.8",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.8"
+    },
+    {
       "providerId": "google",
       "modelId": "gemini-3.5-flash",
       "inputUsdPer1M": 1.5,
@@ -834,22 +850,38 @@
     },
     {
       "providerId": "openai",
-      "modelId": "gpt-4",
-      "inputUsdPer1M": 30,
-      "outputUsdPer1M": 60,
-      "contextLength": 8191,
-      "rawId": "openai/gpt-4"
-    },
-    {
-      "providerId": "openai",
       "modelId": "gpt-3.5-turbo",
       "inputUsdPer1M": 0.5,
       "outputUsdPer1M": 1.5,
       "contextLength": 16385,
       "rawId": "openai/gpt-3.5-turbo"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 60,
+      "contextLength": 8191,
+      "rawId": "openai/gpt-4"
     }
   ],
   "byKey": {
+    "anthropic::claude-opus-4.8-fast": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.8-fast",
+      "inputUsdPer1M": 10,
+      "outputUsdPer1M": 50,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.8-fast"
+    },
+    "anthropic::claude-opus-4.8": {
+      "providerId": "anthropic",
+      "modelId": "claude-opus-4.8",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 25,
+      "contextLength": 1000000,
+      "rawId": "anthropic/claude-opus-4.8"
+    },
     "google::gemini-3.5-flash": {
       "providerId": "google",
       "modelId": "gemini-3.5-flash",
@@ -1682,14 +1714,6 @@
       "contextLength": 8191,
       "rawId": "openai/gpt-4-0314"
     },
-    "openai::gpt-4": {
-      "providerId": "openai",
-      "modelId": "gpt-4",
-      "inputUsdPer1M": 30,
-      "outputUsdPer1M": 60,
-      "contextLength": 8191,
-      "rawId": "openai/gpt-4"
-    },
     "openai::gpt-3.5-turbo": {
       "providerId": "openai",
       "modelId": "gpt-3.5-turbo",
@@ -1697,11 +1721,19 @@
       "outputUsdPer1M": 1.5,
       "contextLength": 16385,
       "rawId": "openai/gpt-3.5-turbo"
+    },
+    "openai::gpt-4": {
+      "providerId": "openai",
+      "modelId": "gpt-4",
+      "inputUsdPer1M": 30,
+      "outputUsdPer1M": 60,
+      "contextLength": 8191,
+      "rawId": "openai/gpt-4"
     }
   },
   "meta": {
     "source": "openrouter",
-    "count": 106,
-    "updatedAt": "2026-05-27T18:50:26.941Z"
+    "count": 108,
+    "updatedAt": "2026-05-29T05:19:09.907Z"
   }
 }

@@ -68,6 +68,8 @@ export const AI_CALL_PURPOSE = {
   BACKEND_FINALIZE_ANALYSIS: 'BACKEND_FINALIZE_ANALYSIS',
   /** Chiarimento risposta su osservazione analisi backend. */
   BACKEND_CLARIFY_ANALYSIS_OBSERVATION: 'BACKEND_CLARIFY_ANALYSIS_OBSERVATION',
+  /** Specifica funzionalità da aggiungere a backend esistente (post-review). */
+  BACKEND_CREATE_SUGGESTED_FEATURE: 'BACKEND_CREATE_SUGGESTED_FEATURE',
   /** Distillazione estrema analisi KB/backend per contesto use case e runtime. */
   RUNTIME_ANALYSIS_DISTILL: 'RUNTIME_ANALYSIS_DISTILL',
   /** Domande di test semantiche per validazione use case. */
@@ -125,6 +127,8 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.BACKEND_FINALIZE_ANALYSIS]: 'Analisi backend concordata',
   [AI_CALL_PURPOSE.BACKEND_CLARIFY_ANALYSIS_OBSERVATION]:
     'Chiarimento risposta su osservazione analisi backend',
+  [AI_CALL_PURPOSE.BACKEND_CREATE_SUGGESTED_FEATURE]:
+    'Specifica funzionalità da aggiungere al backend',
   [AI_CALL_PURPOSE.RUNTIME_ANALYSIS_DISTILL]:
     'Distillazione estrema analisi KB/backend per runtime',
   [AI_CALL_PURPOSE.USE_CASE_GENERATE_TEST_QUESTIONS]:

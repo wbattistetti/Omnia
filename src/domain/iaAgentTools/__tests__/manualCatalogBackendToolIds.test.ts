@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  extractBackendCatalogFromProjectData,
   extractManualCatalogBackendTaskIdsFromProjectData,
   mergeConvaiBackendToolIdLists,
 } from '../manualCatalogBackendToolIds';
@@ -22,8 +23,9 @@ describe('manualCatalogBackendToolIds', () => {
     expect(ids).toEqual(['x', 'y']);
   });
 
-  it('extractManualCatalogBackendTaskIdsFromProjectData returns empty on invalid input', () => {
-    expect(extractManualCatalogBackendTaskIdsFromProjectData(null)).toEqual([]);
-    expect(extractManualCatalogBackendTaskIdsFromProjectData({})).toEqual([]);
+  it('extractBackendCatalogFromProjectData reads backendCatalog blob', () => {
+    const catalog = { catalogVersion: 3, manualEntries: [], auditLog: [] };
+    expect(extractBackendCatalogFromProjectData({ backendCatalog: catalog })).toBe(catalog);
+    expect(extractBackendCatalogFromProjectData(null)).toBeUndefined();
   });
 });

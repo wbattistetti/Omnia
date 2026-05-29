@@ -3,30 +3,15 @@
  */
 
 import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
-import {
-  resolveBackendRuntimeDistillTextSync,
-  resolveKbRuntimeDistillTextSync,
-} from '@domain/analysisRuntime/analysisRuntimeDistill';
-import { kbDocumentHasUsableAnalysis } from '@domain/knowledgeBase/kbAnalysisRuntimeSynthesis';
+import { buildUseOfBackendsPromptSection } from '@domain/backendAnalysis/buildUseOfBackendsPromptSection';
 import type { StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
-import { kbDocumentsEligibleForUseCaseContext } from '@domain/knowledgeBase/useCaseInvalidationKb';
+import {
+  buildKbRuntimePromptSection,
+  KNOWLEDGE_BASE_PROMPT_HEADER,
+} from './buildKbRuntimePromptSection';
 
+/** Header legacy nel blocco Context (appendice KB + backend). */
 const RUNTIME_KB_HEADER = '#### Knowledge base (sintesi analisi documenti)';
-const RUNTIME_BACKEND_HEADER = '#### Backend (sintesi analisi)';
-
-function buildKbRuntimeBlocks(documents: readonly StagedKbDocument[]): string[] {
-  const blocks: string[] = [];
-  for (const doc of kbDocumentsEligibleForUseCaseContext(documents)) {
-    const raw = String(doc.documentAnalysisMarkdown ?? '').trim();
-    if (!raw) continue;
-    const text = kbDocumentHasUsableAnalysis(doc)
-      ? resolveKbRuntimeDistillTextSync(doc, 6_000)
-      : raw.slice(0, 4_000);
-    if (!text.trim()) continue;
-    blocks.push(`**${doc.name}**\n${text.slice(0, 6_000)}`);
-  }
-  return blocks;
-}
 
 /**
  * Blocco markdown compatto per sezione Context / runtime (vuoto se nessuna analisi).
@@ -35,20 +20,28 @@ export function buildAgentRuntimeAnalysisAppendix(params: {
   documents: readonly StagedKbDocument[];
   backendCatalog?: ProjectBackendCatalogBlob;
   agentTaskId?: string;
+  manualCatalogBackendTaskIds?: readonly string[];
 }): string {
   const parts: string[] = [];
 
-  const kbBlocks = buildKbRuntimeBlocks(params.documents);
-  if (kbBlocks.length > 0) {
-    parts.push(RUNTIME_KB_HEADER, '', ...kbBlocks.map((b) => `${b}\n`));
+  const kbSection = buildKbRuntimePromptSection(params.documents);
+  if (kbSection.trim()) {
+    const kbBody = kbSection.startsWith(KNOWLEDGE_BASE_PROMPT_HEADER)
+      ? kbSection.slice(KNOWLEDGE_BASE_PROMPT_HEADER.length).trim()
+      : kbSection;
+    parts.push(RUNTIME_KB_HEADER, '', kbBody);
   }
 
   const agentId = String(params.agentTaskId ?? '').trim();
   const backend = agentId
-    ? resolveBackendRuntimeDistillTextSync(params.backendCatalog, agentId)
+    ? buildUseOfBackendsPromptSection({
+        catalog: params.backendCatalog,
+        agentTaskId: agentId,
+        manualCatalogBackendTaskIds: params.manualCatalogBackendTaskIds,
+      })
     : '';
   if (backend.trim()) {
-    parts.push(RUNTIME_BACKEND_HEADER, '', backend);
+    parts.push(backend);
   }
 
   return parts.join('\n').trim();
@@ -62,7 +55,7 @@ export function mergeRuntimeAnalysisIntoContext(
   const base = contextMarkdown.trim();
   const extra = appendix.trim();
   if (!extra) return base;
-  if (base.includes(RUNTIME_KB_HEADER) || base.includes(RUNTIME_BACKEND_HEADER)) {
+  if (base.includes(RUNTIME_KB_HEADER) || base.includes('## USE OF BACKENDS:')) {
     return base;
   }
   const marker = '\n\n---\n\n### Riferimenti analisi (KB e backend)\n\n';

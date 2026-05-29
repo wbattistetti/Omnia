@@ -91,6 +91,9 @@ export interface SendParameterValueEditorProps {
   openApiEnumValues?: string[];
   apiField?: string;
   compactTypography?: boolean;
+  /** Tooltip OpenAPI (formato, enum, esempio) per la cella valore. */
+  valueTooltip?: string;
+  valueEmpty?: boolean;
 }
 
 export function SendParameterValueEditor({
@@ -105,6 +108,8 @@ export function SendParameterValueEditor({
   openApiEnumValues,
   apiField,
   compactTypography = false,
+  valueTooltip,
+  valueEmpty: valueEmptyProp,
 }: SendParameterValueEditorProps) {
   const textSm = compactTypography ? 'text-xs' : 'text-[10px]';
   const missingSendHintId = useId();
@@ -241,7 +246,12 @@ export function SendParameterValueEditor({
 
   const showEmpty = !variableRefId?.trim() && !literalConstant?.trim();
   const emptyClass = 'text-slate-500 italic font-normal';
-  const sendMissingEmpty = showEmpty;
+  const sendMissingEmpty = valueEmptyProp ?? showEmpty;
+  const valueFieldTitle =
+    valueTooltip?.trim() ||
+    (sendMissingEmpty
+      ? 'Valore mancante: collega una variabile di flusso o immetti un valore costante.'
+      : displayText || placeholder);
 
   const pickExisting = useCallback(
     (varId: string) => {
@@ -450,9 +460,11 @@ export function SendParameterValueEditor({
             skipNextDocumentCloseClickRef.current = true;
             setOpen(true);
           }}
-          title={sendMissingEmpty ? 'Missing value — select variable or constant' : displayText || placeholder}
+          title={valueFieldTitle}
         >
-          <span className="truncate">{sendMissingEmpty ? 'Missing value' : showEmpty ? placeholder : displayText}</span>
+          <span className="truncate">
+            {sendMissingEmpty ? 'Valore mancante' : showEmpty ? placeholder : displayText}
+          </span>
           <ChevronDown className="w-3 h-3 shrink-0 opacity-60" aria-hidden />
         </button>
       ) : (

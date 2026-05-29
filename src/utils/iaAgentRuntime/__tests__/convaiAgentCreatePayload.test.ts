@@ -96,6 +96,15 @@ describe('conversationConfigFragmentFromIaAgentConfig', () => {
     expect(frag!.tts).toEqual({ voice_id: 'voice_en', model_id: 'eleven_flash_v2' });
   });
 
+  it('coerces stale eleven_flash_v2 ttsModel to v2_5 for Italian agents', () => {
+    const cfg = getDefaultConfig('elevenlabs');
+    cfg.systemPrompt = 'Italian TTS coerce.';
+    cfg.voice = { id: 'voice_it', language: 'it', settings: {} };
+    cfg.ttsModel = 'eleven_flash_v2';
+    const frag = conversationConfigFragmentFromIaAgentConfig(cfg);
+    expect(frag!.tts).toEqual({ voice_id: 'voice_it', model_id: 'eleven_flash_v2_5' });
+  });
+
   it('maps gpt-4o-mini to gpt-4o for ElevenLabs residency createAgent compatibility', () => {
     const cfg = getDefaultConfig('elevenlabs');
     cfg.systemPrompt = 'LLM mapping test.';
@@ -108,14 +117,30 @@ describe('conversationConfigFragmentFromIaAgentConfig', () => {
     expect(prompt.llm).toBe('gpt-4o');
   });
 
-  it('omitTts skips tts block for auto-provision (EU cluster voice mismatch)', () => {
+  it('omitTts skips voice_id but keeps model_id v2_5 for Italian (ElevenLabs create validation)', () => {
+    const cfg = getDefaultConfig('elevenlabs');
+    cfg.systemPrompt = 'Omit TTS test prompt.';
+    cfg.voice = { id: 'prim', language: 'it', settings: {} };
+    const frag = conversationConfigFragmentFromIaAgentConfig(cfg, { omitTts: true });
+    expect(frag!.tts).toEqual({ model_id: 'eleven_flash_v2_5' });
+    expect((frag!.tts as Record<string, unknown>).voice_id).toBeUndefined();
+  });
+
+  it('omitTts skips entire tts block for English agents', () => {
     const cfg = getDefaultConfig('elevenlabs');
     cfg.systemPrompt = 'Omit TTS test prompt.';
     cfg.voices = [{ id: 'prim', role: 'primary' }];
     const frag = conversationConfigFragmentFromIaAgentConfig(cfg, { omitTts: true });
-    expect(frag).not.toBeNull();
     expect(frag!.tts).toBeUndefined();
-    expect((frag!.agent as Record<string, unknown>).first_message).toMatch(/Hello!/);
+  });
+
+  it('includes model_id v2_5 for Italian agent without voice_id', () => {
+    const cfg = getDefaultConfig('elevenlabs');
+    cfg.systemPrompt = 'Italian agent without voice.';
+    cfg.voice = { id: '', language: 'it', settings: {} };
+    const frag = conversationConfigFragmentFromIaAgentConfig(cfg);
+    expect(frag!.tts).toEqual({ model_id: 'eleven_flash_v2_5' });
+    expect((frag!.tts as Record<string, unknown>).voice_id).toBeUndefined();
   });
 
   it('sends exact editor rules text when task is passed (not cfg.systemPrompt)', () => {

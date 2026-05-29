@@ -13,6 +13,7 @@ import {
   pickOpenApiPathForReadApi,
 } from './openApiBackendCallSpec';
 import type { OpenApiSendBindingRules } from '../domain/backendCatalog/catalogTypes';
+import { collectOpenApiCompileErrors } from '../domain/openApi/collectOpenApiCompileErrors';
 
 type IoRow = {
   internalName: string;
@@ -190,6 +191,8 @@ export type RunBackendCallReadApiOptions = {
   openapiSpecUrl?: string;
   /** PortalConnection — Bearer verso portale protetto (openapi-proxy). */
   portalConnectionId?: string;
+  /** Ricarica lo spec senza merge con SEND/RECEIVE precedenti (Recupera specifiche). */
+  forceRefresh?: boolean;
 };
 
 /**
@@ -219,15 +222,21 @@ export async function runBackendCallReadApiForTask(
   const prevOutputs = filterRows((task as Task & { outputs?: unknown }).outputs);
   const inputsEmpty = prevInputs.length === 0;
   const outputsEmpty = prevOutputs.length === 0;
+  const forceRefresh = Boolean(options?.forceRefresh);
+  const mergeInputs = forceRefresh ? [] : prevInputs;
+  const mergeOutputs = forceRefresh ? [] : prevOutputs;
 
   const fpSeed = op || manual;
 
   try {
     const connectionId = (options?.portalConnectionId || '').trim() || undefined;
+    const fetchOptions: { connectionId?: string; forceRefresh?: boolean } = {};
+    if (connectionId) fetchOptions.connectionId = connectionId;
+    if (forceRefresh) fetchOptions.forceRefresh = true;
     const { doc } = await fetchOpenApiDocumentOperationalThenManualFallback(
       op,
       manual || undefined,
-      connectionId ? { connectionId } : undefined
+      Object.keys(fetchOptions).length > 0 ? fetchOptions : undefined
     );
     const pathPickUrl = fpSeed;
     const picked = pickOpenApiPathForReadApi(pathPickUrl, doc, method);
@@ -265,13 +274,23 @@ export async function runBackendCallReadApiForTask(
     const contentHash = hashString(JSON.stringify(doc));
     const fp = structuralFingerprint(resolvedMethodUpper, fpSeed);
 
+    const mergedSchemas = {
+      ...(fields.outputJsonSchemaByApiName ?? {}),
+      ...(fields.inputJsonSchemaByApiName ?? {}),
+    };
+    const openapiCompileErrors = collectOpenApiCompileErrors({
+      jsonSchemasByApiName: mergedSchemas,
+      paramUiKindsByApiName: inputUiKindByApiName,
+      paramEnumsByApiName: inputEnumByApiName,
+    });
+
     const used = new Set<string>();
     const nextInputs = inputNames.length > 0
-      ? rebuildInputRows(prevInputs, inputNames, inputDesc, used, sendBinding, fields.bindingPhaseByApiName)
-      : (inputsEmpty ? [] : prevInputs);
+      ? rebuildInputRows(mergeInputs, inputNames, inputDesc, used, sendBinding, fields.bindingPhaseByApiName)
+      : (inputsEmpty || forceRefresh ? [] : prevInputs);
     const nextOutputs = outputNames.length > 0
-      ? rebuildOutputRows(prevOutputs, outputNames, outputDesc, used)
-      : (outputsEmpty ? [] : prevOutputs);
+      ? rebuildOutputRows(mergeOutputs, outputNames, outputDesc, used)
+      : (outputsEmpty || forceRefresh ? [] : prevOutputs);
 
     const prevEp = (task as Task & { endpoint?: { url?: string; method?: string; headers?: Record<string, string> } })
       .endpoint;
@@ -297,15 +316,27 @@ export async function runBackendCallReadApiForTask(
           inputs: { ...inputDesc },
           outputs: { ...outputDesc },
         },
+        ...(fields.inputParamHintsByPath || fields.outputParamHintsByPath
+          ? {
+              openapiParamHintsByPath: {
+                inputs: { ...(fields.inputParamHintsByPath ?? {}) },
+                outputs: { ...(fields.outputParamHintsByPath ?? {}) },
+              },
+            }
+          : {}),
         openapiInputUiKindByApiName: inputUiKindByApiName,
         openapiInputEnumByApiName: inputEnumByApiName,
         ...(fields.inputJsonSchemaByApiName && Object.keys(fields.inputJsonSchemaByApiName).length > 0
           ? { openapiInputJsonSchemaByApiName: fields.inputJsonSchemaByApiName }
           : {}),
+        ...(fields.outputJsonSchemaByApiName && Object.keys(fields.outputJsonSchemaByApiName).length > 0
+          ? { openapiOutputJsonSchemaByApiName: fields.outputJsonSchemaByApiName }
+          : {}),
         openapiSendBinding: sendBinding ?? null,
         openApiMethodLocked: effectiveMethodLock,
         openApiMethodLockUrlSnapshot: effectiveMethodLock ? op.trim() : null,
         openApiLockedHttpMethod: effectiveMethodLock ? resolvedMethodUpper : null,
+        openapiCompileErrors,
       },
       inputs: nextInputs,
       outputs: nextOutputs,
@@ -315,6 +346,14 @@ export async function runBackendCallReadApiForTask(
     }
 
     taskRepository.updateTask(instanceId, taskUpdates, projectId);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent<{ taskId: string }>('omnia:backend-read-api-complete', {
+          detail: { taskId: instanceId },
+        })
+      );
+    }
 
     return {
       ok: true,

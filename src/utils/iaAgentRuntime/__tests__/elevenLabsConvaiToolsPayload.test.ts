@@ -5,7 +5,10 @@
 import { describe, expect, it } from 'vitest';
 import { TaskType, type Task } from '@types/taskTypes';
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
-import { buildElevenLabsConvaiPromptTools } from '../elevenLabsConvaiToolsPayload';
+import {
+  buildConvaiWebhookToolFromBackendTask,
+  buildElevenLabsConvaiPromptTools,
+} from '../elevenLabsConvaiToolsPayload';
 
 function backendTask(overrides: Partial<Task> & { id: string }): Task {
   return {
@@ -245,5 +248,81 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     expect(tools).toHaveLength(1);
     expect(tools[0].type).toBe('client');
     expect((tools[0].parameters as Record<string, unknown>).type).toBe('object');
+  });
+
+  it('propagates nested OpenAPI jsonSchema properties into ElevenLabs request_body_schema', () => {
+    const task = backendTask({
+      id: 'nw',
+      label: 'next_window',
+      backendToolDescription: 'Prossima finestra disponibile.',
+      endpoint: { url: 'https://api.example.com/next-window', method: 'POST', headers: {} },
+      inputs: [
+        { internalName: 'wd', apiParam: 'windowDays', fieldDescription: 'Giorni.' },
+        { internalName: 'c', apiParam: 'constraints', variable: '' },
+      ],
+      backendCallSpecMeta: {
+        schemaVersion: 1,
+        lastImportedAt: null,
+        contentHash: null,
+        importState: 'ok',
+        structuralFingerprint: null,
+        openapiInputUiKindByApiName: { windowDays: 'integer', constraints: 'object' },
+        openapiInputJsonSchemaByApiName: {
+          windowDays: { type: 'integer', minimum: 1, maximum: 30, description: 'Giorni consecutivi.' },
+          constraints: {
+            type: 'object',
+            description: 'Vincoli opzionali.',
+            properties: {
+              weekdays: {
+                type: 'array',
+                items: { type: 'integer', minimum: 0, maximum: 6 },
+              },
+            },
+          },
+        },
+      },
+    } as Partial<Task> & { id: string });
+
+    const built = buildConvaiWebhookToolFromBackendTask(task as Task);
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const body = (built.tool.api_schema as Record<string, unknown>).request_body_schema as Record<
+      string,
+      unknown
+    >;
+    const props = body.properties as Record<string, Record<string, unknown>>;
+    expect(props.windowDays).toEqual(
+      expect.objectContaining({ type: 'integer', minimum: 1, maximum: 30 })
+    );
+    const c = props.constraints;
+    expect(c.type).toBe('object');
+    const cProps = c.properties as Record<string, Record<string, unknown>>;
+    expect(cProps.weekdays.type).toBe('array');
+    expect(cProps.weekdays.items).toEqual(
+      expect.objectContaining({ type: 'integer', minimum: 0, maximum: 6 })
+    );
+    expect(JSON.stringify(body)).not.toMatch(/\$ref|additionalProperties/);
+  });
+
+  it('buildConvaiWebhookToolFromBackendTask matches single webhook from catalog task', () => {
+    const task = backendTask({
+      id: 'bk_pub',
+      label: 'slots',
+      backendToolDescription: 'Lista slot.',
+      inputs: [{ internalName: 'n', apiParam: 'n', fieldDescription: 'N' }],
+    });
+    const single = buildConvaiWebhookToolFromBackendTask(task);
+    expect(single.ok).toBe(true);
+    if (!single.ok) return;
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bk_pub'],
+      tools: [],
+    } as IAAgentConfig;
+    const fromList = buildElevenLabsConvaiPromptTools(cfg, (id) => (id === 'bk_pub' ? task : null));
+    expect(fromList).toHaveLength(1);
+    expect(single.tool.type).toBe('webhook');
+    expect(single.tool.name).toBe(fromList[0].name);
+    expect(single.tool.api_schema).toEqual(fromList[0].api_schema);
   });
 });

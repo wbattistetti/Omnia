@@ -12,6 +12,10 @@ import {
   excerptDuplicatesDesignerNote,
   sanitizeDocumentExcerpt,
 } from './kbDocumentExcerptValidation';
+import {
+  parseSuggestedFeatureDraft,
+  type KbAnalysisSuggestedFeatureDraft,
+} from '@domain/backendAnalysis/suggestedFeatureSpec';
 
 export type KbAnalysisObservationKind =
   | 'aggiunta'
@@ -33,7 +37,13 @@ export type KbAnalysisObservation = {
   readonly excerptRationale?: string;
   /** Nota utente dopo chiarimento, inclusa in finalize se presente. */
   readonly userCorrectionNote?: string;
+  /** Backend: l'osservazione implica estensione contratto API (con bozza in suggestedFeatureDraft). */
+  readonly suggestsApiExtension?: boolean;
+  /** Backend: bozza specifica costruita nella stessa passata di review. */
+  readonly suggestedFeatureDraft?: KbAnalysisSuggestedFeatureDraft;
 };
+
+export type { KbAnalysisSuggestedFeatureDraft };
 
 export type KbAnalysisObservationReview = {
   readonly observations: readonly KbAnalysisObservation[];
@@ -65,7 +75,7 @@ export function normalizeAnalysisText(text: string): string {
 export function analysisDraftDiffersFromBaseline(draft: string, baseline: string): boolean {
   const d = normalizeAnalysisText(draft);
   const b = normalizeAnalysisText(baseline);
-  if (!b) return false;
+  if (!b) return d.length > 0;
   return d !== b;
 }
 
@@ -142,6 +152,12 @@ function parseOneObservation(
     r.excerptRationale.trim()
       ? r.excerptRationale.trim().slice(0, 500)
       : undefined;
+
+  const suggestsApiExtension = r.suggestsApiExtension === true;
+  const suggestedFeatureDraft = suggestsApiExtension
+    ? parseSuggestedFeatureDraft(r.suggestedFeature ?? r.suggestedFeatureDraft)
+    : undefined;
+
   return {
     id,
     kind,
@@ -151,6 +167,8 @@ function parseOneObservation(
     ...(documentExcerpt ? { documentExcerpt } : {}),
     ...(excerptRationale ? { excerptRationale } : {}),
     userCorrectionNote,
+    ...(suggestsApiExtension ? { suggestsApiExtension: true } : {}),
+    ...(suggestedFeatureDraft ? { suggestedFeatureDraft } : {}),
   };
 }
 

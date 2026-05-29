@@ -1,7 +1,9 @@
 /**
- * HTTP client for ElevenLabs ConvAI workspace tools (list + resolve by id).
+ * HTTP client for ElevenLabs ConvAI tools (list, create, resolve by id) e aggancio ad agente.
  */
 
+import { extractPromptToolIdsAndInline } from '../parseConvaiInlineTools';
+import { getConvaiAgentDetail, patchConvaiAgent } from './convaiAgentApi';
 import type { WorkspaceResolvedTool, WorkspaceToolKind } from '../../core/types';
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -93,6 +95,63 @@ export async function listConvaiToolsForWorkspace(params?: {
       : null;
   const hasMore = data.has_more === true || data.hasMore === true;
   return { tools, hasMore, nextCursor };
+}
+
+function pickCreatedToolId(data: Record<string, unknown>): string {
+  const candidates = [
+    data.tool_id,
+    data.toolId,
+    data.id,
+    asRecord(data.tool)?.id,
+    asRecord(data.tool_config)?.id,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim();
+  }
+  return '';
+}
+
+/** POST /elevenlabs/tools — crea tool ConvAI (webhook) con `tool_config` già nel formato ElevenLabs. */
+export async function createConvaiTool(
+  toolConfig: Record<string, unknown>
+): Promise<string> {
+  const url = '/elevenlabs/tools';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool_config: toolConfig }),
+  });
+  const data = await readJson(res, url);
+  const toolId = pickCreatedToolId(data);
+  if (!toolId) {
+    throw new Error(
+      'createTool: risposta senza tool_id. Verifica ELEVENLABS_API_KEY e payload tool_config.'
+    );
+  }
+  return toolId;
+}
+
+/**
+ * Aggiunge `toolId` a `conversation_config.agent.prompt.tool_ids` sull’agente (PATCH parziale).
+ */
+export async function appendConvaiToolToAgent(agentId: string, toolId: string): Promise<void> {
+  const id = String(agentId || '').trim();
+  const tid = String(toolId || '').trim();
+  if (!id || !tid) throw new Error('appendConvaiToolToAgent: agentId e toolId obbligatori.');
+
+  const detail = await getConvaiAgentDetail(id);
+  const { toolIds: existing } = extractPromptToolIdsAndInline(detail.conversationConfig);
+  if (existing.includes(tid)) return;
+
+  await patchConvaiAgent(id, {
+    conversation_config: {
+      agent: {
+        prompt: {
+          tool_ids: [...existing, tid],
+        },
+      },
+    },
+  });
 }
 
 /** GET /elevenlabs/tools/{toolId} */

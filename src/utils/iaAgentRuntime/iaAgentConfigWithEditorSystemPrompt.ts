@@ -5,10 +5,12 @@
 
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
+import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
 
 export type IaAgentConfigWithEditorSystemPromptOptions = {
   manualCatalogBackendTaskIds?: readonly string[];
+  backendCatalog?: ProjectBackendCatalogBlob;
 };
 
 /**
@@ -23,6 +25,7 @@ export function iaAgentConfigWithEditorSystemPrompt(
   if (!task) return cfg;
   const fromEditor = resolveElevenLabsAgentPromptFromTask(task, {
     manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+    backendCatalog: options?.backendCatalog,
   }).trim();
   if (!fromEditor) return cfg;
   return { ...cfg, systemPrompt: fromEditor };

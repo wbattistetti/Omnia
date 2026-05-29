@@ -6,7 +6,10 @@ import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import type { CompiledTask, CompilationError, CompilationResult, ExecutionState } from '../FlowCompiler/types';
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { useProjectData } from '../../context/ProjectDataContext';
-import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import {
+  extractBackendCatalogFromProjectData,
+  extractManualCatalogBackendTaskIdsFromProjectData,
+} from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { looksLikeTechnicalTranslationOrId } from '../../utils/translationKeys';
 import { createVariableMappings } from '@utils/conditionCodeConverter';
 import { interpolateVariableBracketsInText } from './interpolateVariableBracketsInText';
@@ -220,11 +223,13 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         const omniaVersionLabel = String(projectData?.version ?? '0').trim() || '0';
 
         const manualCatalogBackendTaskIds = extractManualCatalogBackendTaskIdsFromProjectData(projectData);
+        const backendCatalog = extractBackendCatalogFromProjectData(projectData);
         const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes, {
           projectLabel,
           rootFlowLabel,
           nodeLabelByTaskId,
           manualCatalogBackendTaskIds,
+          backendCatalog,
           omniaClientLabel,
           omniaVersionLabel,
           flowSlice: {

@@ -10,6 +10,7 @@
 import React from 'react';
 import {
   BookOpen,
+  Bot,
   Columns2,
   Database,
   Eye,
@@ -106,6 +107,7 @@ export function EmbeddedBackendToolbar({
   const showTableBtn = findBtn(buttons, 'show-table');
   const showApiColBtn = findBtn(buttons, 'show-api-column');
   const readApiBtn = findBtn(buttons, 'read-api');
+  const publishElevenLabsBtn = findBtn(buttons, 'publish-elevenlabs');
   const testBackendBtn = findBtn(buttons, 'test-backend');
   const hideReceiveBtn = findBtn(buttons, 'hide-receive');
 
@@ -196,6 +198,19 @@ export function EmbeddedBackendToolbar({
       </button>
 
       <div className="h-4 w-px shrink-0 self-center bg-slate-600/50" aria-hidden />
+
+      {publishElevenLabsBtn && publishElevenLabsBtn.visible !== false ? (
+        <ToolbarIconButton
+          activeTone={isEmulation ? 'sky' : 'emerald'}
+          icon={<Bot size={ICON} strokeWidth={ICON_STROKE} className="shrink-0 text-violet-200" aria-hidden />}
+          label={publishElevenLabsBtn.label ?? 'Aggiorna agente'}
+          onClick={publishElevenLabsBtn.onClick}
+          title={
+            publishElevenLabsBtn.title ??
+            'Pubblica webhook su ElevenLabs con schema da OpenAPI'
+          }
+        />
+      ) : null}
 
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {showSignatureSub && signatureGroupHasContent ? (

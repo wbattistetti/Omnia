@@ -63,10 +63,129 @@ async function proxyToElevenLabs(method, upstreamPath, body = null) {
   return { status: res.status, body: text };
 }
 
+/** Minimal payload ConvAI agents/create (allineato a ApiServer VB). */
+function buildConvaiAgentCreatePayload(displayName) {
+  return {
+    name: displayName,
+    conversation_config: {
+      agent: {
+        first_message: 'Hello! How can I help you today?',
+        language: 'en',
+        prompt: {
+          prompt: '',
+          llm: 'gpt-4o',
+        },
+      },
+    },
+  };
+}
+
+function isPlainObject(x) {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+/** Deep-merge `conversation_config` overlay (subset usato dal client Omnia). */
+function mergeConvaiConversationConfigFromRequest(payload, requestObj) {
+  const overlay = requestObj?.conversation_config;
+  if (!isPlainObject(overlay)) return payload;
+  const baseCc = isPlainObject(payload.conversation_config) ? payload.conversation_config : {};
+  return {
+    ...payload,
+    conversation_config: deepMergePlainObjects(baseCc, overlay),
+  };
+}
+
+function deepMergePlainObjects(base, overlay) {
+  const out = { ...base };
+  for (const [key, val] of Object.entries(overlay)) {
+    if (isPlainObject(val) && isPlainObject(out[key])) {
+      out[key] = deepMergePlainObjects(out[key], val);
+    } else {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+function pickAgentIdFromCreateResponse(data) {
+  if (!isPlainObject(data)) return '';
+  const direct =
+    (typeof data.agent_id === 'string' && data.agent_id.trim()) ||
+    (typeof data.agentId === 'string' && data.agentId.trim()) ||
+    '';
+  if (direct) return direct;
+  const agent = data.agent;
+  if (isPlainObject(agent)) {
+    const nested =
+      (typeof agent.agent_id === 'string' && agent.agent_id.trim()) ||
+      (typeof agent.agentId === 'string' && agent.agentId.trim()) ||
+      '';
+    if (nested) return nested;
+  }
+  return '';
+}
+
 /**
  * @param {import('express').Express} app
  */
 function mountConvaiAgentsProxyRoutes(app) {
+  app.post('/elevenlabs/createAgent', async (req, res) => {
+    const apiBase = getElevenLabsBaseUrl();
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const requestObj =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+      const displayName = String(requestObj.name ?? '').trim() || 'Omnia ConvAI agent';
+      let payload = buildConvaiAgentCreatePayload(displayName);
+      payload = mergeConvaiConversationConfigFromRequest(payload, requestObj);
+      const elevenLabsRequestJson = JSON.stringify(payload, null, 2);
+      const { status, body } = await proxyToElevenLabs(
+        'POST',
+        '/convai/agents/create',
+        JSON.stringify(payload)
+      );
+      if (status >= 400) {
+        console.warn('[elevenlabs:createAgent] upstream', status, body.slice(0, 400));
+        let clientStatus = status;
+        if (status < 400 || status >= 600) clientStatus = 502;
+        else if (status >= 500) clientStatus = 502;
+        return sendJson(res, clientStatus, {
+          error: 'ElevenLabs agents/create failed.',
+          statusCode: status,
+          elevenLabsApiBase: apiBase,
+          details: body,
+          elevenLabsRequestJson,
+        });
+      }
+      let parsed = {};
+      try {
+        parsed = body.trim() ? JSON.parse(body) : {};
+      } catch {
+        return sendJson(res, 502, {
+          error: 'ElevenLabs response not JSON.',
+          elevenLabsApiBase: apiBase,
+          details: body,
+          elevenLabsRequestJson,
+        });
+      }
+      const agentId = pickAgentIdFromCreateResponse(parsed);
+      if (!agentId) {
+        return sendJson(res, 502, {
+          error: 'ElevenLabs response missing agent_id.',
+          elevenLabsApiBase: apiBase,
+          details: body,
+          elevenLabsRequestJson,
+        });
+      }
+      return sendJson(res, 200, { agentId, elevenLabsRequestJson });
+    } catch (err) {
+      sendFatal(res, 'createAgent', err, apiBase);
+    }
+  });
+
   app.get('/elevenlabs/agents', async (req, res) => {
     const apiBase = getElevenLabsBaseUrl();
     try {
@@ -150,6 +269,28 @@ function mountConvaiAgentsProxyRoutes(app) {
     }
   });
 
+  app.post('/elevenlabs/tools', async (req, res) => {
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const rawBody =
+        typeof req.body === 'string'
+          ? req.body
+          : req.body && typeof req.body === 'object'
+            ? JSON.stringify(req.body)
+            : '';
+      const { status, body } = await proxyToElevenLabs('POST', '/convai/tools', rawBody);
+      if (status >= 400) {
+        console.warn('[elevenlabs:createTool] upstream', status, body.slice(0, 400));
+      }
+      res.status(status).type('application/json; charset=utf-8').send(body);
+    } catch (err) {
+      sendFatal(res, 'createTool', err);
+    }
+  });
+
   app.get('/elevenlabs/tools/:toolId', async (req, res) => {
     const id = String(req.params.toolId || '').trim();
     if (!id) return sendJson(res, 400, { error: 'toolId required' });
@@ -165,7 +306,36 @@ function mountConvaiAgentsProxyRoutes(app) {
     }
   });
 
+  app.post('/elevenlabs/knowledge-base/text', async (req, res) => {
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const requestObj =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+      const name = String(requestObj.name ?? '').trim() || 'Omnia KB document';
+      const text = String(requestObj.text ?? '').trim();
+      if (!text) {
+        return sendJson(res, 400, { error: 'text is required' });
+      }
+      const payload = JSON.stringify({ name, text });
+      const { status, body } = await proxyToElevenLabs(
+        'POST',
+        '/convai/knowledge-base/text',
+        payload
+      );
+      if (status >= 400) {
+        console.warn('[elevenlabs:createKbText] upstream', status, body.slice(0, 400));
+      }
+      res.status(status).type('application/json; charset=utf-8').send(body);
+    } catch (err) {
+      sendFatal(res, 'createKbText', err);
+    }
+  });
+
   app.delete('/elevenlabs/agents/:agentId', async (req, res) => {
+    const apiBase = getElevenLabsBaseUrl();
     const id = String(req.params.agentId || '').trim();
     if (!id) return sendJson(res, 400, { error: 'agentId required' });
     try {
@@ -174,13 +344,28 @@ function mountConvaiAgentsProxyRoutes(app) {
         return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
       }
       const { status, body } = await proxyToElevenLabs('DELETE', `/convai/agents/${encodeURIComponent(id)}`);
+      if (status >= 400) {
+        console.warn('[elevenlabs:deleteAgent] upstream', status, 'agentId=', id, body.slice(0, 400));
+        let clientStatus = status;
+        if (status < 400 || status >= 600) clientStatus = 502;
+        else if (status >= 500) clientStatus = 502;
+        return sendJson(res, clientStatus, {
+          error: 'ElevenLabs agents/delete failed.',
+          statusCode: status,
+          elevenLabsApiBase: apiBase,
+          details: body,
+          phase: 'delete',
+        });
+      }
       res.status(status).type('application/json; charset=utf-8').send(body);
     } catch (err) {
-      sendFatal(res, 'deleteAgent', err);
+      sendFatal(res, 'deleteAgent', err, apiBase);
     }
   });
 
-  console.log('[iaCatalog] ElevenLabs ConvAI tools proxy: GET /elevenlabs/tools');
+  console.log(
+    '[iaCatalog] ElevenLabs ConvAI proxy: createAgent, agents, tools, knowledge-base/text'
+  );
 }
 
 module.exports = { mountConvaiAgentsProxyRoutes };

@@ -9,6 +9,7 @@ const {
   REVIEW_OBSERVATIONS_SYSTEM,
   CLARIFY_OBSERVATION_SYSTEM,
   FINALIZE_SYSTEM,
+  CREATE_SUGGESTED_FEATURE_SYSTEM,
 } = require('./backendAnalysisPrompts');
 const { BACKEND_DISTILL_RUNTIME_SYSTEM } = require('./analysisRuntimeDistillPrompts');
 
@@ -106,6 +107,60 @@ function sanitizeReferenceExcerpt(excerpt, referenceCorpus, designerNote) {
   return t.slice(0, 2000);
 }
 
+function parseSuggestedFeatureParameter(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const paramKey = String(raw.paramKey ?? raw.name ?? '').trim();
+  if (!paramKey) return null;
+  const direction = String(raw.direction ?? 'input').toLowerCase() === 'output' ? 'output' : 'input';
+  const kindRaw = String(raw.kind ?? 'required').toLowerCase();
+  const kind =
+    kindRaw === 'optional' ||
+    kindRaw === 'derived' ||
+    kindRaw === 'unused' ||
+    kindRaw === 'missing'
+      ? kindRaw
+      : 'required';
+  return {
+    paramKey,
+    direction,
+    kind,
+    dataType: String(raw.dataType ?? 'string'),
+    role: String(raw.role ?? ''),
+    descriptionShort: String(raw.descriptionShort ?? raw.description ?? ''),
+  };
+}
+
+function parseSuggestedFeatureDraft(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const title = String(raw.title ?? '').trim();
+  const purposeMarkdown = String(raw.purposeMarkdown ?? raw.purpose ?? '').trim();
+  const paramsRaw = raw.parameters;
+  const parameters = [];
+
+  if (Array.isArray(paramsRaw)) {
+    for (const item of paramsRaw) {
+      const p = parseSuggestedFeatureParameter(item);
+      if (p) parameters.push(p);
+    }
+  } else if (paramsRaw && typeof paramsRaw === 'object') {
+    for (const [pk, pr] of Object.entries(paramsRaw)) {
+      const p = parseSuggestedFeatureParameter({ ...pr, paramKey: pr?.paramKey ?? pk });
+      if (p) parameters.push(p);
+    }
+  }
+
+  if (!title && !purposeMarkdown && parameters.length === 0) return null;
+
+  const parametersRecord = {};
+  for (const p of parameters) parametersRecord[p.paramKey] = p;
+
+  return {
+    title: title || 'Funzionalità suggerita',
+    purposeMarkdown,
+    parameters: parametersRecord,
+  };
+}
+
 function parseObservationRow(row, idx, referenceCorpus) {
   const id = typeof row?.id === 'string' && row.id.trim() ? row.id.trim() : String.fromCharCode(65 + idx);
   const kind = String(row?.kind || '').trim();
@@ -129,6 +184,12 @@ function parseObservationRow(row, idx, referenceCorpus) {
     row.excerptRationale.trim()
       ? row.excerptRationale.trim().slice(0, 500)
       : undefined;
+
+  const suggestsApiExtension = row?.suggestsApiExtension === true;
+  const suggestedFeatureDraft = suggestsApiExtension
+    ? parseSuggestedFeatureDraft(row?.suggestedFeature ?? row?.suggestedFeatureDraft)
+    : undefined;
+
   return {
     id,
     kind,
@@ -137,6 +198,8 @@ function parseObservationRow(row, idx, referenceCorpus) {
     interpretation,
     ...(documentExcerpt ? { documentExcerpt } : {}),
     ...(excerptRationale ? { excerptRationale } : {}),
+    ...(suggestsApiExtension ? { suggestsApiExtension: true } : {}),
+    ...(suggestedFeatureDraft ? { suggestedFeatureDraft } : {}),
   };
 }
 
@@ -332,6 +395,77 @@ async function finalizeBackendAnalysis(params) {
   });
 }
 
+function validateSuggestedFeatureField(parsed) {
+  const title = typeof parsed.title === 'string' ? parsed.title.trim() : '';
+  const purposeMarkdown =
+    typeof parsed.purposeMarkdown === 'string' ? parsed.purposeMarkdown.trim() : '';
+  const parameters = Array.isArray(parsed.parameters) ? parsed.parameters : [];
+  if (!title && !purposeMarkdown && parameters.length === 0) {
+    throw new Error('Invalid JSON: expected title, purposeMarkdown, or parameters');
+  }
+  const normalizedParams = [];
+  for (const raw of parameters) {
+    if (!raw || typeof raw !== 'object') continue;
+    const paramKey = String(raw.paramKey ?? raw.name ?? '').trim();
+    if (!paramKey) continue;
+    const direction = String(raw.direction ?? 'input').toLowerCase() === 'output' ? 'output' : 'input';
+    const kindRaw = String(raw.kind ?? 'required').toLowerCase();
+    const kind =
+      kindRaw === 'optional' ||
+      kindRaw === 'derived' ||
+      kindRaw === 'unused' ||
+      kindRaw === 'missing'
+        ? kindRaw
+        : 'required';
+    normalizedParams.push({
+      paramKey,
+      direction,
+      kind,
+      dataType: String(raw.dataType ?? 'string'),
+      role: String(raw.role ?? ''),
+      descriptionShort: String(raw.descriptionShort ?? raw.description ?? ''),
+    });
+  }
+  return {
+    title: title || 'Funzionalità suggerita',
+    purposeMarkdown,
+    parameters: normalizedParams,
+  };
+}
+
+async function createSuggestedFeatureFromObservation(params) {
+  const designerQuestion = String(params.designerQuestion || '').trim();
+  const confirmedInterpretation = String(params.confirmedInterpretation || '').trim();
+  const backendLabel = String(params.backendLabel || '').trim();
+  const referenceCorpus = String(params.referenceCorpus || '').trim();
+  if (!designerQuestion) throw new Error('designerQuestion is required');
+  if (!confirmedInterpretation) throw new Error('confirmedInterpretation is required');
+  if (!backendLabel) throw new Error('backendLabel is required');
+  const parts = [
+    `Backend: ${backendLabel}`,
+    '',
+    '--- Backend reference corpus ---',
+    referenceCorpus.slice(0, 32_000),
+    '',
+    '--- Designer observation (review) ---',
+    designerQuestion.slice(0, 8_000),
+    '',
+    '--- Designer brief (source of truth) ---',
+    confirmedInterpretation.slice(0, 12_000),
+  ];
+  return callJsonAnalysis({
+    systemPrompt: CREATE_SUGGESTED_FEATURE_SYSTEM,
+    userContent: parts.join('\n'),
+    provider: params.provider,
+    model: params.model,
+    aiProviderService: params.aiProviderService,
+    purpose: params.purpose,
+    taskId: params.taskId,
+    taskLabel: params.taskLabel,
+    validate: validateSuggestedFeatureField,
+  });
+}
+
 async function distillBackendAnalysisRuntime(params) {
   const analysis = String(params.analysisMarkdown || '').trim();
   if (!analysis) throw new Error('analysisMarkdown is required');
@@ -361,5 +495,6 @@ module.exports = {
   reviewBackendAnalysisObservations,
   clarifyBackendAnalysisObservation,
   finalizeBackendAnalysis,
+  createSuggestedFeatureFromObservation,
   distillBackendAnalysisRuntime,
 };

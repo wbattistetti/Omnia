@@ -6,7 +6,10 @@ import React from 'react';
 import type { StagedKbDocument, KbDocumentPatch } from '@domain/knowledgeBase/kbDocumentTypes';
 import type { AiCallMeta } from '@services/aiAgentDesignApi';
 import type { KbDocumentAnalysisTaskContext } from '@domain/knowledgeBase/kbDocumentAnalysisApi';
-import type { KbAnalysisToolbarState } from '@domain/knowledgeBase/kbAnalysisToolbarState';
+import {
+  kbAnalysisToolbarStateSnapshot,
+  type KbAnalysisToolbarState,
+} from '@domain/knowledgeBase/kbAnalysisToolbarState';
 import {
   KB_ANALYSIS_REVIEW_TOGGLE,
 } from '@domain/knowledgeBase/kbDocumentAnalysisGuide';
@@ -150,10 +153,27 @@ export function KbWorkspaceTabHost({
   const [analysisToolbar, setAnalysisToolbar] = React.useState<KbAnalysisToolbarState | null>(null);
   const [reviewPanelOpen, setReviewPanelOpen] = React.useState(true);
   const dragTabRef = React.useRef<KbWorkspaceTabId | null>(null);
+  const lastAnalysisToolbarSigRef = React.useRef<string | null>(null);
+
+  const handleAnalysisToolbarChange = React.useCallback(
+    (state: KbAnalysisToolbarState | null) => {
+      if (state === null) {
+        lastAnalysisToolbarSigRef.current = null;
+        setAnalysisToolbar(null);
+        return;
+      }
+      const sig = kbAnalysisToolbarStateSnapshot(state);
+      if (lastAnalysisToolbarSigRef.current === sig) return;
+      lastAnalysisToolbarSigRef.current = sig;
+      setAnalysisToolbar(state);
+    },
+    []
+  );
 
   React.useEffect(() => {
     setActiveTab('analysis');
     setSplitView(true);
+    lastAnalysisToolbarSigRef.current = null;
     setAnalysisToolbar(null);
     setReviewPanelOpen(true);
   }, [doc.id]);
@@ -218,7 +238,7 @@ export function KbWorkspaceTabHost({
         callMeta={callMeta}
         taskContext={taskContext}
         onUpdateDoc={onUpdateDoc}
-        onToolbarStateChange={setAnalysisToolbar}
+        onToolbarStateChange={handleAnalysisToolbarChange}
         reviewPanelOpen={reviewPanelOpen}
         onReviewPanelOpenChange={setReviewPanelOpen}
       />
