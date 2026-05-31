@@ -146,6 +146,44 @@ function deleteDocument(projectId, documentId) {
 }
 
 /**
+ * Sposta il blob repository da `sourceDocumentId` a `targetDocumentId` (contratto: target = doc.id).
+ * @returns {{ ok: true, documentId: string } | { ok: false, error: string }}
+ */
+function adoptRepositoryDocumentId(projectId, targetDocumentId, sourceDocumentId) {
+  const pid = safeProjectId(projectId);
+  const target = String(targetDocumentId || '').trim();
+  const source = String(sourceDocumentId || '').trim();
+  if (!target || !source) {
+    return { ok: false, error: 'target_and_source_required' };
+  }
+  if (target === source) {
+    return { ok: true, documentId: target };
+  }
+  if (readMeta(pid, target)) {
+    return { ok: true, documentId: target };
+  }
+  if (!readMeta(pid, source)) {
+    return { ok: false, error: 'source_not_found' };
+  }
+  const srcDir = docDir(pid, source);
+  const tgtDir = docDir(pid, target);
+  if (!fs.existsSync(srcDir)) {
+    return { ok: false, error: 'source_not_found' };
+  }
+  if (fs.existsSync(tgtDir)) {
+    return { ok: false, error: 'target_exists' };
+  }
+  fs.renameSync(srcDir, tgtDir);
+  const meta = readMeta(pid, target);
+  if (meta) {
+    meta.id = target;
+    meta.projectId = pid;
+    fs.writeFileSync(metaPath(pid, target), JSON.stringify(meta, null, 2), 'utf8');
+  }
+  return { ok: true, documentId: target };
+}
+
+/**
  * Original uploaded bytes for PDF/Word viewers.
  * @returns {{ meta: object, buffer: Buffer, mimeType: string } | null}
  */
@@ -169,4 +207,5 @@ module.exports = {
   readDocumentText,
   readDocumentFile,
   deleteDocument,
+  adoptRepositoryDocumentId,
 };

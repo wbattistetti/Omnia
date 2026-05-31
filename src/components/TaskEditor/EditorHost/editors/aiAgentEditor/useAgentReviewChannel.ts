@@ -16,6 +16,7 @@ import {
   canonicalReviewPayload,
   type AgentReviewChannelDocument,
   type AgentReviewStructuredSections,
+  type BuildReviewDocumentParams,
 } from '@domain/agentReviewChannel/reviewDocument';
 import {
   fetchAgentReviewChannel,
@@ -26,6 +27,7 @@ import {
 import {
   fetchReviewAudiencePendingStatus,
   hasAnyPendingImport,
+  reviewAudienceStatusesSignature,
   type ReviewAudiencePendingStatus,
 } from './reviewChannelPending';
 import { isExpressBackendPaused } from '@services/expressBackendReachability';
@@ -38,6 +40,7 @@ import type { ConversationStyleSelections } from '@domain/aiAgentConversationSty
 import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { Task } from '@types/taskTypes';
 import type { AgentReviewDesignerLlmSnapshot } from '@domain/agentReviewChannel/reviewDocument';
+import { useDocumentVisible } from '@hooks/useDocumentVisible';
 
 export type ReviewChannelBanner =
   | { kind: 'idle' }
@@ -84,101 +87,79 @@ export interface UseAgentReviewChannelParams {
   agentUseCaseWizardStateJson?: string;
 }
 
+function buildReviewLocalParams(p: UseAgentReviewChannelParams): BuildReviewDocumentParams {
+  const taskInstanceId = String(p.taskInstanceId ?? '').trim();
+  const snapshots = buildReviewPublishSnapshots({
+    taskInstanceId,
+    agentKnowledgeBaseDocumentsJson: p.agentKnowledgeBaseDocumentsJson ?? '',
+    conversationalRules: p.conversationalRules ?? [],
+    conversationStyleAuto: p.conversationStyleAuto ?? false,
+    conversationStyleSelections: p.conversationStyleSelections ?? {},
+    globalStyleId: p.globalStyleId ?? '',
+    styleLearningNotes: p.styleLearningNotes ?? '',
+    deployStyleId: p.deployStyleId ?? null,
+    backendPlaceholders: p.backendPlaceholders ?? [],
+    projectTasks: p.projectTasks ?? [],
+    manualBackendEntries: p.manualBackendEntries ?? [],
+  });
+  return {
+    projectId: String(p.projectId ?? '').trim(),
+    taskInstanceId,
+    taskLabel: p.taskLabel,
+    agentDesignDescription: p.designDescription,
+    useCases: p.useCases,
+    categories: p.useCaseCategories,
+    logicalSteps: p.logicalSteps ?? [],
+    structuredSections: structuredSectionsForReviewPublish(
+      p.agentStructuredSectionsJson ?? '',
+      p.agentPrompt ?? ''
+    ),
+    ...snapshots,
+    ...(p.designerLlm?.model?.trim() ? { designerLlm: p.designerLlm } : {}),
+  };
+}
+
+const SSE_CHECK_DEBOUNCE_MS = 2_000;
+
 export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
   const {
     projectId,
     taskInstanceId,
-    taskLabel,
-    designDescription,
-    useCases,
-    useCaseCategories,
-    logicalSteps = [],
-    agentStructuredSectionsJson = '',
-    agentPrompt = '',
     setDesignDescription,
     setUseCases,
     setUseCaseCategories,
     setDirty,
     importReviewStructuredSections,
-    agentKnowledgeBaseDocumentsJson = '',
-    conversationalRules = [],
-    conversationStyleAuto = false,
-    conversationStyleSelections = {},
-    globalStyleId = '',
-    styleLearningNotes = '',
-    deployStyleId = null,
-    backendPlaceholders = [],
-    projectTasks = [],
-    manualBackendEntries = [],
-    designerLlm = null,
-    agentUseCaseWizardStateJson = '',
   } = params;
+
+  const documentVisible = useDocumentVisible();
+  const paramsRef = React.useRef(params);
+  paramsRef.current = params;
 
   const [banner, setBanner] = React.useState<ReviewChannelBanner>({ kind: 'idle' });
   const [busy, setBusy] = React.useState(false);
   const [pendingStatuses, setPendingStatuses] = React.useState<ReviewAudiencePendingStatus[]>([]);
+  const pendingSignatureRef = React.useRef('');
 
   const canUseChannel = Boolean(projectId?.trim() && taskInstanceId?.trim());
+  const channelKey = canUseChannel ? `${projectId!.trim()}:${taskInstanceId!.trim()}` : '';
 
   const buildLocalParams = React.useCallback(
-    () => {
-      const snapshots = buildReviewPublishSnapshots({
-        taskInstanceId: taskInstanceId!.trim(),
-        agentKnowledgeBaseDocumentsJson,
-        conversationalRules,
-        conversationStyleAuto,
-        conversationStyleSelections,
-        globalStyleId,
-        styleLearningNotes,
-        deployStyleId,
-        backendPlaceholders,
-        projectTasks,
-        manualBackendEntries,
-      });
-      return {
-        projectId: projectId!.trim(),
-        taskInstanceId: taskInstanceId!.trim(),
-        taskLabel,
-        agentDesignDescription: designDescription,
-        useCases,
-        categories: useCaseCategories,
-        logicalSteps,
-        structuredSections: structuredSectionsForReviewPublish(
-          agentStructuredSectionsJson,
-          agentPrompt
-        ),
-        ...snapshots,
-        ...(designerLlm?.model?.trim() ? { designerLlm } : {}),
-      };
-    },
-    [
-      projectId,
-      taskInstanceId,
-      taskLabel,
-      designDescription,
-      useCases,
-      useCaseCategories,
-      logicalSteps,
-      agentStructuredSectionsJson,
-      agentPrompt,
-      agentKnowledgeBaseDocumentsJson,
-      conversationalRules,
-      conversationStyleAuto,
-      conversationStyleSelections,
-      globalStyleId,
-      styleLearningNotes,
-      deployStyleId,
-      backendPlaceholders,
-      projectTasks,
-      manualBackendEntries,
-      designerLlm,
-      agentUseCaseWizardStateJson,
-    ]
+    () => buildReviewLocalParams(paramsRef.current),
+    []
   );
+
+  const applyPendingResults = React.useCallback((results: ReviewAudiencePendingStatus[]) => {
+    const sig = reviewAudienceStatusesSignature(results);
+    if (sig === pendingSignatureRef.current) return;
+    pendingSignatureRef.current = sig;
+    setPendingStatuses(results);
+  }, []);
 
   const checkAllReviewChannels = React.useCallback(async () => {
     if (!canUseChannel) return [];
     if (isExpressBackendPaused()) return [];
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return [];
     const token = reviewChannelClientToken();
     const local = buildLocalParams();
     const pid = projectId!;
@@ -188,9 +169,12 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
         fetchReviewAudiencePendingStatus(audience, local, pid, tid, token)
       )
     );
-    setPendingStatuses(results);
+    applyPendingResults(results);
     return results;
-  }, [canUseChannel, buildLocalParams, projectId, taskInstanceId]);
+  }, [canUseChannel, buildLocalParams, projectId, taskInstanceId, applyPendingResults]);
+
+  const checkRef = React.useRef(checkAllReviewChannels);
+  checkRef.current = checkAllReviewChannels;
 
   const publishToChannel = React.useCallback(
     async (audience: AgentReviewAudience) => {
@@ -285,39 +269,39 @@ export function useAgentReviewChannel(params: UseAgentReviewChannelParams) {
 
   const anyPendingImport = hasAnyPendingImport(pendingStatuses);
 
+  /** Check iniziale + poll lento; dipendenze stabili (no reset su ogni edit use case). */
   React.useEffect(() => {
-    if (!canUseChannel) {
-      setPendingStatuses([]);
+    if (!canUseChannel || !documentVisible) {
+      if (!canUseChannel) {
+        pendingSignatureRef.current = '';
+        setPendingStatuses([]);
+      }
       return;
     }
-    const t = window.setTimeout(() => {
-      void checkAllReviewChannels();
-    }, 400);
-    return () => clearTimeout(t);
-  }, [canUseChannel, projectId, taskInstanceId, checkAllReviewChannels]);
-
-  /** Poll di backup (editor aperto). */
-  React.useEffect(() => {
-    if (!canUseChannel) return;
+    void checkRef.current();
     const id = window.setInterval(() => {
-      void checkAllReviewChannels();
+      void checkRef.current();
     }, REVIEW_CHANNEL_POLL_MS);
-    return () => clearInterval(id);
-  }, [canUseChannel, projectId, taskInstanceId, checkAllReviewChannels]);
+    return () => window.clearInterval(id);
+  }, [canUseChannel, channelKey, documentVisible]);
 
-  /** SSE: push da PUT Omnia o POST .../notify (portale Bolt). */
+  /** SSE: una sola connessione per task; check debounced per evitare raffiche GET. */
   React.useEffect(() => {
     if (!canUseChannel) return;
     const token = reviewChannelClientToken();
+    let debounceId = 0;
     return subscribeReviewChannelEvents({
       projectId: projectId!,
       taskInstanceId: taskInstanceId!,
       token,
       onUpdate: () => {
-        void checkAllReviewChannels();
+        window.clearTimeout(debounceId);
+        debounceId = window.setTimeout(() => {
+          void checkRef.current();
+        }, SSE_CHECK_DEBOUNCE_MS);
       },
     });
-  }, [canUseChannel, projectId, taskInstanceId, checkAllReviewChannels]);
+  }, [canUseChannel, channelKey]);
 
   /** Home portale (elenco review); deep link opzionale dopo Pubblica. */
   const reviewPortalUrl = React.useMemo(() => {

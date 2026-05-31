@@ -19,7 +19,7 @@ import {
 import { fetchKbDocumentContent } from '@services/kbDocumentRepositoryApi';
 
 import type { StagedKbDocument } from './kbDocumentTypes';
-
+import { kbRepositoryKeyForDoc } from './kbRepositoryContract';
 import { kbDocumentHasUsableAnalysis } from './kbAnalysisRuntimeSynthesis';
 
 import {
@@ -116,7 +116,7 @@ async function resolveUploadDocText(
 
 
 
-  const rid = String(doc.repositoryDocumentId ?? '').trim();
+  const rid = kbRepositoryKeyForDoc(doc);
 
   const hit = await fetchKbDocumentContent(projectId, rid, perDocBudget);
 

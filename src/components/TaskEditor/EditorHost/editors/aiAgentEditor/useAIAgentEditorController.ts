@@ -33,6 +33,7 @@ import {
   regenerateAIAgentUseCaseTurnApi,
   generalizeAIAgentUseCaseMetaApi,
   polishUseCaseScenarioApi,
+  proposeCompileSlotMappingsApi,
 } from '@services/aiAgentDesignApi';
 import type { AIAgentProposedVariable } from '@types/aiAgentDesign';
 import type {
@@ -55,15 +56,50 @@ import {
   saveProjectSlotLexicon,
 } from '@domain/useCaseBundle/projectLexiconAccess';
 import {
+  CATALOG_IA_FIRST_COMPILE_OPTIONS,
+  collectCatalogCompileInputs,
   collectMappingsFromUseCases,
+  collectSurfacesInCatalogUseCases,
   compileAllUseCases,
 } from '@domain/useCaseBundle/semanticCompile';
 import {
+  CORE_SLOT_IDS,
   isUnclassifiedSlotId,
   mergeMappingsIntoLexicon,
   normalizeSlotId,
+  normalizeSurface,
+  pruneLexiconOrphans,
 } from '@domain/useCaseBundle/projectSlotLexicon';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import {
+  emptyAgentBackendOutputSlotBindings,
+  parseAgentBackendOutputSlotBindingsJson,
+  serializeAgentBackendOutputSlotBindings,
+} from '@domain/backendOutputSlotBinding/parseSerialize';
+import type { AgentBackendOutputSlotBindings } from '@domain/backendOutputSlotBinding/types';
+import { buildBindingsFingerprint } from '@domain/backendOutputSlotBinding/buildBindingsFingerprint';
+import { applyCompileSlotMappingProposal } from '@domain/backendOutputSlotBinding/applyCompileSlotMappingProposal';
+import {
+  collectBackendToolCompileContexts,
+  syncSlotContractsFromRows,
+} from '@domain/backendOutputSlotBinding/slotBackendContract';
+import { collectBackendSendLeavesFromTasks } from '@domain/backendOutputSlotBinding/collectBackendSendLeaves';
+import { collectBackendSendLeavesByTask } from '@domain/backendOutputSlotBinding/collectBackendSendLeavesByTask';
+import {
+  collectBackendReceiveLeavesByTask,
+  collectReceivePathsFromGroups,
+} from '@domain/backendOutputSlotBinding/collectBackendReceiveLeavesByTask';
+import {
+  buildParameterDestinationCatalog,
+  type ParameterDestination,
+} from '@domain/backendOutputSlotBinding/parameterDestinationTree';
+import { reconcileSendHintsWithCatalog } from '@domain/backendOutputSlotBinding/reconcileBindingsWithCatalog';
+import { proposeSurfaceSendHint } from '@domain/backendOutputSlotBinding/surfaceSendHints';
+import { mergeSendHintsIntoBindings, updateSendHintForSurface } from '@domain/backendOutputSlotBinding/mergeSendHints';
+import type { TokenSendRole } from '@domain/backendOutputSlotBinding/types';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import { buildAgentWebhookReadinessReport } from '@domain/openApi/webhookOpenApiReadiness';
+import { computeCatalogCompileValidation } from './useCaseBundle/catalogCompileValidation';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import type { AgentTaskTextFieldId } from '@domain/aiAgent/agentTaskTextFieldIds';
@@ -77,6 +113,12 @@ import {
   formatUseCaseExtendBatchFailureMessage,
 } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import { getScenarioText, withScenarioText } from '@domain/aiAgentUseCase/scenarioText';
+import {
+  emptyAgentStartPromptConfig,
+  parseAgentStartPromptJson,
+  serializeAgentStartPromptConfig,
+  type AgentStartPromptConfig,
+} from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import {
   createConversationalRuleFromLabel,
   serializeConversationalRules,
@@ -363,6 +405,10 @@ export function useAIAgentEditorController({
   /** Note designer persistite su `Task.agentUseCaseStyleLearningNotes`, unite al preset stile nelle API. */
   const [agentUseCaseStyleLearningNotes, setAgentUseCaseStyleLearningNotesState] =
     React.useState('');
+  const [agentStartPromptConfig, setAgentStartPromptConfigState] = React.useState(() =>
+    emptyAgentStartPromptConfig()
+  );
+  const [agentStartUseCaseId, setAgentStartUseCaseIdState] = React.useState('');
   const [useCaseComposerBusy, setUseCaseComposerBusy] = React.useState(false);
   /** Solo generazione bundle use case (wizard): non propagare agli altri pulsanti del pannello DX. */
   const [useCaseBundleGenerationBusy, setUseCaseBundleGenerationBusy] = React.useState(false);
@@ -442,10 +488,15 @@ export function useAIAgentEditorController({
    * non attiva esplicitamente la checkbox dal pannellino Upload.
    */
   const [agentLogUseCase, setAgentLogUseCaseState] = React.useState<boolean>(false);
+  const [agentLogBackendCalls, setAgentLogBackendCallsState] = React.useState<boolean>(false);
   const [agentBehavior, setAgentBehaviorState] = React.useState<'A' | 'B' | 'C'>('B');
   const [agentInterfaceInput, setAgentInterfaceInputState] = React.useState<MappingEntry[]>([]);
   const [agentInterfaceOutput, setAgentInterfaceOutputState] = React.useState<MappingEntry[]>([]);
   const [compilePhrasesBusy, setCompilePhrasesBusy] = React.useState(false);
+  const [backendOutputSlotBindings, setBackendOutputSlotBindings] =
+    React.useState<AgentBackendOutputSlotBindings>(emptyAgentBackendOutputSlotBindings);
+  const [compileMappingBanner, setCompileMappingBanner] = React.useState<string | null>(null);
+  const openSlotMappingOnCompileFailRef = React.useRef<(() => void) | null>(null);
   const [projectSlotLexicon, setProjectSlotLexicon] = React.useState<ProjectSlotLexicon>(() =>
     loadProjectSlotLexicon(
       typeof localStorage !== 'undefined' ? localStorage.getItem('currentProjectId') : null
@@ -455,6 +506,56 @@ export function useAIAgentEditorController({
   const [iaRuntimeConfig, setIaRuntimeConfigState] = React.useState<IAAgentConfig>(() =>
     loadGlobalIaAgentConfig()
   );
+  const backendTaskIdsMerged = React.useMemo(
+    () =>
+      mergeConvaiBackendToolIdLists(
+        iaRuntimeConfig.convaiBackendToolTaskIds ?? [],
+        manualCatalogBackendTaskIds ?? []
+      ),
+    [iaRuntimeConfig.convaiBackendToolTaskIds, manualCatalogBackendTaskIds]
+  );
+
+  const getBackendTask = React.useCallback(
+    (id: string) => taskRepository.getTask(id),
+    []
+  );
+
+  const buildWebhookReadinessReport = React.useCallback(
+    () =>
+      buildAgentWebhookReadinessReport({
+        backendTaskIds: backendTaskIdsMerged,
+        getTask: getBackendTask,
+      }),
+    [backendTaskIdsMerged, getBackendTask]
+  );
+
+  const backendSendLeavesByTask = React.useMemo(
+    () => collectBackendSendLeavesByTask(backendTaskIdsMerged, getBackendTask),
+    [backendTaskIdsMerged, getBackendTask]
+  );
+
+  const backendReceiveLeavesByTask = React.useMemo(
+    () => collectBackendReceiveLeavesByTask(backendTaskIdsMerged, getBackendTask),
+    [backendTaskIdsMerged, getBackendTask]
+  );
+
+  const backendSendParamLeaves = React.useMemo(
+    () => backendSendLeavesByTask.flatMap((g) => g.leaves),
+    [backendSendLeavesByTask]
+  );
+
+  const parameterDestinationCatalog = React.useMemo(() => {
+    const mapped = new Set<string>(CORE_SLOT_IDS);
+    for (const e of projectSlotLexicon.entries) {
+      const id = e.slot_id.trim().toLowerCase();
+      if (id && id !== 'undefined') mapped.add(id);
+    }
+    return buildParameterDestinationCatalog(
+      backendSendLeavesByTask,
+      backendReceiveLeavesByTask,
+      [...mapped]
+    );
+  }, [backendSendLeavesByTask, backendReceiveLeavesByTask, projectSlotLexicon.entries]);
   /** Set in `loadFromRepository`: task has `agentIaRuntimeOverrideJson` vs copy of global defaults. */
   const [iaRuntimeLoadedFrom, setIaRuntimeLoadedFrom] = React.useState<'saved_override' | 'global_defaults'>(
     'global_defaults'
@@ -898,6 +999,14 @@ export function useAIAgentEditorController({
     });
   }, []);
 
+  const setAgentLogBackendCalls = React.useCallback((next: boolean) => {
+    setAgentLogBackendCallsState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
   const setAgentBehavior = React.useCallback((next: 'A' | 'B' | 'C') => {
     setAgentBehaviorState((prev) => {
       if (prev === next) return prev;
@@ -935,6 +1044,11 @@ export function useAIAgentEditorController({
   const agentKnowledgeBaseDocumentsJson = React.useMemo(
     () => serializeAgentKnowledgeBaseDocuments(knowledgeBaseToPersisted()),
     [knowledgeBaseDocuments]
+  );
+
+  const agentBackendOutputSlotBindingsJson = React.useMemo(
+    () => serializeAgentBackendOutputSlotBindings(backendOutputSlotBindings),
+    [backendOutputSlotBindings]
   );
 
   const knowledgeBaseAddFiles = React.useCallback(
@@ -991,6 +1105,7 @@ export function useAIAgentEditorController({
           }
           setUseCaseComposerError(null);
           useCaseInvalidationHandlers.deleteUseCaseWithInvalidationKb(useCaseId);
+          setAgentStartUseCaseIdState((cur) => (cur === useCaseId ? '' : cur));
         }
       ),
     [useCaseInvalidationHandlers, useCases]
@@ -1013,23 +1128,187 @@ export function useAIAgentEditorController({
     [designDescription, structuredRev.composedRuntimeMarkdown, proposedFields, useCases]
   );
 
-  const compileUseCasePhrasesForCatalog = React.useCallback(() => {
+  /**
+   * Allinea il lessico alle surface ancora presenti nei messaggi UC (rimuove orfani).
+   * Chiamato all'apertura di Slot Mapping e dopo Compila.
+   */
+  const reconcileLexiconOrphansWithCatalog = React.useCallback(
+    (catalog: readonly AIAgentUseCase[] = useCases) => {
+      const surfaces = collectSurfacesInCatalogUseCases(catalog);
+      setProjectSlotLexicon((prev) => {
+        const { lexicon: next, removedEntryCount, removedProposalCount } =
+          pruneLexiconOrphans(prev, surfaces);
+        if (removedEntryCount === 0 && removedProposalCount === 0) return prev;
+        saveProjectSlotLexicon(projectId ?? null, next);
+        setDirty(true);
+        return next;
+      });
+
+      const groups = collectBackendSendLeavesByTask(backendTaskIdsMerged, getBackendTask);
+      const leaves = groups.flatMap((g) => g.leaves);
+      if (groups.length > 0 && leaves.length > 0) {
+        setBackendOutputSlotBindings((prev) =>
+          reconcileSendHintsWithCatalog(prev, catalog, leaves, { backendGroups: groups })
+        );
+        setDirty(true);
+      }
+    },
+    [useCases, projectId, backendTaskIdsMerged, getBackendTask]
+  );
+
+  const registerOpenSlotMappingOnCompileFail = React.useCallback((open: () => void) => {
+    openSlotMappingOnCompileFailRef.current = open;
+  }, []);
+
+  const compileUseCasePhrasesForCatalog = React.useCallback(async () => {
     setCompilePhrasesBusy(true);
     try {
-      const compiled = compileAllUseCases(useCases, projectSlotLexicon);
+      const backendIds = mergeConvaiBackendToolIdLists(
+        iaRuntimeConfig.convaiBackendToolTaskIds ?? [],
+        manualCatalogBackendTaskIds ?? []
+      );
+      const backendLinked = backendIds.length > 0;
+      const getBackendTask = (id: string) => taskRepository.getTask(id);
+      let bindings = backendOutputSlotBindings;
+      if (backendLinked) {
+        const fp = buildBindingsFingerprint(backendIds, getBackendTask);
+        if (fp !== bindings.sourceFingerprint) {
+          bindings = { ...bindings, sourceFingerprint: fp };
+          setBackendOutputSlotBindings(bindings);
+        }
+      }
+
+      let lexicon = projectSlotLexicon;
+      const { surfaces, phraseTokens } = collectCatalogCompileInputs(useCases, lexicon);
+      const needsIaMapping = surfaces.length > 0 || phraseTokens.length > 0;
+      const sendLeaves = backendLinked
+        ? collectBackendSendLeavesFromTasks(backendIds, getBackendTask)
+        : [];
+
+      if (needsIaMapping) {
+        if (!backendLinked) {
+          const msg =
+            'Compila: collega almeno un task Backend al catalogo per mappare automaticamente i token.';
+          setUseCaseComposerError(msg);
+          setCompileMappingBanner(msg);
+          openSlotMappingOnCompileFailRef.current?.();
+          return false;
+        }
+        if (!provider.trim() || !model.trim()) {
+          const msg =
+            'Compila: imposta provider e modello in Omnia Tutor (LLM designer) per la mappatura automatica.';
+          setUseCaseComposerError(msg);
+          setCompileMappingBanner(msg);
+          return false;
+        }
+        try {
+          const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
+          const receiveGroups = collectBackendReceiveLeavesByTask(backendIds, getBackendTask);
+          const proposal = await proposeCompileSlotMappingsApi({
+            surfaces,
+            phraseTokens,
+            receivePaths: collectReceivePathsFromGroups(receiveGroups),
+            receiveParamLeaves: receiveGroups.flatMap((g) =>
+              g.leaves.map((l) => ({
+                path: l.path,
+                type: l.type,
+                ...(l.format ? { format: l.format } : {}),
+                ...(l.description ? { description: l.description } : {}),
+                suggestedSlotId: l.suggestedSlotId,
+              }))
+            ),
+            backendTaskId: backendIds[0] ?? '',
+            backendToolContexts: collectBackendToolCompileContexts(backendIds, getBackendTask),
+            sendParamLeaves: sendLeaves.map((l) => ({
+              path: l.path,
+              type: l.type,
+              ...(l.format ? { format: l.format } : {}),
+              ...(l.description ? { description: l.description } : {}),
+              semanticRole: l.semanticRole,
+            })),
+            outputLanguage,
+            provider,
+            model,
+            callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_COMPILE_SLOT_MAPPING),
+          });
+          const applied = applyCompileSlotMappingProposal(lexicon, bindings, proposal, {
+            backendTaskId: backendIds[0] ?? '',
+            sourceTaskId: instanceId,
+            sendLeaves,
+          });
+          lexicon = applied.lexicon;
+          bindings = {
+            ...applied.bindings,
+            slotContracts: syncSlotContractsFromRows(applied.bindings, getBackendTask),
+          };
+          setProjectSlotLexicon(lexicon);
+          saveProjectSlotLexicon(projectId ?? null, lexicon);
+          setBackendOutputSlotBindings(bindings);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err ?? '');
+          const msg = `Compila: mappatura IA non riuscita${detail ? ` — ${detail}` : ''}.`;
+          setUseCaseComposerError(msg);
+          setCompileMappingBanner(msg);
+          openSlotMappingOnCompileFailRef.current?.();
+          return false;
+        }
+      }
+
+      let compiled = compileAllUseCases(useCases, lexicon, CATALOG_IA_FIRST_COMPILE_OPTIONS);
       const mappings = collectMappingsFromUseCases(compiled);
-      const { lexicon: merged } = mergeMappingsIntoLexicon(projectSlotLexicon, mappings, {
+      const { lexicon: merged } = mergeMappingsIntoLexicon(lexicon, mappings, {
         sourceTaskId: instanceId,
-        approve: false,
+        upgradeUnclassified: true,
       });
-      setProjectSlotLexicon(merged);
-      saveProjectSlotLexicon(projectId ?? null, merged);
+      const surfacesInCatalog = collectSurfacesInCatalogUseCases(compiled);
+      const { lexicon: reconciled } = pruneLexiconOrphans(merged, surfacesInCatalog);
+      setProjectSlotLexicon(reconciled);
+      saveProjectSlotLexicon(projectId ?? null, reconciled);
+      if (reconciled !== lexicon) {
+        compiled = compileAllUseCases(useCases, reconciled, CATALOG_IA_FIRST_COMPILE_OPTIONS);
+      }
+      const backendGroups = collectBackendSendLeavesByTask(backendIds, getBackendTask);
+      if (backendLinked && backendGroups.length > 0 && sendLeaves.length > 0) {
+        bindings = reconcileSendHintsWithCatalog(bindings, compiled, sendLeaves, {
+          backendGroups,
+        });
+        setBackendOutputSlotBindings(bindings);
+      }
       setUseCases(compiled);
+
+      const validation = computeCatalogCompileValidation(
+        reconciled,
+        compiled,
+        bindings,
+        backendLinked,
+        { sendLeaves, backendGroups }
+      );
+      setCompileMappingBanner(validation.bannerMessage);
+      if (validation.status === 'invalid') {
+        setUseCaseComposerError(validation.bannerMessage);
+        reconcileLexiconOrphansWithCatalog(compiled);
+        openSlotMappingOnCompileFailRef.current?.();
+      } else {
+        setUseCaseComposerError(null);
+      }
       setDirty(true);
+      return validation.status === 'valid';
     } finally {
       setCompilePhrasesBusy(false);
     }
-  }, [useCases, projectSlotLexicon, instanceId, projectId]);
+  }, [
+    useCases,
+    projectSlotLexicon,
+    instanceId,
+    projectId,
+    backendOutputSlotBindings,
+    iaRuntimeConfig.convaiBackendToolTaskIds,
+    manualCatalogBackendTaskIds,
+    provider,
+    model,
+    buildCallMeta,
+    reconcileLexiconOrphansWithCatalog,
+  ]);
 
   const patchLexiconEntries = React.useCallback(
     (map: (entries: ProjectSlotLexicon['entries']) => ProjectSlotLexicon['entries']) => {
@@ -1063,6 +1342,101 @@ export function useAIAgentEditorController({
     [patchLexiconEntries]
   );
 
+  const updateSurfaceSendHint = React.useCallback(
+    (
+      surface: string,
+      patch: {
+        sendPath: string;
+        slotId?: string;
+        valueKind?: string;
+        role?: TokenSendRole;
+      }
+    ) => {
+      setBackendOutputSlotBindings((prev) =>
+        updateSendHintForSurface(prev, surface, patch, backendSendParamLeaves)
+      );
+      setDirty(true);
+    },
+    [backendSendParamLeaves]
+  );
+
+  const applyParameterDestination = React.useCallback(
+    (surface: string, destination: ParameterDestination) => {
+      const key = surface.trim().toLowerCase();
+      const nextSlot = normalizeSlotId(destination.slotId);
+      const classified = !isUnclassifiedSlotId(nextSlot);
+      patchLexiconEntries((entries) =>
+        entries.map((e) =>
+          e.surface === key
+            ? {
+                ...e,
+                slot_id: nextSlot,
+                approved: classified,
+                conflictWith: undefined,
+              }
+            : e
+        )
+      );
+
+      setBackendOutputSlotBindings((prev) => {
+        const without = {
+          ...prev,
+          sendHints: (prev.sendHints ?? []).filter(
+            (h) => normalizeSurface(h.surface) !== key
+          ),
+        };
+        if (destination.kind === 'send' && destination.sendPath?.trim()) {
+          const hint = {
+            surface: key,
+            slotId: nextSlot,
+            role: destination.role ?? 'value',
+            sendPath: destination.sendPath.trim(),
+            ...(destination.valueKind ? { valueKind: destination.valueKind } : {}),
+            ...(destination.toolName ? { toolName: destination.toolName } : {}),
+            ...(destination.backendTaskId ? { backendTaskId: destination.backendTaskId } : {}),
+          };
+          return mergeSendHintsIntoBindings(without, [hint], backendSendParamLeaves);
+        }
+        if (destination.kind === 'receive' && destination.receivePath?.trim()) {
+          const backendTaskId =
+            destination.backendTaskId?.trim() || backendSendLeavesByTask[0]?.backendTaskId || '';
+          const apiPath = destination.receivePath.trim();
+          const rowKey = `${backendTaskId}::${apiPath}`;
+          const rows = [...without.rows];
+          const idx = rows.findIndex(
+            (r) => `${r.backendTaskId}::${r.apiPath}` === rowKey
+          );
+          const tokenInPhrase = key;
+          const nextRow = {
+            backendTaskId,
+            apiPath,
+            slotId: nextSlot,
+            tokenInPhrase,
+            approved: idx >= 0 ? rows[idx]?.approved : undefined,
+          };
+          if (idx >= 0) rows[idx] = { ...rows[idx]!, ...nextRow };
+          else rows.push(nextRow);
+          const contracts = [...(without.slotContracts ?? [])];
+          const cIdx = contracts.findIndex((c) => c.slotId === nextSlot);
+          const toolName = destination.toolName?.trim() || '';
+          const nextContract = {
+            slotId: nextSlot,
+            toolName: toolName || contracts[cIdx]?.toolName || '',
+            backendTaskId,
+            receive: apiPath,
+            approved: cIdx >= 0 ? contracts[cIdx]?.approved : undefined,
+          };
+          if (cIdx >= 0) contracts[cIdx] = { ...contracts[cIdx]!, ...nextContract };
+          else contracts.push(nextContract);
+          return { ...without, rows, slotContracts: contracts };
+        }
+        return without;
+      });
+      setDirty(true);
+    },
+    [patchLexiconEntries, backendSendParamLeaves, backendSendLeavesByTask]
+  );
+
   const updateLexiconSlotId = React.useCallback(
     (surface: string, slotId: string) => {
       const key = surface.trim().toLowerCase();
@@ -1080,8 +1454,21 @@ export function useAIAgentEditorController({
             : e
         )
       );
+
+      if (backendSendParamLeaves.length > 0) {
+        const proposed = proposeSurfaceSendHint(surface, nextSlot, backendSendParamLeaves, {
+          backendTaskId: backendSendLeavesByTask[0]?.backendTaskId ?? '',
+          toolName: backendSendLeavesByTask[0]?.toolName,
+        });
+        if (proposed) {
+          setBackendOutputSlotBindings((prev) =>
+            mergeSendHintsIntoBindings(prev, [proposed], backendSendParamLeaves)
+          );
+        }
+      }
+      setDirty(true);
     },
-    [patchLexiconEntries]
+    [patchLexiconEntries, backendSendParamLeaves, backendSendLeavesByTask]
   );
 
   const hydratedRef = React.useRef(false);
@@ -1209,6 +1596,7 @@ export function useAIAgentEditorController({
     setAgentConversationStyleSelectionsState(b.agentConversationStyleSelections);
     setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
     setAgentLogUseCaseState(b.agentLogUseCase);
+    setAgentLogBackendCallsState(b.agentLogBackendCalls);
     setAgentBehaviorState(b.agentBehavior);
     const ifaceLoaded = parseAgentInterfaceJson(b.agentInterfaceJson);
     setAgentInterfaceInputState(agentInterfaceRowsToMappingEntries(ifaceLoaded.input));
@@ -1217,6 +1605,10 @@ export function useAIAgentEditorController({
       parseAgentKnowledgeBaseDocumentsJson(b.agentKnowledgeBaseDocumentsJson)
     );
     setProjectSlotLexicon(loadProjectSlotLexicon(projectId ?? null));
+    setBackendOutputSlotBindings(
+      parseAgentBackendOutputSlotBindingsJson(b.agentBackendOutputSlotBindingsJson)
+    );
+    setCompileMappingBanner(null);
     setLogicalSteps(b.logicalSteps);
     useCaseSiblingSortModeRef.current = 'logical';
     setUseCaseSiblingSortModeState('logical');
@@ -1231,6 +1623,8 @@ export function useAIAgentEditorController({
         : DEFAULT_AI_AGENT_GLOBAL_USE_CASE_STYLE_ID
     );
     setAgentUseCaseStyleLearningNotesState(b.agentUseCaseStyleLearningNotes);
+    setAgentStartPromptConfigState(parseAgentStartPromptJson(b.agentStartPromptJson));
+    setAgentStartUseCaseIdState(String(b.agentStartUseCaseId ?? '').trim());
     const iaRaw = b.agentIaRuntimeOverrideJson.trim();
     if (iaRaw) {
       try {
@@ -1322,6 +1716,8 @@ export function useAIAgentEditorController({
       hasAgentGeneration,
       agentLogicalStepsJson: serializeLogicalSteps(logicalSteps),
       agentUseCasesJson,
+      agentStartPromptJson: serializeAgentStartPromptConfig(agentStartPromptConfig),
+      agentStartUseCaseId: String(agentStartUseCaseId ?? '').trim(),
       agentConversationalRulesJson,
       agentUseCaseWizardStateJson,
       agentIaRuntimeOverrideJson: serializeIaAgentConfigForTaskPersistence(iaRuntimeForPersist),
@@ -1334,9 +1730,11 @@ export function useAIAgentEditorController({
       agentConversationStyleSelections,
       agentConversationDeployStyleId,
       agentLogUseCase,
+      agentLogBackendCalls,
       agentBehavior,
       agentInterfaceJson,
       agentKnowledgeBaseDocumentsJson,
+      agentBackendOutputSlotBindingsJson,
     }) as Record<string, unknown>;
     const ok = taskRepository.updateTask(instanceId, patch as Partial<Task>, projectId);
     if (!ok) {
@@ -1391,6 +1789,10 @@ export function useAIAgentEditorController({
     agentBehavior,
     agentInterfaceJson,
     agentKnowledgeBaseDocumentsJson,
+    agentBackendOutputSlotBindingsJson,
+    agentStartPromptConfig,
+    agentStartUseCaseId,
+    agentLogBackendCalls,
   ]);
 
   const persistAgentUseCaseWizardState = React.useCallback((json: string) => {
@@ -2830,10 +3232,24 @@ export function useAIAgentEditorController({
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
     agentLogUseCase,
+    agentLogBackendCalls,
     agentBehavior,
     agentInterfaceJson,
     agentKnowledgeBaseDocumentsJson,
+    agentBackendOutputSlotBindingsJson,
+    agentStartPromptJson: serializeAgentStartPromptConfig(agentStartPromptConfig),
+    agentStartUseCaseId: String(agentStartUseCaseId ?? '').trim(),
   };
+
+  const setAgentStartPromptConfig = React.useCallback((next: AgentStartPromptConfig) => {
+    setAgentStartPromptConfigState(next);
+    setDirty(true);
+  }, []);
+
+  const setAgentStartUseCaseId = React.useCallback((next: string) => {
+    setAgentStartUseCaseIdState(String(next ?? '').trim());
+    setDirty(true);
+  }, []);
 
   const ensurePromptFinalDeterministicCompileSync = React.useCallback((reason: string) => {
     const id = instanceIdRef.current;
@@ -3034,6 +3450,8 @@ export function useAIAgentEditorController({
     setAgentConversationDeployStyleId,
     agentLogUseCase,
     setAgentLogUseCase,
+    agentLogBackendCalls,
+    setAgentLogBackendCalls,
     agentBehavior,
     setAgentBehavior,
     agentInterfaceInput,
@@ -3048,13 +3466,27 @@ export function useAIAgentEditorController({
     knowledgeBaseReorderDocuments,
     knowledgeBaseTaskContext,
     agentUseCasesJson: serializeUseCases(useCases, useCaseCategories),
+    agentStartPromptConfig,
+    setAgentStartPromptConfig,
+    agentStartUseCaseId,
+    setAgentStartUseCaseId,
     agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     compileUseCasePhrasesForCatalog,
     compilePhrasesBusy,
+    buildWebhookReadinessReport,
+    compileMappingBanner,
+    registerOpenSlotMappingOnCompileFail,
+    backendOutputSlotBindings,
+    backendSendParamLeaves,
+    backendSendLeavesByTask,
+    parameterDestinationCatalog,
     projectSlotLexicon,
+    reconcileLexiconOrphansWithCatalog,
     approveLexiconSurface,
     revokeLexiconSurface,
     updateLexiconSlotId,
+    updateSurfaceSendHint,
+    applyParameterDestination,
     markAgentEditorDirty: () => setDirty(true),
   };
 }

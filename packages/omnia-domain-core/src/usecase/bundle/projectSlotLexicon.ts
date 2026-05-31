@@ -141,13 +141,27 @@ export interface MergeLexiconResult {
   conflicts: Array<{ surface: string; existingSlotId: string; proposedSlotId: string }>;
 }
 
+export type MergeMappingsIntoLexiconOptions = {
+  sourceTaskId?: string;
+  /** Nuove voci create già approvate. */
+  approve?: boolean;
+  /**
+   * Se la riga esiste con categoria `undefined` e la proposta è classificata,
+   * aggiorna `slot_id` invece di segnare solo conflitto (es. post-IA compile).
+   */
+  upgradeUnclassified?: boolean;
+  /** Dopo upgrade o stessa surface già classificata: marca approvata (proposta compile IA). */
+  approveClassifiedProposals?: boolean;
+};
+
 /**
- * First-write-wins: nuove surface aggiunte; conflitto se stessa surface, slot_id diverso.
+ * First-write-wins: nuove surface aggiunte; conflitto se stessa surface, slot_id diverso
+ * (salvo upgrade da `undefined` quando `upgradeUnclassified`).
  */
 export function mergeMappingsIntoLexicon(
   lexicon: ProjectSlotLexicon,
   mappings: readonly SlotSurfaceMapping[],
-  options: { sourceTaskId?: string; approve?: boolean } = {}
+  options: MergeMappingsIntoLexiconOptions = {}
 ): MergeLexiconResult {
   const entries = [...lexicon.entries];
   const conflicts: MergeLexiconResult['conflicts'] = [];
@@ -161,29 +175,94 @@ export function mergeMappingsIntoLexicon(
 
     const existing = bySurface.get(surface);
     if (!existing) {
+      const classified = !isUnclassifiedSlotId(slot_id);
       const entry: LexiconEntry = {
         surface,
         slot_id,
-        approved: options.approve === true,
+        approved:
+          options.approve === true ||
+          (options.approveClassifiedProposals === true && classified),
         ...(options.sourceTaskId ? { sourceTaskId: options.sourceTaskId } : {}),
       };
       entries.push(entry);
       bySurface.set(surface, entry);
       continue;
     }
-    if (existing.slot_id !== slot_id) {
-      conflicts.push({
-        surface,
-        existingSlotId: existing.slot_id,
-        proposedSlotId: slot_id,
-      });
-      if (!existing.conflictWith) {
-        existing.conflictWith = slot_id;
+
+    if (existing.slot_id === slot_id) {
+      if (
+        options.approveClassifiedProposals &&
+        !isUnclassifiedSlotId(slot_id) &&
+        !existing.approved
+      ) {
+        existing.approved = true;
       }
+      continue;
+    }
+
+    const canUpgrade =
+      options.upgradeUnclassified &&
+      isUnclassifiedSlotId(existing.slot_id) &&
+      !isUnclassifiedSlotId(slot_id);
+    if (canUpgrade) {
+      existing.slot_id = slot_id;
+      existing.conflictWith = undefined;
+      if (options.approveClassifiedProposals) {
+        existing.approved = true;
+      }
+      continue;
+    }
+
+    conflicts.push({
+      surface,
+      existingSlotId: existing.slot_id,
+      proposedSlotId: slot_id,
+    });
+    if (!existing.conflictWith) {
+      existing.conflictWith = slot_id;
     }
   }
 
   return { lexicon: { ...lexicon, entries }, conflicts };
+}
+
+export interface PruneLexiconOrphansResult {
+  lexicon: ProjectSlotLexicon;
+  removedEntryCount: number;
+  removedProposalCount: number;
+}
+
+/**
+ * Rimuove dal lessico le surface non più presenti nel catalogo (UC cancellati o testo cambiato).
+ */
+export function pruneLexiconOrphans(
+  lexicon: ProjectSlotLexicon,
+  surfacesInCatalog: ReadonlySet<string>
+): PruneLexiconOrphansResult {
+  const entries = lexicon.entries.filter((e) => surfacesInCatalog.has(e.surface));
+  const removedEntryCount = lexicon.entries.length - entries.length;
+
+  const pendingRaw = lexicon.pendingProposals ?? [];
+  const pendingProposals = pendingRaw.filter((p) =>
+    surfacesInCatalog.has(normalizeSurface(p.surface))
+  );
+  const removedProposalCount = pendingRaw.length - pendingProposals.length;
+
+  if (removedEntryCount === 0 && removedProposalCount === 0) {
+    return { lexicon, removedEntryCount: 0, removedProposalCount: 0 };
+  }
+
+  return {
+    lexicon: {
+      ...lexicon,
+      entries,
+      ...(pendingProposals.length > 0 || pendingRaw.length > 0
+        ? { pendingProposals }
+        : {}),
+    },
+    removedEntryCount,
+    removedProposalCount,
+  };
 }
 
 export function lookupApprovedSlotId(
@@ -193,4 +272,15 @@ export function lookupApprovedSlotId(
   const key = normalizeSurface(surface);
   const hit = lexicon.entries.find((e) => e.surface === key && e.approved);
   return hit?.slot_id ?? null;
+}
+
+/** Riga lessico classificata (anche non approvata) — usata dopo proposta compile IA. */
+export function lookupLexiconSlotId(
+  lexicon: ProjectSlotLexicon,
+  surface: string
+): string | null {
+  const key = normalizeSurface(surface);
+  const hit = lexicon.entries.find((e) => e.surface === key);
+  if (!hit || isUnclassifiedSlotId(hit.slot_id)) return null;
+  return hit.slot_id;
 }

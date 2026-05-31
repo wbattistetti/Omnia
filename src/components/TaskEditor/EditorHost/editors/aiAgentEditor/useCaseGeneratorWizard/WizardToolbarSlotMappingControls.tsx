@@ -7,8 +7,11 @@ import { AlertTriangle, Check, Layers } from 'lucide-react';
 import type { AgentBehaviorMode } from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
-import { computeSlotMappingValidation } from '../useCaseBundle/slotMappingValidation';
+import type { AgentBackendOutputSlotBindings } from '@domain/backendOutputSlotBinding/types';
+import { emptyAgentBackendOutputSlotBindings } from '@domain/backendOutputSlotBinding/parseSerialize';
+import { computeCatalogCompileValidation } from '../useCaseBundle/catalogCompileValidation';
 import { useUseCaseWizardListToolbarOptional } from './UseCaseWizardListToolbarContext';
+import { useOptionalAIAgentEditorDock } from '../AIAgentEditorDockContext';
 
 const BEHAVIOR_LABELS: Record<AgentBehaviorMode, string> = {
   A: 'A — UKS + risposta libera',
@@ -58,17 +61,58 @@ export function WizardAgentBehaviorSelect({
   );
 }
 
+export function WizardCompileMappingBanner(): React.ReactElement | null {
+  const ctx = useUseCaseWizardListToolbarOptional();
+  if (!ctx?.compileMappingBanner?.trim()) return null;
+  const ok = ctx.compileMappingBanner.startsWith('MAPPED');
+  return (
+    <div
+      role="status"
+      className={[
+        'mb-2 w-full rounded-md border px-3 py-2 text-center text-sm font-bold tracking-wide',
+        ok
+          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+          : 'border-amber-500/50 bg-amber-500/15 text-amber-100',
+      ].join(' ')}
+    >
+      {ctx.compileMappingBanner}
+    </div>
+  );
+}
+
 export function WizardSlotMappingToggle({
   lexicon,
   useCases,
+  backendOutputSlotBindings,
+  backendLinked = false,
 }: {
   lexicon: ProjectSlotLexicon;
   useCases: readonly AIAgentUseCase[];
+  backendOutputSlotBindings?: AgentBackendOutputSlotBindings;
+  backendLinked?: boolean;
 }): React.ReactElement | null {
   const ctx = useUseCaseWizardListToolbarOptional();
+  const dock = useOptionalAIAgentEditorDock();
   const validation = React.useMemo(
-    () => computeSlotMappingValidation(lexicon, useCases),
-    [lexicon, useCases]
+    () =>
+      computeCatalogCompileValidation(
+        lexicon,
+        useCases,
+        backendOutputSlotBindings ?? emptyAgentBackendOutputSlotBindings(),
+        backendLinked,
+        {
+          sendLeaves: dock?.backendSendParamLeaves ?? [],
+          backendGroups: dock?.backendSendLeavesByTask,
+        }
+      ),
+    [
+      lexicon,
+      useCases,
+      backendOutputSlotBindings,
+      backendLinked,
+      dock?.backendSendParamLeaves,
+      dock?.backendSendLeavesByTask,
+    ]
   );
   if (!ctx) return null;
 
@@ -80,10 +124,13 @@ export function WizardSlotMappingToggle({
       aria-pressed={active}
       title={
         validation.status === 'valid'
-          ? 'Slot Mapping validato'
-          : `Slot Mapping — ${validation.reasons.join('; ') || 'da completare'}`
+          ? 'Slot Mapping e binding backend validati'
+          : `Mapping — ${[...validation.slotReasons, ...validation.backendReasons].join('; ') || 'da completare'}`
       }
       onClick={() => {
+        if (!active) {
+          dock?.reconcileLexiconOrphansWithCatalog?.(useCases);
+        }
         ctx.toggleSlotMappingPanel();
       }}
       className={[
@@ -95,7 +142,7 @@ export function WizardSlotMappingToggle({
     >
       <Layers size={14} aria-hidden />
       <span>Slot mapping</span>
-      {validation.status === 'valid' ? (
+      {validation.status === 'valid' && validation.backendReasons.length === 0 ? (
         <Check size={14} className="text-emerald-400" aria-hidden />
       ) : (
         <AlertTriangle size={14} className="text-amber-400" aria-hidden />

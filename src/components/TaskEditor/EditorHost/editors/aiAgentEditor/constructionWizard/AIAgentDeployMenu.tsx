@@ -1,13 +1,14 @@
 /**
  * Dropdown «Deploy» dello stepper del wizard di costruzione AI Agent.
  *
- * Visibile appena gli use case sono pronti/compilabili (gating fatto dal parent: vedi
- * `canCreateConversationalPrompt`). Le conversazioni NON sono prerequisito di Upload.
+ * Visibile quando il catalogo ha almeno un use case (parent). Upload è gated su mapping
+ * valido; Copy compila e mostra errori senza nascondere il menu.
  *
  * Layout (sezioni separate da divider, sotto un titolo «UPLOAD TO PLATFORM»):
  *   ─── UPLOAD TO PLATFORM ────────────
  *   ☐ Avvio immediato         ← runtime toggle (persistito sul Task)
- *   ☐ Logga Use Case          ← prompt-shaping toggle (persistito sul Task)
+ *   ☐ Mostra Usecases         ← trace USECASE nel prompt (persistito sul Task)
+ *   ☐ Mostra chiamate backend ← righe DEBUG tool nel prompt (persistito sul Task)
  *   ─────────────────────────────────────
  *   ▸ STILE  (opzionale; pill solo se l'utente ne ha checkati nel gate)
  *       [Cortese (2)] [Ironico (1)]
@@ -18,7 +19,8 @@
  *       • Gemini        Manca la voce  [Fix]
  *       • OpenAI        Manca la voce  [Fix]
  *   ─────────────────────────────────────
- *   ▸ Copy system prompt
+ *   ▸ Compila e Copy system prompt
+ *   ▸ Copy system prompt (solo dialog copia, senza ricompilare)
  *
  * **Selezione voce per platform**: la `voicesByPlatform` ricevuta dal parent è già il
  * risultato del resolver (`resolveVoicesByPlatform`), che applica priorità
@@ -28,15 +30,24 @@
  * **Fix**: se la voce è `null`, il bottone Fix è ATTIVO. L'Upload richiede solo che la
  * voce sia configurata; lo stile è opzionale (se selezionato viene propagato).
  *
- * **Copy system prompt**: apre il dialog «Crea prompt conversazionale» esistente per
- * portare il system prompt negli appunti. Sempre disponibile (gating leggero su
- * `copySystemPromptDisabled` dal parent).
+ * **Copy system prompt**: apre il dialog copia senza ricompilare il catalogo.
+ * **Compila e Copy**: compile + mapping IA, poi dialog o Slot Mapping se invalido.
  *
  * Il componente è puramente presentazionale: niente fetch, niente `localStorage` diretto.
  */
 
 import React from 'react';
-import { ChevronDown, FileText, PlayCircle, Rocket, ScrollText, Wrench } from 'lucide-react';
+import {
+  ChevronDown,
+  FileText,
+  ClipboardList,
+  Loader2,
+  PlayCircle,
+  Rocket,
+  ScrollText,
+  Sparkles,
+  Wrench,
+} from 'lucide-react';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 import {
   AGENT_PLATFORM_DISPLAY_LABEL,
@@ -63,15 +74,20 @@ export interface DeployHandlers {
    * il pannello Settings > IA Runtime con `platform` settata su `platform` e focus al picker voce.
    */
   onFixVoice: (platform: IAAgentPlatform) => void;
-  /**
-   * Chiamato per «Copy system prompt»: apre il dialog «Crea prompt conversazionale» esistente
-   * (l'utente vi clicca «Copia tutto» per portare il prompt negli appunti).
-   */
+  /** Apre il dialog copia senza ricompilare il catalogo. */
   onCopySystemPrompt: () => void;
-  /** True se «Copy system prompt» NON è disponibile (es. use case non ancora compilabili). */
+  /** Compila catalogo + mapping IA, poi dialog copia o Slot Mapping se fallisce. */
+  onCompileAndCopySystemPrompt: () => void;
+  /** True se «Copy system prompt» (solo copia) non è disponibile. */
   copySystemPromptDisabled?: boolean;
-  /** Tooltip mostrato sull'item disabilitato (motivo del block). */
   copySystemPromptDisabledReason?: string;
+  /** True se «Compila e Copy» non è disponibile (es. catalogo vuoto). */
+  compileAndCopyDisabled?: boolean;
+  compileAndCopyDisabledReason?: string;
+  /** Compilazione in corso (spinner su Deploy e sulla voce Compila e Copy). */
+  compilePhrasesBusy?: boolean;
+  /** Apre il report readiness OpenAPI / webhook per i backend ConvAI collegati. */
+  onOpenWebhookReadinessReport?: () => void;
 }
 
 export interface AIAgentDeployMenuProps extends DeployHandlers {
@@ -97,6 +113,8 @@ export interface AIAgentDeployMenuProps extends DeployHandlers {
    */
   logUseCaseEnabled: boolean;
   onToggleLogUseCase: (next: boolean) => void;
+  logBackendCallsEnabled: boolean;
+  onToggleLogBackendCalls: (next: boolean) => void;
   /**
    * Toggle "Avvio immediato" (vedi `Task.agentImmediateStart`). Quando true, l'orchestrator
    * runtime inietta un primo turno utente sintetico così l'agente apre il dialogo senza
@@ -105,6 +123,9 @@ export interface AIAgentDeployMenuProps extends DeployHandlers {
    */
   immediateStartEnabled: boolean;
   onToggleImmediateStart: (next: boolean) => void;
+  /** Se false, Upload platform è disabilitato (Copy resta attivo). */
+  catalogUploadReady?: boolean;
+  catalogUploadBlockedReason?: string;
 }
 
 export function AIAgentDeployMenu({
@@ -112,16 +133,25 @@ export function AIAgentDeployMenu({
   onUploadToPlatform,
   onFixVoice,
   onCopySystemPrompt,
+  onCompileAndCopySystemPrompt,
   copySystemPromptDisabled = false,
   copySystemPromptDisabledReason,
+  compileAndCopyDisabled = false,
+  compileAndCopyDisabledReason,
+  compilePhrasesBusy = false,
+  onOpenWebhookReadinessReport,
   availableStyleIds,
   countByStyleId,
   deployStyleId,
   onDeployStyleIdChange,
   logUseCaseEnabled,
   onToggleLogUseCase,
+  logBackendCallsEnabled,
+  onToggleLogBackendCalls,
   immediateStartEnabled,
   onToggleImmediateStart,
+  catalogUploadReady = true,
+  catalogUploadBlockedReason,
 }: AIAgentDeployMenuProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -161,11 +191,21 @@ export function AIAgentDeployMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         title="Deploy: pubblica l'agente su una piattaforma o copia il system prompt"
-        className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/70 bg-amber-700/85 px-2.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
+        className={[
+          'inline-flex items-center gap-1.5 rounded-md border border-amber-500/70 bg-amber-700/85 px-2.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70',
+          compilePhrasesBusy ? 'cursor-wait opacity-90' : '',
+        ].join(' ')}
+        aria-busy={compilePhrasesBusy}
       >
-        <Rocket size={13} aria-hidden />
-        <span>Deploy</span>
-        <ChevronDown size={12} aria-hidden className="opacity-80" />
+        {compilePhrasesBusy ? (
+          <Loader2 size={13} aria-hidden className="animate-spin" />
+        ) : (
+          <Rocket size={13} aria-hidden />
+        )}
+        <span>{compilePhrasesBusy ? 'Compilazione…' : 'Deploy'}</span>
+        {!compilePhrasesBusy ? (
+          <ChevronDown size={12} aria-hidden className="opacity-80" />
+        ) : null}
       </button>
 
       {open ? (
@@ -178,6 +218,12 @@ export function AIAgentDeployMenu({
           <div className="bg-slate-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
             Upload to Platform
           </div>
+
+          {!catalogUploadReady && catalogUploadBlockedReason ? (
+            <p className="border-b border-amber-700/40 bg-amber-950/50 px-3 py-2 text-[11px] leading-snug text-amber-100">
+              Upload disabilitato: {catalogUploadBlockedReason}
+            </p>
+          ) : null}
 
           {/*
             ── Toggle 1: «Avvio immediato» ─────────────────────────────────────────────
@@ -224,7 +270,22 @@ export function AIAgentDeployMenu({
                 className="h-3.5 w-3.5 cursor-pointer accent-amber-500"
               />
               <ScrollText size={12} aria-hidden className="shrink-0 text-amber-300" />
-              <span className="flex-1">Logga Use Case</span>
+              <span className="flex-1">Mostra Usecases</span>
+            </label>
+            <label
+              role="menuitemcheckbox"
+              aria-checked={logBackendCallsEnabled}
+              title="Quando attivo, il system prompt chiede righe DEBUG dopo ogni tool backend e in debugger/chat compaiono riepiloghi delle invocazioni (endpoint e primi risultati)."
+              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800"
+            >
+              <input
+                type="checkbox"
+                checked={logBackendCallsEnabled}
+                onChange={(e) => onToggleLogBackendCalls(e.target.checked)}
+                className="h-3.5 w-3.5 cursor-pointer accent-amber-500"
+              />
+              <ScrollText size={12} aria-hidden className="shrink-0 text-orange-300" />
+              <span className="flex-1">Mostra chiamate backend</span>
             </label>
           </div>
 
@@ -266,14 +327,16 @@ export function AIAgentDeployMenu({
                  * Voce assente   → Fix: apre il pannello voci della platform.
                  * La riga è SEMPRE cliccabile.
                  */
-                const uploadEnabled = voice !== null;
+                const uploadEnabled = catalogUploadReady && voice !== null;
                 return (
                   <li key={platform}>
                     <button
                       type="button"
                       role="menuitem"
+                      disabled={!catalogUploadReady && voice !== null}
                       onClick={() => {
                         setOpen(false);
+                        if (!catalogUploadReady) return;
                         if (uploadEnabled && voice) {
                           onUploadToPlatform(platform, voice);
                         } else {
@@ -310,27 +373,75 @@ export function AIAgentDeployMenu({
             </ul>
           </div>
 
-          {/* ── Sezione finale: copy system prompt ─────────────────────────────────── */}
+          {/* ── Sezione finale: compila + copia / solo copia ───────────────────────── */}
           <div className="border-t border-slate-700 bg-slate-950">
             <button
               type="button"
               role="menuitem"
-              disabled={copySystemPromptDisabled}
+              disabled={compileAndCopyDisabled || compilePhrasesBusy}
               onClick={() => {
-                setOpen(false);
+                if (compilePhrasesBusy || compileAndCopyDisabled) return;
+                onCompileAndCopySystemPrompt();
+              }}
+              title={
+                compilePhrasesBusy
+                  ? 'Compilazione mapping in corso…'
+                  : compileAndCopyDisabled
+                    ? compileAndCopyDisabledReason ||
+                      'Aggiungi almeno uno use case al catalogo'
+                    : 'Compila mapping IA + lessico, poi apre il dialog per copiare il system prompt'
+              }
+              className={[
+                'flex w-full items-center gap-2 border-b border-slate-800/80 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45',
+                compilePhrasesBusy ? 'cursor-wait' : '',
+              ].join(' ')}
+              aria-busy={compilePhrasesBusy}
+            >
+              {compilePhrasesBusy ? (
+                <Loader2 size={12} aria-hidden className="animate-spin text-violet-300" />
+              ) : (
+                <Sparkles size={12} aria-hidden className="text-violet-300" />
+              )}
+              {compilePhrasesBusy ? 'Compilazione mapping…' : 'Compila e Copy system prompt'}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={copySystemPromptDisabled || compilePhrasesBusy}
+              onClick={() => {
+                if (compilePhrasesBusy || copySystemPromptDisabled) return;
                 onCopySystemPrompt();
               }}
               title={
-                copySystemPromptDisabled
-                  ? copySystemPromptDisabledReason ||
-                    'Disponibile quando tutti gli use case sono compilabili'
-                  : 'Apre il dialog «Crea prompt conversazionale» per copiare il system prompt'
+                compilePhrasesBusy
+                  ? 'Attendi la fine della compilazione in corso'
+                  : copySystemPromptDisabled
+                    ? copySystemPromptDisabledReason ||
+                      'Disponibile quando tutti gli use case inclusi sono compilabili nel catalogo'
+                    : 'Apre il dialog per copiare il system prompt (senza ricompilare)'
               }
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
             >
               <FileText size={12} aria-hidden className="text-violet-300" />
               Copy system prompt
             </button>
+            {onOpenWebhookReadinessReport ? (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={compilePhrasesBusy}
+                onClick={() => {
+                  if (compilePhrasesBusy) return;
+                  onOpenWebhookReadinessReport();
+                  setOpen(false);
+                }}
+                title="Audit OpenAPI per tool ConvAI: type, format, vincoli, description, extension — report copiabile per il team backend"
+                className="flex w-full items-center gap-2 border-t border-slate-800/80 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <ClipboardList size={12} aria-hidden className="text-cyan-300" />
+                Report webhook / OpenAPI
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}

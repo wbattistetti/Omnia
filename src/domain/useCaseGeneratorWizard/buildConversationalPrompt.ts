@@ -37,6 +37,12 @@ import {
 import { buildConversationalRulesPromptSection } from '@domain/conversationalRules/buildConversationalRulesPromptSection';
 import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import {
+  buildStartAgentPromptSection,
+  type AgentStartPromptConfig,
+} from './agentStartPrompt';
+import { buildStartUseCaseRuleSection } from './startUseCase';
+import { buildBackendCallDebugPromptSection } from './backendCallDebugPrompt';
 
 /**
  * Opzioni di build del prompt finale. `includeLog`:
@@ -59,6 +65,16 @@ export interface BuildConversationalPromptOptions {
   readonly conversationalRules?: readonly ConversationalRule[];
   /** Formato serializzazione catalogo use case. Default {@link DEFAULT_CONVERSATIONAL_CATALOG_FORMAT}. */
   readonly catalogFormat?: ConversationalCatalogFormat;
+  /** Frase di apertura sessione (scenario startAgent), separata dal catalogo. */
+  readonly startPrompt?: AgentStartPromptConfig;
+  /** Id use case marcato Start (regola di apertura sessione). */
+  readonly startUseCaseId?: string;
+  /** Debug chiamate backend nel prompt (indipendente da includeLog). */
+  readonly includeBackendLog?: boolean;
+  /** Lessico per `tokenBindings` nel catalogo JSON. */
+  readonly lexicon?: import('@domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon;
+  /** Binding RECEIVE → slot per `fillFrom` nel catalogo JSON. */
+  readonly backendOutputSlotBindings?: import('@domain/backendOutputSlotBinding/types').AgentBackendOutputSlotBindings;
 }
 
 /**
@@ -124,6 +140,9 @@ Regole obbligatorie
 5. Non cambiare le stringhe fuori dai token: copia letterale il testo fisso del template.
 6. Usa lo \`scenario\` LLM (intestazione UC o campo \`s\` / \`scenario\`) per decidere QUANDO applicare l'use case.
 7. Il \`label\` interno e gli id tecnici non vanno citati all'utente.
+8. Se la variante ha \`tokenBindings\`: per ogni token usa \`fillFrom\` (campo RECEIVE) per popolare il valore; \`toolName\` e \`sendParams\` indicano quale tool backend invocare e con quali parametri SEND.
+9. Se l'use case ha \`slotBackendContract\`: è la mappa canonica slot_id → { tool, receive, send? }; allinea \`tokenBindings\` a questa mappa. I dettagli OpenAPI dei tool restano nel blocco globale USE OF BACKENDS (non duplicare per UC).
+10. Se \`tokenBindings\` include \`sendPath\`, \`valueKind\` e \`role\`: sono hint SEND su path OpenAPI del tool (vedi USE OF BACKENDS); valorizza i parametri SEND del body tool in contesto, senza inventare path. Per date relative usa \`valueKind\` (es. end_of_month, tomorrow, specific_date) quando presente.
 
 ${catalogHeading}
 Ogni voce elenca lo scenario LLM e il template da compilare (almeno una variante per UC).`;
@@ -156,7 +175,11 @@ export function buildConversationalPrompt(
   const includeLog = options.includeLog === true;
   const agentBehavior = options.agentBehavior ?? 'B';
   const catalogFormat = options.catalogFormat ?? DEFAULT_CONVERSATIONAL_CATALOG_FORMAT;
-  const projected = projectAllUseCasesToConversationalJson(useCases, { includeLog });
+  const projected = projectAllUseCasesToConversationalJson(useCases, {
+    includeLog,
+    lexicon: options?.lexicon,
+    backendOutputSlotBindings: options?.backendOutputSlotBindings,
+  });
   const catalogBody = serializeConversationalCatalog(projected, catalogFormat);
 
   /**
@@ -169,11 +192,29 @@ export function buildConversationalPrompt(
     ? `${PROMPT_LOG_INSTRUCTION_IT}\n\n${uksBlock}\n\n${catalogBody}`
     : `${uksBlock}\n\n${catalogBody}`;
 
+  const startUseCaseSection = buildStartUseCaseRuleSection(
+    useCases,
+    options.startUseCaseId
+  );
+  const startAgentSection =
+    startUseCaseSection.trim().length > 0
+      ? ''
+      : buildStartAgentPromptSection(
+          options.startPrompt ?? { schemaVersion: 1, text: '', variants: [] }
+        );
   const rulesSection = buildConversationalRulesPromptSection(
     options.conversationalRules ?? []
   );
-  const body = rulesSection.trim()
-    ? `${catalogSection}\n\n${rulesSection}`
-    : catalogSection;
+  const backendDebugSection = buildBackendCallDebugPromptSection(
+    options.includeBackendLog === true
+  );
+  const bodyParts = [
+    startUseCaseSection.trim(),
+    startAgentSection.trim(),
+    backendDebugSection.trim(),
+    catalogSection.trim(),
+    rulesSection.trim(),
+  ].filter(Boolean);
+  const body = bodyParts.join('\n\n');
   return `${buildPromptHeaderIt(catalogFormat)}\n\n${body}\n`;
 }

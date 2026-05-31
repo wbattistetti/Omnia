@@ -14,18 +14,38 @@ import type {
 import { ensureUseCasePhrases, syncDialogueFromPrimaryPhrase } from './migrateUseCase';
 import {
   lookupApprovedSlotId,
+  lookupLexiconSlotId,
   type ProjectSlotLexicon,
   isValidSlotId,
+  isUnclassifiedSlotId,
   CORE_SLOT_IDS,
   UNCLASSIFIED_SLOT_ID,
   normalizeSlotId,
+  normalizeSurface,
 } from './projectSlotLexicon';
 
+/** Opzioni compile catalogo: classificazione solo da lessico/IA, senza euristiche locali. */
+export type SemanticCompileOptions = {
+  /** Se false, non usa DOMAIN_SLOT_HINTS né autoTokenize (default true). */
+  inferDomainHints?: boolean;
+  /** Se true, usa anche voci lessico non ancora approvate (dopo proposta IA). */
+  useLexiconClassifiedEntries?: boolean;
+};
+
+export const CATALOG_IA_FIRST_COMPILE_OPTIONS: SemanticCompileOptions = {
+  inferDomainHints: false,
+  useLexiconClassifiedEntries: true,
+};
+
 const DOMAIN_SLOT_HINTS: ReadonlyArray<{ pattern: RegExp; slot_id: string }> = [
+  { pattern: /^giorno_\d+$/i, slot_id: 'data' },
+  { pattern: /^ora_\d+$/i, slot_id: 'orario' },
   { pattern: /^(cardiolog|ortoped|dermatolog|ocul|ginecolog|neurolog|urolog)/i, slot_id: 'prestazione' },
   { pattern: /^(eco|rx|rmn|tac|visita)\b/i, slot_id: 'prestazione' },
   { pattern: /^domani$/i, slot_id: 'datarelativa' },
   { pattern: /^dopodomani$/i, slot_id: 'datarelativa' },
+  { pattern: /^fine\s+(del\s+)?mese$/i, slot_id: 'datarelativa' },
+  { pattern: /^inizio\s+(del\s+)?mese$/i, slot_id: 'datarelativa' },
 ];
 
 function uniqueTokens(tokenizedText: string): string[] {
@@ -39,9 +59,22 @@ function uniqueTokens(tokenizedText: string): string[] {
   return tokens;
 }
 
-function inferSlotIdForSurface(surface: string, lexicon: ProjectSlotLexicon): string {
-  const fromLex = lookupApprovedSlotId(lexicon, surface);
-  if (fromLex) return fromLex;
+function inferSlotIdForSurface(
+  surface: string,
+  lexicon: ProjectSlotLexicon,
+  options?: SemanticCompileOptions
+): string {
+  const fromApproved = lookupApprovedSlotId(lexicon, surface);
+  if (fromApproved) return fromApproved;
+
+  if (options?.useLexiconClassifiedEntries) {
+    const fromLex = lookupLexiconSlotId(lexicon, surface);
+    if (fromLex) return fromLex;
+  }
+
+  if (options?.inferDomainHints === false) {
+    return UNCLASSIFIED_SLOT_ID;
+  }
 
   const trimmed = surface.trim();
   for (const hint of DOMAIN_SLOT_HINTS) {
@@ -54,10 +87,19 @@ function inferSlotIdForSurface(surface: string, lexicon: ProjectSlotLexicon): st
   return UNCLASSIFIED_SLOT_ID;
 }
 
+function tokenLabelForCompilePass(
+  slot_id: string,
+  surfaceKey: string
+): string {
+  if (isUnclassifiedSlotId(slot_id)) return surfaceKey;
+  return slot_id;
+}
+
 function compileNaturalText(
   naturalText: string,
   lexicon: ProjectSlotLexicon,
-  localMappings: readonly SlotSurfaceMapping[] = []
+  localMappings: readonly SlotSurfaceMapping[] = [],
+  options?: SemanticCompileOptions
 ): { tokenizedText: string; mappings: SlotSurfaceMapping[]; tokens: string[] } {
   const localBySurface = new Map(
     localMappings.map((m) => [m.surface.trim().toLowerCase(), m.slot_id])
@@ -84,12 +126,12 @@ function compileNaturalText(
 
     let slot_id = localBySurface.get(surfaceKey);
     if (!slot_id) {
-      slot_id = inferSlotIdForSurface(surface, lexicon);
+      slot_id = inferSlotIdForSurface(surface, lexicon, options);
     }
     if (!isValidSlotId(slot_id)) slot_id = UNCLASSIFIED_SLOT_ID;
 
     mappings.push({ surface, slot_id });
-    bracketSlots.push(slot_id);
+    bracketSlots.push(tokenLabelForCompilePass(slot_id, surfaceKey));
     i = close + 1;
   }
 
@@ -141,11 +183,17 @@ export function variantNaturalText(
 export function compilePhraseVariant(
   phrase: AIAgentCanonicalPhrase,
   variant: AIAgentPhraseVariant,
-  lexicon: ProjectSlotLexicon
+  lexicon: ProjectSlotLexicon,
+  options?: SemanticCompileOptions
 ): PhraseCompiledSnapshot {
   const naturalText = variantNaturalText(phrase, variant);
   const local = [...(phrase.localMappings ?? [])];
-  const { tokenizedText, mappings, tokens } = compileNaturalText(naturalText, lexicon, local);
+  const { tokenizedText, mappings, tokens } = compileNaturalText(
+    naturalText,
+    lexicon,
+    local,
+    options
+  );
   return {
     tokenizedText,
     tokens,
@@ -157,14 +205,15 @@ export function compilePhraseVariant(
 
 export function compileUseCasePhrases(
   uc: AIAgentUseCase,
-  lexicon: ProjectSlotLexicon
+  lexicon: ProjectSlotLexicon,
+  options?: SemanticCompileOptions
 ): AIAgentUseCase {
   const base = ensureUseCasePhrases(uc);
   const phrases = (base.phrases ?? []).map((phrase) => ({
     ...phrase,
     variants: phrase.variants.map((variant) => ({
       ...variant,
-      compiled: compilePhraseVariant(phrase, variant, lexicon),
+      compiled: compilePhraseVariant(phrase, variant, lexicon, options),
     })),
   }));
   return syncDialogueFromPrimaryPhrase({ ...base, phrases });
@@ -172,9 +221,101 @@ export function compileUseCasePhrases(
 
 export function compileAllUseCases(
   useCases: readonly AIAgentUseCase[],
-  lexicon: ProjectSlotLexicon
+  lexicon: ProjectSlotLexicon,
+  options?: SemanticCompileOptions
 ): AIAgentUseCase[] {
-  return useCases.map((uc) => compileUseCasePhrases(uc, lexicon));
+  return useCases.map((uc) => compileUseCasePhrases(uc, lexicon, options));
+}
+
+/** Surface e token per la chiamata compile IA (senza euristiche locali). */
+export function collectCatalogCompileInputs(
+  useCases: readonly AIAgentUseCase[],
+  lexicon: ProjectSlotLexicon
+): { surfaces: string[]; phraseTokens: string[] } {
+  const surfaceSet = collectSurfacesInCatalogUseCases(useCases);
+  const surfaces = [...surfaceSet].sort((a, b) => a.localeCompare(b));
+  const compiled = compileAllUseCases(useCases, lexicon, CATALOG_IA_FIRST_COMPILE_OPTIONS);
+  const tokenSet = new Set<string>();
+  for (const t of extractPhraseTokensFromCompiled(compiled)) tokenSet.add(t);
+  for (const s of surfaces) {
+    if (/^[a-z][a-z0-9_]*$/i.test(s)) tokenSet.add(s.toLowerCase());
+  }
+  return {
+    surfaces,
+    phraseTokens: [...tokenSet].sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+function extractPhraseTokensFromCompiled(useCases: readonly AIAgentUseCase[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const uc of useCases) {
+    for (const phrase of uc.phrases ?? []) {
+      for (const variant of phrase.variants) {
+        for (const token of variant.compiled?.tokens ?? []) {
+          const t = String(token ?? '').trim();
+          if (!t || seen.has(t)) continue;
+          seen.add(t);
+          out.push(t);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/** Estrae le surface (testo tra `[` e `]`) da un testo naturale. */
+export function extractBracketSurfacesFromText(text: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '[') {
+      i += 1;
+      continue;
+    }
+    const close = text.indexOf(']', i + 1);
+    if (close === -1) break;
+    const inner = text.slice(i + 1, close).trim();
+    if (inner) out.push(normalizeSurface(inner));
+    i = close + 1;
+  }
+  return out;
+}
+
+/**
+ * Tutte le surface ancora presenti nei messaggi del catalogo (frasi, varianti, parametrico, dialogue).
+ * Usato per eliminare voci orfane dal lessico progetto.
+ */
+export function collectSurfacesInCatalogUseCases(
+  useCases: readonly AIAgentUseCase[]
+): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const addFrom = (text: string | undefined) => {
+    if (!text?.trim()) return;
+    for (const s of extractBracketSurfacesFromText(text)) seen.add(s);
+  };
+
+  for (const uc of useCases) {
+    const withPhrases = ensureUseCasePhrases(uc);
+    for (const phrase of withPhrases.phrases ?? []) {
+      addFrom(phrase.naturalText);
+      for (const variant of phrase.variants) {
+        addFrom(variantNaturalText(phrase, variant));
+      }
+      const param = phrase.parametric;
+      if (param?.enabled) {
+        for (const row of param.rows ?? []) {
+          addFrom(
+            typeof row.promptNaturalText === 'string' ? row.promptNaturalText : undefined
+          );
+        }
+      }
+    }
+    for (const turn of withPhrases.dialogue ?? []) {
+      if (turn?.role === 'assistant') addFrom(turn.content);
+    }
+  }
+  return seen;
 }
 
 export function collectMappingsFromUseCases(

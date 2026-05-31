@@ -175,6 +175,27 @@ describe('buildConversationalPrompt', () => {
     expect(compact.length).toBeLessThan(pretty.length);
   });
 
+  it('prepends startAgent section when startPrompt is configured', () => {
+    const prompt = buildConversationalPrompt([makeUseCase()], {
+      startPrompt: { schemaVersion: 1, text: 'Benvenuto nel servizio.' },
+    });
+    expect(prompt).toMatch(
+      /Start sessione \(startAgent\)[\s\S]*"useCaseId":\s*"uc-1"/
+    );
+    expect(prompt).toContain('Benvenuto nel servizio.');
+  });
+
+  it('prepends Regola di Start when startUseCaseId is set', () => {
+    const prompt = buildConversationalPrompt(
+      [makeUseCase({ id: 'uc-saluto', label: 'Saluto' })],
+      { startUseCaseId: 'uc-saluto' }
+    );
+    expect(prompt).toContain('Regola di Start');
+    expect(prompt).toContain("Use Case 1 ('Saluto')");
+    expect(prompt).toContain('Non deve usare saluti generici');
+    expect(prompt).not.toContain('Start sessione (startAgent)');
+  });
+
   it('appends conversational rules section when provided', () => {
     const prompt = buildConversationalPrompt([makeUseCase()], {
       conversationalRules: [

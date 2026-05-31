@@ -14,6 +14,12 @@ import {
   iaConvaiTraceElevenLabsFieldResolution,
 } from '@utils/debug/iaConvaiFlowTrace';
 import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
+import {
+  parseAgentStartPromptJson,
+  resolveAgentStartPromptSpeechText,
+} from '@domain/useCaseGeneratorWizard/agentStartPrompt';
+import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
+import { resolveStartUseCaseSpeechText } from '@domain/useCaseGeneratorWizard/startUseCase';
 
 /**
  * ElevenLabs ConvAI agent.language expects ISO 639-1; Omnia may persist BCP-47 (e.g. it-IT).
@@ -123,6 +129,10 @@ export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForComp
   agentImmediateStart?: boolean;
   /** Use case bundle JSON — appended to compiled rules as constrained catalog appendix. */
   agentUseCasesJson?: string | null;
+  /** Start Prompt JSON (`agentStartPromptJson`). */
+  agentStartPromptJson?: string | null;
+  /** Use case marcato Start (`agentStartUseCaseId`). */
+  agentStartUseCaseId?: string | null;
 }
 
 export interface BuildMinimalAiAgentCompileTaskOptions {
@@ -277,6 +287,15 @@ export function buildMinimalAiAgentCompileTask(
   const immediateStart = task.agentImmediateStart === true;
   /** Keep in sync with `CONVAI_DEFAULT_FIRST_MESSAGE` in convaiAgentCreatePayload.ts (avoid import cycle). */
   const defaultConvaiFirst = 'Hello! How can I help you today?';
+  const startUseCaseId = String(task.agentStartUseCaseId ?? '').trim();
+  const startSpeech = startUseCaseId
+    ? resolveStartUseCaseSpeechText(
+        parseAgentUseCasesJson(String(task.agentUseCasesJson ?? '')),
+        startUseCaseId
+      )
+    : resolveAgentStartPromptSpeechText(
+        parseAgentStartPromptJson(task.agentStartPromptJson ?? '')
+      );
   const base: MinimalAiAgentCompilePayload = {
     id: task.id,
     type: task.type,
@@ -284,7 +303,7 @@ export function buildMinimalAiAgentCompileTask(
     rules,
     llmEndpoint: resolveAiAgentLlmEndpointForCompile(task),
     immediateStart,
-    firstMessage: immediateStart ? '' : defaultConvaiFirst,
+    firstMessage: immediateStart ? '' : startSpeech || defaultConvaiFirst,
   };
 
   const globalIa = loadGlobalIaAgentConfig();

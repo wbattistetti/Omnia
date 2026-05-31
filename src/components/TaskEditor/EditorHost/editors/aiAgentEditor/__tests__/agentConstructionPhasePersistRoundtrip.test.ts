@@ -31,6 +31,9 @@ const baseState: AIAgentPersistState = {
   hasAgentGeneration: false,
   agentLogicalStepsJson: '[]',
   agentUseCasesJson: '[]',
+  agentStartPromptJson: '',
+  agentStartUseCaseId: '',
+  agentConversationalRulesJson: '[]',
   agentUseCaseWizardStateJson: '',
   agentIaRuntimeOverrideJson: '',
   agentImmediateStart: false,
@@ -42,6 +45,8 @@ const baseState: AIAgentPersistState = {
   agentConversationStyleSelections: {},
   agentConversationDeployStyleId: null,
   agentLogUseCase: false,
+  agentLogBackendCalls: false,
+  agentBehavior: 'B',
   agentInterfaceJson: '',
   agentKnowledgeBaseDocumentsJson: '',
 };
@@ -116,6 +121,24 @@ describe('phase machine persist roundtrip', () => {
   it('agentWizardTutorAcknowledged: task vergine \u2192 false (mostra Tutor)', () => {
     const snapshot = buildTaskSnapshotFromRaw({});
     expect(snapshot.agentWizardTutorAcknowledged).toBe(false);
+  });
+
+  it('agentStartPromptJson: roundtrip preserva testo di apertura', () => {
+    const json = JSON.stringify({ schemaVersion: 1, text: 'Buongiorno, sono il tuo assistente.' });
+    const patch = buildAIAgentTaskPersistPatch({ ...baseState, agentStartPromptJson: json });
+    expect(patch.agentStartPromptJson).toBe(json);
+    const snapshot = buildTaskSnapshotFromRaw(patch);
+    expect(snapshot.agentStartPromptJson).toBe(json);
+  });
+
+  it('agentStartUseCaseId: roundtrip preserva use case Start', () => {
+    const patch = buildAIAgentTaskPersistPatch({
+      ...baseState,
+      agentStartUseCaseId: 'uc-opening-1',
+    });
+    expect(patch.agentStartUseCaseId).toBe('uc-opening-1');
+    const snapshot = buildTaskSnapshotFromRaw(patch);
+    expect(snapshot.agentStartUseCaseId).toBe('uc-opening-1');
   });
 
   it('agentWizardTutorAcknowledged: task legacy gi\u00e0 generato \u2192 forced true (no Tutor inopportuna)', () => {

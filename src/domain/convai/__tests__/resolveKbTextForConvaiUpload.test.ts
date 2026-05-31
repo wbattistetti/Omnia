@@ -21,7 +21,7 @@ function stubDoc(overrides: Partial<StagedKbDocument> = {}): StagedKbDocument {
     addedAt: '2026-01-01',
     file: new File(['x'], 'listino.pdf'),
     parseStatus: 'ready',
-    repositoryDocumentId: 'repo-1',
+    repositoryDocumentId: 'd1',
     variables: [],
     variableDictionary: {},
     howToUseText: '',
@@ -66,6 +66,6 @@ describe('resolveKbTextForConvaiUploadAsync', () => {
     const doc = stubDoc();
     const text = await resolveKbTextForConvaiUploadAsync(doc, 'proj-1');
     expect(text).toContain('repository');
-    expect(fetchKbDocumentContent).toHaveBeenCalledWith('proj-1', 'repo-1', expect.any(Number));
+    expect(fetchKbDocumentContent).toHaveBeenCalledWith('proj-1', 'd1', expect.any(Number));
   });
 });

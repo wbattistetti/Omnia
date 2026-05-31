@@ -86,11 +86,13 @@ export function createReviewAgentDockStaticSlice(): Pick<
   | 'agentConversationStyleExample'
   | 'agentConversationDeployStyleId'
   | 'agentLogUseCase'
+  | 'agentLogBackendCalls'
   | 'agentBehavior'
   | 'agentUseCasesJson'
   | 'agentConversationalRulesJson'
   | 'compilePhrasesBusy'
   | 'projectSlotLexicon'
+  | 'reconcileLexiconOrphansWithCatalog'
   | 'useCasePropagatorProvider'
   | 'useCasePropagatorModel'
   | 'useCasePropagatorGlobalStyleContract'
@@ -140,11 +142,17 @@ export function createReviewAgentDockStaticSlice(): Pick<
     agentConversationStyleExample: '',
     agentConversationDeployStyleId: null,
     agentLogUseCase: false,
+    agentLogBackendCalls: false,
     agentBehavior: 'A',
     agentUseCasesJson: '[]',
     agentConversationalRulesJson: '[]',
     compilePhrasesBusy: false,
+    compileMappingBanner: null,
+    registerOpenSlotMappingOnCompileFail: () => {},
+    slotMappingOpenRequestNonce: 0,
+    backendOutputSlotBindings: { schemaVersion: 1, rows: [], slotContracts: [] },
     projectSlotLexicon: emptyProjectSlotLexicon(),
+    reconcileLexiconOrphansWithCatalog: reviewNoop,
     useCasePropagatorProvider: '',
     useCasePropagatorModel: '',
     useCasePropagatorGlobalStyleContract: '',

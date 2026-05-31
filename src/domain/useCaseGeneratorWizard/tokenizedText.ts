@@ -18,6 +18,18 @@
  */
 const TOKEN_NAME_REGEX = /^[a-z][a-z0-9]*$/;
 
+/**
+ * Contenuto ammesso tra `[ ]`: id runtime (`data`, `data1`) oppure surface leggibile
+ * design-time (`8 giugno 2026`, `09:30`, `visita cardiologica`).
+ */
+export function isValidBracketInner(inner: string): boolean {
+  const t = inner.trim();
+  if (!t) return false;
+  if (TOKEN_NAME_REGEX.test(t)) return true;
+  if (t.length > 80 || /[\[\]]/.test(t)) return false;
+  return /\p{L}/u.test(t) || /\d/.test(t);
+}
+
 export type TokenizedTextValidation =
   | { ok: true }
   | { ok: false; error: string };
@@ -44,8 +56,8 @@ export function validateTokenizedText(t: string): TokenizedTextValidation {
     }
     if (ch === ']') {
       if (depth !== 1) return { ok: false, error: 'unmatched close bracket' };
-      if (!TOKEN_NAME_REGEX.test(cur)) {
-        return { ok: false, error: `invalid token name "${cur}"` };
+      if (!isValidBracketInner(cur)) {
+        return { ok: false, error: `invalid bracket content "${cur}"` };
       }
       depth = 0;
       cur = '';
@@ -90,9 +102,9 @@ export function splitTokenizedText(t: string): TokenizedTextSegment[] {
         break;
       }
       const inner = t.slice(i + 1, close);
-      if (TOKEN_NAME_REGEX.test(inner)) {
+      if (isValidBracketInner(inner)) {
         flushText();
-        out.push({ kind: 'token', name: inner });
+        out.push({ kind: 'token', name: inner.trim() });
         i = close + 1;
         continue;
       }

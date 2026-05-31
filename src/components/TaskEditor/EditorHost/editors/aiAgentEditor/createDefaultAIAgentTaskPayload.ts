@@ -31,6 +31,8 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentDesignHasGeneration: false,
     agentLogicalStepsJson: '[]',
     agentUseCasesJson: '[]',
+    agentStartPromptJson: '',
+    agentStartUseCaseId: '',
     agentConversationalRulesJson: serializeConversationalRules(
       materializeConversationalRulesFromLibrary()
     ),
@@ -59,5 +61,6 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
      * risposte runtime.
      */
     agentLogUseCase: false,
+    agentLogBackendCalls: false,
   };
 }

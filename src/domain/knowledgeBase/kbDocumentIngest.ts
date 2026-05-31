@@ -65,9 +65,11 @@ export async function ingestKbFileToRepository(
     setDocuments((prev) =>
       prev.map((d) => {
         if (d.id !== docId) return d;
+        const preview = String(textPreview ?? '').trim();
         const next: StagedKbDocument = {
           ...d,
-          repositoryDocumentId: meta.id,
+          repositoryDocumentId: docId,
+          ...(preview ? { markdownSnippet: preview } : {}),
           parseStatus: d.parseStatus === 'parsing' ? ('ready' as const) : d.parseStatus,
           parseError: d.parseStatus === 'error' ? d.parseError : undefined,
         };
@@ -143,7 +145,7 @@ export function deleteKbRepositoryBlob(
   repositoryDocumentId: string | undefined
 ): void {
   const pid = String(projectId || '').trim();
-  const rid = repositoryDocumentId?.trim();
+  const rid = String(repositoryDocumentId ?? '').trim();
   if (pid && rid) {
     void deleteKbDocumentFromProject(pid, rid);
   }

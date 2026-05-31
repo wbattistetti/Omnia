@@ -7,6 +7,10 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { MappingParameterToolbarPortal } from './MappingParameterToolbarPortal';
 import { MAPPING_ROW_CELL_H, MAPPING_ROW_MIN_H } from './mappingPanelTypography';
+import {
+  BACKEND_TREE_ARROW_SLOT_PX,
+  BACKEND_TREE_CHEVRON_SLOT_PX,
+} from './backendMappingTreeLayout';
 
 const HIDE_DELAY_MS = 120;
 /** Fixed gap between consecutive visible slots on the same row. */
@@ -40,6 +44,8 @@ export interface MappingTreeNodeRowProps {
   afterEditor?: React.ReactNode | null;
   toolbar?: React.ReactNode | null;
   trailing?: React.ReactNode | null;
+  /** Albero backend: slot chevron/freccia a larghezza fissa anche se vuoti. */
+  fixedTreeSlots?: boolean;
   drag?: MappingTreeNodeRowDragConfig;
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent) => void;
@@ -68,6 +74,7 @@ export function MappingTreeNodeRow({
   afterEditor,
   toolbar,
   trailing,
+  fixedTreeSlots = false,
   drag,
   draggable: draggableProp,
   onDragStart: onDragStartProp,
@@ -126,8 +133,8 @@ export function MappingTreeNodeRow({
   };
 
   const showValue = !isGroup && valueEditor != null;
-  const showArrow = !isGroup && arrow != null;
-  const showChevron = chevron != null;
+  const showChevronSlot = fixedTreeSlots || chevron != null;
+  const showArrowSlot = fixedTreeSlots ? !isGroup : !isGroup && arrow != null;
   const { style: rowStyle, ...rowRest } = rowProps ?? {};
 
   return (
@@ -150,13 +157,31 @@ export function MappingTreeNodeRow({
         onMouseEnter={handlePointerEnter}
         onMouseLeave={handlePointerLeave}
       >
-        {showChevron ? <div className="flex shrink-0 items-center">{chevron}</div> : null}
+        {showChevronSlot ? (
+          <div
+            className="flex shrink-0 items-center justify-center"
+            style={{ width: BACKEND_TREE_CHEVRON_SLOT_PX }}
+          >
+            {chevron}
+          </div>
+        ) : null}
 
-        {showArrow ? <div className="flex shrink-0 items-center">{arrow}</div> : null}
+        {showArrowSlot ? (
+          <div
+            className="flex shrink-0 items-center justify-center"
+            style={{ width: BACKEND_TREE_ARROW_SLOT_PX }}
+          >
+            {arrow}
+          </div>
+        ) : null}
 
         {labelLeading ? <div className="flex shrink-0 items-center">{labelLeading}</div> : null}
 
-        <div className={`min-w-0 max-w-[min(14rem,50vw)] shrink truncate ${MAPPING_ROW_MIN_H}`}>
+        <div
+          className={`flex min-w-0 shrink items-center gap-0.5 truncate ${MAPPING_ROW_MIN_H} ${
+            fixedTreeSlots ? 'max-w-[min(20rem,60vw)]' : 'max-w-[min(14rem,50vw)]'
+          }`}
+        >
           {label}
         </div>
 

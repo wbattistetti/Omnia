@@ -33,6 +33,8 @@ export type OpenApiOperationFields = {
   requestParamNames: string[];
   /** Top-level JSON body property names (POST/PUT/PATCH body object) */
   requestBodyPropertyNames: string[];
+  /** Nomi in `schema.required` del body (`[]` se assente = tutte le proprietà opzionali). */
+  requestBodyRequiredPropertyNames: string[];
   /** Top-level JSON response property names (2xx, application/json) */
   responsePropertyNames: string[];
   /** OpenAPI `description` per nome parametro/property (chiave = nome API). */
@@ -296,6 +298,53 @@ function schemaPropertyKeys(root: Record<string, unknown>, schema: unknown, refS
   if (isRecord(schema.properties)) {
     const pk = Object.keys(schema.properties as Record<string, unknown>);
     if (pk.length > 0) return pk;
+  }
+  return [];
+}
+
+/**
+ * `required` top-level del body JSON (OpenAPI). Array vuoto se `required` assente sullo schema oggetto.
+ */
+function schemaBodyRequiredPropertyNames(
+  root: Record<string, unknown>,
+  schema: unknown,
+  refStack?: Set<string>
+): string[] {
+  const rs = refStack ?? new Set<string>();
+  if (!isRecord(schema)) return [];
+  if (typeof schema.$ref === 'string') {
+    const ref = schema.$ref;
+    if (rs.has(ref)) return [];
+    rs.add(ref);
+    try {
+      return schemaBodyRequiredPropertyNames(root, resolveRef(root, ref), rs);
+    } finally {
+      rs.delete(ref);
+    }
+  }
+  if (Array.isArray(schema.allOf)) {
+    for (const sub of schema.allOf) {
+      const req = schemaBodyRequiredPropertyNames(root, sub, rs);
+      if (req.length > 0) return req;
+    }
+    return [];
+  }
+  if (Array.isArray(schema.oneOf) || Array.isArray(schema.anyOf)) {
+    const branches = (schema.oneOf ?? schema.anyOf) as unknown[];
+    for (const sub of branches) {
+      const req = schemaBodyRequiredPropertyNames(root, sub, rs);
+      if (req.length > 0) return req;
+    }
+    return [];
+  }
+  if (isRecord(schema.properties) || schema.type === 'object') {
+    if (Array.isArray(schema.required)) {
+      return schema.required
+        .filter((x): x is string => typeof x === 'string')
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }
+    return [];
   }
   return [];
 }
@@ -1069,6 +1118,7 @@ export function extractOperationFields(
 
   const requestParamNames: string[] = [];
   let requestBodyPropertyNames: string[] = [];
+  let requestBodyRequiredPropertyNames: string[] = [];
   const params = op.parameters;
   if (Array.isArray(params)) {
     for (const p of params) {
@@ -1100,6 +1150,10 @@ export function extractOperationFields(
       if (inn === 'body' && isRecord(p.schema)) {
         const keys = schemaPropertyKeys(doc, p.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
+        requestBodyRequiredPropertyNames = mergeUnique(
+          requestBodyRequiredPropertyNames,
+          schemaBodyRequiredPropertyNames(doc, p.schema)
+        );
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, p.schema));
         mergeParamHintMaps(inputParamHintsByPath, schemaPropertyParamHintsByPath(doc, p.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, p.schema));
@@ -1139,6 +1193,10 @@ export function extractOperationFields(
       if (isRecord(json) && isRecord(json.schema)) {
         const keys = schemaPropertyKeys(doc, json.schema);
         requestBodyPropertyNames = mergeUnique(requestBodyPropertyNames, keys);
+        requestBodyRequiredPropertyNames = mergeUnique(
+          requestBodyRequiredPropertyNames,
+          schemaBodyRequiredPropertyNames(doc, json.schema)
+        );
         mergeDescriptionMaps(inputDescriptionsByApiName, schemaPropertyDescriptions(doc, json.schema));
         mergeParamHintMaps(inputParamHintsByPath, schemaPropertyParamHintsByPath(doc, json.schema));
         mergeUiKindMaps(inputUiKindByApiName, schemaPropertyInputKinds(doc, json.schema));
@@ -1194,6 +1252,7 @@ export function extractOperationFields(
     ...(operationDescription ? { operationDescription } : {}),
     requestParamNames,
     requestBodyPropertyNames,
+    requestBodyRequiredPropertyNames,
     responsePropertyNames,
     inputDescriptionsByApiName,
     outputDescriptionsByApiName,

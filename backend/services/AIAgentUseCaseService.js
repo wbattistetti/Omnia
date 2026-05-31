@@ -21,6 +21,10 @@ const {
   applyNarrativeOrder,
 } = require('./useCaseNarrativeOrder');
 const {
+  USE_CASE_READABLE_BRACKET_RULES,
+  ANNOTATE_READABLE_BRACKET_RULES,
+} = require('./useCaseBracketRules');
+const {
   coalesceRawUseCasesDialogue,
   useCasesMissingAssistantContent,
   buildDialogueCompleteRetryDirective,
@@ -57,7 +61,7 @@ const USE_CASE_CATALOG_ABSTRACTION_RULES = `CATALOG_ABSTRACTION (any domain — 
 - Emit a **separate** use_case only when the **conversation script or guardrails** change (extra questions, refusal, escalation, different outcome), not when only entity or attribute **values** change.
 - Before adding a row, ask: "If I replace the catalog noun with another item governed by the same rules, does the assistant dialogue change?" If **no** → do not add; merge into an existing pattern.
 - **Anti-pattern:** N use_cases whose labels only swap a proper noun ("… for X", "… for Y", "… for Z") with identical logic.
-- **Good pattern:** one row — generic label and scenario.llm ("Resolve <choice> for the requested <entity>"); dialogue with [entity] and [choice] slots (snake_case slot_id or mappable surfaces); ONE concrete instance in prose, not a list of every item from DESIGNER_TASK_DESCRIPTION.
+- **Good pattern:** one row — generic label and scenario.llm ("Resolve <choice> for the requested <entity>"); dialogue with [concrete example] bracket slots (readable spoken values, e.g. [visita cardiologica], [8 giugno]); ONE concrete instance in prose, not a list of every item from DESIGNER_TASK_DESCRIPTION.
 - "label" must not name a single catalog item unless the scenario truly applies only there by explicit business rule.
 - Prefer fewer generalized roots (and parent/child when flows fork) over exhaustively instantiating every noun in the task description.
 - **Never pad** with shallow duplicates — including **parameter variants** (same decision repeated per catalog noun or enum value).`;
@@ -73,9 +77,7 @@ Each use case must include:
 - a single assistant "dialogue" turn (the virtual agent output example only; content must never be empty)
 
 For assistant "content":
-- mark only the variable semantic fragment with brackets
-- in Italian, keep articles, prepositions, and fixed function words outside the brackets (e.g., \`alle [14]\`, not \`[alle 14]\`)
-- plain text outside brackets is fixed script; bracket inners are runtime-filled slots
+${USE_CASE_READABLE_BRACKET_RULES}
 - **assistant messages must be extremely concise, in the style of a real call-center agent: 1–2 short sentences, direct, no explanations, no introductory phrases, no redundancy**
 
 One use_case per conversational pattern; parameterize catalog entities and attribute choices with slots — do not enumerate separate use_cases per product, service, department, or enum value when the agent script is the same.
@@ -85,9 +87,9 @@ The user message may give a numeric band for how many "use_cases" to emit — fo
 /** System prompt for annotate_assistant_message_for_json only — avoids UC_SYSTEM “design full use case” framing. */
 const ANNOTATE_ASSISTANT_FOR_JSON_SYSTEM = `You annotate existing assistant messages for OMNIA runtime JSON templating.
 Respond with a single valid JSON object only (no markdown fences, no commentary).
-The user message contains the authoritative assistant text under "Current assistant message text": preserve that wording exactly except for inserting [slot_id] brackets and optional obvious spelling/typo fixes. Do not paraphrase, rephrase for style, add/remove sentences, or normalize tone.
+The user message contains the authoritative assistant text under "Current assistant message text": preserve that wording exactly except for inserting [readable example] brackets and optional obvious spelling/typo fixes. Do not paraphrase, rephrase for style, add/remove sentences, or normalize tone.
 When OUTPUT_LANGUAGE is set, slot labels and motor surfaces still follow the scenario language.
-For bracket placement: mark only variable semantic fragments. In Italian, keep articles, prepositions, and fixed function words outside brackets (e.g. \`alle [ora_disponibile]\` not \`[alle 8]\`).`;
+${ANNOTATE_READABLE_BRACKET_RULES}`;
 
 const STYLE_IDS = new Set(['cortese', 'ironico', 'formale']);
 
@@ -1663,7 +1665,7 @@ STYLE_EXAMPLES are authoritative: copy their tone, register, sentence rhythm, po
 TARGETS need NEW assistant example text that fits EACH scenario (label + payoff) while sounding like STYLE_EXAMPLES wrote them.
 Respond with one JSON object only: { "updates": [ { "use_case_id": string, "assistant_content": string } ] }.
 Emit exactly one update per target id in TARGET_IDS_ORDER; never omit an id. Each assistant_content must be non-empty.
-Bracket rules: variable semantic fragments only; in Italian keep articles/prepositions outside brackets (e.g. alle [ora_disponibile], not [alle 14]).`;
+${USE_CASE_READABLE_BRACKET_RULES}`;
 
 /**
  * @param {string} outputLanguage
@@ -2081,15 +2083,15 @@ ${currentText.slice(0, 8000)}
 Task:
 - Preserve the **exact** wording, punctuation, spacing, and line breaks of "Current assistant message text" above.
 - Do **not** paraphrase, rephrase, normalize, add sentences, remove sentences, or swap synonyms.
-- Only insert \`[slot_id]\` markers around runtime-varying fragments; every other character must stay identical unless you fix an **obvious** spelling/typo in-place (optional; if unsure, leave as-is).
-- Build a coherent \`motor\` JSON that matches the bracketed \`slot_id\`s in your \`content\`.
+- Only insert \`[readable example]\` markers around runtime-varying fragments; every other character must stay identical unless you fix an **obvious** spelling/typo in-place (optional; if unsure, leave as-is).
+- Build a coherent \`motor\` JSON that matches the bracketed literals in your \`content\`.
 ${styleBlock}
 
-**Bracket notation (semantic slot ids):** Inside \`[ ]\` use **stable snake_case slot_id** labels (e.g. \`data_richiesta\`, \`ora_disponibile\`), **not** the literal spoken value. Fixed script stays outside brackets; **Italian:** leave articles/prepositions outside (\`alle [ora_disponibile]\` not \`[alle 8]\`).
+${ANNOTATE_READABLE_BRACKET_RULES}
 
-**Patterns:** Detect lists / repetitions / conjunctions (e.g. \`alle [id], alle [id] e alle [id]\`). Do **not** invent a separate slot for each repeated role — one \`slot_id\` per semantic role. Commas and \` e \` belong to the **linguistic pattern**, not to \`slots\`.
+**Patterns:** Detect lists / repetitions / conjunctions (e.g. \`alle [09:30], alle [10:00] e alle [17:00]\`). Do **not** invent a separate slot for each repeated role — one semantic \`slot_id\` per role. Commas and \` e \` belong to the **linguistic pattern**, not to \`slots\`.
 
-**motor.slots:** One object per distinct \`slot_id\`: \`{ "slot_id": string, "surface": string }\` where **surface** is the **original literal** from the current message text for that role (before semantic renaming), e.g. surface \`"sabato 21"\` for \`data_richiesta\`.
+**motor.slots:** One object per distinct semantic role: \`{ "slot_id": string, "surface": string }\` where **surface** is the **exact text inside the brackets** in \`content\` (e.g. surface \`"sabato 21"\`, slot_id \`"data"\`).
 
 **motor.groups:** For repeated same-role items (e.g. multiple times), add one group:
 \`{ "slot_id": "<same as bracket>", "pattern": "alle [ora]" (example), "values": ["8","10","17"], "separator": ", ", "last_separator": " e " }\`
@@ -2099,7 +2101,7 @@ Legacy compatibility: you may still bucket by day-period using \`period\` + \`ti
 
 Return a single JSON object with exactly these keys:
 {
-  "content": "<same assistant message as Current assistant message text, with [semantic_slot_id] brackets inserted — no other wording changes except optional obvious typo fixes>",
+  "content": "<same assistant message as Current assistant message text, with [readable example] brackets inserted — no other wording changes except optional obvious typo fixes>",
   "motor": {
     "slots": [ { "slot_id": "data_richiesta", "surface": "sabato 21" } ],
     "groups": [ { "slot_id": "ora_disponibile", "pattern": "alle [ora]", "values": ["8","10"], "separator": ", ", "last_separator": " e " } ],

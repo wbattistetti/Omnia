@@ -17,6 +17,7 @@ import type { FlowBackendCallInvocation } from '@features/debugger/types/flowBac
 import { parseFlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
 import type { FlowConvaiWebhookDiagnostic } from '@features/debugger/types/flowConvaiWebhookDiagnostic';
 import { collectConvaiWebhookDiagnosticsFromMergedTasks } from '@utils/iaAgentRuntime/convaiWebhookToolDiagnostics';
+import { formatBackendInvocationsDebugBlock } from '@domain/useCaseGeneratorWizard/backendCallDebugPrompt';
 
 interface UseDialogueEngineOptions {
   nodes: Node<FlowNode>[];
@@ -50,6 +51,8 @@ interface UseDialogueEngineOptions {
    */
   orchestratorCompileRootFlowId?: string | null;
   projectId?: string;
+  /** Mostra righe DEBUG backend in messaggi conversazione (debugger / flow chat). */
+  agentLogBackendCalls?: boolean;
 }
 
 /**
@@ -224,7 +227,12 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
         const manualCatalogBackendTaskIds = extractManualCatalogBackendTaskIdsFromProjectData(projectData);
         const backendCatalog = extractBackendCatalogFromProjectData(projectData);
+        const projectId =
+          typeof projectData?.id === 'string' && projectData.id.trim().length > 0
+            ? projectData.id.trim()
+            : undefined;
         const provisionResult = await ensureConvaiAgentsProvisioned(currentOptions.nodes, {
+          projectId,
           projectLabel,
           rootFlowLabel,
           nodeLabelByTaskId,
@@ -458,10 +466,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               const interpolatedText = interpolateOutgoingMessageText(rawText, store);
               const backendBatch = pendingBackendInvocationsRef.current.splice(0);
               const convaiBatch = takeConvaiWebhookBatch();
+              const backendDebugText =
+                opts.agentLogBackendCalls === true && backendBatch.length > 0
+                  ? formatBackendInvocationsDebugBlock(backendBatch)
+                  : undefined;
               opts.onMessage({
                 ...message,
                 text: interpolatedText,
                 ...(backendBatch.length > 0 ? { backendInvocations: backendBatch } : {}),
+                ...(backendDebugText ? { backendDebugText } : {}),
                 ...(convaiBatch.length > 0 ? { convaiWebhookInvocations: convaiBatch } : {}),
               });
             },
@@ -495,10 +508,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
                       const backendExtra =
                         i === 0 ? pendingBackendInvocationsRef.current.splice(0) : [];
                       const convaiExtra = i === 0 ? takeConvaiWebhookBatch() : [];
+                      const backendDebugText =
+                        opts.agentLogBackendCalls === true && backendExtra.length > 0
+                          ? formatBackendInvocationsDebugBlock(backendExtra)
+                          : undefined;
                       opts.onMessage({
                         ...(entry.raw as object),
                         text: resolved,
                         ...(backendExtra.length > 0 ? { backendInvocations: backendExtra } : {}),
+                        ...(backendDebugText ? { backendDebugText } : {}),
                         ...(convaiExtra.length > 0 ? { convaiWebhookInvocations: convaiExtra } : {}),
                       } as Parameters<typeof opts.onMessage>[0]);
                     }

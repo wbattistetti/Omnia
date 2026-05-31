@@ -27,29 +27,29 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "failed",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -59,12 +59,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "classy",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "male"
+          "age": "middle_aged",
+          "use_case": "conversational",
+          "gender": "male",
+          "descriptive": "classy",
+          "language": "en"
         },
         "description": "Easy going and perfect for casual conversations.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/CwhRBWXzGAHq8TQ4Fs17/58ee3ff5-f6f2-4628-93b8-e38eb31806b0.mp3",
@@ -222,12 +222,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "professional",
-          "language": "en",
-          "use_case": "entertainment_tv",
-          "age": "young",
           "accent": "american",
-          "gender": "female"
+          "age": "young",
+          "use_case": "entertainment_tv",
+          "gender": "female",
+          "descriptive": "professional",
+          "language": "en"
         },
         "description": "Young adult woman with a confident and warm, mature quality and a reassuring, professional tone.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2216a32186.mp3",
@@ -346,29 +346,29 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -378,12 +378,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "sassy",
-          "language": "en",
-          "use_case": "social_media",
-          "age": "young",
           "accent": "american",
-          "gender": "female"
+          "age": "young",
+          "use_case": "social_media",
+          "gender": "female",
+          "descriptive": "sassy",
+          "language": "en"
         },
         "description": "This young adult female voice delivers sunny enthusiasm with a quirky attitude.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/FGY2WhTYpPnrIDTdsKH5/67341759-ad08-41a5-be6e-de12fe448618.mp3",
@@ -527,28 +527,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -558,12 +558,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "hyped",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "young",
           "accent": "australian",
-          "gender": "male"
+          "age": "young",
+          "use_case": "conversational",
+          "gender": "male",
+          "descriptive": "hyped",
+          "language": "en"
         },
         "description": "A young Australian male with a confident and energetic voice.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/IKne3meq5aSn9XLyUdCD/102de6f2-22ed-43e0-a1f1-111fa75c5481.mp3",
@@ -715,22 +715,22 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_v2_flash": 1
+            "eleven_v2_flash": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -740,12 +740,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "mature",
-          "language": "en",
-          "use_case": "narrative_story",
-          "age": "middle_aged",
           "accent": "british",
-          "gender": "male"
+          "age": "middle_aged",
+          "use_case": "narrative_story",
+          "gender": "male",
+          "descriptive": "mature",
+          "language": "en"
         },
         "description": "Warm resonance that instantly captivates listeners.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/JBFqnCBsd6RMkjVDRZzb/e6206d1a-0721-4787-aafb-06a6e705cac5.mp3",
@@ -910,28 +910,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -941,11 +941,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "language": "en",
-          "use_case": "characters_animation",
           "age": "middle_aged",
+          "use_case": "characters_animation",
+          "gender": "male",
           "accent": "american",
-          "gender": "male"
+          "language": "en"
         },
         "description": "Deceptively gravelly, yet unsettling edge.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/N2lVS1w4EtoT3dr4eOWO/ac833bd8-ffda-4938-9ebc-b0f99ca25481.mp3",
@@ -1083,30 +1083,30 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
-            "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned"
+            "eleven_multilingual_sts_v2": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1116,12 +1116,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "calm",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "neutral"
+          "age": "middle_aged",
+          "use_case": "conversational",
+          "gender": "neutral",
+          "descriptive": "calm",
+          "language": "en"
         },
         "description": "A relaxed, neutral voice ready for narrations or conversational projects.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SAz9YHcvj6GT2YYXdXww/e6c95f0b-2227-491a-b3d7-2249240decb7.mp3",
@@ -1273,30 +1273,30 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
+            "eleven_turbo_v2": "",
             "eleven_turbo_v2_5": "",
             "eleven_multilingual_v2": "",
             "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1306,12 +1306,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "rough",
-          "language": "en",
-          "use_case": "characters_animation",
-          "age": "young",
           "accent": "american",
-          "gender": "male"
+          "age": "young",
+          "use_case": "characters_animation",
+          "gender": "male",
+          "descriptive": "rough",
+          "language": "en"
         },
         "description": "An animated warrior ready to charge forward.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/SOYHLrjzK2X1ezoPC6cr/86d178f6-f4b6-4e0e-85be-3de19f490794.mp3",
@@ -1435,22 +1435,22 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_v2_flash": 1
+            "eleven_v2_flash": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1460,12 +1460,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "confident",
-          "language": "en",
-          "use_case": "social_media",
-          "age": "young",
           "accent": "american",
-          "gender": "male"
+          "age": "young",
+          "use_case": "social_media",
+          "gender": "male",
+          "descriptive": "confident",
+          "language": "en"
         },
         "description": "A young adult with energy and warmth - suitable for reels and shorts.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3",
@@ -1631,28 +1631,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1662,12 +1662,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "professional",
-          "language": "en",
-          "use_case": "informative_educational",
-          "age": "middle_aged",
           "accent": "british",
-          "gender": "female"
+          "age": "middle_aged",
+          "use_case": "informative_educational",
+          "gender": "female",
+          "descriptive": "professional",
+          "language": "en"
         },
         "description": "Clear and engaging, friendly woman with a British accent suitable for e-learning.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/Xb7hH8MSUJpSbSDYk0k2/d10f7534-11f6-41fe-a012-2de1e482d336.mp3",
@@ -1825,22 +1825,22 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_v2_5_flash": 1,
-            "eleven_v2_flash": 1
+            "eleven_v2_flash": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_v2_5_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1850,12 +1850,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "upbeat",
-          "language": "en",
-          "use_case": "informative_educational",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "female"
+          "age": "middle_aged",
+          "use_case": "informative_educational",
+          "gender": "female",
+          "descriptive": "upbeat",
+          "language": "en"
         },
         "description": "A professional woman with a pleasing alto pitch. Suitable for many use cases.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/XrExE9yKIg1WjnnlVkGX/b930e18d-6b4d-466e-bab2-0ae97c6d8535.mp3",
@@ -2014,29 +2014,29 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2046,12 +2046,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "chill",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "young",
           "accent": "american",
-          "gender": "male"
+          "age": "young",
+          "use_case": "conversational",
+          "gender": "male",
+          "descriptive": "chill",
+          "language": "en"
         },
         "description": "Conversational and laid back.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/bIHbv24MWmeRgasZH58o/8caf8f3d-ad29-4980-af41-53f20c72d7a4.mp3",
@@ -2230,29 +2230,29 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2262,12 +2262,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "cute",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "young",
           "accent": "american",
-          "gender": "female"
+          "age": "young",
+          "use_case": "conversational",
+          "gender": "female",
+          "descriptive": "cute",
+          "language": "en"
         },
         "description": "Young and popular, this playful American female voice is perfect for trendy content.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cgSgspJ2msm6clMCkdW9/56a97bf8-b69b-448f-846c-c3a11683d45a.mp3",
@@ -2432,29 +2432,29 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
-            "eleven_flash_v2_5": "Done!"
+            "eleven_flash_v2": "Done!",
+            "eleven_flash_v2_5": "Done!",
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2464,12 +2464,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "classy",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "male"
+          "age": "middle_aged",
+          "use_case": "conversational",
+          "gender": "male",
+          "descriptive": "classy",
+          "language": "en"
         },
         "description": "A smooth tenor pitch from a man in his 40s - perfect for agentic use cases.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/cjVigY5qzO86Huf0OWal/d098fda0-6456-4030-b3d8-63aa048c9070.mp3",
@@ -2620,13 +2620,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2634,13 +2634,13 @@
           "language": "en",
           "progress": {},
           "message": {
-            "eleven_flash_v2": "",
+            "eleven_turbo_v2": "",
             "eleven_multilingual_v2": "",
-            "eleven_v2_5_flash": "",
-            "eleven_flash_v2_5": "",
-            "eleven_turbo_v2_5": "",
             "eleven_v2_flash": "",
-            "eleven_turbo_v2": ""
+            "eleven_flash_v2": "",
+            "eleven_turbo_v2_5": "",
+            "eleven_flash_v2_5": "",
+            "eleven_v2_5_flash": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2650,12 +2650,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "descriptive": "professional",
-          "language": "en",
-          "use_case": "informative_educational",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "female"
+          "age": "middle_aged",
+          "use_case": "informative_educational",
+          "gender": "female",
+          "descriptive": "professional",
+          "language": "en"
         },
         "description": "This voice is warm, bright, and professional, characterized by a Standard American accent and a polished, narrative quality. It features a medium-high pitch with crisp diction and a deliberate, rhythmic pace that makes it highly intelligible and engaging for long-form listening.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/hpp4J3VqNfWAUOO0d1Us/dab0f5ba-3aa4-48a8-9fad-f138fea1126d.mp3",
@@ -2771,28 +2771,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2802,12 +2802,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "casual",
-          "language": "en",
-          "use_case": "conversational",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "male"
+          "age": "middle_aged",
+          "use_case": "conversational",
+          "gender": "male",
+          "descriptive": "casual",
+          "language": "en"
         },
         "description": "Natural and real, this down-to-earth voice is great across many use-cases.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/iP95p4xoKVk53GoZ742B/3f4bde72-cc48-40dd-829f-57fbf906f4d7.mp3",
@@ -2958,28 +2958,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2989,12 +2989,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "classy",
-          "language": "en",
-          "use_case": "social_media",
-          "age": "middle_aged",
           "accent": "american",
-          "gender": "male"
+          "age": "middle_aged",
+          "use_case": "social_media",
+          "gender": "male",
+          "descriptive": "classy",
+          "language": "en"
         },
         "description": "Middle-aged man with a resonant and comforting tone. Great for narrations and advertisements.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/nPczCjzI2devNBz1zQrb/2dd3e72c-4fd3-42f1-93ea-abc5d4e5aa1d.mp3",
@@ -3166,28 +3166,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3197,12 +3197,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "formal",
-          "language": "en",
-          "use_case": "informative_educational",
-          "age": "middle_aged",
           "accent": "british",
-          "gender": "male"
+          "age": "middle_aged",
+          "use_case": "informative_educational",
+          "gender": "male",
+          "descriptive": "formal",
+          "language": "en"
         },
         "description": "A strong voice perfect for delivering a professional broadcast or news story.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/onwK4e9ZLuTAKqWW03F9/7eee0236-1a72-4b86-b303-5dcadc007ba9.mp3",
@@ -3340,28 +3340,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3371,12 +3371,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "confident",
-          "language": "en",
-          "use_case": "informative_educational",
-          "age": "middle_aged",
           "accent": "british",
-          "gender": "female"
+          "age": "middle_aged",
+          "use_case": "informative_educational",
+          "gender": "female",
+          "descriptive": "confident",
+          "language": "en"
         },
         "description": "Velvety British female voice delivers news and narrations with warmth and clarity.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pFZP5JQG7iQjIQuC4Bku/89b68b35-b3dd-4348-a84a-a3c13a3c2b30.mp3",
@@ -3548,11 +3548,11 @@
           "next_max_verification_attempts_reset_unix_ms": null
         },
         "labels": {
-          "language": "en",
-          "use_case": "social_media",
           "age": "middle_aged",
+          "use_case": "social_media",
+          "gender": "male",
           "accent": "american",
-          "gender": "male"
+          "language": "en"
         },
         "description": "A bright tenor pitch that immediately cuts through. The delivery is brash and openly confident, speaking with unwavering certainty and a slightly aggressive self-assurance.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pNInz6obpgDQGcFmaJgB/d6905d7a-dd26-4187-bfff-1bd3a5ea7cac.mp3",
@@ -3610,28 +3610,28 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
           "manual_verification_requested": false,
           "language": "en",
           "progress": {
-            "eleven_flash_v2": 1,
             "eleven_v2_flash": 1,
-            "eleven_v2_5_flash": 1,
-            "eleven_flash_v2_5": 1
+            "eleven_flash_v2": 1,
+            "eleven_flash_v2_5": 1,
+            "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_flash_v2": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2": "Done!",
             "eleven_flash_v2_5": "Done!",
-            "eleven_turbo_v2": ""
+            "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3641,12 +3641,12 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "descriptive": "crisp",
-          "language": "en",
-          "use_case": "advertisement",
-          "age": "old",
           "accent": "american",
-          "gender": "male"
+          "age": "old",
+          "use_case": "advertisement",
+          "gender": "male",
+          "descriptive": "crisp",
+          "language": "en"
         },
         "description": "Friendly and comforting voice ready to narrate your stories.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/premade/voices/pqHfZKP75CvOlQylNhV4/d782b3ff-84ba-4029-848c-acf01285524d.mp3",
@@ -3798,10 +3798,10 @@
           "is_allowed_to_fine_tune": true,
           "state": {
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3810,10 +3810,10 @@
           "progress": {},
           "message": {
             "eleven_v2_5_flash": "",
-            "eleven_turbo_v2_5": "",
             "eleven_multilingual_v2": "",
             "eleven_multilingual_sts_v2": "",
-            "eleven_flash_v2_5": ""
+            "eleven_flash_v2_5": "",
+            "eleven_turbo_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3823,11 +3823,11 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "descriptive": "gentle",
-          "language": "it",
-          "gender": "male",
-          "age": "middle_aged",
           "accent": "standard",
+          "age": "middle_aged",
+          "gender": "male",
+          "language": "it",
+          "descriptive": "gentle",
           "use_case": "narrative_story"
         },
         "description": "Antonio",
@@ -3859,11 +3859,11 @@
           "name": "Antonio - Natural, Balanced and Calm",
           "description": "Antonio",
           "labels": {
-            "descriptive": "gentle",
-            "language": "it",
-            "gender": "male",
             "age": "middle_aged",
             "accent": "standard",
+            "gender": "male",
+            "descriptive": "gentle",
+            "language": "it",
             "use_case": "narrative_story",
             "locale": "it-IT"
           },
@@ -3935,10 +3935,10 @@
           "is_allowed_to_fine_tune": true,
           "state": {
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3947,10 +3947,10 @@
           "progress": {},
           "message": {
             "eleven_v2_5_flash": "",
-            "eleven_turbo_v2_5": "",
             "eleven_multilingual_v2": "",
             "eleven_multilingual_sts_v2": "",
-            "eleven_flash_v2_5": ""
+            "eleven_flash_v2_5": "",
+            "eleven_turbo_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3960,11 +3960,11 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "descriptive": "professional",
-          "language": "it",
-          "gender": "female",
-          "age": "middle_aged",
           "accent": "standard",
+          "age": "middle_aged",
+          "gender": "female",
+          "language": "it",
+          "descriptive": "professional",
           "use_case": "narrative_story"
         },
         "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
@@ -3996,11 +3996,11 @@
           "name": "Violetta - Ringing, Bright and Joyful",
           "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
           "labels": {
-            "descriptive": "professional",
-            "language": "it",
-            "gender": "female",
             "age": "middle_aged",
             "accent": "standard",
+            "gender": "female",
+            "descriptive": "professional",
+            "language": "it",
             "use_case": "narrative_story",
             "locale": "it-IT"
           },
@@ -4222,9 +4222,9 @@
           "is_allowed_to_fine_tune": true,
           "state": {
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -4233,9 +4233,9 @@
           "progress": {},
           "message": {
             "eleven_v2_5_flash": "",
-            "eleven_turbo_v2_5": "",
             "eleven_multilingual_v2": "",
-            "eleven_flash_v2_5": ""
+            "eleven_flash_v2_5": "",
+            "eleven_turbo_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -4245,11 +4245,11 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "descriptive": "calm",
-          "language": "pt",
-          "gender": "female",
-          "age": "middle_aged",
           "accent": "european",
+          "age": "middle_aged",
+          "gender": "female",
+          "language": "pt",
+          "descriptive": "calm",
           "use_case": "narrative_story"
         },
         "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
@@ -4281,11 +4281,11 @@
           "name": "Maria - Anxious, Serious and Urgent",
           "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
           "labels": {
-            "descriptive": "calm",
-            "language": "pt",
-            "gender": "female",
             "age": "middle_aged",
             "accent": "european",
+            "gender": "female",
+            "descriptive": "calm",
+            "language": "pt",
             "use_case": "narrative_story",
             "locale": "pt-PT"
           },
@@ -7157,2298 +7157,15 @@
     ],
     "anthropic": [],
     "google": [],
-    "elevenlabs": [
-      {
-        "model_id": "claude-3-5-sonnet",
-        "name": "claude-3-5-sonnet",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-5-sonnet",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-5-sonnet",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-02-19T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-3-5-sonnet-v2@20241022",
-        "name": "claude-3-5-sonnet-v2@20241022",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-5-sonnet-v2@20241022",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-5-sonnet-v2@20241022",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-02-19T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-3-5-sonnet@20240620",
-        "name": "claude-3-5-sonnet@20240620",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-5-sonnet@20240620",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-5-sonnet@20240620",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-02-19T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-3-7-sonnet",
-        "name": "claude-3-7-sonnet",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-7-sonnet",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-7-sonnet",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-05-11T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-3-7-sonnet@20250219",
-        "name": "claude-3-7-sonnet@20250219",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-7-sonnet@20250219",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-7-sonnet@20250219",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-05-11T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-3-haiku",
-        "name": "claude-3-haiku",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-haiku",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-haiku",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-08-23T00:00:00Z",
-            "replacement_model": "claude-haiku-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-3-haiku@20240307",
-        "name": "claude-3-haiku@20240307",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-3-haiku@20240307",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-3-haiku@20240307",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-08-23T00:00:00Z",
-            "replacement_model": "claude-haiku-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-haiku-4-5",
-        "name": "claude-haiku-4-5",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-haiku-4-5",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-haiku-4-5@20251001",
-        "name": "claude-haiku-4-5@20251001",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-haiku-4-5@20251001",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-opus-4-7",
-        "name": "claude-opus-4-7",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 1000000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-opus-4-7",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 1000000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-sonnet-4",
-        "name": "claude-sonnet-4",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-sonnet-4",
-          "is_checkpoint": false,
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-sonnet-4",
-            "is_deprecated": false,
-            "is_in_warning_period": false,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-09-13T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-sonnet-4-5",
-        "name": "claude-sonnet-4-5",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-sonnet-4-5",
-          "is_checkpoint": false,
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-sonnet-4-5@20250929",
-        "name": "claude-sonnet-4-5@20250929",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-sonnet-4-5@20250929",
-          "is_checkpoint": true,
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-sonnet-4-6",
-        "name": "claude-sonnet-4-6",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-sonnet-4-6",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "claude-sonnet-4@20250514",
-        "name": "claude-sonnet-4@20250514",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "claude-sonnet-4@20250514",
-          "is_checkpoint": true,
-          "max_tokens_limit": 64000,
-          "max_context_limit": 200000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "claude-sonnet-4@20250514",
-            "is_deprecated": false,
-            "is_in_warning_period": false,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-09-13T00:00:00Z",
-            "replacement_model": "claude-sonnet-4-5",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "custom-llm",
-        "name": "custom-llm",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 2097152,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "custom-llm",
-          "is_checkpoint": false,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 2097152,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "none",
-            "minimal",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-2.0-flash",
-        "name": "gemini-2.0-flash",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-2.0-flash",
-          "is_checkpoint": false,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "gemini-2.0-flash",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-03-31T00:00:00Z",
-            "replacement_model": "gemini-2.5-flash",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-2.0-flash-001",
-        "name": "gemini-2.0-flash-001",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-2.0-flash-001",
-          "is_checkpoint": true,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "gemini-2.0-flash-001",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-03-31T00:00:00Z",
-            "replacement_model": "gemini-2.5-flash",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-2.0-flash-lite",
-        "name": "gemini-2.0-flash-lite",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-2.0-flash-lite",
-          "is_checkpoint": false,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "gemini-2.0-flash-lite",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-03-31T00:00:00Z",
-            "replacement_model": "gemini-2.5-flash-lite",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-2.0-flash-lite-001",
-        "name": "gemini-2.0-flash-lite-001",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-2.0-flash-lite-001",
-          "is_checkpoint": true,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "gemini-2.0-flash-lite-001",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": true,
-            "fallback_percentage": 100,
-            "provider_deprecation_date": "2026-03-31T00:00:00Z",
-            "replacement_model": "gemini-2.5-flash-lite",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-2.5-flash",
-        "name": "gemini-2.5-flash",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-2.5-flash",
-          "is_checkpoint": false,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-2.5-flash-lite",
-        "name": "gemini-2.5-flash-lite",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-2.5-flash-lite",
-          "is_checkpoint": false,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-3.1-flash-lite",
-        "name": "gemini-3.1-flash-lite",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 65536,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-3.1-flash-lite",
-          "is_checkpoint": false,
-          "max_tokens_limit": 65536,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gemini-3.5-flash",
-        "name": "gemini-3.5-flash",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 65535,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gemini-3.5-flash",
-          "is_checkpoint": false,
-          "max_tokens_limit": 65535,
-          "max_context_limit": 1048576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "glm-45-air-fp8",
-        "name": "glm-45-air-fp8",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 64000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "glm-45-air-fp8",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 64000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": {
-            "llm": "glm-45-air-fp8",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-06-04T00:00:00Z",
-            "replacement_model": "qwen35-397b-a17b",
-            "deprecation_config": {
-              "warning_start_days": 30,
-              "fallback_start_days": 2,
-              "fallback_complete_days": 0,
-              "fallback_start_percentage": 25,
-              "fallback_complete_percentage": 100
-            }
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-3.5-turbo",
-        "name": "gpt-3.5-turbo",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 16385,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-3.5-turbo",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 16385,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-3.5-turbo-0125",
-        "name": "gpt-3.5-turbo-0125",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 16385,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-3.5-turbo-0125",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 16385,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-3.5-turbo-1106",
-        "name": "gpt-3.5-turbo-1106",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 16385,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-3.5-turbo-1106",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 16385,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4",
-        "name": "gpt-4",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 8192,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4",
-          "is_checkpoint": false,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 8192,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4-0314",
-        "name": "gpt-4-0314",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 8192,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4-0314",
-          "is_checkpoint": true,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 8192,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4-0613",
-        "name": "gpt-4-0613",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 8192,
-          "max_context_limit": 8192,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4-0613",
-          "is_checkpoint": true,
-          "max_tokens_limit": 8192,
-          "max_context_limit": 8192,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4-turbo",
-        "name": "gpt-4-turbo",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4-turbo",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4-turbo-2024-04-09",
-        "name": "gpt-4-turbo-2024-04-09",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4-turbo-2024-04-09",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4.1",
-        "name": "gpt-4.1",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4.1",
-          "is_checkpoint": false,
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4.1-2025-04-14",
-        "name": "gpt-4.1-2025-04-14",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4.1-2025-04-14",
-          "is_checkpoint": true,
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4.1-mini",
-        "name": "gpt-4.1-mini",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4.1-mini",
-          "is_checkpoint": false,
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4.1-mini-2025-04-14",
-        "name": "gpt-4.1-mini-2025-04-14",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4.1-mini-2025-04-14",
-          "is_checkpoint": true,
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4.1-nano",
-        "name": "gpt-4.1-nano",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4.1-nano",
-          "is_checkpoint": false,
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4.1-nano-2025-04-14",
-        "name": "gpt-4.1-nano-2025-04-14",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4.1-nano-2025-04-14",
-          "is_checkpoint": true,
-          "max_tokens_limit": 32768,
-          "max_context_limit": 1047576,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4o",
-        "name": "gpt-4o",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4o",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4o-2024-05-13",
-        "name": "gpt-4o-2024-05-13",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4o-2024-05-13",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4o-2024-08-06",
-        "name": "gpt-4o-2024-08-06",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4o-2024-08-06",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4o-2024-11-20",
-        "name": "gpt-4o-2024-11-20",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4o-2024-11-20",
-          "is_checkpoint": true,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4o-mini",
-        "name": "gpt-4o-mini",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 16384,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4o-mini",
-          "is_checkpoint": false,
-          "max_tokens_limit": 16384,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-4o-mini-2024-07-18",
-        "name": "gpt-4o-mini-2024-07-18",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 16384,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-4o-mini-2024-07-18",
-          "is_checkpoint": true,
-          "max_tokens_limit": 16384,
-          "max_context_limit": 128000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5",
-        "name": "gpt-5",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5-2025-08-07",
-        "name": "gpt-5-2025-08-07",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5-2025-08-07",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5-mini",
-        "name": "gpt-5-mini",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5-mini",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5-mini-2025-08-07",
-        "name": "gpt-5-mini-2025-08-07",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5-mini-2025-08-07",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5-nano",
-        "name": "gpt-5-nano",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5-nano",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5-nano-2025-08-07",
-        "name": "gpt-5-nano-2025-08-07",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5-nano-2025-08-07",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "minimal",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5.1",
-        "name": "gpt-5.1",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.1",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5.1-2025-11-13",
-        "name": "gpt-5.1-2025-11-13",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.1-2025-11-13",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5.2",
-        "name": "gpt-5.2",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.2",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5.2-2025-12-11",
-        "name": "gpt-5.2-2025-12-11",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.2-2025-12-11",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5.2-chat-latest",
-        "name": "gpt-5.2-chat-latest",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.2-chat-latest",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "medium"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "gpt-5.4",
-        "name": "gpt-5.4",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.4",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.4-2026-03-05",
-        "name": "gpt-5.4-2026-03-05",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.4-2026-03-05",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.4-mini",
-        "name": "gpt-5.4-mini",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.4-mini",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.4-mini-2026-03-17",
-        "name": "gpt-5.4-mini-2026-03-17",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.4-mini-2026-03-17",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.4-nano",
-        "name": "gpt-5.4-nano",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.4-nano",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.4-nano-2026-03-17",
-        "name": "gpt-5.4-nano-2026-03-17",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.4-nano-2026-03-17",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 400000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.5",
-        "name": "gpt-5.5",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.5",
-          "is_checkpoint": false,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "gpt-5.5-2026-04-23",
-        "name": "gpt-5.5-2026-04-23",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "gpt-5.5-2026-04-23",
-          "is_checkpoint": true,
-          "max_tokens_limit": 128000,
-          "max_context_limit": 272000,
-          "supports_image_input": true,
-          "supports_document_input": true,
-          "supports_parallel_tool_calls": true,
-          "available_reasoning_efforts": [
-            "none",
-            "low",
-            "medium",
-            "high",
-            "xhigh"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": {
-            "multiplier": 1.1
-          }
-        }
-      },
-      {
-        "model_id": "qwen3-30b-a3b",
-        "name": "qwen3-30b-a3b",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 120000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "qwen3-30b-a3b",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 120000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "qwen3-30b-a3b",
-            "is_deprecated": true,
-            "is_in_warning_period": true,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": "2026-06-04T00:00:00Z",
-            "replacement_model": "qwen36-35b-a3b",
-            "deprecation_config": {
-              "warning_start_days": 30,
-              "fallback_start_days": 2,
-              "fallback_complete_days": 0,
-              "fallback_start_percentage": 25,
-              "fallback_complete_percentage": 100
-            }
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "qwen3-4b",
-        "name": "qwen3-4b",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 32768,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "qwen3-4b",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 32768,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "qwen35-397b-a17b",
-        "name": "qwen35-397b-a17b",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 64000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "qwen35-397b-a17b",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 64000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "qwen36-35b-a3b",
-        "name": "qwen36-35b-a3b",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 64000,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "qwen36-35b-a3b",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 64000,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "deprecation_info": null,
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "watt-tool-70b",
-        "name": "watt-tool-70b",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 32768,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "watt-tool-70b",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 32768,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "watt-tool-70b",
-            "is_deprecated": true,
-            "is_in_warning_period": false,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": null,
-            "replacement_model": "gemini-2.5-flash",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      },
-      {
-        "model_id": "watt-tool-8b",
-        "name": "watt-tool-8b",
-        "latency_ms": null,
-        "cost_hint": null,
-        "capabilities": {
-          "max_tokens_limit": 4096,
-          "max_context_limit": 32768,
-          "supports_image_input": false,
-          "supports_document_input": false
-        },
-        "tags": [
-          "convai"
-        ],
-        "notes": "ElevenLabs ConvAI",
-        "raw": {
-          "llm": "watt-tool-8b",
-          "is_checkpoint": false,
-          "max_tokens_limit": 4096,
-          "max_context_limit": 32768,
-          "supports_image_input": false,
-          "supports_document_input": false,
-          "supports_parallel_tool_calls": false,
-          "available_reasoning_efforts": null,
-          "deprecation_info": {
-            "llm": "watt-tool-8b",
-            "is_deprecated": true,
-            "is_in_warning_period": false,
-            "is_in_fallback_period": false,
-            "fallback_percentage": 0,
-            "provider_deprecation_date": null,
-            "replacement_model": "gemini-2.5-flash",
-            "deprecation_config": null
-          },
-          "regional_processing_surcharge": null
-        }
-      }
-    ]
+    "elevenlabs": []
   },
   "meta": {
-    "updatedAt": "2026-05-29T05:19:10.076Z",
-    "lastLanguagesSync": "2026-05-29T05:19:10.076Z",
-    "lastModelsSync": "2026-05-28T12:20:25.054Z",
+    "updatedAt": "2026-05-31T20:19:33.021Z",
+    "lastLanguagesSync": "2026-05-31T20:19:33.021Z",
+    "lastModelsSync": "2026-05-30T20:55:51.074Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-29T05:19:10.034Z",
+      "at": "2026-05-31T20:19:32.979Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

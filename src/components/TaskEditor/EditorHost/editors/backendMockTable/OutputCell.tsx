@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { stableJsonStringify } from '../../../../../utils/stableJsonStringify';
 import { coerceMockCellValue } from '../../../../../utils/backendCall/coerceMockCellValue';
 import { NoteEditor } from './NoteEditor';
@@ -38,6 +38,8 @@ export type OutputCellProps = {
   valueTooltip?: string;
   /** JSON compatto vs indentato (toggle globale tabella). */
   valueFormat?: MockOutputValueFormat;
+  /** Chiamata HTTP in corso per questa riga. */
+  isLoading?: boolean;
 };
 
 export function OutputCell({
@@ -50,6 +52,7 @@ export function OutputCell({
   onSaveMockValue,
   valueTooltip,
   valueFormat = 'js',
+  isLoading = false,
 }: OutputCellProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [showRaw, setShowRaw] = React.useState(false);
@@ -86,6 +89,20 @@ export function OutputCell({
   const openMockEditor = () => {
     if (onSaveMockValue) setEditMock(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="group relative min-h-[2.5rem] min-w-[120px] max-w-[320px] border-l border-slate-700 px-2 py-2 align-middle">
+        <div className="flex min-h-[2rem] flex-col items-center justify-center gap-1 pr-7">
+          <Loader2 size={14} className="animate-spin text-emerald-400/90" aria-hidden />
+          <span className="text-[10px] italic text-slate-400">In attesa risposta…</span>
+        </div>
+        <div className="pointer-events-none absolute right-1 top-1/2 z-10 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+          <NoteEditor noteKey={noteKey} value={noteText} onSave={onNoteSave} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="group relative min-h-[2.5rem] min-w-[120px] max-w-[320px] border-l border-slate-700 px-2 py-2 align-middle">

@@ -94,6 +94,8 @@ export interface SendParameterValueEditorProps {
   /** Tooltip OpenAPI (formato, enum, esempio) per la cella valore. */
   valueTooltip?: string;
   valueEmpty?: boolean;
+  /** Parametro SEND opzionale a design-time: cella vuota → «Valore opzionale», non errore. */
+  paramOptional?: boolean;
 }
 
 export function SendParameterValueEditor({
@@ -110,6 +112,7 @@ export function SendParameterValueEditor({
   compactTypography = false,
   valueTooltip,
   valueEmpty: valueEmptyProp,
+  paramOptional = false,
 }: SendParameterValueEditorProps) {
   const textSm = compactTypography ? 'text-xs' : 'text-[10px]';
   const missingSendHintId = useId();
@@ -246,12 +249,16 @@ export function SendParameterValueEditor({
 
   const showEmpty = !variableRefId?.trim() && !literalConstant?.trim();
   const emptyClass = 'text-slate-500 italic font-normal';
-  const sendMissingEmpty = valueEmptyProp ?? showEmpty;
+  const valueUnset = valueEmptyProp ?? showEmpty;
+  const sendMissingEmpty = valueUnset && !paramOptional;
+  const sendOptionalEmpty = valueUnset && paramOptional;
   const valueFieldTitle =
     valueTooltip?.trim() ||
-    (sendMissingEmpty
-      ? 'Valore mancante: collega una variabile di flusso o immetti un valore costante.'
-      : displayText || placeholder);
+    (sendOptionalEmpty
+      ? 'Parametro opzionale: puoi omettere il valore o collegare variabile/costante.'
+      : sendMissingEmpty
+        ? 'Valore mancante: collega una variabile di flusso o immetti un valore costante.'
+        : displayText || placeholder);
 
   const pickExisting = useCallback(
     (varId: string) => {
@@ -432,6 +439,9 @@ export function SendParameterValueEditor({
           Valore obbligatorio per SEND: scegli una variabile dall&apos;elenco o immetti una costante.
         </span>
       ) : null}
+      {sendOptionalEmpty && !open ? (
+        <span className="sr-only">Parametro SEND opzionale: valore non impostato.</span>
+      ) : null}
       {!open ? (
         <button
           type="button"
@@ -442,7 +452,9 @@ export function SendParameterValueEditor({
           className={`inline-flex items-center gap-0 max-w-[min(16rem,92vw)] truncate rounded px-1.5 py-0 ${textSm} font-medium h-6 min-h-6 leading-6 border ${mappingParamValueHottrack} ${
             sendMissingEmpty
               ? 'border-red-500/40 bg-red-950/25 text-red-300 hover:border-red-500/60'
-              : `border-transparent hover:border-amber-500/25 ${showEmpty ? emptyClass : accentClassName}`
+              : sendOptionalEmpty
+                ? `border-transparent hover:border-amber-500/25 ${emptyClass}`
+                : `border-transparent hover:border-amber-500/25 ${showEmpty ? emptyClass : accentClassName}`
           }`}
           onPointerDown={(e) => {
             editorParamDebug('trigger pointerdown (hit target)', {
@@ -463,7 +475,13 @@ export function SendParameterValueEditor({
           title={valueFieldTitle}
         >
           <span className="truncate">
-            {sendMissingEmpty ? 'Valore mancante' : showEmpty ? placeholder : displayText}
+            {sendMissingEmpty
+              ? 'Valore mancante'
+              : sendOptionalEmpty
+                ? 'Valore opzionale'
+                : showEmpty
+                  ? placeholder
+                  : displayText}
           </span>
           <ChevronDown className="w-3 h-3 shrink-0 opacity-60" aria-hidden />
         </button>

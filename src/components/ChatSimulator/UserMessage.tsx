@@ -28,6 +28,8 @@ export interface Message {
   compilationFixError?: CompilationError;
   /** Debugger flusso: chiamate BackendCall (mock) collegate a questo messaggio bot. */
   backendInvocations?: FlowBackendCallInvocation[];
+  /** Righe DEBUG backend in conversazione (toggle `agentLogBackendCalls`). */
+  backendDebugText?: string;
   /** Debugger flusso: tool ConvAI webhook (URL effettivi post-tunnel). */
   convaiWebhookInvocations?: FlowConvaiWebhookDiagnostic[];
   /** Debugger flusso: task che ha emesso il messaggio bot (SSE orchestrator). */

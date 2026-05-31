@@ -28,6 +28,7 @@ import { extractTokenNames } from './tokenizedText';
 import { autoTokenizeAnnotated, type AutoTokenizeBracket } from './tokenTypeInference';
 import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
 import { compilePhraseVariant } from '@domain/useCaseBundle/semanticCompile';
+import type { PhraseCompiledSnapshot } from '@domain/useCaseBundle/schema';
 import { buildParametricWhenClause } from '@domain/useCaseBundle/parametricPhraseHelpers';
 import { emptyProjectSlotLexicon, type ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import type { AIAgentPhraseVariant } from '@domain/useCaseBundle/schema';
@@ -44,8 +45,22 @@ import {
   buildUseCaseCatalogNumberById,
   buildUseCaseLogValue,
 } from '@domain/aiAgentUseCase/useCaseCatalogNumber';
+import { isStartAgentUseCase } from './agentStartPrompt';
+import type { AgentBackendOutputSlotBindings } from '@domain/backendOutputSlotBinding/types';
+import { emptyAgentBackendOutputSlotBindings } from '@domain/backendOutputSlotBinding/parseSerialize';
+import { buildVariantTokenBindings } from '@domain/backendOutputSlotBinding/buildVariantTokenBindings';
+import { validateBackendOutputBindings } from '@domain/backendOutputSlotBinding/validateBackendOutputBindings';
 
 export { buildUseCaseLogValue } from '@domain/aiAgentUseCase/useCaseCatalogNumber';
+
+import type {
+  SlotBackendContractMap,
+  UseCaseTokenBindingJson,
+} from '@domain/backendOutputSlotBinding/types';
+import {
+  collectSlotIdsFromCompiledTokens,
+  subsetSlotBackendContractForSlotIds,
+} from '@domain/backendOutputSlotBinding/slotBackendContract';
 
 /** Variante deploy (schema v2 prompt conversazionale). */
 export interface UseCaseConversationalVariantJson {
@@ -53,6 +68,8 @@ export interface UseCaseConversationalVariantJson {
   phraseId?: string;
   tokenizedExample: string;
   tokens: string[];
+  /** Binding esplicito token → campo RECEIVE (`fillFrom`). */
+  tokenBindings?: UseCaseTokenBindingJson[];
   when?: string;
 }
 
@@ -75,6 +92,8 @@ export interface UseCaseConversationalJson {
   template?: string;
   tokens_stile?: UseCaseConversationalTokensStile;
   style_rule?: { llm: string };
+  /** Contratto slot_id → tool RECEIVE/SEND (subset degli slot usati in questo UC). */
+  slotBackendContract?: SlotBackendContractMap;
   log?: string;
 }
 
@@ -89,6 +108,8 @@ export interface ProjectUseCaseOptions {
   readonly catalogNumber?: number;
   /** Lessico progetto per compile on-the-fly se manca snapshot su variante. */
   readonly lexicon?: ProjectSlotLexicon;
+  /** Tabella binding backend→slot per `tokenBindings` nel JSON. */
+  readonly backendOutputSlotBindings?: AgentBackendOutputSlotBindings;
 }
 
 export interface UseCaseConversationalCompilation {
@@ -205,9 +226,18 @@ function variantNaturalForDeploy(
   return phrase.naturalText.trim();
 }
 
+function attachTokenBindings(
+  snap: PhraseCompiledSnapshot,
+  bindings: AgentBackendOutputSlotBindings
+): UseCaseConversationalVariantJson['tokenBindings'] {
+  const rows = buildVariantTokenBindings(snap, bindings);
+  return rows.length > 0 ? rows : undefined;
+}
+
 function collectVariantProjections(
   uc: AIAgentUseCase,
-  lexicon: ProjectSlotLexicon
+  lexicon: ProjectSlotLexicon,
+  bindings: AgentBackendOutputSlotBindings = emptyAgentBackendOutputSlotBindings()
 ): UseCaseConversationalVariantJson[] {
   const withPhrases = ensureUseCasePhrases(uc);
   const out: UseCaseConversationalVariantJson[] = [];
@@ -232,6 +262,10 @@ function collectVariantProjections(
               phraseId: phrase.phraseId,
               tokenizedExample: snap.tokenizedText,
               tokens: snap.tokens,
+              ...(() => {
+                const tokenBindings = attachTokenBindings(snap, bindings);
+                return tokenBindings ? { tokenBindings } : {};
+              })(),
             });
           }
         }
@@ -249,11 +283,13 @@ function collectVariantProjections(
         };
         const snap = compilePhraseVariant(phrase, rowVariant, lexicon);
         if (!snap.tokenizedText.trim()) continue;
+        const tokenBindings = attachTokenBindings(snap, bindings);
         out.push({
           variantId: vid,
           phraseId: phrase.phraseId,
           tokenizedExample: snap.tokenizedText,
           tokens: snap.tokens,
+          ...(tokenBindings ? { tokenBindings } : {}),
           ...(when.trim() ? { when: when.trim() } : {}),
         });
       }
@@ -273,11 +309,13 @@ function collectVariantProjections(
           ? variant.compiled
           : compilePhraseVariant(phrase, variant, lexicon);
       if (!snap.tokenizedText.trim()) continue;
+      const tokenBindings = attachTokenBindings(snap, bindings);
       out.push({
         variantId: variant.variantId,
         phraseId: phrase.phraseId,
         tokenizedExample: snap.tokenizedText,
         tokens: snap.tokens,
+        ...(tokenBindings ? { tokenBindings } : {}),
         ...(typeof variant.when === 'string' && variant.when.trim()
           ? { when: variant.when.trim() }
           : {}),
@@ -287,14 +325,33 @@ function collectVariantProjections(
   return out;
 }
 
+function collectSlotBackendContractForVariants(
+  variants: readonly UseCaseConversationalVariantJson[],
+  bindings: AgentBackendOutputSlotBindings
+): SlotBackendContractMap | undefined {
+  const slotIds: string[] = [];
+  const seen = new Set<string>();
+  for (const v of variants) {
+    for (const id of collectSlotIdsFromCompiledTokens(v.tokens)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      slotIds.push(id);
+    }
+  }
+  if (slotIds.length === 0) return undefined;
+  const map = subsetSlotBackendContractForSlotIds(bindings.slotContracts ?? [], slotIds);
+  return Object.keys(map).length > 0 ? map : undefined;
+}
+
 /**
  * Indica se uno use case ha almeno una variante deployabile con testo non vuoto.
  */
 export function isUseCaseProjectable(
   uc: AIAgentUseCase,
-  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon()
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon(),
+  bindings: AgentBackendOutputSlotBindings = emptyAgentBackendOutputSlotBindings()
 ): boolean {
-  return collectVariantProjections(uc, lexicon).length > 0;
+  return collectVariantProjections(uc, lexicon, bindings).length > 0;
 }
 
 /**
@@ -310,7 +367,8 @@ export function projectUseCaseToConversationalJson(
   options: ProjectUseCaseOptions = {}
 ): UseCaseConversationalJson | null {
   const lexicon = options.lexicon ?? emptyProjectSlotLexicon();
-  const variants = collectVariantProjections(uc, lexicon);
+  const bindings = options.backendOutputSlotBindings ?? emptyAgentBackendOutputSlotBindings();
+  const variants = collectVariantProjections(uc, lexicon, bindings);
   if (variants.length === 0) return null;
 
   const scenario = projectScenarioLlmText(uc);
@@ -322,12 +380,15 @@ export function projectUseCaseToConversationalJson(
       ? Math.floor(options.catalogNumber)
       : undefined;
 
+  const slotBackendContract = collectSlotBackendContractForVariants(variants, bindings);
+
   const projected: UseCaseConversationalJson = {
     useCaseId: uc.id,
     ...(catalogNumber ? { catalogNumber } : {}),
     label,
     scenario,
     variants,
+    ...(slotBackendContract ? { slotBackendContract } : {}),
     ...(styleFields
       ? {
           template: styleFields.template,
@@ -357,7 +418,9 @@ export function projectAllUseCasesToConversationalJson(
   useCases: readonly AIAgentUseCase[],
   options: ProjectUseCaseOptions = {}
 ): UseCaseConversationalJson[] {
-  const included = useCases.filter(isUseCaseIncludedInConversations);
+  const included = useCases.filter(
+    (uc) => isUseCaseIncludedInConversations(uc) && !isStartAgentUseCase(uc)
+  );
   const numberById = buildUseCaseCatalogNumberById(included);
   const sorted = [...included].sort(
     (a, b) => (numberById.get(a.id) ?? 0) - (numberById.get(b.id) ?? 0)
@@ -381,14 +444,31 @@ export function projectAllUseCasesToConversationalJson(
  */
 export function areAllUseCasesProjectable(
   useCases: readonly AIAgentUseCase[],
-  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon()
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon(),
+  bindings: AgentBackendOutputSlotBindings = emptyAgentBackendOutputSlotBindings()
 ): boolean {
-  const included = useCases.filter(isUseCaseIncludedInConversations);
+  const included = useCases.filter(
+    (uc) => isUseCaseIncludedInConversations(uc) && !isStartAgentUseCase(uc)
+  );
   if (included.length === 0) return false;
   for (const uc of included) {
-    if (!isUseCaseProjectable(uc, lexicon)) return false;
+    if (!isUseCaseProjectable(uc, lexicon, bindings)) return false;
   }
   return true;
+}
+
+/**
+ * True se il catalogo è proiettabile e, con backend collegati, ogni token ha `fillFrom` in tabella.
+ */
+export function areCatalogUseCasesDeployReady(
+  useCases: readonly AIAgentUseCase[],
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon(),
+  bindings: AgentBackendOutputSlotBindings = emptyAgentBackendOutputSlotBindings(),
+  backendLinked = false
+): boolean {
+  if (!areAllUseCasesProjectable(useCases, lexicon, bindings)) return false;
+  if (!backendLinked) return true;
+  return validateBackendOutputBindings(useCases, bindings, true).status === 'valid';
 }
 
 /**

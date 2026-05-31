@@ -7,7 +7,7 @@ import type {
   BackendCallInputRow,
   BackendCallOutputRow,
 } from '@components/FlowMappingPanel/backendCallMappingAdapter';
-import type { OpenApiSendBindingRules } from '@domain/backendCatalog/catalogTypes';
+import { buildSendBindingRowFieldsForApiParam } from '@domain/backendCall/sendBindingRowFields';
 
 function toTreeInternalName(apiName: string): string {
   const raw = String(apiName || '').trim();
@@ -30,37 +30,6 @@ function nextUniqueInternalName(base: string, used: Set<string>): string {
   return n;
 }
 
-function sendBindingRowFields(
-  apiName: string,
-  rules: OpenApiSendBindingRules | undefined
-): Pick<
-  BackendCallInputRow,
-  | 'sendBindingOptional'
-  | 'sendBindingDesignTimeRequired'
-  | 'sendConstraintGroupId'
-  | 'sendConstraintGroupLabel'
-> {
-  if (!rules) return {};
-  if (rules.optionalApiParams.includes(apiName)) {
-    return { sendBindingOptional: true };
-  }
-  const design =
-    rules.designTimeRequiredApiParams?.includes(apiName) === true
-      ? { sendBindingDesignTimeRequired: true as const }
-      : {};
-  for (const set of rules.requireOneOfSets ?? []) {
-    for (const alt of set.alternatives) {
-      if (alt.allApiParams.includes(apiName)) {
-        return {
-          ...design,
-          sendConstraintGroupId: set.id,
-          ...(set.label?.trim() ? { sendConstraintGroupLabel: set.label.trim() } : {}),
-        };
-      }
-    }
-  }
-  return Object.keys(design).length > 0 ? design : {};
-}
 
 /** SEND + RECEIVE rows for mapping UI (no task persistence). */
 export function buildBackendCallRowsFromOpenApiFields(fields: OpenApiOperationFields): {
@@ -78,7 +47,10 @@ export function buildBackendCallRowsFromOpenApiFields(fields: OpenApiOperationFi
   const inputs: BackendCallInputRow[] = [];
   for (const apiName of inputNames) {
     const internalName = nextUniqueInternalName(toTreeInternalName(apiName), usedIn);
-    const bind = sendBindingRowFields(apiName, fields.sendBindingRules);
+    const bind = buildSendBindingRowFieldsForApiParam(apiName, fields.sendBindingRules, {
+      requestBodyPropertyNames: fields.requestBodyPropertyNames,
+      requestBodyRequiredPropertyNames: fields.requestBodyRequiredPropertyNames,
+    });
     const phase = fields.bindingPhaseByApiName?.[apiName];
     inputs.push({
       internalName,

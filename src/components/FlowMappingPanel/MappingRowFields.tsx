@@ -20,6 +20,8 @@ export interface MappingRowFieldsProps {
   entry: MappingEntry | null;
   /** Parent node with children but no row at this path — compact visual spacers */
   groupOnlyBackend?: boolean;
+  /** Proprietà virtuali da schema OpenAPI annidato — nessun editor valore. */
+  schemaOutlineOnly?: boolean;
   groupOnlyInterface?: boolean;
   /** Backend: when false, hide API field (variable only). */
   showApiFields?: boolean;
@@ -51,6 +53,7 @@ export function MappingRowFields({
   variant,
   entry,
   groupOnlyBackend,
+  schemaOutlineOnly,
   groupOnlyInterface,
   showApiFields = true,
   hideApiFieldColumn = false,
@@ -78,6 +81,10 @@ export function MappingRowFields({
         <div className="h-[18px] w-[5.5rem] shrink-0 rounded bg-slate-800/30" />
       </div>
     );
+  }
+
+  if (variant === 'backend' && schemaOutlineOnly) {
+    return null;
   }
 
   if (variant === 'interface' && groupOnlyInterface) {
@@ -109,12 +116,15 @@ export function MappingRowFields({
       backendColumn === 'send' ? backendSendParamEnumByWireKey?.[wireMetaKey] : undefined;
     const apiRef = (entry.apiField || '').trim();
     const valueEmpty = !entry.variableRefId?.trim() && !entry.literalConstant?.trim();
+    const paramOptional = Boolean(entry.sendBindingOptional);
     const valueTooltip = entry.openapiValueHint?.trim() || undefined;
     return (
       <div className="flex min-w-0 shrink-0 items-center gap-0">
         {showApiFields && !hideApiFieldColumn ? (
           <span
-            className={`h-6 min-h-[22px] min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono leading-6 text-slate-400 cursor-default select-none tabular-nums ${mappingParamValueHottrack} ${compactTypography ? 'text-xs' : 'text-[10px]'}`}
+            className={`h-6 min-h-[22px] min-w-0 max-w-[10rem] shrink-0 truncate rounded border border-transparent bg-slate-900/40 px-1 font-mono leading-6 cursor-default select-none tabular-nums ${mappingParamValueHottrack} ${compactTypography ? 'text-xs' : 'text-[10px]'} ${
+              paramOptional ? 'italic text-slate-400/95' : 'text-slate-400'
+            }`}
             title={
               apiRef
                 ? `Backend parameter name (read-only): ${apiRef}`
@@ -159,6 +169,7 @@ export function MappingRowFields({
             compactTypography={compactTypography}
             valueTooltip={valueTooltip}
             valueEmpty={valueEmpty}
+            paramOptional={paramOptional}
           />
         )}
       </div>

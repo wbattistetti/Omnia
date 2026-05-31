@@ -20,13 +20,7 @@ import {
   Columns2,
   Calculator,
   FileJson,
-  Bot,
 } from 'lucide-react';
-import { SyncElevenLabsAgentDialog } from './aiAgentEditor/SyncElevenLabsAgentDialog';
-import { buildConvaiAgentSyncParams } from '@domain/convai/buildConvaiAgentSyncParams';
-import type { ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
-import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
-import { useOptionalAIAgentEditorDock } from './aiAgentEditor/AIAgentEditorDockContext';
 import { variableCreationService } from '../../../../services/VariableCreationService';
 import { InterfaceMappingEditor } from '../../../../components/FlowMappingPanel/InterfaceMappingEditor';
 import { useOptionalAgentBackendAnalysis } from './aiAgentEditor/AgentBackendAnalysisContext';
@@ -39,6 +33,7 @@ import {
 import { wrapBookFromAgendaSessionEntries } from '../../../../components/FlowMappingPanel/bookFromAgendaSessionTree';
 import type { MappingEntry } from '../../../../components/FlowMappingPanel/mappingTypes';
 import { enrichBackendMappingEntriesOpenApi } from '../../../../components/FlowMappingPanel/enrichBackendMappingOpenApiUi';
+import { expandMappingEntriesWithOpenApiSchemaOutline } from '../../../../components/FlowMappingPanel/expandMappingEntriesWithOpenApiSchemaOutline';
 import { getActiveFlowCanvasId } from '../../../../flows/activeFlowCanvas';
 import { resolveVariableStoreProjectId } from '../../../../utils/safeProjectId';
 import { getVariableLabel } from '../../../../utils/getVariableLabel';
@@ -48,9 +43,8 @@ import { EndpointUrlMethodBar } from './EndpointUrlMethodBar';
 import { BackendExecutionMode, type BackendMockTableRow } from '../../../../domain/backendTest/backendTestRowTypes';
 import { buildLiteralFallbackFromSendMapping } from '../../../../domain/backendTest/buildLiteralFallbackFromSendMapping';
 import { ensureMockTablePrefilledFromSendLiterals } from '../../../../domain/backendTest/ensureMockTablePrefilledFromSendLiterals';
-import {
-  isBackendMockRowAnyInputFilled,
-} from '../../../../domain/backendTest/backendMockRowCompletion';
+import { applySendBindingOptionalHintsToMappingEntries } from '../../../../domain/backendCall/applySendBindingOptionalHints';
+import { isBackendMockTableReadyForBulkTest } from '../../../../domain/backendTest/backendMockTestReadiness';
 import { slugInternalName, type OpenApiInputUiKind } from '../../../../services/openApiBackendCallSpec';
 import {
   applyFlatJsonBodyExampleToBackendTask,
@@ -584,59 +578,6 @@ export default function BackendCallEditor({
     open: false,
     origin: '',
   });
-  const [syncElevenLabsOpen, setSyncElevenLabsOpen] = React.useState(false);
-  const dockCtx = useOptionalAIAgentEditorDock();
-
-  const manualCatalogBackendTaskIds = React.useMemo(
-    () => (projectData?.backendCatalog?.manualEntries ?? []).map((e) => e.id),
-    [projectData?.backendCatalog?.manualEntries]
-  );
-
-  const convaiSyncParams = React.useMemo(() => {
-    const agentTaskId = String(dockCtx?.instanceId ?? '').trim();
-    if (!agentTaskId || !dockCtx) return null;
-    return buildConvaiAgentSyncParams({
-      agentTaskId,
-      projectId: projectId ?? projectData?.projectId ?? undefined,
-      useCases: dockCtx.useCases,
-      conversationalRules: dockCtx.conversationalRules,
-      includeLog: dockCtx.agentLogUseCase,
-      agentBehavior: dockCtx.agentBehavior,
-      catalogFormat: DEFAULT_CONVERSATIONAL_CATALOG_FORMAT,
-      backendCatalog: projectData?.backendCatalog,
-      manualCatalogBackendTaskIds,
-      knowledgeBaseDocuments: dockCtx.knowledgeBaseDocuments,
-    });
-  }, [dockCtx, manualCatalogBackendTaskIds, projectData?.backendCatalog]);
-
-  const persistElevenLabsSyncResult = React.useCallback(
-    (result: ConvaiAgentSyncResult) => {
-      if (!projectData || !pdUpdate?.updateDataDirectly) return;
-      const catalog = projectData.backendCatalog;
-      const prev = catalog?.manualEntries ?? [];
-      if (prev.length === 0) return;
-      const toolByBackend = new Map(result.tools.map((t) => [t.backendTaskId, t.toolId]));
-      const next = prev.map((e) => {
-        const toolId = toolByBackend.get(e.id);
-        return {
-          ...e,
-          elevenLabsConvaiAgentId: result.agentId,
-          ...(toolId ? { elevenLabsConvaiToolId: toolId } : {}),
-        };
-      });
-      pdUpdate.updateDataDirectly({
-        ...projectData,
-        backendCatalog: {
-          schemaVersion: 1,
-          manualEntries: next,
-          auditLog: catalog?.auditLog ?? [],
-          catalogVersion: (catalog?.catalogVersion ?? 0) + 1,
-        },
-      });
-    },
-    [pdUpdate, projectData]
-  );
-
   const mergePortalConnections = React.useCallback(
     (meta: PortalConnectionMeta) => {
       if (!projectData || !pdUpdate?.updateDataDirectly) return;
@@ -998,16 +939,31 @@ export default function BackendCallEditor({
     [instanceId]
   );
 
-  const mappingSend = React.useMemo(
-    () =>
-      enrichBackendMappingEntriesOpenApi(
-        backendInputsToMappingEntries(config.inputs, knownBackendVariableIdSet),
-        'send',
-        openapiDescriptionSnapshots,
-        openapiParamHintsByPath?.inputs
-      ),
-    [config.inputs, knownBackendVariableIdSet, openapiDescriptionSnapshots, openapiParamHintsByPath]
-  );
+  const backendCallSpecMeta = React.useMemo(() => {
+    if (!instanceId) return null;
+    return taskRepository.getTask(instanceId)?.backendCallSpecMeta ?? null;
+  }, [instanceId, config.inputs, config.outputs]);
+
+  const mappingSend = React.useMemo(() => {
+    const base = enrichBackendMappingEntriesOpenApi(
+      backendInputsToMappingEntries(config.inputs, knownBackendVariableIdSet),
+      'send',
+      openapiDescriptionSnapshots,
+      openapiParamHintsByPath?.inputs
+    );
+    const withOutline = expandMappingEntriesWithOpenApiSchemaOutline(
+      applySendBindingOptionalHintsToMappingEntries(base, backendCallSpecMeta),
+      'send',
+      backendCallSpecMeta
+    );
+    return withOutline;
+  }, [
+    config.inputs,
+    knownBackendVariableIdSet,
+    openapiDescriptionSnapshots,
+    openapiParamHintsByPath,
+    backendCallSpecMeta,
+  ]);
 
   /** BookFromAgenda: cartella Session (solo UI); persistenza senza prefisso tramite adapter. */
   const mappingSendDisplay = React.useMemo(
@@ -1021,13 +977,14 @@ export default function BackendCallEditor({
       [
         ...new Set(
           mappingSend
+            .filter((e) => !e.schemaOutlineOnly)
             .map((e) => {
               const w = (e.wireKey || '').trim();
               return w ? paramFieldKeyFromWireKey(w) || w : '';
             })
             .filter(Boolean)
         ),
-    ] as string[],
+      ] as string[],
     [mappingSend]
   );
 
@@ -1289,14 +1246,16 @@ export default function BackendCallEditor({
   );
 
   const mappingReceive = React.useMemo(
-    () =>
-      enrichBackendMappingEntriesOpenApi(
+    () => {
+      const base = enrichBackendMappingEntriesOpenApi(
         backendOutputsToMappingEntries(config.outputs, knownBackendVariableIdSet),
         'receive',
         openapiDescriptionSnapshots,
         openapiParamHintsByPath?.outputs
-      ),
-    [config.outputs, knownBackendVariableIdSet, openapiDescriptionSnapshots, openapiParamHintsByPath]
+      );
+      return expandMappingEntriesWithOpenApiSchemaOutline(base, 'receive', backendCallSpecMeta);
+    },
+    [config.outputs, knownBackendVariableIdSet, openapiDescriptionSnapshots, openapiParamHintsByPath, backendCallSpecMeta]
   );
 
   /** Fallback Test API: solo letterali SEND (variabile di flusso → valorizza la cella mock o runtime). */
@@ -1381,38 +1340,41 @@ export default function BackendCallEditor({
     return (config.inputs || []).map((i) => i.internalName?.trim()).filter(Boolean) as string[];
   }, [config.mockTableColumns, config.inputs]);
 
-  /** Test API abilitato se esiste almeno una riga con almeno una cella input non vuota (o fallback letterale SEND sulla colonna). */
-  const mockTableHasAtLeastOneNonEmptyInputRow = React.useMemo(() => {
-    const table = config.mockTable ?? [];
-    const names = mockTableAllInputInternalNames;
-    if (names.length === 0) {
-      return false;
-    }
-    const fallback = literalFallbackFromSend;
-    return table.some((row) => isBackendMockRowAnyInputFilled(row, names, fallback));
-  }, [config.mockTable, mockTableAllInputInternalNames, literalFallbackFromSend]);
+  /** Test API: obbligatori SEND soddisfatti (mapping o mock); opzionali vuoti non bloccano. */
+  const mockTableReadyForBulkTest = React.useMemo(
+    () =>
+      isBackendMockTableReadyForBulkTest(
+        mappingSend,
+        config.mockTable ?? [],
+        literalFallbackFromSend
+      ),
+    [mappingSend, config.mockTable, literalFallbackFromSend]
+  );
 
   const [highlightIncompleteRows, setHighlightIncompleteRows] = React.useState(false);
 
   React.useEffect(() => {
-    if (mockTableHasAtLeastOneNonEmptyInputRow) setHighlightIncompleteRows(false);
-  }, [mockTableHasAtLeastOneNonEmptyInputRow]);
+    if (mockTableReadyForBulkTest) setHighlightIncompleteRows(false);
+  }, [mockTableReadyForBulkTest]);
 
   const testApiReadiness = React.useMemo(() => {
     if (mockTableAllInputInternalNames.length === 0) return 'needs_setup' as const;
-    if (mockTableHasAtLeastOneNonEmptyInputRow) return 'ready' as const;
+    if (mockTableReadyForBulkTest) return 'ready' as const;
     return 'incomplete' as const;
-  }, [mockTableAllInputInternalNames.length, mockTableHasAtLeastOneNonEmptyInputRow]);
+  }, [mockTableAllInputInternalNames.length, mockTableReadyForBulkTest]);
 
-  const handleTestApi = React.useCallback(() => {
-    embeddedCloseSignatureToolbar?.();
-    logBackendCallTest('handleTestApi: click', { testApiReadiness });
-    setShowTableView(true);
-    if (mockTableAllInputInternalNames.length === 0) {
-      logBackendCallTest('handleTestApi: stop (needs_setup — nessun input SEND in tabella)');
-      return;
+  const executeBulkTitle = React.useMemo(() => {
+    if (testApiReadiness === 'needs_setup') {
+      return 'Configura prima i parametri SEND (Read API).';
     }
+    if (testApiReadiness === 'incomplete') {
+      return 'Completa i parametri obbligatori (Signature o celle mock) prima di eseguire.';
+    }
+    return 'Esegui chiamate HTTP reali (proxy) su tutte le righe pronte; opzionali vuoti sono ammessi.';
+  }, [testApiReadiness]);
 
+  /** Prefill mock table da letterali SEND; ritorna se gli obbligatori sono soddisfatti. */
+  const prefillMockTableAndCheckReady = React.useCallback((): boolean => {
     let canBulk = false;
     flushSync(() => {
       setConfig((prev) => {
@@ -1434,9 +1396,16 @@ export default function BackendCallEditor({
           literals,
           prev.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK
         );
-        canBulk =
-          names.length > 0 &&
-          nextTable.some((row) => isBackendMockRowAnyInputFilled(row, names, literals));
+        const sendForReady = applySendBindingOptionalHintsToMappingEntries(
+          enrichBackendMappingEntriesOpenApi(
+            backendInputsToMappingEntries(prev.inputs, knownBackendVariableIdSet),
+            'send',
+            openapiDescriptionSnapshots,
+            openapiParamHintsByPath?.inputs
+          ),
+          backendCallSpecMeta
+        );
+        canBulk = isBackendMockTableReadyForBulkTest(sendForReady, nextTable, literals);
         const withTable = { ...prev, mockTable: nextTable };
         return {
           ...withTable,
@@ -1444,26 +1413,52 @@ export default function BackendCallEditor({
         };
       });
     });
+    return canBulk;
+  }, [
+    knownBackendVariableIdSet,
+    openapiDescriptionSnapshots,
+    openapiParamHintsByPath,
+    backendCallSpecMeta,
+  ]);
 
+  /** Toolbar «Test Backend»: apre solo la tabella (nessuna chiamata HTTP). */
+  const handleOpenTestTable = React.useCallback(() => {
+    embeddedCloseSignatureToolbar?.();
+    logBackendCallTest('handleOpenTestTable: click', { testApiReadiness });
+    setShowTableView(true);
+    if (mockTableAllInputInternalNames.length === 0) {
+      logBackendCallTest('handleOpenTestTable: stop (needs_setup — nessun input SEND)');
+      return;
+    }
+    prefillMockTableAndCheckReady();
+    setHighlightIncompleteRows(false);
+  }, [
+    embeddedCloseSignatureToolbar,
+    mockTableAllInputInternalNames.length,
+    prefillMockTableAndCheckReady,
+    testApiReadiness,
+  ]);
+
+  /** Pulsante «Esegui» nella tabella: chiamate HTTP reali sulle righe pronte. */
+  const handleExecuteBulkTest = React.useCallback(() => {
+    logBackendCallTest('handleExecuteBulkTest: click', { testApiReadiness });
+    if (mockTableAllInputInternalNames.length === 0) {
+      return;
+    }
+    const canBulk = prefillMockTableAndCheckReady();
     if (!canBulk) {
-      logBackendCallTest('handleTestApi: incomplete dopo prefill letterali SEND nella tabella');
+      logBackendCallTest('handleExecuteBulkTest: incomplete — obbligatori SEND mancanti');
       setHighlightIncompleteRows(true);
       return;
     }
     setHighlightIncompleteRows(false);
+    flushSync(() => setBulkApiTestBusy(true));
     setBulkTestNonce((n) => {
       const next = n + 1;
-      logBackendCallTest('handleTestApi: avvio bulk mock table', { bulkTestNonce: { from: n, to: next } });
+      logBackendCallTest('handleExecuteBulkTest: avvio bulk', { bulkTestNonce: { from: n, to: next } });
       return next;
     });
-  }, [
-    knownBackendVariableIdSet,
-    openapiDescriptionSnapshots,
-    mockTableAllInputInternalNames.length,
-    mockTableHasAtLeastOneNonEmptyInputRow,
-    testApiReadiness,
-    embeddedCloseSignatureToolbar,
-  ]);
+  }, [mockTableAllInputInternalNames.length, prefillMockTableAndCheckReady, testApiReadiness]);
 
   /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
   const inputTooltipByInternalName = React.useMemo(() => {
@@ -1558,10 +1553,8 @@ export default function BackendCallEditor({
 
     const testApiTitle =
       testApiReadiness === 'needs_setup'
-        ? 'Clicca per impostare il set di test'
-        : testApiReadiness === 'incomplete'
-          ? 'Completa tutti gli input attivi su almeno una riga: il test gira solo sulle righe complete; le righe vuote vengono saltate.'
-          : 'Chiamata HTTP reale al backend (proxy ApiServer) per ogni riga con tutti gli input compilati; le righe vuote sono saltate. Il toggle MOCK/REAL non influisce su Test API — MOCK serve per emulare i valori nelle celle output senza rete.';
+        ? 'Apri la tabella di test (serve almeno un parametro SEND da Read API).'
+        : 'Apri la tabella di test Real backend call. Le chiamate HTTP si avviano con «Esegui» nella barra sopra la griglia.';
 
     const setEmulationMode = () =>
       setConfig((prev) => ({ ...prev, mockTableDefaultExecutionMode: BackendExecutionMode.MOCK }));
@@ -1623,27 +1616,28 @@ export default function BackendCallEditor({
         visible: readApiToolbarVisible,
       },
       {
-        buttonId: 'publish-elevenlabs',
-        icon: <Bot size={16} />,
-        label: 'Aggiorna agente',
-        onClick: () => setSyncElevenLabsOpen(true),
-        title:
-          'Sincronizza su ElevenLabs prompt completo, webhook catalogo e documenti KB (dal task AI Agent)',
-        visible:
-          operationalUrlNonEmpty &&
-          Boolean(String(backendToolDescription ?? '').trim()) &&
-          Boolean(convaiSyncParams),
-      },
-      {
         buttonId: 'test-backend',
         icon: <FlaskConical size={16} />,
-        label: bulkApiTestBusy ? 'Testing…' : 'Test Backend',
-        onClick: () => void handleTestApi(),
+        label: 'Test Backend',
+        onClick: () => void handleOpenTestTable(),
         title: testApiTitle,
-        disabled: bulkApiTestBusy,
+        disabled: false,
         active: showTableView,
-        successHighlight: testApiReadiness === 'ready' && !bulkApiTestBusy,
+        successHighlight: showTableView && testApiReadiness === 'ready' && !bulkApiTestBusy,
         visible: operationalUrlNonEmpty && mockExecMode === BackendExecutionMode.REAL,
+        subAction: {
+          label: 'Esegui',
+          busyLabel: 'Sto testando il backend',
+          busy: bulkApiTestBusy,
+          onClick: () => void handleExecuteBulkTest(),
+          title: bulkApiTestBusy
+            ? 'Chiamata HTTP in corso…'
+            : executeBulkTitle,
+          disabled:
+            bulkApiTestBusy ||
+            mockTableAllInputInternalNames.length === 0 ||
+            testApiReadiness === 'needs_setup',
+        },
       },
       // Utility
       {
@@ -1705,7 +1699,10 @@ export default function BackendCallEditor({
     readApiBusy,
     bulkApiTestBusy,
     handleReadApi,
-    handleTestApi,
+    handleOpenTestTable,
+    handleExecuteBulkTest,
+    executeBulkTitle,
+    mockTableAllInputInternalNames.length,
     missingFieldsTotal,
     swaggerInputContract.length,
     swaggerOutputContract.length,
@@ -1717,8 +1714,6 @@ export default function BackendCallEditor({
     advancementEditorWireKey,
     embeddedSignatureSubToolbarOpen,
     embeddedCloseSignatureToolbar,
-    backendToolDescription,
-    convaiSyncParams,
   ]);
 
   // Update toolbar when it changes (for docking mode)
@@ -1754,13 +1749,6 @@ export default function BackendCallEditor({
   return (
     <div className="h-full bg-slate-900 flex flex-col min-h-0" style={{ color: '#e5e7eb' }}>
       {/* ✅ ARCHITECTURE: No local header - icon/title/toolbar are injected into main header */}
-
-      <SyncElevenLabsAgentDialog
-        open={syncElevenLabsOpen}
-        onClose={() => setSyncElevenLabsOpen(false)}
-        syncParams={convaiSyncParams}
-        onSynced={persistElevenLabsSyncResult}
-      />
 
       <div
         className={
@@ -1854,7 +1842,6 @@ export default function BackendCallEditor({
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 min-w-0 flex-1 overflow-auto">
             <BackendCallMockTable
               bulkTestNonce={bulkTestNonce}
               endpointInvocationFallback={literalFallbackFromSend}
@@ -1906,7 +1893,6 @@ export default function BackendCallEditor({
                 return v;
               }}
             />
-            </div>
           </div>
         ) : (
         <div

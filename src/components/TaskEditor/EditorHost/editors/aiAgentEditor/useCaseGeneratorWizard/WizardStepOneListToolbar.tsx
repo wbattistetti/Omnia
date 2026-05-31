@@ -44,8 +44,10 @@ import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexico
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   WizardAgentBehaviorSelect,
+  WizardCompileMappingBanner,
   WizardSlotMappingToggle,
 } from './WizardToolbarSlotMappingControls';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { UseCaseTestQuestionsToolbar } from '../useCaseTestQuestions/UseCaseTestQuestionsToolbar';
 import { UseCaseOverlapCheckToolbar } from '../useCaseOverlap/UseCaseOverlapCheckToolbar';
 
@@ -369,16 +371,19 @@ export function WizardStepOneListToolbar({
 }: WizardStepOneListToolbarProps & { visible: boolean }): React.ReactElement | null {
   if (!visible) return null;
   return (
-    <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-violet-500/20 bg-slate-950/50 px-3 py-2"
-      role="toolbar"
-      aria-label="Controlli lista use case"
-    >
+    <div className="border-t border-violet-500/20 bg-slate-950/50 px-3 py-2">
+      <WizardCompileMappingBanner />
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-2"
+        role="toolbar"
+        aria-label="Controlli lista use case"
+      >
       <WizardStepOneListToolbarControls
         wizard={wizard}
         canShowJsonToggle={canShowJsonToggle}
         expandTheme={expandTheme}
       />
+      </div>
     </div>
   );
 }
@@ -536,7 +541,17 @@ export function WizardStepOneListToolbarControls({
       <UseCaseTestQuestionsToolbar />
       <UseCaseOverlapCheckToolbar />
       {dock && projectSlotLexicon ? (
-        <WizardSlotMappingToggle lexicon={projectSlotLexicon} useCases={catalogUseCases} />
+        <WizardSlotMappingToggle
+          lexicon={projectSlotLexicon}
+          useCases={catalogUseCases}
+          backendOutputSlotBindings={dock.backendOutputSlotBindings}
+          backendLinked={
+            mergeConvaiBackendToolIdLists(
+              dock.iaRuntimeConfig?.convaiBackendToolTaskIds ?? [],
+              []
+            ).length > 0
+          }
+        />
       ) : null}
       {dock ? (
         <WizardAgentBehaviorSelect

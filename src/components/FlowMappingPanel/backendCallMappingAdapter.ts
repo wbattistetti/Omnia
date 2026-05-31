@@ -98,7 +98,7 @@ export function backendOutputsToMappingEntries(
 
 export function mappingEntriesToBackendInputs(entries: MappingEntry[]): BackendCallInputRow[] {
   return entries
-    .filter((e) => e.wireKey.trim())
+    .filter((e) => e.wireKey.trim() && !e.schemaOutlineOnly)
     .map((e) => ({
       internalName: unwrapSessionTreeWireKey(e.wireKey.trim()),
       apiParam: e.apiField.trim(),
@@ -119,7 +119,7 @@ export function mappingEntriesToBackendInputs(entries: MappingEntry[]): BackendC
 
 export function mappingEntriesToBackendOutputs(entries: MappingEntry[]): BackendCallOutputRow[] {
   return entries
-    .filter((e) => e.wireKey.trim())
+    .filter((e) => e.wireKey.trim() && !e.schemaOutlineOnly)
     .map((e) => ({
       internalName: e.wireKey.trim(),
       apiField: e.apiField.trim(),

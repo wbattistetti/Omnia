@@ -1,0 +1,51 @@
+/**
+ * URL gateway Omnia per webhook ConvAI: applica sendHints (valueKind → ISO) poi inoltra al Backend Call.
+ */
+
+/** Express runtime default (allineato a `backend/server.js` PORT). */
+export const OMNIA_RUNTIME_DEFAULT_ORIGIN = 'http://localhost:3100';
+
+/**
+ * Origine assoluta del runtime Omnia (gateway, bookfromagenda, proxy designer).
+ * Non usare l'origin del Backend Call esterno.
+ */
+export function resolveOmniaRuntimeOrigin(explicitBase?: string): string {
+  const fromArg = explicitBase?.trim().replace(/\/$/, '');
+  if (fromArg) return fromArg;
+  if (typeof window !== 'undefined') {
+    const w = window as unknown as { __OMNIA_APISERVER_BASE__?: string };
+    const winBase = w.__OMNIA_APISERVER_BASE__?.trim();
+    if (winBase) return winBase.replace(/\/$/, '');
+  }
+  return OMNIA_RUNTIME_DEFAULT_ORIGIN;
+}
+
+export type ConvaiWebhookGatewayParams = {
+  /** Origine del runtime (es. http://localhost:3100). */
+  origin: string;
+  projectId: string;
+  agentTaskId: string;
+  backendTaskId: string;
+};
+
+/** Path relativo del gateway (senza origin). */
+export function convaiWebhookGatewayPath(
+  projectId: string,
+  agentTaskId: string,
+  backendTaskId: string
+): string {
+  const pid = encodeURIComponent(projectId.trim());
+  const aid = encodeURIComponent(agentTaskId.trim());
+  const bid = encodeURIComponent(backendTaskId.trim());
+  return `/api/runtime/convai-webhook/${pid}/${aid}/${bid}`;
+}
+
+export function buildConvaiWebhookGatewayUrl(params: ConvaiWebhookGatewayParams): string {
+  const origin = params.origin.trim().replace(/\/$/, '');
+  return `${origin}${convaiWebhookGatewayPath(params.projectId, params.agentTaskId, params.backendTaskId)}`;
+}
+
+/** True se l'URL punta al gateway Omnia (evita loop di re-inoltro). */
+export function isConvaiWebhookGatewayUrl(url: string): boolean {
+  return /\/api\/runtime\/convai-webhook\//i.test(String(url ?? ''));
+}

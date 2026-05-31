@@ -4,6 +4,7 @@
 
 import type { PersistedKbDocument } from './kbDocumentTypes';
 import { persistedKbToStaged, stagedKbToPersisted } from './kbDocumentTypes';
+import { normalizePersistedKbRepositoryLink } from './kbRepositoryContract';
 
 function isPersistedKbDocument(row: unknown): row is PersistedKbDocument {
   if (!row || typeof row !== 'object') return false;
@@ -20,7 +21,7 @@ export function parseAgentKnowledgeBaseDocumentsJson(raw: string): PersistedKbDo
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter(isPersistedKbDocument)
-      .map((row) => stagedKbToPersisted(persistedKbToStaged(row)));
+      .map((row) => normalizePersistedKbRepositoryLink(stagedKbToPersisted(persistedKbToStaged(row))));
   } catch {
     return [];
   }
@@ -28,5 +29,6 @@ export function parseAgentKnowledgeBaseDocumentsJson(raw: string): PersistedKbDo
 
 export function serializeAgentKnowledgeBaseDocuments(docs: readonly PersistedKbDocument[]): string {
   if (docs.length === 0) return '';
-  return JSON.stringify(docs);
+  const normalized = docs.map((d) => normalizePersistedKbRepositoryLink(stagedKbToPersisted(persistedKbToStaged(d))));
+  return JSON.stringify(normalized);
 }

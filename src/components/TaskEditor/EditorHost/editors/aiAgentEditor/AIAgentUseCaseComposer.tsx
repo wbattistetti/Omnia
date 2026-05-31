@@ -56,8 +56,15 @@ import { usePatchUseCaseResponseTasks } from './usePatchUseCaseResponseTasks';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { UseCaseRowDeployChips } from './useCaseBundle/UseCaseRowDeployChips';
+import { UseCaseStartChip } from './useCaseBundle/UseCaseStartChip';
 import { UseCaseCatalogNumberBadge } from './useCaseBundle/UseCaseCatalogNumberBadge';
 import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeployStats';
+import {
+  buildAgentPromptCatalogExport,
+  isStartAgentUseCase,
+} from '@domain/useCaseGeneratorWizard/agentStartPrompt';
+import { StartPromptAccordion } from './useCaseGeneratorWizard/StartPromptAccordion';
+import type { AgentStartPromptConfig } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import {
   buildUseCaseCatalogNumberById,
   formatUseCaseCatalogListLabel,
@@ -353,6 +360,14 @@ export interface AIAgentUseCaseComposerProps {
   onInspectCompiled?: (useCaseId: string) => void;
   /** `conversational_rules`: catalogo error handling (no IA create/regenerate). */
   composerCatalog?: 'prompts' | 'conversational_rules';
+  /** Frase di apertura sessione (scenario startAgent), persistita separatamente dagli use case. */
+  startPromptConfig?: AgentStartPromptConfig;
+  onStartPromptConfigChange?: (next: AgentStartPromptConfig) => void;
+  /** Id use case marcato Start (apertura sessione). */
+  startUseCaseId?: string;
+  onStartUseCaseIdChange?: (next: string) => void;
+  /** Toggle «Logga Use Case» per export JSON startUseCaseId + useCases. */
+  includeLogInPromptExport?: boolean;
 }
 
 export function AIAgentUseCaseComposer({
@@ -407,8 +422,17 @@ export function AIAgentUseCaseComposer({
   projectSlotLexicon = emptyProjectSlotLexicon(),
   onInspectCompiled,
   composerCatalog = 'prompts',
+  startPromptConfig,
+  onStartPromptConfigChange,
+  startUseCaseId = '',
+  onStartUseCaseIdChange,
+  includeLogInPromptExport = false,
 }: AIAgentUseCaseComposerProps) {
   const isConversationalRulesCatalog = composerCatalog === 'conversational_rules';
+  const catalogUseCases = React.useMemo(
+    () => useCases.filter((u) => !isStartAgentUseCase(u)),
+    [useCases]
+  );
   const patchUseCaseResponseTasks = usePatchUseCaseResponseTasks(setUseCases);
 
   const seedUseCaseResponse = React.useCallback(
@@ -440,7 +464,10 @@ export function AIAgentUseCaseComposer({
   const [styleLearningNotesEditorOpen, setStyleLearningNotesEditorOpen] = React.useState(false);
   const showStyleLearningNotesPanel =
     useCaseStyleLearningNotes.trim().length > 0 || styleLearningNotesEditorOpen;
-  const { ordered } = React.useMemo(() => orderUseCasesWithDepth(useCases), [useCases]);
+  const { ordered } = React.useMemo(
+    () => orderUseCasesWithDepth(catalogUseCases),
+    [catalogUseCases]
+  );
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
   /** Rimuove chip/bordo «New» solo dopo un’azione designer esplicita (voto, commit testo, …). */
   const clearNewHighlightOnDesignerAction = React.useCallback(
@@ -1987,6 +2014,27 @@ export function AIAgentUseCaseComposer({
     [setUseCases]
   );
 
+  const handleToggleStartUseCase = React.useCallback(
+    (useCaseId: string) => {
+      if (!onStartUseCaseIdChange) return;
+      const trimmed = String(startUseCaseId ?? '').trim();
+      const next = trimmed === useCaseId ? '' : useCaseId;
+      if (next) {
+        const uc = useCases.find((x) => x.id === useCaseId);
+        if (uc && !isUseCaseIncludedInConversations(uc)) {
+          setUseCaseIncludedInConversations(useCaseId, true);
+        }
+      }
+      onStartUseCaseIdChange(next);
+    },
+    [
+      onStartUseCaseIdChange,
+      setUseCaseIncludedInConversations,
+      startUseCaseId,
+      useCases,
+    ]
+  );
+
   const toggleDesignerFieldVote = React.useCallback(
     (useCaseId: string, field: DesignerVoteField, choice: DesignerFieldVote) => {
       setUseCases((prev) => applyDesignerFieldVoteToggle(prev, useCaseId, field, choice));
@@ -2631,7 +2679,7 @@ export function AIAgentUseCaseComposer({
   }, [useCaseGlobalStyleId, useCaseStyleLearningNotes]);
 
   const runtimeCatalogExport = React.useMemo(() => {
-    const built = buildVirtualAgentRuntimeCatalogFromUseCases(useCases);
+    const built = buildVirtualAgentRuntimeCatalogFromUseCases(catalogUseCases);
     return {
       catalogJson: serializeVirtualAgentRuntimeCatalog(built),
       appendix: buildVirtualAgentUseCaseConstrainedPromptAppendix(built.entries, {
@@ -2640,7 +2688,7 @@ export function AIAgentUseCaseComposer({
       skippedCount: built.skipped.length,
       entryCount: built.entries.length,
     };
-  }, [useCases, mergedStyleContractForCatalog]);
+  }, [catalogUseCases, mergedStyleContractForCatalog]);
 
   const copyRuntimeCatalogJson = React.useCallback(() => {
     void navigator.clipboard.writeText(runtimeCatalogExport.catalogJson).catch(() => {
@@ -2653,6 +2701,25 @@ export function AIAgentUseCaseComposer({
       /* clipboard denied */
     });
   }, [runtimeCatalogExport.appendix]);
+
+  const conversationalCatalogExportJson = React.useMemo(() => {
+    try {
+      const payload = buildAgentPromptCatalogExport(catalogUseCases, {
+        includeLog: includeLogInPromptExport,
+        startUseCaseId: String(startUseCaseId ?? '').trim() || undefined,
+      });
+      return JSON.stringify(payload, null, 2);
+    } catch {
+      return '';
+    }
+  }, [catalogUseCases, includeLogInPromptExport, startUseCaseId]);
+
+  const copyConversationalCatalogJson = React.useCallback(() => {
+    if (!conversationalCatalogExportJson) return;
+    void navigator.clipboard.writeText(conversationalCatalogExportJson).catch(() => {
+      /* clipboard denied */
+    });
+  }, [conversationalCatalogExportJson]);
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-2">
@@ -2766,6 +2833,16 @@ export function AIAgentUseCaseComposer({
             <Copy size={12} aria-hidden />
             Copia appendix prompt
           </button>
+          <button
+            type="button"
+            title="Copia JSON conversazionale (startUseCaseId + useCases) negli appunti"
+            onClick={copyConversationalCatalogJson}
+            disabled={busy || !conversationalCatalogExportJson}
+            className="inline-flex items-center gap-1 rounded border border-orange-700/50 bg-orange-950/35 px-2 py-1 text-[11px] font-semibold text-orange-100 hover:bg-orange-900/45 disabled:opacity-40"
+          >
+            <FileJson size={12} aria-hidden />
+            Copia JSON conversazionale
+          </button>
         </div>
       ) : null}
 
@@ -2804,6 +2881,28 @@ export function AIAgentUseCaseComposer({
           } flex min-h-0 min-w-0 flex-1 flex-col self-stretch overflow-hidden min-h-[240px] ${USE_CASE_PANEL_SHELL}`}
         >
           <div {...tutorIdProps(UI_IDS.useCaseList)} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {!isConversationalRulesCatalog && !startUseCaseId.trim() &&
+              startPromptConfig &&
+              onStartPromptConfigChange ? (
+                <div className="shrink-0 px-2 pt-2">
+                  <StartPromptAccordion
+                    config={startPromptConfig}
+                    onChange={onStartPromptConfigChange}
+                    disabled={busy}
+                  />
+                </div>
+              ) : null}
+              {!isConversationalRulesCatalog && startUseCaseId.trim() ? (
+                <p className="shrink-0 px-3 pt-2 text-[11px] text-orange-200/90">
+                  Use case Start:{' '}
+                  <span className="font-semibold text-orange-100">
+                    {catalogUseCases.find((u) => u.id === startUseCaseId)?.label?.trim() ||
+                      startUseCaseId}
+                  </span>
+                  . Passa su un altro use case e clicca «Start» per cambiare, o clicca di nuovo
+                  Start per rimuovere.
+                </p>
+              ) : null}
               {!showUseCaseEmptyTutor ? (
                 <UseCaseRootComposerHeader
                   rootDraftRef={rootDraftRef}
@@ -2961,6 +3060,9 @@ export function AIAgentUseCaseComposer({
                   }
                   const u = row.useCase;
                   const includedInConv = isUseCaseIncludedInConversations(u);
+                  const isStartUseCaseRow =
+                    !isConversationalRulesCatalog &&
+                    String(startUseCaseId ?? '').trim() === u.id;
                   const catalogNumber = catalogNumberById.get(u.id);
                   const listDisplayLabel = row.category
                     ? displayUseCaseLabelForCategory(u, row.category)
@@ -2992,7 +3094,9 @@ export function AIAgentUseCaseComposer({
                       ? `overflow-hidden rounded-md ${UC_ROW_REVIEW_EDGE}`
                       : cardExpanded
                         ? `overflow-hidden rounded-md border ${UC_WIZARD_ROW_EXPANDED}`
-                        : `rounded-md ${zebraRow}`;
+                        : isStartUseCaseRow
+                          ? `rounded-md ring-1 ring-orange-500/55 ${zebraRow}`
+                          : `rounded-md ${zebraRow}`;
                   const nextRow = useCaseListRows[rowIndex + 1];
                   const nextInFiltered =
                     nextRow?.kind === 'use_case' ? nextRow.useCase : undefined;
@@ -3232,19 +3336,34 @@ export function AIAgentUseCaseComposer({
                               </span>
                             ) : null}
                             {/*
-                              Toolbar unica (pollici, matita, [+ classico], globo con conferma, cestino):
-                              visibile solo su hover/focus header; resta aperta durante menu «Generalizza» o
-                              generalizzazione in corso (messaggio sotto il globo).
+                              Start: sempre visibile se attivo; altrimenti solo su hover header.
+                              Altre azioni: toolbar hover (resta aperta durante Generalizza).
                             */}
-                            <div
-                              data-uc-head-toolbar
-                              className={`mt-[1px] flex shrink-0 items-center gap-0.5 transition-opacity ${
-                                generalizeMetaPendingUseCaseId === u.id ||
-                                generalizeGlobeMenuOpenUseCaseId === u.id
-                                  ? 'pointer-events-auto opacity-100'
-                                  : 'pointer-events-none opacity-0 group-hover/uc-head:pointer-events-auto group-hover/uc-head:opacity-100 group-focus-within/uc-head:pointer-events-auto group-focus-within/uc-head:opacity-100'
-                              }`}
-                            >
+                            <div className="mt-[1px] flex shrink-0 items-center gap-0.5">
+                              {!isConversationalRulesCatalog && onStartUseCaseIdChange ? (
+                                <div
+                                  className={
+                                    isStartUseCaseRow
+                                      ? 'pointer-events-auto opacity-100'
+                                      : 'pointer-events-none opacity-0 transition-opacity group-hover/uc-head:pointer-events-auto group-hover/uc-head:opacity-100 group-focus-within/uc-head:pointer-events-auto group-focus-within/uc-head:opacity-100'
+                                  }
+                                >
+                                  <UseCaseStartChip
+                                    active={isStartUseCaseRow}
+                                    disabled={busy}
+                                    onToggle={() => handleToggleStartUseCase(u.id)}
+                                  />
+                                </div>
+                              ) : null}
+                              <div
+                                data-uc-head-toolbar
+                                className={`flex items-center gap-0.5 transition-opacity ${
+                                  generalizeMetaPendingUseCaseId === u.id ||
+                                  generalizeGlobeMenuOpenUseCaseId === u.id
+                                    ? 'pointer-events-auto opacity-100'
+                                    : 'pointer-events-none opacity-0 group-hover/uc-head:pointer-events-auto group-hover/uc-head:opacity-100 group-focus-within/uc-head:pointer-events-auto group-focus-within/uc-head:opacity-100'
+                                }`}
+                              >
                               <VoteThumbPair
                                 vote={u.designer_label_vote}
                                 disabled={busy}
@@ -3350,6 +3469,7 @@ export function AIAgentUseCaseComposer({
                               >
                                 <GripVertical size={14} aria-hidden />
                               </UseCaseRowDragHandle>
+                              </div>
                             </div>
                           </div>
                         )}

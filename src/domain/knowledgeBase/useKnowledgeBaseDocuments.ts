@@ -8,6 +8,8 @@ import {
   runKbDocumentIngest,
   stageKbFilesFromUpload,
 } from './kbDocumentIngest';
+import { normalizePersistedKbRepositoryLink } from './kbRepositoryContract';
+import { reconcileKbDocumentsWithRepository } from './reconcileKbDocumentsWithRepository';
 import {
   persistedKbToStaged,
   stagedKbToPersisted,
@@ -43,9 +45,14 @@ export function useKnowledgeBaseDocuments(
 
   const [documents, setDocuments] = React.useState<StagedKbDocument[]>([]);
 
-  const hydrateFromPersisted = React.useCallback((rows: readonly PersistedKbDocument[]) => {
-    setDocuments(rows.map(persistedKbToStaged));
-  }, []);
+  const hydrateFromPersisted = React.useCallback(
+    (rows: readonly PersistedKbDocument[]) => {
+      const normalized = rows.map((row) => normalizePersistedKbRepositoryLink(row));
+      setDocuments(normalized.map(persistedKbToStaged));
+      void reconcileKbDocumentsWithRepository(projectId, normalized, setDocuments);
+    },
+    [projectId]
+  );
 
   const markDirty = React.useCallback(() => {
     onDirty?.();
@@ -69,7 +76,7 @@ export function useKnowledgeBaseDocuments(
       const doc = documents.find((d) => d.id === docId);
       setDocuments((prev) => prev.filter((d) => d.id !== docId));
       markDirty();
-      deleteKbRepositoryBlob(projectId, doc?.repositoryDocumentId);
+      deleteKbRepositoryBlob(projectId, doc?.id);
     },
     [documents, projectId, markDirty]
   );
@@ -96,7 +103,10 @@ export function useKnowledgeBaseDocuments(
     [markDirty]
   );
 
-  const toPersisted = React.useCallback(() => documents.map(stagedKbToPersisted), [documents]);
+  const toPersisted = React.useCallback(
+    () => documents.map((d) => normalizePersistedKbRepositoryLink(stagedKbToPersisted(d))),
+    [documents]
+  );
 
   return {
     documents,

@@ -22,6 +22,7 @@ import type { AgentPromptPlatformId, BackendPlaceholderInstance, PlatformPromptO
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { UseCaseGeneratorWizardModel } from './useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 import type { UseCaseSiblingSortMode } from './useCaseHierarchy';
+import type { AgentStartPromptConfig } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import type { MappingEntry } from '@components/FlowMappingPanel/mappingTypes';
 import type { KbDocumentPatch, StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
 import type { AiCallMeta } from '@services/aiAgentDesignApi';
@@ -146,6 +147,12 @@ export interface AIAgentEditorDockContextValue {
   /** Designer notes merged into the preset style contract (`Task.agentUseCaseStyleLearningNotes`). */
   agentUseCaseStyleLearningNotes: string;
   setAgentUseCaseStyleLearningNotes: (next: string) => void;
+  /** Start Prompt (scenario startAgent) — frase di apertura sessione. */
+  agentStartPromptConfig: AgentStartPromptConfig;
+  setAgentStartPromptConfig: (next: AgentStartPromptConfig) => void;
+  /** Id use case marcato Start (apertura sessione). */
+  agentStartUseCaseId: string;
+  setAgentStartUseCaseId: (next: string) => void;
   /** Design-time preview style (persisted with task). */
   previewStyleId: string;
   setPreviewStyleId: (styleId: string) => void;
@@ -343,7 +350,7 @@ export interface AIAgentEditorDockContextValue {
    * actions) del gruppo di destra (Dati / Use case / Agent setup / Backends), allineato a
    * destra. Lo state apertura del dialog è gestito dal parent ({@link AIAgentEditor}); il
    * dialog è renderizzato lì. Qui esponiamo:
-   *  - `canCreateConversationalPrompt`: tutti gli use case sono compilabili
+   *  - `canCreateConversationalPrompt`: tutti gli use case inclusi sono proiettabili (dialog prompt)
    *    ({@link areAllUseCasesProjectable}). Se false, il bottone è disabilitato.
    *  - `onOpenConversationalPromptDialog`: apre il dialog se le condizioni sono OK.
    */
@@ -386,16 +393,47 @@ export interface AIAgentEditorDockContextValue {
    */
   agentLogUseCase: boolean;
   setAgentLogUseCase: (next: boolean) => void;
+  agentLogBackendCalls: boolean;
+  setAgentLogBackendCalls: (next: boolean) => void;
   agentBehavior: 'A' | 'B' | 'C';
   setAgentBehavior: (next: 'A' | 'B' | 'C') => void;
   agentUseCasesJson: string;
   agentConversationalRulesJson: string;
-  compileUseCasePhrasesForCatalog: () => void;
+  /** Compila catalogo; `true` se slot mapping e binding backend (se collegati) sono validi. */
+  compileUseCasePhrasesForCatalog: () => Promise<boolean>;
   compilePhrasesBusy: boolean;
+  compileMappingBanner: string | null;
+  registerOpenSlotMappingOnCompileFail: (open: () => void) => void;
+  /** Incrementato per aprire Slot Mapping dal passo Prompts (Copy system prompt / compile fallita). */
+  slotMappingOpenRequestNonce: number;
+  backendOutputSlotBindings: import('@domain/backendOutputSlotBinding/types').AgentBackendOutputSlotBindings;
   projectSlotLexicon: import('@domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon;
+  /** Rimuove voci lessico non più presenti nei messaggi UC (es. all'apertura Slot Mapping). */
+  reconcileLexiconOrphansWithCatalog: (catalog?: readonly import('@types/aiAgentUseCases').AIAgentUseCase[]) => void;
   approveLexiconSurface: (surface: string) => void;
   revokeLexiconSurface: (surface: string) => void;
   updateLexiconSlotId: (surface: string, slotId: string) => void;
+  /** Aggiorna hint SEND (path OpenAPI leaf) per una surface. */
+  updateSurfaceSendHint: (
+    surface: string,
+    patch: {
+      sendPath: string;
+      slotId?: string;
+      valueKind?: string;
+      role?: import('@domain/backendOutputSlotBinding/types').TokenSendRole;
+    }
+  ) => void;
+  /** Catalogo destinazioni (albero backend + slot semantici) per Slot Mapping. */
+  parameterDestinationCatalog: import('@domain/backendOutputSlotBinding/parameterDestinationTree').ParameterDestination[];
+  /** Applica destinazione unificata (lessico + sendHints). */
+  applyParameterDestination: (
+    surface: string,
+    destination: import('@domain/backendOutputSlotBinding/parameterDestinationTree').ParameterDestination
+  ) => void;
+  /** Catalogo leaf SEND da OpenAPI (validazione allowlist). */
+  backendSendParamLeaves: import('@domain/openApi/backendSendParamCatalog').BackendSendParamLeaf[];
+  /** Leaf SEND per backend (albero destinazioni). */
+  backendSendLeavesByTask: import('@domain/backendOutputSlotBinding/collectBackendSendLeavesByTask').BackendSendLeavesGroup[];
 
   /**
    * Parametri per propagazione/anteprima stile correzioni nel composer (mirror di Omnia Tutor +

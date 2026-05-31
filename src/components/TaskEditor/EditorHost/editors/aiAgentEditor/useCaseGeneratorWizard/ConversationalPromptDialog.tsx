@@ -30,6 +30,7 @@ import {
 } from './ConversationalPromptFormatPills';
 import type { ConversationalRule } from '@domain/conversationalRules/types';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import type { AgentStartPromptConfig } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import type { StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
 import {
   ensureConversationalPromptLanguage,
@@ -48,8 +49,11 @@ import {
 export interface ConversationalPromptDialogProps {
   open: boolean;
   useCases: readonly AIAgentUseCase[];
+  startPrompt?: AgentStartPromptConfig;
+  startUseCaseId?: string;
   conversationalRules?: readonly ConversationalRule[];
   includeLog?: boolean;
+  includeBackendLog?: boolean;
   agentBehavior?: AgentBehaviorMode;
   catalogFormat: ConversationalCatalogFormat;
   onCatalogFormatChange: (format: ConversationalCatalogFormat) => void;
@@ -57,6 +61,8 @@ export interface ConversationalPromptDialogProps {
   backendCatalog?: ProjectBackendCatalogBlob;
   manualCatalogBackendTaskIds?: readonly string[];
   knowledgeBaseDocuments?: readonly StagedKbDocument[];
+  projectSlotLexicon?: import('@domain/useCaseBundle/projectSlotLexicon').ProjectSlotLexicon;
+  backendOutputSlotBindings?: import('@domain/backendOutputSlotBinding/types').AgentBackendOutputSlotBindings;
   onClose: () => void;
 }
 
@@ -91,8 +97,11 @@ const CONTENT_TABS: ReadonlyArray<{ id: ExternalAgentPromptTabId; label: string 
 export function ConversationalPromptDialog({
   open,
   useCases,
+  startPrompt,
+  startUseCaseId,
   conversationalRules = [],
   includeLog = false,
+  includeBackendLog = false,
   agentBehavior = 'B',
   catalogFormat,
   onCatalogFormatChange,
@@ -100,6 +109,8 @@ export function ConversationalPromptDialog({
   backendCatalog,
   manualCatalogBackendTaskIds,
   knowledgeBaseDocuments = [],
+  projectSlotLexicon,
+  backendOutputSlotBindings,
   onClose,
 }: ConversationalPromptDialogProps): React.ReactElement | null {
   const editorRef = React.useRef<monacoEditorNs.IStandaloneCodeEditor | null>(null);
@@ -186,7 +197,10 @@ export function ConversationalPromptDialog({
       return {
         sections: buildExternalAgentPromptSections({
           useCases,
+          startPrompt,
+          startUseCaseId: String(startUseCaseId ?? '').trim() || undefined,
           includeLog,
+          includeBackendLog,
           agentBehavior,
           conversationalRules,
           catalogFormat,
@@ -194,6 +208,8 @@ export function ConversationalPromptDialog({
           backendCatalog,
           manualCatalogBackendTaskIds,
           knowledgeBaseDocuments,
+          lexicon: projectSlotLexicon,
+          backendOutputSlotBindings,
         }),
         error: null,
       };
@@ -208,12 +224,17 @@ export function ConversationalPromptDialog({
     useCases,
     conversationalRules,
     includeLog,
+    includeBackendLog,
     agentBehavior,
     catalogFormat,
     agentTaskId,
     backendCatalog,
     manualCatalogBackendTaskIds,
     knowledgeBaseDocuments,
+    startPrompt,
+    startUseCaseId,
+    projectSlotLexicon,
+    backendOutputSlotBindings,
   ]);
 
   const mergedPrompt = React.useMemo(() => {
@@ -253,13 +274,29 @@ export function ConversationalPromptDialog({
     try {
       return buildConversationalPromptFormatSizes(useCases, {
         includeLog,
+        includeBackendLog,
         agentBehavior,
         conversationalRules,
+        startPrompt,
+        startUseCaseId: String(startUseCaseId ?? '').trim() || undefined,
+        lexicon: projectSlotLexicon,
+        backendOutputSlotBindings,
       });
     } catch {
       return null;
     }
-  }, [open, useCases, conversationalRules, includeLog, agentBehavior]);
+  }, [
+    open,
+    useCases,
+    conversationalRules,
+    includeLog,
+    includeBackendLog,
+    agentBehavior,
+    startPrompt,
+    startUseCaseId,
+    projectSlotLexicon,
+    backendOutputSlotBindings,
+  ]);
 
   const mergedMetrics = React.useMemo(
     () => (mergedPrompt ? measurePromptText(mergedPrompt) : null),

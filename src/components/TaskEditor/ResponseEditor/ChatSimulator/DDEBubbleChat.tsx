@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Task, TaskTree } from 'types/taskTypes';
+import { TaskType, templateIdToTaskType, type Task, type TaskTree } from '@types/taskTypes';
 import { AlertTriangle, Workflow, RotateCcw, Save, X } from 'lucide-react';
 import UserMessage, { type Message } from '@components/ChatSimulator/UserMessage';
 import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
@@ -388,8 +388,24 @@ export default function DDEBubbleChat({
     debuggerMachineRef.current = new DebuggerStateMachine(setDbgToolbarState);
   }
 
+  const flowAgentLogBackendCalls = React.useMemo(() => {
+    for (const raw of flowTasks ?? []) {
+      const t = raw as {
+        type?: string;
+        templateId?: string | null;
+        agentLogBackendCalls?: boolean;
+      };
+      const isAgent =
+        t.type === TaskType.AIAgent ||
+        templateIdToTaskType(t.templateId) === TaskType.AIAgent;
+      if (isAgent && t.agentLogBackendCalls === true) return true;
+    }
+    return false;
+  }, [flowTasks]);
+
   const flowDebuggerHookOpts = React.useMemo<UseFlowModeChatOptions>(
     () => ({
+      agentLogBackendCalls: flowAgentLogBackendCalls,
       onSessionStarted: () => {
         debuggerMachineRef.current?.setState('running');
       },
@@ -400,7 +416,7 @@ export default function DDEBubbleChat({
         debuggerMachineRef.current?.setState('idle');
       },
     }),
-    []
+    [flowAgentLogBackendCalls]
   );
 
   // ✅ ARCHITECTURAL: Flow orchestrator (manual Play by default — no autoStart)
@@ -2047,6 +2063,7 @@ export default function DDEBubbleChat({
                 priorUserTurnText={priorUserTextByBotMessageId.get(m.id) ?? ''}
                 debuggerFlowId={orchestratorCompileRootFlowId ?? null}
                 flowDebuggerScrollParentRef={scrollContainerRef}
+                showBackendCallInvocationsPanel={flowAgentLogBackendCalls}
               />
             );
           }

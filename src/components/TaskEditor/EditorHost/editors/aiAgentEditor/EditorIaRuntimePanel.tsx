@@ -171,6 +171,7 @@ export function EditorIaRuntimePanel(_props: IDockviewPanelProps) {
           task: task ?? undefined,
           manualCatalogBackendTaskIds,
           backendCatalog,
+          projectId: taskRepository.getCurrentProjectId()?.trim() || undefined,
         })!;
       } catch (buildErr) {
         console.error('[IA·ConvAI] createAgent: payload non costruibile (prompt vuoto o dati mancanti)', buildErr);

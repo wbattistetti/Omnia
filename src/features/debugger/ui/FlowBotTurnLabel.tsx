@@ -136,6 +136,8 @@ export function FlowBotTurnLabel(props: {
   debuggerFlowId?: string | null;
   /** Ref al contenitore scrollabile della lista messaggi (flow debugger). */
   flowDebuggerScrollParentRef?: React.RefObject<HTMLElement | null>;
+  /** Toggle task «Mostra chiamate backend»: pannello tecnico invocazioni. */
+  showBackendCallInvocationsPanel?: boolean;
 }) {
   const {
     message,
@@ -144,6 +146,7 @@ export function FlowBotTurnLabel(props: {
     priorUserTurnText = '',
     debuggerFlowId = null,
     flowDebuggerScrollParentRef,
+    showBackendCallInvocationsPanel = false,
   } = props;
   const [stylePanelOpen, setStylePanelOpen] = React.useState(false);
   const [styleBlockedHint, setStyleBlockedHint] = React.useState<string | null>(null);
@@ -737,7 +740,17 @@ export function FlowBotTurnLabel(props: {
           {styleBlockedHint}
         </p>
       ) : null}
-      {message.backendInvocations && message.backendInvocations.length > 0 ? (
+      {message.backendDebugText?.trim() ? (
+        <pre
+          className="mt-1 max-w-[min(100%,28rem)] whitespace-pre-wrap break-words rounded-md border border-slate-300/60 bg-slate-100/80 px-2 py-1 font-mono text-[10px] leading-snug text-slate-700 dark:border-slate-600/50 dark:bg-slate-900/70 dark:text-slate-300"
+          aria-label="Debug chiamate backend"
+        >
+          {message.backendDebugText.trim()}
+        </pre>
+      ) : null}
+      {showBackendCallInvocationsPanel &&
+      message.backendInvocations &&
+      message.backendInvocations.length > 0 ? (
         <FlowBackendCallInvocationsPanel invocations={message.backendInvocations} />
       ) : null}
       {message.convaiWebhookInvocations && message.convaiWebhookInvocations.length > 0 ? (

@@ -9,6 +9,7 @@ import {
   stringifyUseCaseConversationalJson,
 } from '../useCaseJsonProjection';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import { BACKEND_OUTPUT_SLOT_BINDING_SCHEMA_VERSION } from '@domain/backendOutputSlotBinding/types';
 
 function makeUseCase(overrides: Partial<AIAgentUseCase> = {}): AIAgentUseCase {
   return {
@@ -335,6 +336,41 @@ describe('projectUseCaseToConversationalJson — log field', () => {
       { includeLog: true, catalogNumber: 2 }
     );
     expect(out!.log).toBe('USECASE: "2 — PADDED"');
+  });
+});
+
+describe('projectUseCaseToConversationalJson — slotBackendContract', () => {
+  it('includes subset of slot contracts used by variant tokens', () => {
+    const out = projectUseCaseToConversationalJson(makeUseCase(), {
+      backendOutputSlotBindings: {
+        schemaVersion: BACKEND_OUTPUT_SLOT_BINDING_SCHEMA_VERSION,
+        rows: [],
+        slotContracts: [
+          {
+            slotId: 'data',
+            toolName: 'get_slots',
+            backendTaskId: 'bk1',
+            receive: 'slots[].date',
+          },
+          {
+            slotId: 'orario',
+            toolName: 'get_slots',
+            backendTaskId: 'bk1',
+            receive: 'slots[].startTime',
+          },
+          {
+            slotId: 'nome',
+            toolName: 'other',
+            backendTaskId: 'bk2',
+            receive: 'user.name',
+          },
+        ],
+      },
+    });
+    expect(out?.slotBackendContract).toEqual({
+      data: { tool: 'get_slots', receive: 'slots[].date' },
+      orario: { tool: 'get_slots', receive: 'slots[].startTime' },
+    });
   });
 });
 

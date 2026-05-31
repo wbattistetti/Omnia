@@ -105,8 +105,9 @@ export const UC_AGENT_ROW_EDIT_BTN =
 export const UC_AGENT_STYLE_TOOL_BTN =
   'shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:text-sky-300 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 disabled:opacity-40';
 
+/** Toolbar riga UC: visibilità gestita dal contenitore hover, non da opacity sui bottoni. */
 export const UC_HEAD_VOTE_BTN =
-  'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-200/90 dark:hover:bg-slate-800/80 group-hover/uc-head:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50 disabled:opacity-40';
+  'shrink-0 rounded p-0.5 transition-opacity hover:bg-slate-200/90 dark:hover:bg-slate-800/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50 disabled:opacity-40';
 export const UC_SCENARIO_VOTE_BTN =
   'shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-slate-200/90 dark:hover:bg-slate-800/80 group-hover/payoff-row:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:opacity-40';
 export const UC_AGENT_VOTE_BTN =

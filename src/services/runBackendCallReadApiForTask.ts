@@ -14,6 +14,10 @@ import {
 } from './openApiBackendCallSpec';
 import type { OpenApiSendBindingRules } from '../domain/backendCatalog/catalogTypes';
 import { collectOpenApiCompileErrors } from '../domain/openApi/collectOpenApiCompileErrors';
+import {
+  buildSendBindingRowFieldsForApiParam,
+  type SendBindingRowFieldsContext,
+} from '../domain/backendCall/sendBindingRowFields';
 
 type IoRow = {
   internalName: string;
@@ -30,38 +34,6 @@ type IoRow = {
   sendConstraintGroupId?: string;
   sendConstraintGroupLabel?: string;
 };
-
-function buildSendBindingRowFields(
-  apiName: string,
-  rules: OpenApiSendBindingRules | undefined
-): Pick<
-  IoRow,
-  | 'sendBindingOptional'
-  | 'sendBindingDesignTimeRequired'
-  | 'sendConstraintGroupId'
-  | 'sendConstraintGroupLabel'
-> {
-  if (!rules) return {};
-  if (rules.optionalApiParams.includes(apiName)) {
-    return { sendBindingOptional: true };
-  }
-  const design =
-    rules.designTimeRequiredApiParams?.includes(apiName) === true
-      ? { sendBindingDesignTimeRequired: true as const }
-      : {};
-  for (const set of rules.requireOneOfSets ?? []) {
-    for (const alt of set.alternatives) {
-      if (alt.allApiParams.includes(apiName)) {
-        return {
-          ...design,
-          sendConstraintGroupId: set.id,
-          ...(set.label?.trim() ? { sendConstraintGroupLabel: set.label.trim() } : {}),
-        };
-      }
-    }
-  }
-  return Object.keys(design).length > 0 ? design : {};
-}
 
 function filterRows(rows: unknown): IoRow[] {
   if (!Array.isArray(rows)) return [];
@@ -97,13 +69,52 @@ function toTreeInternalName(apiName: string): string {
   return safe || 'field';
 }
 
+/**
+ * Descrizione campo SEND/RECEIVE dopo Read API.
+ * Con `overwriteFromOpenApi` (Recupera specifiche) usa solo lo spec; altrimenti conserva testo locale.
+ */
+export function resolveIoFieldDescriptionFromOpenApi(
+  localDescription: string | undefined,
+  openApiDescription: string | undefined,
+  overwriteFromOpenApi: boolean
+): string | undefined {
+  const fromSpec = openApiDescription?.trim();
+  if (overwriteFromOpenApi) {
+    return fromSpec || undefined;
+  }
+  const local = localDescription?.trim();
+  if (local) return localDescription!.trim();
+  return fromSpec || undefined;
+}
+
+/**
+ * `backendToolDescription` dopo Read API: con refresh forzato allinea sempre allo spec operazione.
+ */
+export function resolveBackendToolDescriptionAfterReadApi(
+  currentToolDesc: string,
+  operationDocBlurb: string,
+  forceRefresh: boolean
+): string | undefined {
+  const blurb = operationDocBlurb.trim();
+  const current = currentToolDesc.trim();
+  if (forceRefresh) {
+    return blurb;
+  }
+  if (!current && blurb) {
+    return blurb;
+  }
+  return undefined;
+}
+
 function rebuildInputRows(
   prevInputs: IoRow[],
   apiNames: string[],
   inputDesc: Record<string, string>,
   used: Set<string>,
   sendBinding?: OpenApiSendBindingRules,
-  bindingPhaseByApiName?: Record<string, 'design' | 'runtime'>
+  bindingPhaseByApiName?: Record<string, 'design' | 'runtime'>,
+  overwriteDescriptionsFromOpenApi = false,
+  sendBindingCtx?: SendBindingRowFieldsContext
 ): IoRow[] {
   const byApi = new Map<string, IoRow>();
   for (const row of prevInputs) {
@@ -117,7 +128,7 @@ function rebuildInputRows(
     const internalName = prev?.internalName?.trim()
       ? nextUniqueInternalName(prev.internalName.trim(), used)
       : nextUniqueInternalName(toTreeInternalName(apiName), used);
-    const bind = buildSendBindingRowFields(apiName, sendBinding);
+    const bind = buildSendBindingRowFieldsForApiParam(apiName, sendBinding, sendBindingCtx);
     const phaseResolved = bindingPhaseByApiName?.[apiName] ?? prev?.sendBindingBindingPhase;
     next.push({
       internalName,
@@ -125,11 +136,14 @@ function rebuildInputRows(
       variable: prev?.variable ?? '',
       ...bind,
       ...(phaseResolved ? { sendBindingBindingPhase: phaseResolved } : {}),
-      ...(prev?.fieldDescription?.trim()
-        ? { fieldDescription: prev.fieldDescription }
-        : inputDesc[apiName]?.trim()
-          ? { fieldDescription: inputDesc[apiName] }
-          : {}),
+      ...(() => {
+        const fd = resolveIoFieldDescriptionFromOpenApi(
+          prev?.fieldDescription,
+          inputDesc[apiName],
+          overwriteDescriptionsFromOpenApi
+        );
+        return fd ? { fieldDescription: fd } : {};
+      })(),
     });
   }
   return next;
@@ -139,7 +153,8 @@ function rebuildOutputRows(
   prevOutputs: IoRow[],
   apiNames: string[],
   outputDesc: Record<string, string>,
-  used: Set<string>
+  used: Set<string>,
+  overwriteDescriptionsFromOpenApi = false
 ): IoRow[] {
   const byApi = new Map<string, IoRow>();
   for (const row of prevOutputs) {
@@ -157,11 +172,14 @@ function rebuildOutputRows(
       internalName,
       apiField: apiName,
       variable: prev?.variable ?? '',
-      ...(prev?.fieldDescription?.trim()
-        ? { fieldDescription: prev.fieldDescription }
-        : outputDesc[apiName]?.trim()
-          ? { fieldDescription: outputDesc[apiName] }
-          : {}),
+      ...(() => {
+        const fd = resolveIoFieldDescriptionFromOpenApi(
+          prev?.fieldDescription,
+          outputDesc[apiName],
+          overwriteDescriptionsFromOpenApi
+        );
+        return fd ? { fieldDescription: fd } : {};
+      })(),
     });
   }
   return next;
@@ -191,7 +209,10 @@ export type RunBackendCallReadApiOptions = {
   openapiSpecUrl?: string;
   /** PortalConnection — Bearer verso portale protetto (openapi-proxy). */
   portalConnectionId?: string;
-  /** Ricarica lo spec senza merge con SEND/RECEIVE precedenti (Recupera specifiche). */
+  /**
+   * Ricarica lo spec senza merge con SEND/RECEIVE precedenti (Recupera specifiche).
+   * Sovrascrive anche `backendToolDescription` e `fieldDescription` da OpenAPI.
+   */
   forceRefresh?: boolean;
 };
 
@@ -285,11 +306,24 @@ export async function runBackendCallReadApiForTask(
     });
 
     const used = new Set<string>();
+    const sendBindingCtx: SendBindingRowFieldsContext = {
+      requestBodyPropertyNames: fields.requestBodyPropertyNames,
+      requestBodyRequiredPropertyNames: fields.requestBodyRequiredPropertyNames,
+    };
     const nextInputs = inputNames.length > 0
-      ? rebuildInputRows(mergeInputs, inputNames, inputDesc, used, sendBinding, fields.bindingPhaseByApiName)
+      ? rebuildInputRows(
+          mergeInputs,
+          inputNames,
+          inputDesc,
+          used,
+          sendBinding,
+          fields.bindingPhaseByApiName,
+          forceRefresh,
+          sendBindingCtx
+        )
       : (inputsEmpty || forceRefresh ? [] : prevInputs);
     const nextOutputs = outputNames.length > 0
-      ? rebuildOutputRows(mergeOutputs, outputNames, outputDesc, used)
+      ? rebuildOutputRows(mergeOutputs, outputNames, outputDesc, used, forceRefresh)
       : (outputsEmpty || forceRefresh ? [] : prevOutputs);
 
     const prevEp = (task as Task & { endpoint?: { url?: string; method?: string; headers?: Record<string, string> } })
@@ -333,6 +367,8 @@ export async function runBackendCallReadApiForTask(
           ? { openapiOutputJsonSchemaByApiName: fields.outputJsonSchemaByApiName }
           : {}),
         openapiSendBinding: sendBinding ?? null,
+        openapiRequestBodyPropertyNames: fields.requestBodyPropertyNames,
+        openapiRequestBodyRequiredPropertyNames: fields.requestBodyRequiredPropertyNames,
         openApiMethodLocked: effectiveMethodLock,
         openApiMethodLockUrlSnapshot: effectiveMethodLock ? op.trim() : null,
         openApiLockedHttpMethod: effectiveMethodLock ? resolvedMethodUpper : null,
@@ -341,8 +377,13 @@ export async function runBackendCallReadApiForTask(
       inputs: nextInputs,
       outputs: nextOutputs,
     };
-    if (operationDocBlurb && !currentToolDesc) {
-      taskUpdates.backendToolDescription = operationDocBlurb;
+    const nextToolDesc = resolveBackendToolDescriptionAfterReadApi(
+      currentToolDesc,
+      operationDocBlurb,
+      forceRefresh
+    );
+    if (nextToolDesc !== undefined) {
+      taskUpdates.backendToolDescription = nextToolDesc;
     }
 
     taskRepository.updateTask(instanceId, taskUpdates, projectId);

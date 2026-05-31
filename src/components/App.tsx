@@ -122,7 +122,14 @@ function AppInner() {
       DialogueTaskService.loadTemplates().catch(() => []),
       taskTemplateService.getAllTemplates().catch(() => null),
       TemplateTranslationsService.loadForLanguage(projectLang).catch(() => null),
-      import('../services/DDTPatternService').then(module => module.DDTPatternService.loadPatterns().catch(() => ({})))
+      import('../services/DDTPatternService').then((module) =>
+        module.DDTPatternService.loadPatterns().catch(() => ({}))
+      ),
+      import('../services/embeddingStartupPreload').then((module) =>
+        module.preloadFactoryEmbeddings().catch((err) => {
+          console.warn('[App] Factory embedding preload failed (non-blocking):', err);
+        })
+      ),
     ]).catch(() => {
       // Silently handle errors - cache preload is non-critical
     });

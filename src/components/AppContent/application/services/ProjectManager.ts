@@ -338,11 +338,10 @@ export class ProjectManager {
         console.warn('[ProjectManager] ⚠️ Failed to register project templates in DialogueTaskService', e);
       }
 
-      // ✅ NEW: Load project embeddings in background (non-blocking)
-      // This ensures embeddings from project database are available for template matching
+      // Merge embedding progetto (factory task/taskType già precaricati all'avvio Omnia)
       try {
-        const { EmbeddingService } = await import('@services/EmbeddingService');
-        EmbeddingService.loadEmbeddings('task', false, id).catch(err => {
+        const { preloadProjectEmbeddings } = await import('@services/embeddingStartupPreload');
+        preloadProjectEmbeddings(id).catch((err) => {
           console.warn('[ProjectManager] ⚠️ Failed to load project embeddings (non-blocking):', err);
         });
         if (showPerfLogs) {

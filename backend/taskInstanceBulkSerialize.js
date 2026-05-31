@@ -77,6 +77,7 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentConversationStyleSelections',
   'agentConversationDeployStyleId',
   'agentLogUseCase',
+  'agentLogBackendCalls',
 ];
 
 /**

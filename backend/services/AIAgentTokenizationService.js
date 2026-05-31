@@ -16,21 +16,15 @@ const { extractJsonString } = require('./AIAgentDesignService');
 
 const TOKENIZE_USE_CASES_TIMEOUT_MS = 180000;
 
-const TOKENIZE_USE_CASES_SYSTEM = `You produce token templates for OMNIA virtual-agent runtime (e.g. ElevenLabs).
-For each canonical assistant phrase you receive, replace ONLY the variable parts with placeholders in square brackets.
+const TOKENIZE_USE_CASES_SYSTEM = `You prepare OMNIA wizard preview text for virtual-agent phrases.
+For each canonical assistant phrase, ensure runtime-variable parts are marked with square brackets.
 
-PLACEHOLDER NAMING:
-- token names are lowercase alphanumeric, no spaces (e.g. [data], [ora], [nome], [importo], [durata]);
-- pick a NAME that describes the TYPE of value, not its current literal (date → [data], time → [ora],
-  euro amount → [importo], person name → [nome]);
-- if the SAME token type appears MORE THAN ONCE in the same phrase, disambiguate with numeric
-  indices (e.g. [data1], [data2], [ora1], [ora2]). Otherwise NO index.
-
-PRESERVE EVERYTHING ELSE:
-- keep all fixed words, punctuation, capitalization and whitespace EXACTLY as in the original phrase
-  except where you insert a [token];
-- do NOT paraphrase, do NOT translate, do NOT shorten, do NOT add or remove sentences;
-- if the phrase has NO variable parts (only fixed text), return it UNCHANGED.
+RULES:
+- If the phrase ALREADY has balanced [ … ] with human-readable inner text (dates, times, names), return it UNCHANGED as tokenized_text.
+- Otherwise wrap ONLY variable fragments in [realistic spoken examples] (e.g. [8 giugno 2026], [09:30], [visita cardiologica]) — NOT snake_case technical ids like [data_richiesta].
+- In Italian keep articles/prepositions outside brackets: alle [09:30] not [alle 09:30].
+- Do NOT paraphrase fixed script; do NOT add/remove sentences.
+- If no variable parts exist, copy assistant_example as-is.
 
 OUTPUT:
 Respond with a single valid JSON object only (no markdown fences, no commentary).
@@ -50,8 +44,7 @@ function buildTokenizeUseCasesUserMessage({ useCases, outputLanguage }) {
   return `${lang}USE_CASES_TO_TOKENIZE (canonical assistant phrases — produce ONE tokenized_text per id):
 ${compactJson}
 
-Task: for each entry, produce \`tokenized_text\` by replacing only the variable parts with [token]
-placeholders. Keep fixed words verbatim. If no variable parts exist, copy the assistant_example as-is.
+Task: for each entry, produce \`tokenized_text\` with readable [example] placeholders (see system rules). Keep fixed words verbatim.
 
 Output a single valid JSON object with this exact shape:
 {
@@ -65,8 +58,7 @@ Rules:
 - Emit exactly one entry per use case, in the SAME order as the input.
 - \`tokenized_text\` is a non-empty string.
 - Square brackets must be BALANCED; no nested brackets; no empty \`[]\`.
-- Token names match the regex /^[a-z][a-z0-9]*$/ (lowercase, start with a letter, alphanumeric, no spaces).
-- Numeric indices only when the same token type repeats inside the same phrase.
+- Bracket inners are human-readable examples, not empty and not pure technical snake_case ids.
 - Do NOT include extra keys. Valid JSON only.`;
 }
 
@@ -91,8 +83,15 @@ function validateTokenizedText(t) {
     }
     if (ch === ']') {
       if (depth !== 1) return { ok: false, error: 'unmatched close bracket' };
-      if (!/^[a-z][a-z0-9]*$/.test(cur)) {
-        return { ok: false, error: `invalid token name "${cur}"` };
+      const inner = cur.trim();
+      const tokenId = /^[a-z][a-z0-9]*$/.test(inner);
+      const readable =
+        inner.length > 0 &&
+        inner.length <= 80 &&
+        !/[\[\]]/.test(inner) &&
+        (/[a-zA-Z\u00C0-\u024F]/.test(inner) || /\d/.test(inner));
+      if (!tokenId && !readable) {
+        return { ok: false, error: `invalid bracket content "${cur}"` };
       }
       depth = 0;
       cur = '';

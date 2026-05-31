@@ -459,6 +459,13 @@ export interface Task {
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
   /**
+   * Start Prompt (scenario `startAgent`): frase di apertura sessione.
+   * @see `parseAgentStartPromptJson` in `@domain/useCaseGeneratorWizard/agentStartPrompt`.
+   */
+  agentStartPromptJson?: string;
+  /** Id use case marcato Start (apertura sessione da catalogo use case). */
+  agentStartUseCaseId?: string;
+  /**
    * JSON array: conversational rules (error handling, ecc.) — catalogo separato dagli use case
    * di business. Snapshot completo per regola sul task; libreria globale fa da seed.
    */
@@ -482,6 +489,11 @@ export interface Task {
   agentUseCaseStyleLearningNotes?: string;
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
+  /**
+   * Binding backend RECEIVE → slot semantico use case (`apiPath` → `slotId` → `fillFrom` in JSON deploy).
+   * @see `AgentBackendOutputSlotBindings` in `@domain/backendOutputSlotBinding/types`.
+   */
+  agentBackendOutputSlotBindingsJson?: string;
   /**
    * JSON array: knowledge-base documents parsed at design-time (`.txt` / `.xlsx` columns → variables).
    * @see `PersistedKbDocument` in `@domain/knowledgeBase/kbDocumentTypes`.
@@ -567,6 +579,13 @@ export interface Task {
    * Toggle UI: prima voce della dropdown `AIAgentDeployMenu` ("Upload to Platform").
    */
   agentLogUseCase?: boolean;
+
+  /**
+   * **Mostra chiamate backend**: quando `true`, il system prompt include l'istruzione
+   * per righe `DEBUG: chiamata backend …` dopo ogni tool; in debugger/chat compaiono
+   * anche riepiloghi runtime delle invocazioni (indipendente da `agentLogUseCase`).
+   */
+  agentLogBackendCalls?: boolean;
 
   /**
    * Comportamento UKS (use case non riconosciuto) nel prompt conversazionale:

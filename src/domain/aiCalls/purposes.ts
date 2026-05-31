@@ -78,6 +78,8 @@ export const AI_CALL_PURPOSE = {
   USE_CASE_ANALYZE_OVERLAP: 'USE_CASE_ANALYZE_OVERLAP',
   /** Verifica sovrapposizioni su tutto il catalogo use case. */
   USE_CASE_CHECK_OVERLAPS: 'USE_CASE_CHECK_OVERLAPS',
+  /** Compile catalogo: IA propone surface → slot_id e binding backend fillFrom. */
+  USE_CASE_COMPILE_SLOT_MAPPING: 'USE_CASE_COMPILE_SLOT_MAPPING',
 } as const;
 
 export type AiCallPurposeId = (typeof AI_CALL_PURPOSE)[keyof typeof AI_CALL_PURPOSE];
@@ -136,6 +138,8 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.USE_CASE_ANALYZE_OVERLAP]:
     'Analisi sovrapposizione use case vs catalogo',
   [AI_CALL_PURPOSE.USE_CASE_CHECK_OVERLAPS]: 'Verifica sovrapposizioni catalogo use case',
+  [AI_CALL_PURPOSE.USE_CASE_COMPILE_SLOT_MAPPING]:
+    'Compile catalogo: mapping slot e binding backend',
 });
 
 /** Human-readable label for a known purpose id; falls back to the id itself when unknown. */

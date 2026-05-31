@@ -14,6 +14,7 @@ export type ConvaiAgentSyncPromptOptions = {
   useCases: readonly AIAgentUseCase[];
   conversationalRules?: readonly ConversationalRule[];
   includeLog?: boolean;
+  includeBackendLog?: boolean;
   agentBehavior?: AgentBehaviorMode;
   catalogFormat?: ConversationalCatalogFormat;
   backendCatalog?: ProjectBackendCatalogBlob;

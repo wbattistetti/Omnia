@@ -843,6 +843,159 @@ export async function checkUseCaseOverlapsApi(
   }
 }
 
+export interface BackendToolCompileContextWire {
+  backendTaskId: string;
+  toolName: string;
+  receivePaths: string[];
+  receivePathTree?: Record<string, unknown>;
+  sendPaths: string[];
+}
+
+export interface ProposeCompileSlotMappingsApiParams {
+  surfaces: readonly string[];
+  phraseTokens?: readonly string[];
+  receivePaths: readonly string[];
+  receiveParamLeaves?: ReadonlyArray<{
+    path: string;
+    type?: string;
+    format?: string;
+    description?: string;
+    suggestedSlotId?: string;
+  }>;
+  backendTaskId: string;
+  backendToolContexts?: readonly BackendToolCompileContextWire[];
+  sendParamLeaves?: ReadonlyArray<{
+    path: string;
+    type?: string;
+    format?: string;
+    description?: string;
+    semanticRole?: string;
+  }>;
+  outputLanguage?: string;
+  provider: string;
+  model: string;
+  callMeta?: AiCallMeta;
+}
+
+/** IA compile: surface letterali → slot_id + binding RECEIVE. */
+export async function proposeCompileSlotMappingsApi(
+  params: ProposeCompileSlotMappingsApiParams
+): Promise<{
+  lexicon_mappings: Array<{ surface: string; slot_id: string }>;
+  backend_bindings: Array<{
+    apiPath: string;
+    slotId: string;
+    tokenInPhrase: string;
+    format?: string;
+  }>;
+  token_bindings: Array<{
+    token: string;
+    apiPath: string;
+    slotId: string;
+    format?: string;
+  }>;
+  slot_contracts: Array<{
+    slotId: string;
+    toolName: string;
+    receive: string;
+    send?: string[];
+    format?: string;
+    backendTaskId?: string;
+  }>;
+  send_hints?: Array<{
+    surface: string;
+    slotId: string;
+    role: 'value' | 'constraint';
+    sendPath: string;
+    valueKind?: string;
+    toolName?: string;
+  }>;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const res = await fetchAiAgentDesignAgentGenerate({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        applyCallMetaToBody(
+          {
+            action: 'propose_compile_slot_mappings',
+            surfaces: params.surfaces,
+            phraseTokens: params.phraseTokens ?? [],
+            receivePaths: params.receivePaths,
+            receiveParamLeaves: params.receiveParamLeaves ?? [],
+            backendTaskId: params.backendTaskId,
+            backendToolContexts: params.backendToolContexts ?? [],
+            sendParamLeaves: params.sendParamLeaves ?? [],
+            outputLanguage: params.outputLanguage,
+            provider: params.provider.toLowerCase(),
+            model: params.model,
+            purpose: AI_CALL_PURPOSE.USE_CASE_COMPILE_SLOT_MAPPING,
+          },
+          params.callMeta
+        )
+      ),
+      signal: controller.signal,
+    });
+    const body = (await parseDesignApiJsonResponse(res)) as
+      | ({
+          success: true;
+          lexicon_mappings?: unknown;
+          backend_bindings?: unknown;
+        } & Record<string, unknown>)
+      | AIAgentDesignApiError;
+    if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
+      emitDesignAiLlmBurstFromErrorResponse(res, body);
+      const err = body as AIAgentDesignApiError;
+      throw new Error(err.error || `propose_compile_slot_mappings failed (${res.status})`);
+    }
+    return {
+      lexicon_mappings: Array.isArray(body.lexicon_mappings)
+        ? (body.lexicon_mappings as Array<{ surface: string; slot_id: string }>)
+        : [],
+      backend_bindings: Array.isArray(body.backend_bindings)
+        ? (body.backend_bindings as Array<{
+            apiPath: string;
+            slotId: string;
+            tokenInPhrase: string;
+            format?: string;
+          }>)
+        : [],
+      slot_contracts: Array.isArray(body.slot_contracts)
+        ? (body.slot_contracts as Array<{
+            slotId: string;
+            toolName: string;
+            receive: string;
+            send?: string[];
+            format?: string;
+            backendTaskId?: string;
+          }>)
+        : [],
+      token_bindings: Array.isArray(body.token_bindings)
+        ? (body.token_bindings as Array<{
+            token: string;
+            apiPath: string;
+            slotId: string;
+            format?: string;
+          }>)
+        : [],
+      send_hints: Array.isArray(body.send_hints)
+        ? (body.send_hints as Array<{
+            surface: string;
+            slotId: string;
+            role: 'value' | 'constraint';
+            sendPath: string;
+            valueKind?: string;
+            toolName?: string;
+          }>)
+        : [],
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface RegenerateAIAgentUseCaseParams {
   useCase: AIAgentUseCase;
   allUseCases: AIAgentUseCase[];

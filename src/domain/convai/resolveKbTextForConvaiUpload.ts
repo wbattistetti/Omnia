@@ -22,6 +22,7 @@ import {
 
 } from '@domain/knowledgeBase/useCaseInvalidationKb';
 
+import { kbRepositoryKeyForDoc } from '@domain/knowledgeBase/kbRepositoryContract';
 import { fetchKbDocumentContent } from '@services/kbDocumentRepositoryApi';
 
 
@@ -42,7 +43,7 @@ function clipKbText(text: string): string {
 
 
 
-function fallbackFromStagedFields(doc: StagedKbDocument): string | null {
+function stagedFieldsTextForConvaiUpload(doc: StagedKbDocument): string | null {
 
   const snippet = String(doc.markdownSnippet ?? '').trim();
 
@@ -100,7 +101,7 @@ export function resolveKbTextForConvaiUpload(doc: StagedKbDocument): string | nu
 
 
 
-  return fallbackFromStagedFields(doc);
+  return stagedFieldsTextForConvaiUpload(doc);
 
 }
 
@@ -132,24 +133,15 @@ export async function resolveKbTextForConvaiUploadAsync(
 
   const pid = String(projectId ?? '').trim();
 
-  const rid = String(doc.repositoryDocumentId ?? '').trim();
-
+  const rid = kbRepositoryKeyForDoc(doc);
   if (!pid || !rid) return null;
 
-
-
   try {
-
     const hit = await fetchKbDocumentContent(pid, rid, MAX_KB_UPLOAD_CHARS);
-
     const text = String(hit.text ?? '').trim();
-
     return text.length > 0 ? clipKbText(text) : null;
-
   } catch {
-
     return null;
-
   }
 
 }

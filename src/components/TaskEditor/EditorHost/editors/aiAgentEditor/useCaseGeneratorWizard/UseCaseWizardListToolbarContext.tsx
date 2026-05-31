@@ -138,6 +138,12 @@ export interface UseCaseWizardListToolbarContextValue {
   overlapCheckError: string | null;
   registerCheckOverlapsHandler: (handler: (() => Promise<void>) | null) => void;
   triggerCheckOverlaps: () => Promise<void>;
+
+  /** Banner post-compile (MAPPED / MAPPING — …). */
+  compileMappingBanner: string | null;
+  setCompileMappingBanner: (message: string | null) => void;
+  /** Apre il pannello Slot Mapping (chiude azioni). */
+  openSlotMappingPanel: () => void;
 }
 
 const UseCaseWizardListToolbarContext =
@@ -145,8 +151,13 @@ const UseCaseWizardListToolbarContext =
 
 export function UseCaseWizardListToolbarProvider({
   children,
+  compileMappingBanner: compileMappingBannerProp = null,
+  slotMappingOpenRequestNonce = 0,
 }: {
   children: React.ReactNode;
+  compileMappingBanner?: string | null;
+  /** Incrementato dal parent per aprire Slot Mapping (es. dopo Copy system prompt fallito). */
+  slotMappingOpenRequestNonce?: number;
 }): React.ReactElement {
   const [listAccordionHeaderMode, setListAccordionHeaderMode] =
     React.useState<WizardAccordionHeaderMode>('label');
@@ -205,6 +216,13 @@ export function UseCaseWizardListToolbarProvider({
   const [overlapCheckBusy, setOverlapCheckBusy] = React.useState(false);
   const [overlapReport, setOverlapReport] = React.useState<UseCaseOverlapReport | null>(null);
   const [overlapCheckError, setOverlapCheckError] = React.useState<string | null>(null);
+  const [compileMappingBanner, setCompileMappingBanner] = React.useState<string | null>(
+    compileMappingBannerProp
+  );
+
+  React.useEffect(() => {
+    setCompileMappingBanner(compileMappingBannerProp);
+  }, [compileMappingBannerProp]);
 
   /**
    * Rearm automatico del dismissal: appena il count torna a 0 (consolidamento
@@ -263,6 +281,11 @@ export function UseCaseWizardListToolbarProvider({
     setShowActionsPanel(true);
   }, []);
 
+  const openSlotMappingPanel = React.useCallback(() => {
+    setShowActionsPanel(false);
+    setShowSlotMappingPanel(true);
+  }, []);
+
   const toggleSlotMappingPanel = React.useCallback(() => {
     setShowSlotMappingPanel((v) => {
       const next = !v;
@@ -270,6 +293,12 @@ export function UseCaseWizardListToolbarProvider({
       return next;
     });
   }, []);
+
+  React.useEffect(() => {
+    if (slotMappingOpenRequestNonce > 0) {
+      openSlotMappingPanel();
+    }
+  }, [slotMappingOpenRequestNonce, openSlotMappingPanel]);
 
   const setLensActiveSurface = React.useCallback((next: string | null) => {
     setLensActiveSurfaceRaw(next && next.trim() ? next.trim().toLowerCase() : null);
@@ -438,6 +467,9 @@ export function UseCaseWizardListToolbarProvider({
       overlapCheckError,
       registerCheckOverlapsHandler,
       triggerCheckOverlaps,
+      compileMappingBanner,
+      setCompileMappingBanner,
+      openSlotMappingPanel,
     }),
     [
       listAccordionHeaderMode,
@@ -485,6 +517,8 @@ export function UseCaseWizardListToolbarProvider({
       overlapCheckError,
       registerCheckOverlapsHandler,
       triggerCheckOverlaps,
+      compileMappingBanner,
+      openSlotMappingPanel,
     ]
   );
 

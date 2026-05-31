@@ -38,6 +38,8 @@ export interface AIAgentTaskSnapshot {
   agentDesignHasGeneration: boolean | undefined;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
+  agentStartPromptJson: string;
+  agentStartUseCaseId: string;
   agentConversationalRulesJson: string;
   conversationalRules: ConversationalRule[];
   agentUseCaseWizardStateJson: string;
@@ -88,11 +90,13 @@ export interface AIAgentTaskSnapshot {
    * `false` per non alterare il comportamento dei task già pubblicati.
    */
   agentLogUseCase: boolean;
+  agentLogBackendCalls: boolean;
   agentBehavior: 'A' | 'B' | 'C';
   /** Serialized agent INPUT/OUTPUT contract. */
   agentInterfaceJson: string;
   /** Knowledge-base documents (design-time), JSON array. */
   agentKnowledgeBaseDocumentsJson: string;
+  agentBackendOutputSlotBindingsJson: string;
 }
 
 /**
@@ -126,6 +130,8 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
       typeof r?.agentDesignHasGeneration === 'boolean' ? r.agentDesignHasGeneration : undefined,
     agentLogicalStepsJson: String(r?.agentLogicalStepsJson ?? ''),
     agentUseCasesJson: String(r?.agentUseCasesJson ?? ''),
+    agentStartPromptJson: String(r?.agentStartPromptJson ?? ''),
+    agentStartUseCaseId: String(r?.agentStartUseCaseId ?? ''),
     agentConversationalRulesJson: String(r?.agentConversationalRulesJson ?? ''),
     agentUseCaseWizardStateJson: String(r?.agentUseCaseWizardStateJson ?? ''),
     agentIaRuntimeOverrideJson: String(r?.agentIaRuntimeOverrideJson ?? ''),
@@ -167,12 +173,14 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
         ? r.agentConversationDeployStyleId
         : null,
     agentLogUseCase: r?.agentLogUseCase === true,
+    agentLogBackendCalls: r?.agentLogBackendCalls === true,
     agentBehavior:
       r?.agentBehavior === 'A' || r?.agentBehavior === 'B' || r?.agentBehavior === 'C'
         ? r.agentBehavior
         : 'B',
     agentInterfaceJson: String(r?.agentInterfaceJson ?? ''),
     agentKnowledgeBaseDocumentsJson: String(r?.agentKnowledgeBaseDocumentsJson ?? ''),
+    agentBackendOutputSlotBindingsJson: String(r?.agentBackendOutputSlotBindingsJson ?? ''),
   };
 }
 

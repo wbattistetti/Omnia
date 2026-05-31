@@ -30,6 +30,8 @@ export interface AIAgentPersistState {
   hasAgentGeneration: boolean;
   agentLogicalStepsJson: string;
   agentUseCasesJson: string;
+  agentStartPromptJson: string;
+  agentStartUseCaseId: string;
   agentConversationalRulesJson: string;
   /** JSON wizard pipeline + baseline (use case guided generator). */
   agentUseCaseWizardStateJson: string;
@@ -51,10 +53,13 @@ export interface AIAgentPersistState {
   agentConversationDeployStyleId: string | null;
   /** Toggle "Logga Use Case" della dropdown Upload. Default `false`. */
   agentLogUseCase: boolean;
+  agentLogBackendCalls: boolean;
   agentBehavior: 'A' | 'B' | 'C';
   agentInterfaceJson: string;
   /** JSON array of {@link import('@domain/knowledgeBase/kbDocumentTypes').PersistedKbDocument}. */
   agentKnowledgeBaseDocumentsJson: string;
+  /** JSON: tabella binding backend output → slot (`AgentBackendOutputSlotBindings`). */
+  agentBackendOutputSlotBindingsJson: string;
 }
 
 /**
@@ -81,6 +86,8 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentDesignHasGeneration: state.hasAgentGeneration,
     agentLogicalStepsJson: state.agentLogicalStepsJson,
     agentUseCasesJson: state.agentUseCasesJson,
+    agentStartPromptJson: state.agentStartPromptJson,
+    agentStartUseCaseId: state.agentStartUseCaseId,
     agentConversationalRulesJson: state.agentConversationalRulesJson,
     agentUseCaseWizardStateJson: state.agentUseCaseWizardStateJson,
     agentIaRuntimeOverrideJson: state.agentIaRuntimeOverrideJson,
@@ -93,8 +100,10 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentConversationStyleSelections: state.agentConversationStyleSelections,
     agentConversationDeployStyleId: state.agentConversationDeployStyleId,
     agentLogUseCase: state.agentLogUseCase,
+    agentLogBackendCalls: state.agentLogBackendCalls,
     agentBehavior: state.agentBehavior,
     agentInterfaceJson: state.agentInterfaceJson,
     agentKnowledgeBaseDocumentsJson: state.agentKnowledgeBaseDocumentsJson,
+    agentBackendOutputSlotBindingsJson: state.agentBackendOutputSlotBindingsJson,
   };
 }

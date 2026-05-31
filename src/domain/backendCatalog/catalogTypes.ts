@@ -76,6 +76,10 @@ export interface BackendCallSpecMeta {
   openapiOperationId?: string | null;
   /** Regole obbligatorietà SEND da `x-omnia.sendBinding` (se presenti nello spec). `null` = assenti dopo import. */
   openapiSendBinding?: OpenApiSendBindingRules | null;
+  /** Proprietà top-level body dall’ultimo Read API (per inferire opzionali senza sendBinding). */
+  openapiRequestBodyPropertyNames?: string[];
+  /** `schema.required` del body (`[]` = tutte opzionali per JSON Schema). */
+  openapiRequestBodyRequiredPropertyNames?: string[];
   /**
    * Ultimo Read API: pathname dell’endpoint operativo trovato nello Swagger/OpenAPI (match esplicito sul path).
    * Se true e `openApiMethodLockUrlSnapshot` coincide con l’URL operativo corrente, il metodo HTTP è solo lettura (da spec).

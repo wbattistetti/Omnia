@@ -60,6 +60,9 @@ describe('agentConversationStyle{Example,Auto} — persist roundtrip', () => {
       hasAgentGeneration: false,
       agentLogicalStepsJson: '',
       agentUseCasesJson: '',
+      agentStartPromptJson: '',
+      agentStartUseCaseId: '',
+      agentConversationalRulesJson: '[]',
       agentUseCaseWizardStateJson: '',
       agentIaRuntimeOverrideJson: '',
       agentImmediateStart: false,
@@ -71,6 +74,10 @@ describe('agentConversationStyle{Example,Auto} — persist roundtrip', () => {
       agentConversationStyleSelections: {},
       agentConversationDeployStyleId: null,
       agentLogUseCase: false,
+      agentLogBackendCalls: false,
+      agentBehavior: 'B' as const,
+      agentInterfaceJson: '',
+      agentKnowledgeBaseDocumentsJson: '',
       ...overrides,
     };
   }
@@ -122,6 +129,9 @@ describe('agentConversationStyleSelections / DeployStyleId — persist roundtrip
       hasAgentGeneration: false,
       agentLogicalStepsJson: '',
       agentUseCasesJson: '',
+      agentStartPromptJson: '',
+      agentStartUseCaseId: '',
+      agentConversationalRulesJson: '[]',
       agentUseCaseWizardStateJson: '',
       agentIaRuntimeOverrideJson: '',
       agentImmediateStart: false,
@@ -133,6 +143,10 @@ describe('agentConversationStyleSelections / DeployStyleId — persist roundtrip
       agentConversationStyleSelections: {},
       agentConversationDeployStyleId: null,
       agentLogUseCase: false,
+      agentLogBackendCalls: false,
+      agentBehavior: 'B' as const,
+      agentInterfaceJson: '',
+      agentKnowledgeBaseDocumentsJson: '',
       ...overrides,
     };
   }
@@ -163,6 +177,18 @@ describe('agentConversationStyleSelections / DeployStyleId — persist roundtrip
   it('defaults agentLogUseCase to false when missing in raw row (back-compat)', () => {
     const snap = buildTaskSnapshotFromRaw({ id: 'x' });
     expect(snap.agentLogUseCase).toBe(false);
+  });
+
+  it('preserves agentLogBackendCalls=true through patch → snapshot', () => {
+    const state = makeMinimalState({ agentLogBackendCalls: true });
+    const patch = buildAIAgentTaskPersistPatch(state);
+    const snap = buildTaskSnapshotFromRaw(patch);
+    expect(snap.agentLogBackendCalls).toBe(true);
+  });
+
+  it('defaults agentLogBackendCalls to false when missing in raw row (back-compat)', () => {
+    const snap = buildTaskSnapshotFromRaw({ id: 'x' });
+    expect(snap.agentLogBackendCalls).toBe(false);
   });
 
   it('lazy-migrates legacy example when selections are absent on load', () => {

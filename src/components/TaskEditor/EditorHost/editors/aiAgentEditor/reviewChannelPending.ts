@@ -79,6 +79,18 @@ export function hasAnyPendingImport(statuses: readonly ReviewAudiencePendingStat
   return statuses.some((s) => s.hasPendingImport);
 }
 
+/** Firma compatta per evitare `setState` quando il poll non ha cambiato nulla. */
+export function reviewAudienceStatusesSignature(
+  statuses: readonly ReviewAudiencePendingStatus[]
+): string {
+  return statuses
+    .map(
+      (s) =>
+        `${s.audience}:${s.hasRemote ? 1 : 0}:${s.hasPendingImport ? 1 : 0}:${s.remoteUpdatedAt ?? ''}`
+    )
+    .join('|');
+}
+
 export function pendingStatusForAudience(
   statuses: readonly ReviewAudiencePendingStatus[],
   audience: AgentReviewAudience

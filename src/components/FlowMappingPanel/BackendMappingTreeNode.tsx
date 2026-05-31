@@ -41,6 +41,7 @@ import { BACKEND_TREE_INDENT_PX, backendDominioValoriCleanTreeInsetPx } from './
 import { DropPreviewLine, placementFromY } from './backendMappingTreeDnD';
 import type { MappingEntry } from './mappingTypes';
 import { renameLeafSegment } from './mappingTreeUtils';
+import { buildMappingParamTooltip } from './buildMappingParamTooltip';
 
 const ICON = 'w-3 h-3';
 import { MAPPING_ROW_TEXT_CLASS } from './mappingPanelTypography';
@@ -137,26 +138,20 @@ export function BackendMappingTreeNode({
 
   const hasChildren = treeNode.children.length > 0;
   const hasEntry = Boolean(treeNode.entry);
+  const isSchemaOutline = Boolean(treeNode.entry?.schemaOutlineOnly);
   const isGroupOnly = hasChildren && !hasEntry;
-  const canRenameLabel = Boolean(treeNode.entry && !hasChildren);
+  const isReadOnlyRow = isGroupOnly || isSchemaOutline;
+  const canRenameLabel = Boolean(treeNode.entry && !hasChildren && !isSchemaOutline);
   const leafLabelEditable = canRenameLabel;
   const level = node.level;
   const pathKey = treeNode.pathKey;
 
-  const hiddenDescendantParamCount = useMemo(
+  const descendantParamCount = useMemo(
     () => countDescendantMappingEntries(entries, pathKey),
     [entries, pathKey]
   );
 
-  const collapsedParamCountSuffix =
-    hasChildren && node.isClosed ? (
-      <span
-        className={`shrink-0 whitespace-nowrap ${ROW_TEXT} font-medium tabular-nums text-slate-500`}
-        aria-label={`${hiddenDescendantParamCount} parametri nascosti`}
-      >
-        ({hiddenDescendantParamCount})
-      </span>
-    ) : null;
+  const paramTooltip = buildMappingParamTooltip(treeNode.entry);
 
   const patchEntry = useCallback(
     (patch: Partial<MappingEntry>) => {
@@ -250,7 +245,7 @@ export function BackendMappingTreeNode({
   const ephemeralNew = Boolean(treeNode.entry && isEphemeralNewSegment(treeNode.segment));
 
   const canAgentParamDrag = Boolean(
-    treeNode.entry && !isGroupOnly && agentParamDragSource && !ephemeralNew
+    treeNode.entry && !isReadOnlyRow && agentParamDragSource && !ephemeralNew
   );
 
   const handleAgentParamDragStart = useCallback(
@@ -276,14 +271,10 @@ export function BackendMappingTreeNode({
     [agentParamDragSource, backendColumn, canAgentParamDrag, treeNode.entry, treeNode.segment]
   );
 
-  const descTitle =
-    treeNode.entry?.fieldDescription?.trim() ||
-    treeNode.entry?.openapiDescriptionHint?.trim() ||
-    undefined;
-  const openApiFormatLabel = treeNode.entry?.openapiFormatLabel?.trim() || undefined;
+  const descTitle = paramTooltip;
 
   const receiveOptional =
-    backendColumn === 'receive' && treeNode.entry && !isGroupOnly
+    backendColumn === 'receive' && treeNode.entry && !isReadOnlyRow
       ? Boolean(treeNode.entry.sendBindingOptional)
       : false;
 
@@ -300,21 +291,23 @@ export function BackendMappingTreeNode({
   const segmentToneClass = sendOptionalLabelClass ?? receiveOptionalLabelClass;
 
   const sendGlyphKind: SendArrowGlyphKind =
-    backendColumn === 'send' && treeNode.entry && !isGroupOnly
+    backendColumn === 'send' && treeNode.entry && !isReadOnlyRow
       ? resolveSendArrowKind(treeNode.entry.apiField, treeNode.entry)
-      : 'filledSolid';
+      : isSchemaOutline
+        ? 'outlineSolid'
+        : 'filledSolid';
 
   const wireKey = treeNode.entry?.wireKey?.trim() ?? '';
   const advancementWireKey = unwrapSessionTreeWireKey(wireKey);
   const showAdvancementUi =
     backendColumn === 'send' &&
     Boolean(treeNode.entry) &&
-    !isGroupOnly &&
+    !isReadOnlyRow &&
     Boolean(backendSendAdvancement) &&
     !ephemeralNew;
 
   const dominioValoriAlignPx =
-    treeNode.entry && !isGroupOnly
+    treeNode.entry && !isReadOnlyRow
       ? backendDominioValoriCleanTreeInsetPx({
           depth: level,
           showAdvancementUi,
@@ -341,8 +334,10 @@ export function BackendMappingTreeNode({
 
   const labelIndentPx = level * BACKEND_TREE_INDENT_PX;
 
-  const arrowTitle = isGroupOnly
-    ? undefined
+  const arrowTitle = isReadOnlyRow
+    ? isSchemaOutline
+      ? 'Proprietà da schema OpenAPI (solo firma, non mappata sul task)'
+      : undefined
     : backendColumn === 'send'
       ? sendArrowTitle(sendGlyphKind)
       : backendColumn === 'receive'
@@ -352,13 +347,15 @@ export function BackendMappingTreeNode({
         : 'Parametro';
 
   const paramArrow = !isGroupOnly ? (
-    <span title={arrowTitle}>
-      {backendColumn === 'send' ? (
-        <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} compact />
-      ) : backendColumn === 'receive' ? (
-        <BackendReceiveArrowIcon optional={receiveOptional} compact />
-      ) : null}
-    </span>
+    isSchemaOutline ? null : (
+      <span title={arrowTitle}>
+        {backendColumn === 'send' ? (
+          <BackendSendArrowIcon kind={sendGlyphKind} title={sendArrowTitle(sendGlyphKind)} compact />
+        ) : backendColumn === 'receive' ? (
+          <BackendReceiveArrowIcon optional={receiveOptional} compact />
+        ) : null}
+      </span>
+    )
   ) : null;
 
   const advancementCheckbox = showAdvancementUi ? (
@@ -399,16 +396,16 @@ export function BackendMappingTreeNode({
         inlinePencil={false}
         viewTitle={descTitle}
         segmentClassName={segmentToneClass}
-        readOnlyPreferWrap={!leafLabelEditable}
+        readOnlyPreferWrap={false}
         textSizeClass={ROW_TEXT}
-        hoverHighlight={Boolean(treeNode.entry && !isGroupOnly)}
+        hoverHighlight={Boolean(treeNode.entry && !isReadOnlyRow)}
       />
-      {openApiFormatLabel && !isGroupOnly ? (
+      {hasChildren && descendantParamCount > 0 ? (
         <span
-          className={`shrink-0 whitespace-nowrap font-normal text-slate-500 ${ROW_TEXT}`}
-          title={`Formato OpenAPI: ${openApiFormatLabel}`}
+          className={`shrink-0 whitespace-nowrap tabular-nums text-slate-500 ${ROW_TEXT}`}
+          aria-label={`${descendantParamCount} proprietà annidate`}
         >
-          ({openApiFormatLabel})
+          ({descendantParamCount})
         </span>
       ) : null}
     </>
@@ -420,6 +417,7 @@ export function BackendMappingTreeNode({
         variant="backend"
         entry={treeNode.entry}
         groupOnlyBackend={isGroupOnly}
+        schemaOutlineOnly={isSchemaOutline}
         showApiFields={false}
         hideApiFieldColumn
         secondaryFieldsLocked={ephemeralNew}
@@ -449,20 +447,20 @@ export function BackendMappingTreeNode({
           rowRef={rowRef}
           rowClassName="h-full"
           depthIndentPx={labelIndentPx}
+          fixedTreeSlots
           isGroup={isGroupOnly}
           chevron={chevronControl}
           arrow={paramArrow}
           labelLeading={advancementCheckbox}
           label={labelNode}
-          labelSuffix={collapsedParamCountSuffix}
-          valueEditor={isGroupOnly ? null : valueEditorNode}
+          valueEditor={isGroupOnly || isSchemaOutline ? null : valueEditorNode}
           afterEditor={
             showAdvancementUi && backendSendAdvancement!.isEnabled(advancementWireKey)
               ? backendSendAdvancement.renderEditor(advancementWireKey)
               : null
           }
           toolbar={
-            treeNode.entry && !isGroupOnly ? (
+            treeNode.entry && !isReadOnlyRow ? (
               <MappingParameterToolbarActions
                 onEditName={() => labelEditRef.current?.startEditing()}
                 onRemove={handleRemove}

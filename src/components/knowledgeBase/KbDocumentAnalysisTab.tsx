@@ -134,7 +134,7 @@ export function KbDocumentAnalysisTab({
     setReviewPanelOpenInternal(true);
   }, [doc.id, doc.documentAnalysisMarkdown]);
 
-  const repoId = doc.repositoryDocumentId?.trim();
+  const repoId = doc.id?.trim() || doc.repositoryDocumentId?.trim() || undefined;
   const content = useKbDocumentContent(projectId, repoId);
   const canEdit = !disabled && doc.parseStatus !== 'parsing';
   const hasModel = Boolean(provider?.trim() && model?.trim());

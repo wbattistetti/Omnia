@@ -434,14 +434,6 @@
     },
     {
       "providerId": "openai",
-      "modelId": "gpt-4o-audio-preview",
-      "inputUsdPer1M": 2.5,
-      "outputUsdPer1M": 10,
-      "contextLength": 128000,
-      "rawId": "openai/gpt-4o-audio-preview"
-    },
-    {
-      "providerId": "openai",
       "modelId": "gpt-5-chat",
       "inputUsdPer1M": 1.25,
       "outputUsdPer1M": 10,
@@ -499,7 +491,7 @@
     {
       "providerId": "openai",
       "modelId": "gpt-oss-20b",
-      "inputUsdPer1M": 0.03,
+      "inputUsdPer1M": 0.029,
       "outputUsdPer1M": 0.14,
       "contextLength": 131072,
       "rawId": "openai/gpt-oss-20b"
@@ -701,7 +693,7 @@
       "modelId": "gemini-2.0-flash-001",
       "inputUsdPer1M": 0.09999999999999999,
       "outputUsdPer1M": 0.39999999999999997,
-      "contextLength": 1000000,
+      "contextLength": 1048576,
       "rawId": "google/gemini-2.0-flash-001"
     },
     {
@@ -746,19 +738,19 @@
     },
     {
       "providerId": "openai",
-      "modelId": "gpt-4o-mini",
-      "inputUsdPer1M": 0.15,
-      "outputUsdPer1M": 0.6,
-      "contextLength": 128000,
-      "rawId": "openai/gpt-4o-mini"
-    },
-    {
-      "providerId": "openai",
       "modelId": "gpt-4o-mini-2024-07-18",
       "inputUsdPer1M": 0.15,
       "outputUsdPer1M": 0.6,
       "contextLength": 128000,
       "rawId": "openai/gpt-4o-mini-2024-07-18"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini"
     },
     {
       "providerId": "google",
@@ -770,19 +762,19 @@
     },
     {
       "providerId": "openai",
-      "modelId": "gpt-4o-2024-05-13",
-      "inputUsdPer1M": 5,
-      "outputUsdPer1M": 15,
-      "contextLength": 128000,
-      "rawId": "openai/gpt-4o-2024-05-13"
-    },
-    {
-      "providerId": "openai",
       "modelId": "gpt-4o",
       "inputUsdPer1M": 2.5,
       "outputUsdPer1M": 10,
       "contextLength": 128000,
       "rawId": "openai/gpt-4o"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-05-13",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 15,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-05-13"
     },
     {
       "providerId": "openai",
@@ -850,19 +842,19 @@
     },
     {
       "providerId": "openai",
-      "modelId": "gpt-3.5-turbo",
-      "inputUsdPer1M": 0.5,
-      "outputUsdPer1M": 1.5,
-      "contextLength": 16385,
-      "rawId": "openai/gpt-3.5-turbo"
-    },
-    {
-      "providerId": "openai",
       "modelId": "gpt-4",
       "inputUsdPer1M": 30,
       "outputUsdPer1M": 60,
       "contextLength": 8191,
       "rawId": "openai/gpt-4"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 16385,
+      "rawId": "openai/gpt-3.5-turbo"
     }
   ],
   "byKey": {
@@ -1298,14 +1290,6 @@
       "contextLength": 400000,
       "rawId": "openai/gpt-5-codex"
     },
-    "openai::gpt-4o-audio-preview": {
-      "providerId": "openai",
-      "modelId": "gpt-4o-audio-preview",
-      "inputUsdPer1M": 2.5,
-      "outputUsdPer1M": 10,
-      "contextLength": 128000,
-      "rawId": "openai/gpt-4o-audio-preview"
-    },
     "openai::gpt-5-chat": {
       "providerId": "openai",
       "modelId": "gpt-5-chat",
@@ -1365,7 +1349,7 @@
     "openai::gpt-oss-20b": {
       "providerId": "openai",
       "modelId": "gpt-oss-20b",
-      "inputUsdPer1M": 0.03,
+      "inputUsdPer1M": 0.029,
       "outputUsdPer1M": 0.14,
       "contextLength": 131072,
       "rawId": "openai/gpt-oss-20b"
@@ -1567,7 +1551,7 @@
       "modelId": "gemini-2.0-flash-001",
       "inputUsdPer1M": 0.09999999999999999,
       "outputUsdPer1M": 0.39999999999999997,
-      "contextLength": 1000000,
+      "contextLength": 1048576,
       "rawId": "google/gemini-2.0-flash-001"
     },
     "openai::o3-mini": {
@@ -1610,14 +1594,6 @@
       "contextLength": 128000,
       "rawId": "openai/gpt-4o-2024-08-06"
     },
-    "openai::gpt-4o-mini": {
-      "providerId": "openai",
-      "modelId": "gpt-4o-mini",
-      "inputUsdPer1M": 0.15,
-      "outputUsdPer1M": 0.6,
-      "contextLength": 128000,
-      "rawId": "openai/gpt-4o-mini"
-    },
     "openai::gpt-4o-mini-2024-07-18": {
       "providerId": "openai",
       "modelId": "gpt-4o-mini-2024-07-18",
@@ -1625,6 +1601,14 @@
       "outputUsdPer1M": 0.6,
       "contextLength": 128000,
       "rawId": "openai/gpt-4o-mini-2024-07-18"
+    },
+    "openai::gpt-4o-mini": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-mini",
+      "inputUsdPer1M": 0.15,
+      "outputUsdPer1M": 0.6,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-mini"
     },
     "google::gemma-2-27b-it": {
       "providerId": "google",
@@ -1634,14 +1618,6 @@
       "contextLength": 8192,
       "rawId": "google/gemma-2-27b-it"
     },
-    "openai::gpt-4o-2024-05-13": {
-      "providerId": "openai",
-      "modelId": "gpt-4o-2024-05-13",
-      "inputUsdPer1M": 5,
-      "outputUsdPer1M": 15,
-      "contextLength": 128000,
-      "rawId": "openai/gpt-4o-2024-05-13"
-    },
     "openai::gpt-4o": {
       "providerId": "openai",
       "modelId": "gpt-4o",
@@ -1649,6 +1625,14 @@
       "outputUsdPer1M": 10,
       "contextLength": 128000,
       "rawId": "openai/gpt-4o"
+    },
+    "openai::gpt-4o-2024-05-13": {
+      "providerId": "openai",
+      "modelId": "gpt-4o-2024-05-13",
+      "inputUsdPer1M": 5,
+      "outputUsdPer1M": 15,
+      "contextLength": 128000,
+      "rawId": "openai/gpt-4o-2024-05-13"
     },
     "openai::gpt-4-turbo": {
       "providerId": "openai",
@@ -1714,14 +1698,6 @@
       "contextLength": 8191,
       "rawId": "openai/gpt-4-0314"
     },
-    "openai::gpt-3.5-turbo": {
-      "providerId": "openai",
-      "modelId": "gpt-3.5-turbo",
-      "inputUsdPer1M": 0.5,
-      "outputUsdPer1M": 1.5,
-      "contextLength": 16385,
-      "rawId": "openai/gpt-3.5-turbo"
-    },
     "openai::gpt-4": {
       "providerId": "openai",
       "modelId": "gpt-4",
@@ -1729,11 +1705,19 @@
       "outputUsdPer1M": 60,
       "contextLength": 8191,
       "rawId": "openai/gpt-4"
+    },
+    "openai::gpt-3.5-turbo": {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo",
+      "inputUsdPer1M": 0.5,
+      "outputUsdPer1M": 1.5,
+      "contextLength": 16385,
+      "rawId": "openai/gpt-3.5-turbo"
     }
   },
   "meta": {
     "source": "openrouter",
-    "count": 108,
-    "updatedAt": "2026-05-29T05:19:09.907Z"
+    "count": 107,
+    "updatedAt": "2026-05-31T20:19:32.941Z"
   }
 }

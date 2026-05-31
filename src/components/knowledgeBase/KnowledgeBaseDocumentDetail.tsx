@@ -50,7 +50,7 @@ export function KnowledgeBaseDocumentDetail({
 
 }: KnowledgeBaseDocumentDetailProps): React.ReactElement {
 
-  const repoId = doc.repositoryDocumentId?.trim();
+  const repoId = doc.id?.trim() || doc.repositoryDocumentId?.trim();
 
   const content = useKbDocumentContent(projectId, repoId);
 

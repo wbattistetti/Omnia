@@ -5,6 +5,7 @@
  */
 
 import type { MappingEntry } from '../../components/FlowMappingPanel/mappingTypes';
+import { isBackendMockInputCellFilled } from '../../domain/backendTest/backendMockRowCompletion';
 import { stableJsonStringify } from '../stableJsonStringify';
 import { coerceMockCellValue } from './coerceMockCellValue';
 
@@ -28,7 +29,12 @@ function buildValuesByApiParam(
     if (!api) continue;
     const wire = (e.wireKey || '').trim();
     if (!wire) continue;
-    const raw = rowInputs[wire];
+    let raw = rowInputs[wire];
+    if (!isBackendMockInputCellFilled(raw)) {
+      const lit = e.literalConstant?.trim();
+      if (lit) raw = lit;
+    }
+    if (raw === undefined || raw === null) continue;
     out[api] = coerceMockCellValue(raw);
   }
   return out;

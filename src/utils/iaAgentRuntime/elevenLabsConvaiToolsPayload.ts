@@ -18,6 +18,11 @@ import {
 import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import type { MergeEffectiveIaAgentToolsOptions } from '@domain/iaAgentTools/backendToolDerivation';
+import {
+  buildConvaiWebhookGatewayUrl,
+  isConvaiWebhookGatewayUrl,
+  resolveOmniaRuntimeOrigin,
+} from '@domain/convaiRuntime/convaiWebhookGatewayUrl';
 
 /** GET/HEAD: body params → query string schema; altrimenti JSON body. */
 function usesQueryParamsForMethod(method: string): boolean {
@@ -46,10 +51,38 @@ function dedupeElevenLabsToolNames(tools: Record<string, unknown>[]): Record<str
 /**
  * Costruisce l’array `tools` per `conversation_config.agent.prompt` nel formato ElevenLabs API.
  */
+export type BuildElevenLabsConvaiToolsOptions = MergeEffectiveIaAgentToolsOptions & {
+  /** Se impostato, i webhook POST usano il gateway Omnia (sendHints + forward generico). */
+  convaiGateway?: {
+    projectId: string;
+    agentTaskId: string;
+    /** Override origine runtime (default {@link resolveOmniaRuntimeOrigin}). */
+    gatewayOrigin?: string;
+  };
+};
+
+function resolveWebhookToolUrl(
+  targetUrl: string,
+  method: string,
+  backendTaskId: string,
+  convaiGateway?: BuildElevenLabsConvaiToolsOptions['convaiGateway']
+): string {
+  if (!convaiGateway?.projectId?.trim() || !convaiGateway?.agentTaskId?.trim()) return targetUrl;
+  if (usesQueryParamsForMethod(method)) return targetUrl;
+  if (isConvaiWebhookGatewayUrl(targetUrl)) return targetUrl;
+  const origin = resolveOmniaRuntimeOrigin(convaiGateway.gatewayOrigin);
+  return buildConvaiWebhookGatewayUrl({
+    origin,
+    projectId: convaiGateway.projectId.trim(),
+    agentTaskId: convaiGateway.agentTaskId.trim(),
+    backendTaskId,
+  });
+}
+
 export function buildElevenLabsConvaiPromptTools(
   cfg: IAAgentConfig,
   getTask: (taskId: string) => Task | null | undefined,
-  options?: MergeEffectiveIaAgentToolsOptions
+  options?: BuildElevenLabsConvaiToolsOptions
 ): Record<string, unknown>[] {
   const manual = Array.isArray(cfg.tools) ? cfg.tools : [];
   const fromCfg = Array.isArray(cfg.convaiBackendToolTaskIds)
@@ -81,8 +114,9 @@ export function buildElevenLabsConvaiPromptTools(
     if (!t || t.type !== TaskType.BackendCall) continue;
     const dr = deriveBackendToolDefinition(t);
     if (!dr.ok) continue;
-    const { url, method, headers } = readBackendCallEndpoint(t);
-    if (!url) continue;
+    const { url: targetUrl, method, headers } = readBackendCallEndpoint(t);
+    if (!targetUrl) continue;
+    const url = resolveWebhookToolUrl(targetUrl, method, id, options?.convaiGateway);
 
     const apiSchema: Record<string, unknown> = {
       url,
@@ -149,17 +183,24 @@ export type BuildConvaiWebhookFromBackendTaskResult =
  * Un singolo tool `webhook` ConvAI da Backend Call (stesso payload di {@link buildElevenLabsConvaiPromptTools}).
  */
 export function buildConvaiWebhookToolFromBackendTask(
-  task: Task
+  task: Task,
+  options?: Pick<BuildElevenLabsConvaiToolsOptions, 'convaiGateway'>
 ): BuildConvaiWebhookFromBackendTaskResult {
   if (task.type !== TaskType.BackendCall) {
     return { ok: false, error: 'Il task non è un Backend Call.' };
   }
   const dr = deriveBackendToolDefinition(task);
   if (!dr.ok) return { ok: false, error: dr.error };
-  const { url, method, headers } = readBackendCallEndpoint(task);
-  if (!url.trim()) {
+  const { url: targetUrl, method, headers } = readBackendCallEndpoint(task);
+  if (!targetUrl.trim()) {
     return { ok: false, error: 'URL operativo obbligatorio sul Backend Call.' };
   }
+  const url = resolveWebhookToolUrl(
+    targetUrl,
+    method,
+    String(task.id ?? '').trim(),
+    options?.convaiGateway
+  );
 
   const apiSchema: Record<string, unknown> = { url, method };
   if (Object.keys(headers).length > 0) {

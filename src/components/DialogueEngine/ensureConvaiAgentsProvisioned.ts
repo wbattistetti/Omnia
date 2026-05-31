@@ -44,6 +44,8 @@ import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoin
 
 /** Contesto per il nome leggibile ElevenLabs (OMNIA… + GUID) e validazione tool. */
 export type ConvaiProvisionContext = {
+  /** GUID progetto Mongo (gateway ConvAI webhook). */
+  projectId?: string;
   projectLabel: string;
   rootFlowLabel: string;
   /** taskId → etichetta nodo canvas */
@@ -394,6 +396,7 @@ export async function ensureConvaiAgentsProvisioned(
           task,
           manualCatalogBackendTaskIds,
           backendCatalog: context.backendCatalog,
+          projectId: context.projectId,
         })!;
       } catch (buildErr) {
         failed.push(taskId);

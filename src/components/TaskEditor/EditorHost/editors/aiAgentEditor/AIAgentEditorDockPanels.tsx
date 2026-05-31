@@ -183,6 +183,11 @@ export function EditorUseCasesPanel({
     setUseCaseGlobalStyleId,
     agentUseCaseStyleLearningNotes,
     setAgentUseCaseStyleLearningNotes,
+    agentStartPromptConfig,
+    setAgentStartPromptConfig,
+    agentStartUseCaseId,
+    setAgentStartUseCaseId,
+    agentLogUseCase,
     previewStyleId,
     setPreviewStyleId,
     hasAgentGeneration,
@@ -215,6 +220,8 @@ export function EditorUseCasesPanel({
     agentConversationStyleSelections,
     setAgentConversationStyleSelections,
     projectSlotLexicon,
+    compileMappingBanner,
+    slotMappingOpenRequestNonce,
     approveLexiconSurface,
     revokeLexiconSurface,
     updateLexiconSlotId,
@@ -398,6 +405,11 @@ export function EditorUseCasesPanel({
       showTokenizedAgentMessage={Boolean(useCaseGeneratorWizard?.showTokenizedInBubbles)}
       tokenizedByUseCaseId={tokenizedByUseCaseId}
       projectSlotLexicon={projectSlotLexicon}
+      startPromptConfig={agentStartPromptConfig}
+      onStartPromptConfigChange={setAgentStartPromptConfig}
+      startUseCaseId={agentStartUseCaseId}
+      onStartUseCaseIdChange={setAgentStartUseCaseId}
+      includeLogInPromptExport={agentLogUseCase}
     />
   );
 
@@ -643,7 +655,10 @@ export function EditorUseCasesPanel({
       <>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
         <FontProvider>
-        <UseCaseWizardListToolbarProvider>
+        <UseCaseWizardListToolbarProvider
+          compileMappingBanner={compileMappingBanner}
+          slotMappingOpenRequestNonce={slotMappingOpenRequestNonce}
+        >
           <ViewSkaGenerator
             wizard={useCaseGeneratorWizard}
             leftPanel={leftPanel}
@@ -712,7 +727,10 @@ export function EditorUseCasesPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/95 dark:bg-slate-950/80">
-      <UseCaseWizardListToolbarProvider>
+      <UseCaseWizardListToolbarProvider
+        compileMappingBanner={compileMappingBanner}
+        slotMappingOpenRequestNonce={slotMappingOpenRequestNonce}
+      >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{composer}</div>
       </UseCaseWizardListToolbarProvider>
     </div>

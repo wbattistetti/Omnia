@@ -36,28 +36,24 @@ describe('validateTokenizedText', () => {
     if (!r.ok) expect(r.error).toMatch(/nested or unclosed bracket/);
   });
 
-  it('rejects uppercase token name', () => {
-    const r = validateTokenizedText('Token [Data] maiuscolo');
+  it('rejects bracket content without letters or digits', () => {
+    const r = validateTokenizedText('Token [@#$] simboli');
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/invalid token name "Data"/);
+    if (!r.ok) expect(r.error).toMatch(/invalid bracket content/);
   });
 
-  it('rejects empty token name', () => {
+  it('rejects empty bracket content', () => {
     const r = validateTokenizedText('Token vuoto [] qui');
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/invalid token name ""/);
+    if (!r.ok) expect(r.error).toMatch(/invalid bracket content ""/);
   });
 
-  it('rejects token name with space', () => {
-    const r = validateTokenizedText('Token con [a b] spazio');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/invalid token name "a b"/);
+  it('accepts readable surface with spaces (design-time)', () => {
+    expect(validateTokenizedText('Il [8 giugno 2026] alle [09:30].')).toEqual({ ok: true });
   });
 
-  it('rejects token name starting with digit', () => {
-    const r = validateTokenizedText('Token [1ora] cifra');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/invalid token name "1ora"/);
+  it('accepts readable surface starting with digit (e.g. time)', () => {
+    expect(validateTokenizedText('Token [09:30] cifra')).toEqual({ ok: true });
   });
 
   it('rejects non-string input', () => {
@@ -85,10 +81,12 @@ describe('splitTokenizedText', () => {
     ]);
   });
 
-  it('treats invalid bracket content as literal text', () => {
-    /** `[Data]` (maiuscolo) non è token valido: viene preservato come testo letterale. */
-    const segs = splitTokenizedText('Ciao [Data] di battesimo');
-    expect(segs).toEqual([{ kind: 'text', text: 'Ciao [Data] di battesimo' }]);
+  it('splits readable surface tokens for highlight', () => {
+    expect(splitTokenizedText('Ciao [8 giugno] di battesimo')).toEqual([
+      { kind: 'text', text: 'Ciao ' },
+      { kind: 'token', name: '8 giugno' },
+      { kind: 'text', text: ' di battesimo' },
+    ]);
   });
 
   it('keeps unclosed bracket as trailing text', () => {
@@ -105,8 +103,8 @@ describe('extractTokenNames', () => {
     expect(extractTokenNames('Ho [data] e [data] e [ora]')).toEqual(['data', 'data', 'ora']);
   });
 
-  it('ignores invalid bracket pairs', () => {
-    expect(extractTokenNames('Ciao [Data] e [nome]')).toEqual(['nome']);
+  it('extracts readable surfaces and runtime token ids', () => {
+    expect(extractTokenNames('Ciao [8 giugno] e [nome]')).toEqual(['8 giugno', 'nome']);
   });
 
   it('returns empty array when no tokens', () => {

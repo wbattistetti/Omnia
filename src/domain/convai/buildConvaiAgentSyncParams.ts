@@ -21,6 +21,7 @@ export type BuildConvaiAgentSyncParamsInput = {
   useCases?: readonly import('@types/aiAgentUseCases').AIAgentUseCase[];
   conversationalRules?: readonly ConversationalRule[];
   includeLog?: boolean;
+  includeBackendLog?: boolean;
   agentBehavior?: AgentBehaviorMode;
   catalogFormat?: ConversationalCatalogFormat;
   newAgentName?: string;
@@ -40,12 +41,16 @@ export function buildConvaiAgentSyncParams(
     input.useCases ??
     parseAgentUseCasesJson(String(agentTask.agentUseCasesJson ?? ''));
 
+  const includeLog = input.includeLog ?? agentTask.agentLogUseCase === true;
+  const includeBackendLog = input.includeBackendLog ?? agentTask.agentLogBackendCalls === true;
+
   return {
     agentTask,
     projectId: String(input.projectId ?? '').trim() || undefined,
     useCases,
     conversationalRules: input.conversationalRules,
-    includeLog: input.includeLog,
+    includeLog,
+    includeBackendLog,
     agentBehavior: input.agentBehavior,
     catalogFormat: input.catalogFormat,
     backendCatalog: input.backendCatalog,

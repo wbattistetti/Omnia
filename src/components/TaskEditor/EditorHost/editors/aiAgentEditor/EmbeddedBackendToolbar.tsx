@@ -3,19 +3,19 @@
  *
  * - Toggle principale: Emulation ↔ Real backend call (non chiude Signature: il pannello resta stabile).
  * - Signature: sempre visibile; se attivo, il gruppo azioni è unito visivamente a destra (bordo + fondo tenue).
- * - In Emulation: Emulation table; in Real: Test Backend quando disponibile.
+ * - In Emulation: Emulation table; in Real: Test Backend (apre tabella) + sottopulsante Esegui.
  * I pulsanti azione provengono da `BackendCallEditor` tramite `buttonId`.
  */
 
 import React from 'react';
 import {
   BookOpen,
-  Bot,
   Columns2,
   Database,
   Eye,
   EyeOff,
   FlaskConical,
+  Play,
   Loader2,
   SlidersHorizontal,
   Table2,
@@ -43,6 +43,123 @@ const SIG_GHOST_HOVER = 'text-slate-200 hover:bg-white/[0.06] hover:text-slate-5
 
 function findBtn(buttons: ToolbarButton[], id: string): ToolbarButton | undefined {
   return buttons.find((b) => b.buttonId === id);
+}
+
+/** Puntini animati durante bulk test (… . .. …). */
+function useBusyDots(active: boolean): string {
+  const [phase, setPhase] = React.useState(0);
+  React.useEffect(() => {
+    if (!active) {
+      setPhase(0);
+      return;
+    }
+    const t = window.setInterval(() => setPhase((p) => (p + 1) % 4), 420);
+    return () => window.clearInterval(t);
+  }, [active]);
+  if (!active) return '';
+  return '.'.repeat(phase);
+}
+
+/** Test Backend: area principale apre tabella; sottopulsante «Esegui» lancia HTTP. */
+function TestBackendSplitButton({
+  btn,
+  activeTone = 'emerald',
+}: {
+  btn: ToolbarButton;
+  activeTone?: 'sky' | 'emerald';
+}) {
+  const sub = btn.subAction;
+  const tableOpen = Boolean(btn.active);
+  const busyDots = useBusyDots(Boolean(sub?.busy));
+
+  if (!sub || !tableOpen) {
+    return (
+      <ToolbarIconButton
+        activeTone={activeTone}
+        icon={
+          btn.icon ?? (
+            <FlaskConical size={ICON} strokeWidth={ICON_STROKE} className="shrink-0" aria-hidden />
+          )
+        }
+        label={btn.label ?? 'Test Backend'}
+        active={tableOpen}
+        onClick={btn.onClick}
+        disabled={btn.disabled}
+        title={btn.title}
+      />
+    );
+  }
+
+  const shellActive = Boolean(btn.active || btn.successHighlight);
+  const shellBorder = shellActive
+    ? activeTone === 'emerald'
+      ? 'border-emerald-700/50'
+      : 'border-sky-600/55'
+    : 'border-slate-600/45';
+
+  return (
+    <div
+      role="group"
+      aria-label="Test Backend"
+      className={`inline-flex ${ROW_H} shrink-0 overflow-hidden rounded-md border ${shellBorder} ${
+        shellActive
+          ? activeTone === 'emerald'
+            ? 'bg-emerald-950/55 shadow-inner shadow-emerald-950/35'
+            : 'bg-sky-950/55 shadow-inner shadow-sky-950/40'
+          : 'bg-slate-900/50'
+      }`}
+    >
+      <button
+        type="button"
+        title={btn.title}
+        disabled={btn.disabled}
+        onClick={btn.onClick}
+        aria-pressed={btn.active}
+        className={`inline-flex h-full items-center justify-center gap-1.5 border-0 bg-transparent px-2.5 text-xs font-medium transition-colors hover:bg-white/[0.06] ${
+          shellActive
+            ? activeTone === 'emerald'
+              ? 'text-emerald-50'
+              : 'text-sky-100'
+            : 'text-slate-200 hover:text-slate-50'
+        } disabled:pointer-events-none disabled:opacity-45`}
+      >
+        {btn.icon ?? (
+          <FlaskConical
+            size={ICON}
+            strokeWidth={ICON_STROKE}
+            className={`shrink-0 ${shellActive ? 'text-emerald-200' : 'text-slate-400'}`}
+            aria-hidden
+          />
+        )}
+        <span className="whitespace-nowrap">{btn.label ?? 'Test Backend'}</span>
+      </button>
+      <div
+        className={`w-px shrink-0 self-stretch ${
+          shellActive ? 'bg-emerald-600/35' : 'bg-slate-600/50'
+        }`}
+        aria-hidden
+      />
+      <button
+        type="button"
+        title={sub.title}
+        disabled={sub.disabled}
+        onClick={sub.onClick}
+        aria-busy={sub.busy}
+        className={`inline-flex h-full max-w-[11rem] items-center justify-center gap-1 border-0 bg-transparent px-2 text-[10px] font-semibold transition-colors hover:bg-emerald-500/15 ${
+          shellActive ? 'text-emerald-100' : 'text-emerald-300/90 hover:text-emerald-100'
+        } disabled:pointer-events-none disabled:opacity-45`}
+      >
+        {sub.busy ? (
+          <Loader2 size={12} strokeWidth={2.5} className="shrink-0 animate-spin" aria-hidden />
+        ) : (
+          <Play size={12} strokeWidth={2.5} className="shrink-0" aria-hidden />
+        )}
+        <span className="truncate">
+          {sub.busy ? `${sub.busyLabel ?? 'Sto testando il backend'}${busyDots}` : sub.label}
+        </span>
+      </button>
+    </div>
+  );
 }
 
 function ToolbarIconButton({
@@ -107,7 +224,6 @@ export function EmbeddedBackendToolbar({
   const showTableBtn = findBtn(buttons, 'show-table');
   const showApiColBtn = findBtn(buttons, 'show-api-column');
   const readApiBtn = findBtn(buttons, 'read-api');
-  const publishElevenLabsBtn = findBtn(buttons, 'publish-elevenlabs');
   const testBackendBtn = findBtn(buttons, 'test-backend');
   const hideReceiveBtn = findBtn(buttons, 'hide-receive');
 
@@ -139,8 +255,6 @@ export function EmbeddedBackendToolbar({
     if (!isTableShown) setShowSignatureSub(false);
     showTableBtn?.onClick?.();
   };
-
-  const testBackendActive = Boolean(testBackendBtn?.active ?? isTableShown);
 
   if (buttons.length === 0) return null;
 
@@ -196,21 +310,6 @@ export function EmbeddedBackendToolbar({
           </>
         )}
       </button>
-
-      <div className="h-4 w-px shrink-0 self-center bg-slate-600/50" aria-hidden />
-
-      {publishElevenLabsBtn && publishElevenLabsBtn.visible !== false ? (
-        <ToolbarIconButton
-          activeTone={isEmulation ? 'sky' : 'emerald'}
-          icon={<Bot size={ICON} strokeWidth={ICON_STROKE} className="shrink-0 text-violet-200" aria-hidden />}
-          label={publishElevenLabsBtn.label ?? 'Aggiorna agente'}
-          onClick={publishElevenLabsBtn.onClick}
-          title={
-            publishElevenLabsBtn.title ??
-            'Pubblica webhook su ElevenLabs con schema da OpenAPI'
-          }
-        />
-      ) : null}
 
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {showSignatureSub && signatureGroupHasContent ? (
@@ -292,22 +391,7 @@ export function EmbeddedBackendToolbar({
           }
         />
       ) : testBackendBtn && testBackendBtn.visible !== false ? (
-        <ToolbarIconButton
-          activeTone="emerald"
-          icon={
-            <FlaskConical
-              size={ICON}
-              strokeWidth={ICON_STROKE}
-              className={`shrink-0 ${testBackendActive ? 'text-emerald-200' : 'text-slate-400'}`}
-              aria-hidden
-            />
-          }
-          label={testBackendBtn.disabled ? 'Testing…' : testBackendBtn.label ?? 'Test Backend'}
-          active={testBackendActive}
-          onClick={testBackendBtn.onClick}
-          disabled={testBackendBtn.disabled}
-          title={testBackendBtn.title ?? 'Run real backend test'}
-        />
+        <TestBackendSplitButton btn={testBackendBtn} activeTone="emerald" />
       ) : null}
     </div>
   );

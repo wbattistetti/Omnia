@@ -36,10 +36,20 @@ import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
 import { getAssistantExample } from '@types/aiAgentUseCases';
 import { useFullscreenEditorPref } from './aiAgentEditor/useFullscreenEditorPref';
 import { useAppToolbarBottom } from './aiAgentEditor/useAppToolbarBottom';
-import { areAllUseCasesProjectable } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
+import {
+  areAllUseCasesProjectable,
+  areCatalogUseCasesDeployReady,
+} from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
+import { WebhookReadinessReportDialog } from './aiAgentEditor/webhookReadiness/WebhookReadinessReportDialog';
+import type { AgentWebhookReadinessReport } from '@domain/openApi/webhookOpenApiReadiness';
+import {
+  AGENT_WIZARD_PROMPTS_STEP_INDEX,
+  formatMappingBlockedReasonShort,
+} from './aiAgentEditor/useCaseBundle/mappingBlockedReasonCopy';
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { createPortal } from 'react-dom';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
@@ -931,24 +941,54 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * compilabili dal builder deterministico (`areAllUseCasesProjectable`).
    */
   const [conversationalPromptDialogOpen, setConversationalPromptDialogOpen] = React.useState(false);
+  const [webhookReadinessReportOpen, setWebhookReadinessReportOpen] = React.useState(false);
+  const [webhookReadinessReport, setWebhookReadinessReport] =
+    React.useState<AgentWebhookReadinessReport | null>(null);
+  const [slotMappingOpenRequestNonce, setSlotMappingOpenRequestNonce] = React.useState(0);
   const [conversationalCatalogFormat, setConversationalCatalogFormat] =
     React.useState<ConversationalCatalogFormat>(DEFAULT_CONVERSATIONAL_CATALOG_FORMAT);
-  const canCreateConversationalPrompt = React.useMemo(
-    () => Array.isArray(c.useCases) && c.useCases.length > 0 && areAllUseCasesProjectable(c.useCases),
-    [c.useCases]
+  const manualCatalogBackendTaskIds = React.useMemo(
+    () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
+    [projectData]
   );
-  const onOpenConversationalPromptDialog = React.useCallback(() => {
-    if (!canCreateConversationalPrompt) return;
-    c.compileUseCasePhrasesForCatalog();
-    setConversationalPromptDialogOpen(true);
-  }, [canCreateConversationalPrompt, c.compileUseCasePhrasesForCatalog]);
+  const backendToolTaskIds = React.useMemo(
+    () =>
+      mergeConvaiBackendToolIdLists(
+        c.iaRuntimeConfig?.convaiBackendToolTaskIds ?? [],
+        manualCatalogBackendTaskIds
+      ),
+    [c.iaRuntimeConfig?.convaiBackendToolTaskIds, manualCatalogBackendTaskIds]
+  );
+  const hasCatalogUseCases = Array.isArray(c.useCases) && c.useCases.length > 0;
+  const catalogDeployReady = React.useMemo(
+    () =>
+      hasCatalogUseCases &&
+      areCatalogUseCasesDeployReady(
+        c.useCases,
+        c.projectSlotLexicon,
+        c.backendOutputSlotBindings,
+        backendToolTaskIds.length > 0
+      ),
+    [hasCatalogUseCases, c.useCases, c.projectSlotLexicon, c.backendOutputSlotBindings, backendToolTaskIds.length]
+  );
+  /** Dialog prompt: tutti gli UC inclusi proiettabili (compile può ancora fallire su slot/backend). */
+  const canCreateConversationalPrompt = React.useMemo(
+    () =>
+      hasCatalogUseCases &&
+      areAllUseCasesProjectable(c.useCases, c.projectSlotLexicon, c.backendOutputSlotBindings),
+    [hasCatalogUseCases, c.useCases, c.projectSlotLexicon, c.backendOutputSlotBindings]
+  );
   const onCloseConversationalPromptDialog = React.useCallback(
     () => setConversationalPromptDialogOpen(false),
     []
   );
-  const manualCatalogBackendTaskIds = React.useMemo(
-    () => extractManualCatalogBackendTaskIdsFromProjectData(projectData),
-    [projectData]
+  const onOpenWebhookReadinessReport = React.useCallback(() => {
+    setWebhookReadinessReport(c.buildWebhookReadinessReport());
+    setWebhookReadinessReportOpen(true);
+  }, [c.buildWebhookReadinessReport]);
+  const onCloseWebhookReadinessReport = React.useCallback(
+    () => setWebhookReadinessReportOpen(false),
+    []
   );
 
   /**
@@ -1008,6 +1048,51 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     },
     [stepSetter]
   );
+
+  const openSlotMappingForMappingWork = React.useCallback(() => {
+    setCostsViewActive(false);
+    setAgentInterfacePanelOpen(false);
+    onSelectWizardStep(AGENT_WIZARD_PROMPTS_STEP_INDEX);
+    useCaseGenWizard.selectStep(0);
+    setSlotMappingOpenRequestNonce((n) => n + 1);
+  }, [onSelectWizardStep, useCaseGenWizard]);
+
+  React.useEffect(() => {
+    c.registerOpenSlotMappingOnCompileFail(openSlotMappingForMappingWork);
+  }, [c.registerOpenSlotMappingOnCompileFail, openSlotMappingForMappingWork]);
+
+  const onOpenConversationalPromptDialog = React.useCallback(() => {
+    if (!hasCatalogUseCases) {
+      window.alert('Aggiungi almeno uno use case prima di copiare il system prompt.');
+      return;
+    }
+    if (!canCreateConversationalPrompt) {
+      window.alert(
+        'Completa la compilazione degli use case (o usa «Compila e Copy system prompt») prima di copiare.'
+      );
+      return;
+    }
+    setConversationalPromptDialogOpen(true);
+  }, [hasCatalogUseCases, canCreateConversationalPrompt]);
+
+  const onCompileAndCopySystemPrompt = React.useCallback(() => {
+    if (!hasCatalogUseCases) {
+      window.alert('Aggiungi almeno uno use case prima di compilare.');
+      return;
+    }
+    void c.compileUseCasePhrasesForCatalog().then((ok) => {
+      if (ok) {
+        setConversationalPromptDialogOpen(true);
+        return;
+      }
+      openSlotMappingForMappingWork();
+    });
+  }, [
+    hasCatalogUseCases,
+    c.compileUseCasePhrasesForCatalog,
+    openSlotMappingForMappingWork,
+  ]);
+
   const onSelectCostsView = React.useCallback(() => {
     setCostsViewActive(true);
     setAgentInterfacePanelOpen(false);
@@ -1251,7 +1336,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     <AIAgentReviewToolbar channel={agentReviewChannel} />
   ) : null;
 
-  const deploySlot: React.ReactNode = canCreateConversationalPrompt ? (
+  const deploySlot: React.ReactNode = hasCatalogUseCases ? (
     <AIAgentDeployMenu
       voicesByPlatform={voicesByPlatform}
       onUploadToPlatform={(platform, voice) => {
@@ -1259,14 +1344,31 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       }}
       onFixVoice={onFixVoiceForPlatform}
       onCopySystemPrompt={onOpenConversationalPromptDialog}
+      onCompileAndCopySystemPrompt={onCompileAndCopySystemPrompt}
+      onOpenWebhookReadinessReport={onOpenWebhookReadinessReport}
+      compilePhrasesBusy={c.compilePhrasesBusy}
       copySystemPromptDisabled={!canCreateConversationalPrompt}
-      copySystemPromptDisabledReason="Disponibile quando tutti gli use case sono compilabili (frase canonica presente)."
+      copySystemPromptDisabledReason={
+        canCreateConversationalPrompt
+          ? undefined
+          : 'Use case non ancora proiettabili: usa «Compila e Copy» o completa Slot mapping.'
+      }
+      compileAndCopyDisabled={!hasCatalogUseCases}
+      compileAndCopyDisabledReason="Aggiungi almeno uno use case al catalogo."
+      catalogUploadReady={catalogDeployReady}
+      catalogUploadBlockedReason={
+        catalogDeployReady
+          ? undefined
+          : formatMappingBlockedReasonShort(c.compileMappingBanner)
+      }
       availableStyleIds={deployAvailableStyleIds}
       countByStyleId={deployCountByStyleId}
       deployStyleId={c.agentConversationDeployStyleId}
       onDeployStyleIdChange={c.setAgentConversationDeployStyleId}
       logUseCaseEnabled={c.agentLogUseCase}
       onToggleLogUseCase={c.setAgentLogUseCase}
+      logBackendCallsEnabled={c.agentLogBackendCalls}
+      onToggleLogBackendCalls={c.setAgentLogBackendCalls}
       immediateStartEnabled={c.agentImmediateStart}
       onToggleImmediateStart={c.setAgentImmediateStart}
     />
@@ -1342,6 +1444,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setUseCaseGlobalStyleId: c.setUseCaseGlobalStyleId,
     agentUseCaseStyleLearningNotes: c.agentUseCaseStyleLearningNotes,
     setAgentUseCaseStyleLearningNotes: c.setAgentUseCaseStyleLearningNotes,
+    agentStartPromptConfig: c.agentStartPromptConfig,
+    setAgentStartPromptConfig: c.setAgentStartPromptConfig,
+    agentStartUseCaseId: c.agentStartUseCaseId,
+    setAgentStartUseCaseId: c.setAgentStartUseCaseId,
     previewStyleId: c.previewStyleId,
     setPreviewStyleId: c.setPreviewStyleId,
     initialStateTemplateJson: c.initialStateTemplateJson,
@@ -1432,16 +1538,28 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     setAgentConversationDeployStyleId: c.setAgentConversationDeployStyleId,
     agentLogUseCase: c.agentLogUseCase,
     setAgentLogUseCase: c.setAgentLogUseCase,
+    agentLogBackendCalls: c.agentLogBackendCalls,
+    setAgentLogBackendCalls: c.setAgentLogBackendCalls,
     agentBehavior: c.agentBehavior,
     setAgentBehavior: c.setAgentBehavior,
     agentUseCasesJson: c.agentUseCasesJson,
     agentConversationalRulesJson: c.agentConversationalRulesJson,
     compileUseCasePhrasesForCatalog: c.compileUseCasePhrasesForCatalog,
     compilePhrasesBusy: c.compilePhrasesBusy,
+    compileMappingBanner: c.compileMappingBanner,
+    registerOpenSlotMappingOnCompileFail: c.registerOpenSlotMappingOnCompileFail,
+    slotMappingOpenRequestNonce,
+    backendOutputSlotBindings: c.backendOutputSlotBindings,
     projectSlotLexicon: c.projectSlotLexicon,
+    reconcileLexiconOrphansWithCatalog: c.reconcileLexiconOrphansWithCatalog,
     approveLexiconSurface: c.approveLexiconSurface,
     revokeLexiconSurface: c.revokeLexiconSurface,
     updateLexiconSlotId: c.updateLexiconSlotId,
+    updateSurfaceSendHint: c.updateSurfaceSendHint,
+    parameterDestinationCatalog: c.parameterDestinationCatalog,
+    applyParameterDestination: c.applyParameterDestination,
+    backendSendParamLeaves: c.backendSendParamLeaves,
+    backendSendLeavesByTask: c.backendSendLeavesByTask,
 
     useCasePropagatorProvider: provider,
     useCasePropagatorModel: typeof model === 'string' ? model : '',
@@ -1615,11 +1733,19 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           viewport) — sta sopra al dock ma sotto la chrome esterna. Usa portal interno via
           `absolute inset-0 z-[60]` (vedi `ConversationalPromptDialog`).
         */}
+        <WebhookReadinessReportDialog
+          open={webhookReadinessReportOpen}
+          report={webhookReadinessReport}
+          onClose={onCloseWebhookReadinessReport}
+        />
         <ConversationalPromptDialog
           open={conversationalPromptDialogOpen}
           useCases={c.useCases}
+          startPrompt={c.agentStartPromptConfig}
+          startUseCaseId={c.agentStartUseCaseId}
           conversationalRules={c.conversationalRules}
           includeLog={c.agentLogUseCase}
+          includeBackendLog={c.agentLogBackendCalls}
           agentBehavior={c.agentBehavior}
           catalogFormat={conversationalCatalogFormat}
           onCatalogFormatChange={setConversationalCatalogFormat}
@@ -1627,6 +1753,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           backendCatalog={projectData?.backendCatalog}
           manualCatalogBackendTaskIds={manualCatalogBackendTaskIds}
           knowledgeBaseDocuments={c.knowledgeBaseDocuments}
+          projectSlotLexicon={c.projectSlotLexicon}
+          backendOutputSlotBindings={c.backendOutputSlotBindings}
           onClose={onCloseConversationalPromptDialog}
         />
       </div>

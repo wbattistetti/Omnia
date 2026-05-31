@@ -20,7 +20,10 @@ import {
 import { stableJsonStringify } from '../utils/stableJsonStringify';
 import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
 import type { BackendOutputDef } from '../utils/backendCall/mapJsonResponseToWireOutputs';
-import { logBackendCallTest } from '../debug/backendCallTestDebug';
+import { logBackendCallTest, warnBackendCallTest } from '../debug/backendCallTestDebug';
+import { isEmptyBackendTestBodyJson } from '../domain/backendTest/describeBackendTestHttpPayload';
+import { applyAgentSendHintsToJsonBody } from '../domain/backendOutputSlotBinding/applySendHintsToHttpBody';
+import type { AgentBackendOutputSlotBindings } from '../domain/backendOutputSlotBinding/types';
 
 function mergeRow(prev: BackendMockTableRow, patch: Partial<BackendMockTableRow>): BackendMockTableRow {
   const pt = patch.testRun;
@@ -110,7 +113,25 @@ export type UseBackendTestRunParams = {
   outputDefs: BackendOutputDef[];
   /** Valori striscia endpoint (internalName): uniti a `row.inputs` prima della HTTP; la riga vince. */
   endpointInvocationFallback?: Record<string, string>;
+  /** Send hints agente (surface → sendPath ISO): applicati al body POST prima del proxy. */
+  agentSlotBindings?: AgentBackendOutputSlotBindings | null;
 };
+
+function applySendHintsToBuiltBody(
+  bodyJson: string | null,
+  bindings: AgentBackendOutputSlotBindings | null | undefined
+): string | null {
+  if (!bodyJson?.trim() || !bindings?.sendHints?.length) return bodyJson;
+  try {
+    const parsed = JSON.parse(bodyJson) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return bodyJson;
+    const body = { ...(parsed as Record<string, unknown>) };
+    applyAgentSendHintsToJsonBody(body, bindings);
+    return stableJsonStringify(body);
+  } catch {
+    return bodyJson;
+  }
+}
 
 export function useBackendTestRun(params: UseBackendTestRunParams) {
   const pRef = useRef(params);
@@ -177,8 +198,29 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
         sendEntries: p.sendEntries,
         rowInputs: mergedInputs,
       });
+      const bodyJson = applySendHintsToBuiltBody(built.bodyJson, p.agentSlotBindings);
+      const builtForProxy =
+        bodyJson === built.bodyJson ? built : { ...built, bodyJson };
 
-      const proxy = await forwardBackendCallViaProxy(built);
+      const emptyBody = isEmptyBackendTestBodyJson(builtForProxy.bodyJson);
+      logBackendCallTest('runRow: richiesta HTTP', {
+        rowId,
+        url: built.url,
+        method: built.method,
+        bodyJson: builtForProxy.bodyJson,
+        mergedInputs,
+        endpointFallbackKeys: Object.keys(p.endpointInvocationFallback ?? {}),
+        emptyBody,
+        sendHintsApplied: Boolean(p.agentSlotBindings?.sendHints?.length),
+      });
+      if (emptyBody) {
+        warnBackendCallTest(
+          'Body POST vuoto ({}) — nessun param SEND in riga né letterale in Signature. Il backend userà solo i suoi default; la tabella mostrerà la risposta reale (niente merge con output vecchi).',
+          { rowId, url: builtForProxy.url }
+        );
+      }
+
+      const proxy = await forwardBackendCallViaProxy(builtForProxy);
 
       if (proxy.error === BACKEND_CALL_PROXY_ENVELOPE_NOT_JSON) {
         const hint =
@@ -214,7 +256,10 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
           ? mapJsonResponseToWireOutputs(parsed, p.outputDefs)
           : ({} as Record<string, unknown>);
 
-      const nextOutputs = { ...(row.outputs ?? {}), ...mapped } as Record<string, unknown>;
+      /** HTTP reale: sostituisce gli output (no merge con mock precedenti). */
+      const nextOutputs = (
+        forceHttp ? mapped : { ...(row.outputs ?? {}), ...mapped }
+      ) as Record<string, unknown>;
       const rawJson =
         parsed !== null ? stableJsonStringify(parsed) : stableJsonStringify({ bodyText: proxy.bodyText });
       const preview =
@@ -233,11 +278,15 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
           lastTestedAt: ts,
         },
       });
+      const responsePreview =
+        bodyForTarget.length > 600 ? `${bodyForTarget.slice(0, 600)}…` : bodyForTarget;
       logBackendCallTest('runRow: HTTP completato', {
         rowId,
         status: proxy.status,
         lastTestedAt: ts,
         forceHttp,
+        responsePreview,
+        mappedOutputKeys: Object.keys(nextOutputs),
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

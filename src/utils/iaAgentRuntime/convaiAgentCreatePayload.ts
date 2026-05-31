@@ -54,6 +54,8 @@ export type ConversationConfigFragmentOptions = {
   manualCatalogBackendTaskIds?: readonly string[];
   /** Catalogo backend progetto (analisi IA → sezione USE OF BACKENDS nel prompt). */
   backendCatalog?: import('@domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob;
+  /** Progetto corrente (gateway ConvAI webhook). */
+  projectId?: string;
 };
 
 function primaryVoiceId(cfg: IAAgentConfig): string {
@@ -199,8 +201,15 @@ export function conversationConfigFragmentFromIaAgentConfig(
   const manualCatalogBackendTaskIds = options?.manualCatalogBackendTaskIds ?? [];
 
   /** ElevenLabs accetta `webhook` | `client` | … — non `function` (OpenAI). */
+  const agentTaskId = options?.task?.id?.trim() || '';
+  const projectId =
+    options?.projectId?.trim() || taskRepository.getCurrentProjectId()?.trim() || '';
+  const convaiGateway =
+    projectId && agentTaskId ? { projectId, agentTaskId } : undefined;
+
   const elevenTools = buildElevenLabsConvaiPromptTools(cfg, (id) => taskRepository.getTask(id), {
     manualCatalogBackendTaskIds,
+    convaiGateway,
   });
 
   let promptText = resolveConvaiAgentPromptText(

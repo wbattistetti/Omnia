@@ -35,6 +35,16 @@ export type ToolbarButton = {
    *  'title-suffix' → rendered immediately after the tab title (not pushed right).
    *  Default (undefined) → rendered right-aligned in the tab toolbar strip. */
   position?: 'title-suffix';
+  /** Sottopulsante affiancato (es. «Esegui» dentro «Test Backend»). */
+  subAction?: {
+    label: string;
+    onClick?: () => void;
+    title?: string;
+    disabled?: boolean;
+    /** Durante bulk test HTTP: spinner + `busyLabel`. */
+    busy?: boolean;
+    busyLabel?: string;
+  };
 };
 
 // Flow tab - for flowchart canvas

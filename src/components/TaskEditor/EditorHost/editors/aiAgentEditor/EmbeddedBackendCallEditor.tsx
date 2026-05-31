@@ -22,6 +22,9 @@ function embeddedToolbarSignature(buttons: ToolbarButton[]): string {
       active: Boolean(b?.active),
       visible: b?.visible !== false,
       buttonId: (b as { buttonId?: string })?.buttonId,
+      subBusy: Boolean(b?.subAction?.busy),
+      subBusyLabel: b?.subAction?.busyLabel ?? '',
+      subDisabled: Boolean(b?.subAction?.disabled),
     }))
   );
 }

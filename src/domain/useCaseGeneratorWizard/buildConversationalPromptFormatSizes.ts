@@ -53,7 +53,12 @@ export function buildConversationalPromptFormatSizes(
     throw new Error('buildConversationalPromptFormatSizes: use case non proiettabili.');
   }
   const includeLog = options.includeLog === true;
-  const projected = projectAllUseCasesToConversationalJson(useCases, { includeLog });
+  const projected = projectAllUseCasesToConversationalJson(useCases, {
+    includeLog,
+    lexicon: options.lexicon,
+    backendOutputSlotBindings: options.backendOutputSlotBindings,
+  });
+  const startPrompt = options.startPrompt;
 
   const catalogByFormat = {} as Record<ConversationalCatalogFormat, string>;
   for (const { id } of CONVERSATIONAL_CATALOG_FORMAT_OPTIONS) {
@@ -64,7 +69,11 @@ export function buildConversationalPromptFormatSizes(
 
   const out = {} as Record<ConversationalCatalogFormat, ConversationalPromptFormatSizeEntry>;
   for (const { id } of CONVERSATIONAL_CATALOG_FORMAT_OPTIONS) {
-    const totalText = buildConversationalPrompt(useCases, { ...options, catalogFormat: id });
+    const totalText = buildConversationalPrompt(useCases, {
+      ...options,
+      catalogFormat: id,
+      startPrompt,
+    });
     const catalogText = catalogByFormat[id];
     out[id] = {
       total: measurePromptText(totalText),

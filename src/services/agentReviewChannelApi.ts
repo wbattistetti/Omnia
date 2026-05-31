@@ -145,8 +145,8 @@ export async function saveAgentReviewChannel(params: {
   };
 }
 
-/** Intervallo consigliato per poll di backup se SSE non disponibile. */
-export const REVIEW_CHANNEL_POLL_MS = 20_000;
+/** Poll di backup lento (SSE copre gli aggiornamenti push). */
+export const REVIEW_CHANNEL_POLL_MS = 120_000;
 
 /**
  * SSE: il server invia `review_channel_updated` dopo PUT o POST .../notify (portale).

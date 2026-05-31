@@ -42,6 +42,8 @@ export interface MappingEntry {
   /** Agent interface: provenance from backend SEND/RECEIVE drag. */
   sourceBackendTaskId?: string;
   sourceSide?: 'send' | 'receive';
+  /** Solo UI Signature: proprietà da schema OpenAPI annidato, non persistita sul task. */
+  schemaOutlineOnly?: boolean;
 }
 
 export function createMappingEntry(partial: Partial<MappingEntry> & Pick<MappingEntry, 'wireKey'>): MappingEntry {
@@ -80,6 +82,7 @@ export function createMappingEntry(partial: Partial<MappingEntry> & Pick<Mapping
     ...(partial.sourceSide === 'send' || partial.sourceSide === 'receive'
       ? { sourceSide: partial.sourceSide }
       : {}),
+    ...(partial.schemaOutlineOnly ? { schemaOutlineOnly: true } : {}),
   };
 }
 

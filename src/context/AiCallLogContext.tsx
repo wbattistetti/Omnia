@@ -1,13 +1,12 @@
 /**
- * Global cache of AI calls (last N=500). Polls `/api/ai-calls` every `POLL_INTERVAL_MS` and
- * exposes:
+ * Global cache of AI calls (last N=500). Polls `/api/ai-calls` on a slow interval while the tab
+ * is visible and exposes:
  *  - `calls`: full list (newest first), used by the `$` dialog,
  *  - `lastByPurpose`: O(1) lookup for `useLastCallCost(purpose)` to render "Last $X.XX",
  *  - `refreshNow`: imperative refresh after a known mutation (e.g. just clicked an AI button),
  *  - `clear`: wipe the log via the backend (debug / reset).
  *
- * Polling is intentionally simple; we can swap it for SSE without changing the consumer surface
- * if we ever need real-time push for multiple designers.
+ * Background polls are silent (no `loading` flip) to avoid re-rendering the whole app every tick.
  */
 
 import React from 'react';
@@ -18,8 +17,10 @@ import {
   fetchExchangeRate,
   AiExchangeRate,
 } from '../services/aiCallsApi';
+import { useDocumentVisible } from '../hooks/useDocumentVisible';
 
-const POLL_INTERVAL_MS = 5000;
+/** Slow poll — sufficient for "last cost" badges; avoids Network noise. */
+const POLL_INTERVAL_MS = 30_000;
 const FX_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface AiCallLogContextValue {
@@ -46,14 +47,16 @@ function indexByPurpose(records: AiCallRecord[]): ReadonlyMap<string, AiCallReco
 }
 
 export function AiCallLogProvider({ children }: { children: React.ReactNode }): React.ReactElement {
+  const documentVisible = useDocumentVisible();
   const [calls, setCalls] = React.useState<AiCallRecord[]>([]);
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [exchangeRate, setExchangeRate] = React.useState<AiExchangeRate | null>(null);
   const lastSignatureRef = React.useRef<string>('');
 
-  const refreshNow = React.useCallback(async () => {
-    setLoading(true);
+  const fetchCalls = React.useCallback(async (options?: { showLoading?: boolean }) => {
+    const showLoading = options?.showLoading === true;
+    if (showLoading) setLoading(true);
     try {
       const items = await fetchAiCalls();
       const signature = items.length ? `${items[0]?.id ?? ''}|${items.length}` : 'empty';
@@ -65,9 +68,13 @@ export function AiCallLogProvider({ children }: { children: React.ReactNode }): 
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }, []);
+
+  const refreshNow = React.useCallback(async () => {
+    await fetchCalls({ showLoading: true });
+  }, [fetchCalls]);
 
   const clear = React.useCallback(async () => {
     await clearAiCalls();
@@ -76,12 +83,13 @@ export function AiCallLogProvider({ children }: { children: React.ReactNode }): 
   }, []);
 
   React.useEffect(() => {
-    void refreshNow();
+    if (!documentVisible) return;
+    void fetchCalls({ showLoading: true });
     const id = window.setInterval(() => {
-      void refreshNow();
+      void fetchCalls();
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [refreshNow]);
+  }, [documentVisible, fetchCalls]);
 
   React.useEffect(() => {
     let cancelled = false;

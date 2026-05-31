@@ -304,6 +304,30 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     expect(JSON.stringify(body)).not.toMatch(/\$ref|additionalProperties/);
   });
 
+  it('rewrites POST webhook URL to Omnia convai gateway (not backend API origin)', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bk_gw'],
+      tools: [],
+    } as IAAgentConfig;
+    const tools = buildElevenLabsConvaiPromptTools(
+      cfg,
+      (id) =>
+        id === 'bk_gw'
+          ? backendTask({
+              id: 'bk_gw',
+              endpoint: { url: 'https://api.example.com/v1/slots', method: 'POST', headers: {} },
+            })
+          : null,
+      { convaiGateway: { projectId: 'proj-1', agentTaskId: 'agent-1' } }
+    );
+    expect(tools).toHaveLength(1);
+    const url = (tools[0].api_schema as { url: string }).url;
+    expect(url).toContain('/api/runtime/convai-webhook/proj-1/agent-1/bk_gw');
+    expect(url).toMatch(/^http:\/\/localhost:3100\//);
+    expect(url).not.toContain('api.example.com');
+  });
+
   it('buildConvaiWebhookToolFromBackendTask matches single webhook from catalog task', () => {
     const task = backendTask({
       id: 'bk_pub',

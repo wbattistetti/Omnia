@@ -24,6 +24,8 @@ import {
 
 /** Optional debugger lifecycle hooks + auto-start (default: manual Play only). */
 export type UseFlowModeChatOptions = {
+  /** Mostra righe DEBUG backend in messaggi bot (da task AI Agent `agentLogBackendCalls`). */
+  agentLogBackendCalls?: boolean;
   /** When true: auto-start when nodes/translations/engine are ready (legacy). */
   autoStart?: boolean;
   onSessionStarted?: () => void;
@@ -260,6 +262,7 @@ export function useFlowModeChat(
         id?: string;
         compilationFixError?: CompilationError;
         backendInvocations?: Message['backendInvocations'];
+        backendDebugText?: string;
         convaiWebhookInvocations?: Message['convaiWebhookInvocations'];
       }) => {
         const messageId =
@@ -290,6 +293,7 @@ export function useFlowModeChat(
           stepType: message.stepType,
           compilationFixError: message.compilationFixError,
           backendInvocations: message.backendInvocations,
+          backendDebugText: message.backendDebugText,
           convaiWebhookInvocations: message.convaiWebhookInvocations,
           ...(sourceTaskId ? { sourceTaskId } : {}),
         };
@@ -324,6 +328,7 @@ export function useFlowModeChat(
         lifecycleRef.current.onOrchestratorEnded?.();
       },
       orchestratorCompileRootFlowId: options?.orchestratorCompileRootFlowId ?? null,
+      agentLogBackendCalls: options?.agentLogBackendCalls === true,
       onWaitingForInput: (data?: {
         taskId: string;
         nodeId?: string;
@@ -366,6 +371,7 @@ export function useFlowModeChat(
       resolveNodeLabel,
       toReadableLabel,
       options?.orchestratorCompileRootFlowId,
+      options?.agentLogBackendCalls,
       debuggerController,
       setStartAgentRuntimeError,
       setOrchestratorTaskIdHint,

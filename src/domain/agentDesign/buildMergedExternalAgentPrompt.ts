@@ -10,6 +10,7 @@ import {
   type BuildConversationalPromptOptions,
 } from '@domain/useCaseGeneratorWizard/buildConversationalPrompt';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
+import type { AgentStartPromptConfig } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import { buildKbRuntimePromptSection } from './buildKbRuntimePromptSection';
 
 export type ExternalAgentPromptTabId = 'use-cases' | 'backends' | 'knowledge-base';
@@ -24,6 +25,8 @@ const SECTION_SEPARATOR = '\n\n---\n\n';
 
 export type BuildExternalAgentPromptSectionsParams = BuildConversationalPromptOptions & {
   useCases: readonly AIAgentUseCase[];
+  startPrompt?: AgentStartPromptConfig;
+  startUseCaseId?: string;
   agentTaskId?: string;
   backendCatalog?: ProjectBackendCatalogBlob;
   manualCatalogBackendTaskIds?: readonly string[];
@@ -34,7 +37,12 @@ export type BuildExternalAgentPromptSectionsParams = BuildConversationalPromptOp
 export function buildExternalAgentPromptSections(
   params: BuildExternalAgentPromptSectionsParams
 ): ExternalAgentPromptSections {
-  const useCases = buildConversationalPrompt(params.useCases, params);
+  const useCases = buildConversationalPrompt(params.useCases, {
+    ...params,
+    startPrompt: params.startPrompt,
+    startUseCaseId: params.startUseCaseId,
+    includeBackendLog: params.includeBackendLog,
+  });
   const agentTaskId = String(params.agentTaskId ?? '').trim();
   const backends = agentTaskId
     ? buildUseOfBackendsPromptSection({

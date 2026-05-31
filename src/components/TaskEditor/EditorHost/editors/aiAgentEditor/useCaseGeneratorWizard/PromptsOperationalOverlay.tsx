@@ -51,7 +51,7 @@ export function PromptsOperationalOverlay({
 }: PromptsOperationalOverlayProps): React.ReactElement {
   return (
     <div
-      className="absolute inset-y-0 right-0 z-20 flex w-[min(420px,92%)] flex-col border-l border-slate-300/80 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100/95 shadow-[-8px_0_24px_rgba(15,23,42,0.12)] dark:border-slate-700 dark:from-slate-900/95 dark:via-slate-950 dark:to-slate-950/90"
+      className="absolute inset-y-0 right-0 z-20 flex w-[min(420px,92%)] flex-col border-l border-slate-300/80 bg-slate-50 shadow-[-8px_0_24px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950"
       {...tutorIdProps(MODE_UI_ID[mode])}
       role="dialog"
       aria-label={MODE_LABELS[mode]}
@@ -69,7 +69,7 @@ export function PromptsOperationalOverlay({
           <X size={16} aria-hidden />
         </button>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
         {mode === 'json' ? (
           <div className="h-full min-h-0 overflow-hidden px-2 py-2">
             <ConversationalJsonPanel

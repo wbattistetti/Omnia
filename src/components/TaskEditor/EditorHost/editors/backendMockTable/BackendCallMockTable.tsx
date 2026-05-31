@@ -3,17 +3,23 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { AlignLeft, AlertTriangle, Braces, Plus, Trash2 } from 'lucide-react';
 import {
   BackendExecutionMode,
   backendTestNoteKey,
   type BackendMockTableRow,
 } from '../../../../../domain/backendTest/backendTestRowTypes';
-import { isBackendMockRowAnyInputFilled } from '../../../../../domain/backendTest/backendMockRowCompletion';
+import {
+  isBackendMockRowIncompleteForBulkTest,
+  isBackendMockTableReadyForBulkTest,
+} from '../../../../../domain/backendTest/backendMockTestReadiness';
 import type { MappingEntry } from '../../../../FlowMappingPanel/mappingTypes';
 import type { BackendOutputDef } from '../../../../../utils/backendCall/mapJsonResponseToWireOutputs';
 import { useBackendTestRun } from '../../../../../hooks/useBackendTestRun';
 import { logBackendCallTest } from '../../../../../debug/backendCallTestDebug';
+import { isEmptyBackendTestBodyJson } from '../../../../../domain/backendTest/describeBackendTestHttpPayload';
+import { buildSendHttpRequest } from '../../../../../utils/backendCall/buildSendHttpRequest';
 import type { OpenApiInputUiKind } from '../../../../../services/openApiBackendCallSpec';
 import { InputRow } from './InputRow';
 import { OutputCell } from './OutputCell';
@@ -79,6 +85,8 @@ export function BackendCallMockTable({
     const [showParkedColumns, setShowParkedColumns] = useState(false);
     /** Tutte le celle output: JSON compatto (JS) vs indentato (Pretty). */
     const [outputValueFormat, setOutputValueFormat] = useState<MockOutputValueFormat>('js');
+    /** Avviso dopo preflight bulk (body `{}` o celle in modifica non salvate). */
+    const [bulkPayloadHint, setBulkPayloadHint] = useState<string | null>(null);
 
     const allColumns = useMemo(() => {
       if (!columns?.length) {
@@ -110,10 +118,65 @@ export function BackendCallMockTable({
       [outputs]
     );
 
-    const getRows = useCallback(() => rows, [rows]);
+    const outputColumnNames = useMemo(
+      () => outputs.map((o) => o.internalName?.trim()).filter(Boolean) as string[],
+      [outputs]
+    );
 
-    const { errorByRowId, runRow } = useBackendTestRun({
-      getRows,
+    /** Righe per HTTP: include bozza cella SEND ancora in modifica (prima del ✓). */
+    const getRowsForTest = useCallback((): BackendMockTableRow[] => {
+      if (!editingCell || editingCell.type !== 'input') return rows;
+      return rows.map((row) => {
+        if (row.id !== editingCell.rowId) return row;
+        return {
+          ...row,
+          inputs: { ...(row.inputs ?? {}), [editingCell.param]: cellValue },
+        };
+      });
+    }, [rows, editingCell, cellValue]);
+
+    const applyCellEditRecipe = useCallback(
+      (prev: BackendMockTableRow[]): BackendMockTableRow[] => {
+        if (!editingCell) return prev;
+        const idx = prev.findIndex((r) => r.id === editingCell.rowId);
+        const isLast = idx === prev.length - 1;
+        const updated = prev.map((row) => {
+          if (row.id !== editingCell.rowId) return row;
+          const next = { ...row };
+          if (editingCell.type === 'input') {
+            next.inputs = { ...next.inputs, [editingCell.param]: cellValue };
+          } else {
+            next.outputs = { ...next.outputs, [editingCell.param]: cellValue };
+          }
+          return next;
+        });
+        if (isLast) {
+          return [
+            ...updated,
+            {
+              id: `row_${Date.now()}`,
+              inputs: {},
+              outputs: {},
+              testRun: { executionMode: defaultExecutionMode, notes: {} },
+            },
+          ];
+        }
+        return updated;
+      },
+      [cellValue, defaultExecutionMode, editingCell]
+    );
+
+    const commitPendingCellEdit = useCallback(() => {
+      if (!editingCell) return;
+      flushSync(() => {
+        onMockTableRecipe(applyCellEditRecipe);
+        setEditingCell(null);
+        setCellValue('');
+      });
+    }, [applyCellEditRecipe, editingCell, onMockTableRecipe]);
+
+    const { errorByRowId, loadingByRowId, runRow } = useBackendTestRun({
+      getRows: getRowsForTest,
       onRowsUpdate: onMockTableRecipe,
       defaultExecutionMode,
       endpointUrl: endpoint.url.trim(),
@@ -125,16 +188,21 @@ export function BackendCallMockTable({
       endpointInvocationFallback,
     });
 
-    /** Test bulk: righe con almeno una cella input non vuota (allineato al pulsante Test API). */
+    /** Test bulk: righe senza obbligatori SEND mancanti (opzionali vuoti ok). */
     const runBulkTestOnFilledRows = useCallback(async () => {
-      const currentRows = getRows();
+      const currentRows = getRowsForTest();
       const names = allMockInputInternalNames;
       if (names.length === 0) {
         logBackendCallTest('runBulkTestOnFilledRows: skip (nessun param SEND)');
         return;
       }
+      const fallback = endpointInvocationFallback ?? {};
+      if (!isBackendMockTableReadyForBulkTest(mappingSend, currentRows, fallback)) {
+        logBackendCallTest('runBulkTestOnFilledRows: skip (obbligatori SEND non soddisfatti)');
+        return;
+      }
       const ids = currentRows
-        .filter((r) => isBackendMockRowAnyInputFilled(r, names, endpointInvocationFallback))
+        .filter((r) => !isBackendMockRowIncompleteForBulkTest(r, mappingSend, fallback))
         .map((r) => r.id);
       logBackendCallTest('runBulkTestOnFilledRows: righe da eseguire', {
         rowIds: ids,
@@ -145,9 +213,71 @@ export function BackendCallMockTable({
         logBackendCallTest('runBulkTestOnFilledRows: nessuna riga con input, runRow non chiamato');
         return;
       }
-      await Promise.all(ids.map((id) => runRow(id, { forceHttp: true })));
-      logBackendCallTest('runBulkTestOnFilledRows: Promise.all completato', { rowIds: ids });
-    }, [getRows, allMockInputInternalNames, runRow, endpointInvocationFallback]);
+
+      let anyEmptyBody = false;
+      for (const id of ids) {
+        const row = currentRows.find((r) => r.id === id);
+        if (!row) continue;
+        const mergedInputs = { ...fallback, ...(row.inputs ?? {}) };
+        const built = buildSendHttpRequest({
+          endpointUrl: endpoint.url.trim(),
+          method: endpoint.method,
+          endpointHeaders: endpoint.headers,
+          portalConnectionId,
+          sendEntries: mappingSend,
+          rowInputs: mergedInputs,
+        });
+        if (isEmptyBackendTestBodyJson(built.bodyJson)) {
+          anyEmptyBody = true;
+          break;
+        }
+      }
+      setBulkPayloadHint(
+        anyEmptyBody
+          ? 'Invio con body {} — nessun valore in tabella né letterale in Signature. Il backend userà i suoi default. Dettaglio in console [Omnia:BackendCallTest] (bodyJson, mergedInputs).'
+          : null
+      );
+
+      onMockTableRecipe((prev) =>
+        prev.map((row) => {
+          if (!ids.includes(row.id)) return row;
+          const clearedOutputs = { ...(row.outputs ?? {}) };
+          for (const col of outputColumnNames) {
+            delete clearedOutputs[col];
+          }
+          return {
+            ...row,
+            outputs: clearedOutputs,
+            testRun: {
+              executionMode: row.testRun?.executionMode ?? defaultExecutionMode,
+              notes: row.testRun?.notes ?? {},
+              lastResponse: undefined,
+            },
+          };
+        })
+      );
+
+      try {
+        await Promise.all(ids.map((id) => runRow(id, { forceHttp: true })));
+        logBackendCallTest('runBulkTestOnFilledRows: Promise.all completato', { rowIds: ids });
+      } finally {
+        commitPendingCellEdit();
+      }
+    }, [
+      commitPendingCellEdit,
+      getRowsForTest,
+      allMockInputInternalNames,
+      mappingSend,
+      runRow,
+      endpointInvocationFallback,
+      onMockTableRecipe,
+      outputColumnNames,
+      defaultExecutionMode,
+      endpoint.url,
+      endpoint.method,
+      endpoint.headers,
+      portalConnectionId,
+    ]);
 
     const lastHandledBulkNonce = useRef(0);
     useEffect(() => {
@@ -208,32 +338,7 @@ export function BackendCallMockTable({
 
     const saveCellEdit = () => {
       if (!editingCell) return;
-      onMockTableRecipe((prev) => {
-        const idx = prev.findIndex((r) => r.id === editingCell.rowId);
-        const isLast = idx === prev.length - 1;
-        const updated = prev.map((row) => {
-          if (row.id !== editingCell.rowId) return row;
-          const next = { ...row };
-          if (editingCell.type === 'input') {
-            next.inputs = { ...next.inputs, [editingCell.param]: cellValue };
-          } else {
-            next.outputs = { ...next.outputs, [editingCell.param]: cellValue };
-          }
-          return next;
-        });
-        if (isLast) {
-          return [
-            ...updated,
-            {
-              id: `row_${Date.now()}`,
-              inputs: {},
-              outputs: {},
-              testRun: { executionMode: defaultExecutionMode, notes: {} },
-            },
-          ];
-        }
-        return updated;
-      });
+      onMockTableRecipe(applyCellEditRecipe);
       setEditingCell(null);
       setCellValue('');
     };
@@ -314,12 +419,20 @@ export function BackendCallMockTable({
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
-          <div className="overflow-x-auto">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {bulkPayloadHint ? (
+            <div
+              className="shrink-0 border-b border-amber-600/40 bg-amber-950/40 px-4 py-2 text-xs text-amber-100/95"
+              role="status"
+            >
+              {bulkPayloadHint}
+            </div>
+          ) : null}
+          <div className="min-h-0 flex-1 overflow-auto p-4">
             <table className="border-collapse" style={{ tableLayout: 'auto', width: 'auto' }}>
               <thead>
                 <tr className="border-b border-slate-700">
-                  <th className="sticky left-0 z-10 min-w-[40px] bg-slate-800 px-1 py-2 text-left text-xs font-semibold text-slate-400">
+                  <th className="sticky left-0 top-0 z-30 min-w-[40px] border-b border-slate-700 bg-slate-800 px-1 py-2 text-left text-xs font-semibold text-slate-400 shadow-[0_1px_0_0_rgba(15,23,42,0.9)]">
                     #
                   </th>
                   {visibleInputColumns.map((col) => {
@@ -328,8 +441,10 @@ export function BackendCallMockTable({
                     return (
                       <th
                         key={`in_${col.name}`}
-                        className={`whitespace-nowrap border-l border-t-2 border-b-2 border-slate-700 px-2 py-2 text-left text-xs font-semibold ${
-                          isParked ? 'bg-slate-800/50 text-slate-500' : 'border-cyan-500 bg-cyan-500/20 text-cyan-500'
+                        className={`sticky top-0 z-20 whitespace-nowrap border-l border-t-2 border-b-2 border-slate-700 px-2 py-2 text-left text-xs font-semibold shadow-[0_1px_0_0_rgba(15,23,42,0.9)] ${
+                          isParked
+                            ? 'bg-slate-800 text-slate-500'
+                            : 'border-cyan-500 bg-cyan-950 text-cyan-400'
                         }`}
                       >
                         <div className="flex flex-col">
@@ -350,8 +465,10 @@ export function BackendCallMockTable({
                     return (
                       <th
                         key={`out_${col.name}`}
-                        className={`whitespace-nowrap border-l border-t-2 border-b-2 border-slate-700 px-2 py-2 text-left text-xs font-semibold ${
-                          isParked ? 'bg-slate-800/50 text-slate-500' : 'border-green-500 bg-green-500/20 text-green-500'
+                        className={`sticky top-0 z-20 whitespace-nowrap border-l border-t-2 border-b-2 border-slate-700 px-2 py-2 text-left text-xs font-semibold shadow-[0_1px_0_0_rgba(15,23,42,0.9)] ${
+                          isParked
+                            ? 'bg-slate-800 text-slate-500'
+                            : 'border-green-500 bg-emerald-950 text-green-400'
                         }`}
                       >
                         <div className="flex flex-col">
@@ -366,7 +483,7 @@ export function BackendCallMockTable({
                       </th>
                     );
                   })}
-                  <th className="min-w-[88px] border-l border-slate-700 bg-slate-800 px-1 py-2 text-center text-xs font-semibold text-slate-400">
+                  <th className="sticky top-0 z-20 min-w-[88px] border-b border-l border-slate-700 bg-slate-800 px-1 py-2 text-center text-xs font-semibold text-slate-400 shadow-[0_1px_0_0_rgba(15,23,42,0.9)]">
                     <div className="flex flex-col items-center gap-1">
                       <span>Actions</span>
                       <div
@@ -407,17 +524,14 @@ export function BackendCallMockTable({
               </thead>
               <tbody>
                 {rows.map((row, rowIndex) => {
-                  const rowHasAnyInput =
-                    allMockInputInternalNames.length > 0 &&
-                    isBackendMockRowAnyInputFilled(
-                      row,
-                      allMockInputInternalNames,
-                      endpointInvocationFallback
-                    );
                   const showRowIncomplete =
                     Boolean(highlightIncompleteRows) &&
                     allMockInputInternalNames.length > 0 &&
-                    !rowHasAnyInput;
+                    isBackendMockRowIncompleteForBulkTest(
+                      row,
+                      mappingSend,
+                      endpointInvocationFallback ?? {}
+                    );
                   return (
                   <tr
                     key={row.id}
@@ -495,6 +609,7 @@ export function BackendCallMockTable({
                             onSaveMockValue={(next) => saveOutputMock(row.id, col.name, next)}
                             valueTooltip={outputValueTooltipByInternalName?.[col.name]}
                             valueFormat={outputValueFormat}
+                            isLoading={Boolean(loadingByRowId[row.id])}
                           />
                         </td>
                       );
@@ -515,7 +630,7 @@ export function BackendCallMockTable({
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end">
+          <div className="flex shrink-0 justify-end border-t border-slate-700 px-4 py-2">
             <button
               type="button"
               onClick={addRow}

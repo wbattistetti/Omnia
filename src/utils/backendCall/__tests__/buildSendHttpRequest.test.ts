@@ -33,6 +33,25 @@ describe('buildSendHttpRequest', () => {
     expect(built.url).toContain('q=hello');
   });
 
+  it('uses SEND literalConstant when mock cell is empty', () => {
+    const built = buildSendHttpRequest({
+      endpointUrl: 'https://api.example.com/book',
+      method: 'POST',
+      sendEntries: [
+        createMappingEntry({
+          wireKey: 'projectId',
+          apiField: 'projectId',
+          literalConstant: 'app-1',
+        }),
+        entry('windowDays', 'windowDays'),
+      ],
+      rowInputs: { windowDays: '10' },
+    });
+    const body = JSON.parse(built.bodyJson!);
+    expect(body.projectId).toBe('app-1');
+    expect(body.windowDays).toBe(10);
+  });
+
   it('substitutes path placeholders and excludes from body', () => {
     const built = buildSendHttpRequest({
       endpointUrl: 'https://api.example.com/items/{id}/sub',

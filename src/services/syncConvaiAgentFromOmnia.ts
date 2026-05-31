@@ -10,6 +10,11 @@ import {
 } from '@domain/agentDesign/buildMergedExternalAgentPrompt';
 import { KNOWLEDGE_BASE_PROMPT_HEADER } from '@domain/agentDesign/buildKbRuntimePromptSection';
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
+import {
+  parseAgentStartPromptJson,
+  resolveAgentStartPromptSpeechText,
+} from '@domain/useCaseGeneratorWizard/agentStartPrompt';
+import { resolveStartUseCaseSpeechText } from '@domain/useCaseGeneratorWizard/startUseCase';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { openApiCompileErrorsFromTask } from '@domain/openApi/openApiCompileErrorsFromTask';
 import { buildConvaiWebhookToolFromBackendTask } from '@utils/iaAgentRuntime/elevenLabsConvaiToolsPayload';
@@ -67,10 +72,16 @@ function buildSyncPromptText(
   params: ConvaiAgentSyncParams,
   kbResolved: readonly ResolvedKbForSync[]
 ): string {
+  const startPrompt = parseAgentStartPromptJson(
+    String(params.agentTask.agentStartPromptJson ?? '')
+  );
   const sections = buildExternalAgentPromptSections({
     useCases: params.useCases,
+    startPrompt,
+    startUseCaseId: String(params.agentTask.agentStartUseCaseId ?? '').trim() || undefined,
     conversationalRules: params.conversationalRules,
     includeLog: params.includeLog,
+    includeBackendLog: params.includeBackendLog,
     agentBehavior: params.agentBehavior ?? 'B',
     catalogFormat: params.catalogFormat ?? DEFAULT_CONVERSATIONAL_CATALOG_FORMAT,
     agentTaskId: String(params.agentTask.id ?? '').trim(),
@@ -273,7 +284,7 @@ export async function syncConvaiAgentFromOmnia(
   if (kbDocs.length > 0 && kbRefs.length === 0) {
     const hint =
       kbSkipped.length > 0
-        ? ` Nessun testo recuperabile per: ${kbSkipped.slice(0, 5).join(', ')}${kbSkipped.length > 5 ? '…' : ''}. Completa l’analisi del documento o verifica il salvataggio nel repository progetto.`
+        ? ` Nessun testo recuperabile per: ${kbSkipped.slice(0, 5).join(', ')}${kbSkipped.length > 5 ? '…' : ''}. Completa l’analisi del documento o ricarica il file nella Knowledge Base (repository progetto).`
         : ' Verifica parseStatus «ready» e repositoryDocumentId sui file KB.';
     return {
       ok: false,
@@ -313,9 +324,17 @@ export async function syncConvaiAgentFromOmnia(
   }
 
   const immediateStart = agentTask.agentImmediateStart === true;
+  const startUseCaseId = String(agentTask.agentStartUseCaseId ?? '').trim();
+  const startSpeech = startUseCaseId
+    ? resolveStartUseCaseSpeechText(params.useCases, startUseCaseId)
+    : resolveAgentStartPromptSpeechText(
+        parseAgentStartPromptJson(String(agentTask.agentStartPromptJson ?? ''))
+      );
   const conversationConfig: Record<string, unknown> = {
     agent: {
-      first_message: immediateStart ? '' : CONVAI_DEFAULT_FIRST_MESSAGE,
+      first_message: immediateStart
+        ? ''
+        : startSpeech || CONVAI_DEFAULT_FIRST_MESSAGE,
       language: lang,
       prompt,
     },

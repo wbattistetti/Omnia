@@ -55,42 +55,35 @@ export class RowHeuristicsService {
       method: separation.method
     });
 
-    // 1️⃣ EURISTICA 1: interpreta la Part A e decide il TaskType usando embeddings
-    let taskType = TaskType.UNDEFINED;
-    try {
-      const { EmbeddingService } = await import('./EmbeddingService');
+    // 1️⃣ EURISTICA 1: pattern prima (istantaneo); embedding solo se UNDEFINED
+    const textForTaskType = separation.partA || trimmedLabel;
+    const heuristic1Result = await inferTaskType(textForTaskType, {
+      languageOrder: ['IT', 'EN', 'PT'] as any,
+    });
+    let taskType = heuristic1Result.type;
 
-      // ✅ Usa partA per TaskType classification (se vuota, usa full text)
-      const textForTaskType = separation.partA || trimmedLabel;
-      const taskTypeMatch = await EmbeddingService.findBestMatch(
-        textForTaskType,
-        'taskType',  // ✅ Usa embeddings TaskType invece di pattern
-        0.65         // ✅ Threshold più basso per classificazione (vs 0.70 per template matching)
-      );
+    if (taskType === TaskType.UNDEFINED) {
+      try {
+        const { EmbeddingService } = await import('./EmbeddingService');
+        const taskTypeMatch = await EmbeddingService.findBestMatch(
+          textForTaskType,
+          'taskType',
+          0.65
+        );
 
-      if (taskTypeMatch && typeof taskTypeMatch === 'object' && 'taskType' in taskTypeMatch) {
-        // ✅ Match trovato con taskType
-        taskType = taskTypeMatch.taskType as TaskType;
-        console.log('[RowHeuristicsService] ✅ TaskType classified via embeddings', {
-          label: trimmedLabel,
-          partA: separation.partA,
-          taskType: TaskType[taskType],
-          matchedId: taskTypeMatch.id
-        });
-      } else {
-        // ✅ Nessun match sopra soglia
-        console.log('[RowHeuristicsService] ℹ️ No TaskType match found via embeddings (threshold: 0.65)', {
-          label: trimmedLabel,
-          partA: separation.partA
+        if (taskTypeMatch && typeof taskTypeMatch === 'object' && 'taskType' in taskTypeMatch) {
+          taskType = taskTypeMatch.taskType as TaskType;
+          console.log('[RowHeuristicsService] ✅ TaskType via embeddings (pattern had no match)', {
+            label: trimmedLabel,
+            taskType: TaskType[taskType],
+            matchedId: taskTypeMatch.id,
+          });
+        }
+      } catch (error) {
+        console.warn('[RowHeuristicsService] ⚠️ Embedding taskType skipped', {
+          error: error instanceof Error ? error.message : String(error),
         });
       }
-    } catch (error) {
-      // ✅ Se embedding service non disponibile, fallback a pattern (temporaneo)
-      console.warn('[RowHeuristicsService] ⚠️ Embedding service unavailable, falling back to pattern matching', {
-        error: error instanceof Error ? error.message : String(error)
-      });
-      const heuristic1Result = await inferTaskType(trimmedLabel, { languageOrder: ['IT', 'EN', 'PT'] as any });
-      taskType = heuristic1Result.type;
     }
 
     // 2️⃣ EURISTICA 2: cerca template task usando embedding matching (solo Part B)

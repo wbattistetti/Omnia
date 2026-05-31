@@ -79,6 +79,7 @@ const {
   analyzeUseCaseOverlap,
   checkUseCaseOverlaps,
 } = require('./services/useCaseOverlapService');
+const { proposeCompileSlotMappings } = require('./services/useCaseCompileSlotMappingService');
 const {
   assertAiCallContract,
   aiCallContractErrorResponse,
@@ -227,6 +228,22 @@ mountAiCostRoutes(app);
 
 const { mountBackendCallTestProxy } = require('./designer/backendCallTestProxyRoute');
 mountBackendCallTestProxy(app);
+
+const { createConvaiWebhookGatewayHandler } = require('./services/convaiWebhookGatewayService');
+app.post(
+  '/api/runtime/convai-webhook/:projectId/:agentTaskId/:backendTaskId',
+  createConvaiWebhookGatewayHandler({
+    loadProjectTask: async (projectId, taskId) => {
+      const client = await getMongoClient();
+      try {
+        const projDb = await getProjectDb(client, projectId);
+        return await projDb.collection('tasks').findOne({ projectId, id: taskId });
+      } finally {
+        await client.close();
+      }
+    },
+  })
+);
 
 /** Route tunnel: `mount` è chiamato poco sotto, subito prima di `app.listen` (coda dello stack Express, dopo tutte le altre route). */
 const { mountDevTunnelNgrokRoutes } = require('./routes/devTunnelNgrokRoutes');
@@ -2142,6 +2159,35 @@ app.get('/api/projects/:pid/kb-documents/:documentId/file', (req, res) => {
     res.setHeader('Content-Type', mime);
     res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(hit.meta.name || 'document')}"`);
     res.send(hit.buffer);
+  } catch (e) {
+    res.status(400).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+app.get('/api/projects/:pid/kb-documents/:documentId', (req, res) => {
+  try {
+    const meta = kbDocumentRepository.getDocumentMeta(req.params.pid, req.params.documentId);
+    if (!meta) {
+      return res.status(404).json({ success: false, error: 'document_not_found' });
+    }
+    res.json({ success: true, document: meta });
+  } catch (e) {
+    res.status(400).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+app.post('/api/projects/:pid/kb-documents/:documentId/adopt-repository', (req, res) => {
+  try {
+    const sourceId = String((req.body || {}).sourceDocumentId || '').trim();
+    const result = kbDocumentRepository.adoptRepositoryDocumentId(
+      req.params.pid,
+      req.params.documentId,
+      sourceId
+    );
+    if (!result.ok) {
+      return res.status(404).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, documentId: result.documentId });
   } catch (e) {
     res.status(400).json({ success: false, error: String(e?.message || e) });
   }
@@ -7412,6 +7458,46 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         catalogUseCases: Array.isArray(catalogUseCases) ? catalogUseCases : [],
         threshold,
         catalogNumberById: numberMap,
+        outputLanguage,
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'propose_compile_slot_mappings') {
+      const {
+        surfaces,
+        phraseTokens,
+        receivePaths,
+        receiveParamLeaves,
+        backendTaskId,
+        backendToolContexts,
+        sendParamLeaves,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'USE_CASE_COMPILE_SLOT_MAPPING',
+      });
+      console.log(`[AI_AGENT_USE_CASES][${requestId}] propose_compile_slot_mappings`, {
+        provider,
+        model,
+        surfaceCount: Array.isArray(surfaces) ? surfaces.length : 0,
+        tokenCount: Array.isArray(phraseTokens) ? phraseTokens.length : 0,
+        receiveCount: Array.isArray(receivePaths) ? receivePaths.length : 0,
+        toolContextCount: Array.isArray(backendToolContexts) ? backendToolContexts.length : 0,
+      });
+      const result = await proposeCompileSlotMappings({
+        surfaces: Array.isArray(surfaces) ? surfaces : [],
+        phraseTokens: Array.isArray(phraseTokens) ? phraseTokens : [],
+        receivePaths: Array.isArray(receivePaths) ? receivePaths : [],
+        receiveParamLeaves: Array.isArray(receiveParamLeaves) ? receiveParamLeaves : [],
+        backendTaskId: typeof backendTaskId === 'string' ? backendTaskId : '',
+        backendToolContexts: Array.isArray(backendToolContexts) ? backendToolContexts : [],
+        sendParamLeaves: Array.isArray(sendParamLeaves) ? sendParamLeaves : [],
         outputLanguage,
         provider,
         model,

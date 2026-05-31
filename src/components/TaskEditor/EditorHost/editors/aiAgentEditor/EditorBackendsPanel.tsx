@@ -350,7 +350,7 @@ export function ManualBackendAccordion({
           ...(specMeta?.contentHash ? { contentHash: specMeta.contentHash } : {}),
         },
       });
-      if (toolDesc) setHeaderToolDescription(toolDesc);
+      setHeaderToolDescription(toolDesc);
       setEndpointRev((r) => r + 1);
       setOpenApiErrorsRev((r) => r + 1);
       onExpandEntry(entry.id);
@@ -428,6 +428,7 @@ export function ManualBackendAccordion({
   React.useEffect(() => {
     const id = entry.id;
     const sync = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       const t = taskRepository.getTask(id);
       if (!t) return;
       const ep = (t as { endpoint?: { url?: string; method?: string } }).endpoint;
@@ -447,7 +448,7 @@ export function ManualBackendAccordion({
         });
       }
     };
-    const h = window.setInterval(sync, 1200);
+    const h = window.setInterval(sync, 5000);
     sync();
     return () => clearInterval(h);
   }, [entry.endpointUrl, entry.id, entry.method, onPatch]);
