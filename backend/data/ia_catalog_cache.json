@@ -27,13 +27,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "failed",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -42,14 +42,14 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
             "eleven_v2_flash": "Done!",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -59,11 +59,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "conversational",
           "gender": "male",
+          "use_case": "conversational",
+          "age": "middle_aged",
           "descriptive": "classy",
+          "accent": "american",
           "language": "en"
         },
         "description": "Easy going and perfect for casual conversations.",
@@ -222,11 +222,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "young",
-          "use_case": "entertainment_tv",
           "gender": "female",
+          "use_case": "entertainment_tv",
+          "age": "young",
           "descriptive": "professional",
+          "accent": "american",
           "language": "en"
         },
         "description": "Young adult woman with a confident and warm, mature quality and a reassuring, professional tone.",
@@ -346,13 +346,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -361,14 +361,14 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
             "eleven_v2_flash": "Done!",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -378,11 +378,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "young",
-          "use_case": "social_media",
           "gender": "female",
+          "use_case": "social_media",
+          "age": "young",
           "descriptive": "sassy",
+          "accent": "american",
           "language": "en"
         },
         "description": "This young adult female voice delivers sunny enthusiasm with a quirky attitude.",
@@ -527,11 +527,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -540,15 +540,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -558,11 +558,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "australian",
-          "age": "young",
-          "use_case": "conversational",
           "gender": "male",
+          "use_case": "conversational",
+          "age": "young",
           "descriptive": "hyped",
+          "accent": "australian",
           "language": "en"
         },
         "description": "A young Australian male with a confident and energetic voice.",
@@ -715,8 +715,8 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
@@ -728,8 +728,8 @@
             "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -740,11 +740,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "british",
-          "age": "middle_aged",
-          "use_case": "narrative_story",
           "gender": "male",
+          "use_case": "narrative_story",
+          "age": "middle_aged",
           "descriptive": "mature",
+          "accent": "british",
           "language": "en"
         },
         "description": "Warm resonance that instantly captivates listeners.",
@@ -910,11 +910,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -923,15 +923,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -941,9 +941,9 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "age": "middle_aged",
-          "use_case": "characters_animation",
           "gender": "male",
+          "use_case": "characters_animation",
+          "age": "middle_aged",
           "accent": "american",
           "language": "en"
         },
@@ -1083,14 +1083,14 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_multilingual_sts_v2": "fine_tuned",
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_multilingual_sts_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1099,14 +1099,14 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
             "eleven_v2_flash": "Done!",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1116,11 +1116,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "conversational",
           "gender": "neutral",
+          "use_case": "conversational",
+          "age": "middle_aged",
           "descriptive": "calm",
+          "accent": "american",
           "language": "en"
         },
         "description": "A relaxed, neutral voice ready for narrations or conversational projects.",
@@ -1273,11 +1273,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1286,17 +1286,17 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
+            "eleven_v2_flash": "Done!",
+            "eleven_multilingual_v2": "",
             "eleven_turbo_v2": "",
             "eleven_turbo_v2_5": "",
-            "eleven_multilingual_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_flash": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1306,11 +1306,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "young",
-          "use_case": "characters_animation",
           "gender": "male",
+          "use_case": "characters_animation",
+          "age": "young",
           "descriptive": "rough",
+          "accent": "american",
           "language": "en"
         },
         "description": "An animated warrior ready to charge forward.",
@@ -1435,8 +1435,8 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
@@ -1448,8 +1448,8 @@
             "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -1460,11 +1460,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "young",
-          "use_case": "social_media",
           "gender": "male",
+          "use_case": "social_media",
+          "age": "young",
           "descriptive": "confident",
+          "accent": "american",
           "language": "en"
         },
         "description": "A young adult with energy and warmth - suitable for reels and shorts.",
@@ -1631,11 +1631,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -1644,15 +1644,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -1662,11 +1662,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "british",
-          "age": "middle_aged",
-          "use_case": "informative_educational",
           "gender": "female",
+          "use_case": "informative_educational",
+          "age": "middle_aged",
           "descriptive": "professional",
+          "accent": "british",
           "language": "en"
         },
         "description": "Clear and engaging, friendly woman with a British accent suitable for e-learning.",
@@ -1825,8 +1825,8 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
@@ -1838,8 +1838,8 @@
             "eleven_v2_5_flash": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_v2_5_flash": "Done!"
           },
           "dataset_duration_seconds": null,
@@ -1850,11 +1850,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "informative_educational",
           "gender": "female",
+          "use_case": "informative_educational",
+          "age": "middle_aged",
           "descriptive": "upbeat",
+          "accent": "american",
           "language": "en"
         },
         "description": "A professional woman with a pleasing alto pitch. Suitable for many use cases.",
@@ -2014,13 +2014,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2029,14 +2029,14 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
             "eleven_v2_flash": "Done!",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2046,11 +2046,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "young",
-          "use_case": "conversational",
           "gender": "male",
+          "use_case": "conversational",
+          "age": "young",
           "descriptive": "chill",
+          "accent": "american",
           "language": "en"
         },
         "description": "Conversational and laid back.",
@@ -2230,13 +2230,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2245,14 +2245,14 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
             "eleven_v2_flash": "Done!",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2262,11 +2262,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "young",
-          "use_case": "conversational",
           "gender": "female",
+          "use_case": "conversational",
+          "age": "young",
           "descriptive": "cute",
+          "accent": "american",
           "language": "en"
         },
         "description": "Young and popular, this playful American female voice is perfect for trendy content.",
@@ -2432,13 +2432,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
+            "eleven_v2_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_flash": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2447,14 +2447,14 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
             "eleven_v2_flash": "Done!",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2464,11 +2464,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "conversational",
           "gender": "male",
+          "use_case": "conversational",
+          "age": "middle_aged",
           "descriptive": "classy",
+          "accent": "american",
           "language": "en"
         },
         "description": "A smooth tenor pitch from a man in his 40s - perfect for agentic use cases.",
@@ -2620,13 +2620,13 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2634,13 +2634,13 @@
           "language": "en",
           "progress": {},
           "message": {
-            "eleven_turbo_v2": "",
-            "eleven_multilingual_v2": "",
             "eleven_v2_flash": "",
             "eleven_flash_v2": "",
+            "eleven_turbo_v2": "",
+            "eleven_v2_5_flash": "",
+            "eleven_multilingual_v2": "",
             "eleven_turbo_v2_5": "",
-            "eleven_flash_v2_5": "",
-            "eleven_v2_5_flash": ""
+            "eleven_flash_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2650,11 +2650,11 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "informative_educational",
           "gender": "female",
+          "use_case": "informative_educational",
+          "age": "middle_aged",
           "descriptive": "professional",
+          "accent": "american",
           "language": "en"
         },
         "description": "This voice is warm, bright, and professional, characterized by a Standard American accent and a polished, narrative quality. It features a medium-high pitch with crisp diction and a deliberate, rhythmic pace that makes it highly intelligible and engaging for long-form listening.",
@@ -2771,11 +2771,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2784,15 +2784,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2802,11 +2802,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "conversational",
           "gender": "male",
+          "use_case": "conversational",
+          "age": "middle_aged",
           "descriptive": "casual",
+          "accent": "american",
           "language": "en"
         },
         "description": "Natural and real, this down-to-earth voice is great across many use-cases.",
@@ -2958,11 +2958,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -2971,15 +2971,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -2989,11 +2989,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "middle_aged",
-          "use_case": "social_media",
           "gender": "male",
+          "use_case": "social_media",
+          "age": "middle_aged",
           "descriptive": "classy",
+          "accent": "american",
           "language": "en"
         },
         "description": "Middle-aged man with a resonant and comforting tone. Great for narrations and advertisements.",
@@ -3166,11 +3166,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3179,15 +3179,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3197,11 +3197,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "british",
-          "age": "middle_aged",
-          "use_case": "informative_educational",
           "gender": "male",
+          "use_case": "informative_educational",
+          "age": "middle_aged",
           "descriptive": "formal",
+          "accent": "british",
           "language": "en"
         },
         "description": "A strong voice perfect for delivering a professional broadcast or news story.",
@@ -3340,11 +3340,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3353,15 +3353,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3371,11 +3371,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "british",
-          "age": "middle_aged",
-          "use_case": "informative_educational",
           "gender": "female",
+          "use_case": "informative_educational",
+          "age": "middle_aged",
           "descriptive": "confident",
+          "accent": "british",
           "language": "en"
         },
         "description": "Velvety British female voice delivers news and narrations with warmth and clarity.",
@@ -3548,9 +3548,9 @@
           "next_max_verification_attempts_reset_unix_ms": null
         },
         "labels": {
-          "age": "middle_aged",
-          "use_case": "social_media",
           "gender": "male",
+          "use_case": "social_media",
+          "age": "middle_aged",
           "accent": "american",
           "language": "en"
         },
@@ -3610,11 +3610,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2": "fine_tuned",
             "eleven_v2_flash": "fine_tuned",
+            "eleven_turbo_v2": "fine_tuned",
             "eleven_flash_v2": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned"
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_flash_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3623,15 +3623,15 @@
           "progress": {
             "eleven_v2_flash": 1,
             "eleven_flash_v2": 1,
-            "eleven_flash_v2_5": 1,
-            "eleven_v2_5_flash": 1
+            "eleven_v2_5_flash": 1,
+            "eleven_flash_v2_5": 1
           },
           "message": {
-            "eleven_turbo_v2": "",
             "eleven_v2_flash": "Done!",
+            "eleven_turbo_v2": "",
             "eleven_flash_v2": "Done!",
-            "eleven_flash_v2_5": "Done!",
-            "eleven_v2_5_flash": "Done!"
+            "eleven_v2_5_flash": "Done!",
+            "eleven_flash_v2_5": "Done!"
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3641,11 +3641,11 @@
           "next_max_verification_attempts_reset_unix_ms": 1700000000000
         },
         "labels": {
-          "accent": "american",
-          "age": "old",
-          "use_case": "advertisement",
           "gender": "male",
+          "use_case": "advertisement",
+          "age": "old",
           "descriptive": "crisp",
+          "accent": "american",
           "language": "en"
         },
         "description": "Friendly and comforting voice ready to narrate your stories.",
@@ -3797,11 +3797,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_multilingual_sts_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned"
+            "eleven_multilingual_sts_v2": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3809,11 +3809,11 @@
           "language": "it",
           "progress": {},
           "message": {
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": "",
-            "eleven_multilingual_sts_v2": "",
             "eleven_flash_v2_5": "",
-            "eleven_turbo_v2_5": ""
+            "eleven_multilingual_sts_v2": "",
+            "eleven_turbo_v2_5": "",
+            "eleven_v2_5_flash": "",
+            "eleven_multilingual_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3823,12 +3823,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "accent": "standard",
-          "age": "middle_aged",
-          "gender": "male",
-          "language": "it",
+          "use_case": "narrative_story",
           "descriptive": "gentle",
-          "use_case": "narrative_story"
+          "language": "it",
+          "age": "middle_aged",
+          "accent": "standard",
+          "gender": "male"
         },
         "description": "Antonio",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/ce9b70089f524a4d8a519bbfcd0bd217/voices/JfznbVXrGXYh0gZo9Lcp/d0693720-4116-47d5-a76c-769441c5a55f.mp3",
@@ -3859,12 +3859,12 @@
           "name": "Antonio - Natural, Balanced and Calm",
           "description": "Antonio",
           "labels": {
+            "use_case": "narrative_story",
+            "descriptive": "gentle",
+            "language": "it",
             "age": "middle_aged",
             "accent": "standard",
             "gender": "male",
-            "descriptive": "gentle",
-            "language": "it",
-            "use_case": "narrative_story",
             "locale": "it-IT"
           },
           "review_status": "not_requested",
@@ -3934,11 +3934,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
-            "eleven_multilingual_sts_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned"
+            "eleven_multilingual_sts_v2": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3946,11 +3946,11 @@
           "language": "it",
           "progress": {},
           "message": {
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": "",
-            "eleven_multilingual_sts_v2": "",
             "eleven_flash_v2_5": "",
-            "eleven_turbo_v2_5": ""
+            "eleven_multilingual_sts_v2": "",
+            "eleven_turbo_v2_5": "",
+            "eleven_v2_5_flash": "",
+            "eleven_multilingual_v2": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3960,12 +3960,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "accent": "standard",
-          "age": "middle_aged",
-          "gender": "female",
-          "language": "it",
+          "use_case": "narrative_story",
           "descriptive": "professional",
-          "use_case": "narrative_story"
+          "language": "it",
+          "age": "middle_aged",
+          "accent": "standard",
+          "gender": "female"
         },
         "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/b3290375d9f7402daf26d0139c290f2d/voices/gfKKsLN1k0oYYN9n2dXX/Z2oJ1Jb0O555Pu7XDZv4.mp3",
@@ -3996,12 +3996,12 @@
           "name": "Violetta - Ringing, Bright and Joyful",
           "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
           "labels": {
+            "use_case": "narrative_story",
+            "descriptive": "professional",
+            "language": "it",
             "age": "middle_aged",
             "accent": "standard",
             "gender": "female",
-            "descriptive": "professional",
-            "language": "it",
-            "use_case": "narrative_story",
             "locale": "it-IT"
           },
           "review_status": "not_requested",
@@ -4221,10 +4221,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
-            "eleven_turbo_v2_5": "fine_tuned"
+            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -4232,10 +4232,10 @@
           "language": "pt",
           "progress": {},
           "message": {
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": "",
             "eleven_flash_v2_5": "",
-            "eleven_turbo_v2_5": ""
+            "eleven_turbo_v2_5": "",
+            "eleven_multilingual_v2": "",
+            "eleven_v2_5_flash": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -4245,12 +4245,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "accent": "european",
-          "age": "middle_aged",
-          "gender": "female",
-          "language": "pt",
+          "use_case": "narrative_story",
           "descriptive": "calm",
-          "use_case": "narrative_story"
+          "language": "pt",
+          "age": "middle_aged",
+          "accent": "european",
+          "gender": "female"
         },
         "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
@@ -4281,12 +4281,12 @@
           "name": "Maria - Anxious, Serious and Urgent",
           "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
           "labels": {
+            "use_case": "narrative_story",
+            "descriptive": "calm",
+            "language": "pt",
             "age": "middle_aged",
             "accent": "european",
             "gender": "female",
-            "descriptive": "calm",
-            "language": "pt",
-            "use_case": "narrative_story",
             "locale": "pt-PT"
           },
           "review_status": "not_requested",
@@ -4578,8 +4578,8 @@
           "next_max_verification_attempts_reset_unix_ms": null
         },
         "labels": {
-          "gender": "female",
-          "language": "it"
+          "language": "it",
+          "gender": "female"
         },
         "description": "",
         "preview_url": "https://storage.googleapis.com/eleven-isolated-be-public-prod/database/workspace/2a71776ced594d908c078e498773a297/voices/Qh8EG6cnbgBZzfAs6Jk1/fe309408-f52e-4d0a-8bf9-f63b2474e040.mp3",
@@ -7160,12 +7160,12 @@
     "elevenlabs": []
   },
   "meta": {
-    "updatedAt": "2026-05-31T20:19:33.021Z",
-    "lastLanguagesSync": "2026-05-31T20:19:33.021Z",
+    "updatedAt": "2026-06-02T03:50:49.158Z",
+    "lastLanguagesSync": "2026-06-02T03:50:49.158Z",
     "lastModelsSync": "2026-05-30T20:55:51.074Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-05-31T20:19:32.979Z",
+      "at": "2026-06-02T03:50:49.102Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

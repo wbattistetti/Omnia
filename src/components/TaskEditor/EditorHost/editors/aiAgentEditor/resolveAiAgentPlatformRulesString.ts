@@ -1,13 +1,11 @@
 /**
  * Builds compile/ConvAI rules text from full structured section bodies (no word-clipped compact join).
  * Matches toolbar “target platform” preview and {@link compileAgentPromptToPlatform}.
- * Per ConvAI, appende in **Context** (o sostituisce il placeholder `missing`) un riepilogo contrattuale dai Backend Call in `convaiBackendToolTaskIds`.
+ * Per ConvAI, appende in **Context** la sezione slim BACKEND RECEIVE (SEND resta negli schema webhook).
  */
 
 import type { Task } from '@types/taskTypes';
-import { TaskType } from '@types/taskTypes';
 import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
-import { taskRepository } from '@services/TaskRepository';
 import {
   AgentPlatform,
   buildAgentStructuredSections,
@@ -18,7 +16,6 @@ import {
   buildUseOfBackendsPromptSection,
   mergeUseOfBackendsIntoContext,
 } from '@domain/backendAnalysis/buildUseOfBackendsPromptSection';
-import { deriveExportedToolName } from '@domain/iaAgentTools/backendToolDerivation';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { parsePersistedStructuredSectionsJson } from './structuredSectionPersist';
 import { effectiveBySectionFromPersistedStructured } from './structuredSectionsRevisionReducer';
@@ -78,6 +75,7 @@ function applyUseOfBackendsToIrContext<T extends { context?: string }>(
     catalog: options?.backendCatalog,
     agentTaskId,
     manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+    mode: 'full',
   });
   if (!section) return ir;
   return {
@@ -99,10 +97,10 @@ export function resolveAiAgentPlatformRulesString(
 
 export type ResolveElevenLabsAgentPromptOptions = ResolvePlatformPromptOptions;
 
-function buildConvaiBackendToolContractAppendix(
-  task: TaskLikeForPlatformRules & { agentIaRuntimeOverrideJson?: string | null },
-  manualCatalogBackendTaskIds: readonly string[] | undefined
-): string {
+function resolveBackendToolIdsForElevenLabsPrompt(
+  task: TaskLikeForElevenLabsPrompt,
+  manualCatalogBackendTaskIds?: readonly string[]
+): string[] {
   const raw = task.agentIaRuntimeOverrideJson;
   let parsed: Record<string, unknown> | null = null;
   if (typeof raw === 'string' && raw.trim()) {
@@ -112,27 +110,11 @@ function buildConvaiBackendToolContractAppendix(
       parsed = null;
     }
   }
-  const fromJson = parsed && Array.isArray(parsed.convaiBackendToolTaskIds) ? parsed.convaiBackendToolTaskIds : [];
-  const idsCombined = mergeConvaiBackendToolIdLists(
-    fromJson.map((x) => String(x ?? '').trim()).filter(Boolean),
-    manualCatalogBackendTaskIds ?? []
-  );
-  if (idsCombined.length === 0) return '';
-  const chunks: string[] = [];
-  for (const x of idsCombined) {
-    const tid = String(x ?? '').trim();
-    if (!tid) continue;
-    const bt = taskRepository.getTask(tid);
-    if (!bt || bt.type !== TaskType.BackendCall) continue;
-    const name = deriveExportedToolName(bt);
-    const label = String((bt as Task).label ?? '').trim();
-    const desc = String((bt as Task).backendToolDescription ?? '').trim();
-    const head = `**Tool \`${name}\`**${label ? ` (${label})` : ''}`;
-    const body = desc || '_Aggiungi «Descrizione per ConvAI» sul Backend Call per il contratto d’uso._';
-    chunks.push(`${head}\n${body}`);
-  }
-  if (!chunks.length) return '';
-  return ['#### Contratto tool backend (ConvAI)', '', ...chunks].join('\n\n');
+  const fromJson =
+    parsed && Array.isArray(parsed.convaiBackendToolTaskIds)
+      ? parsed.convaiBackendToolTaskIds.map((x) => String(x ?? '').trim()).filter(Boolean)
+      : [];
+  return mergeConvaiBackendToolIdLists(fromJson, manualCatalogBackendTaskIds ?? []);
 }
 
 /** ConvAI `conversation_config.agent.prompt.prompt`: ElevenLabs compile of full sections (cloud agent target). */
@@ -151,22 +133,17 @@ export function resolveElevenLabsAgentPromptFromTask(
   const irWithUseCases = { ...ir, examples: examplesMerged };
 
   let context = (irWithUseCases.context ?? '').trim();
-  const useOfBackends = buildUseOfBackendsPromptSection({
+  const backendReceiveSection = buildUseOfBackendsPromptSection({
     catalog: options?.backendCatalog,
     agentTaskId: String(task.id ?? '').trim(),
-    manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+    manualCatalogBackendTaskIds: resolveBackendToolIdsForElevenLabsPrompt(
+      task,
+      options?.manualCatalogBackendTaskIds
+    ),
+    mode: 'slim',
   });
-  if (useOfBackends) {
-    context = mergeUseOfBackendsIntoContext(context, useOfBackends);
-  } else {
-    const appendix = buildConvaiBackendToolContractAppendix(task, options?.manualCatalogBackendTaskIds);
-    if (appendix) {
-      if (!context || /^missing$/i.test(context)) {
-        context = appendix;
-      } else {
-        context = `${context}\n\n${appendix}`;
-      }
-    }
+  if (backendReceiveSection) {
+    context = mergeUseOfBackendsIntoContext(context, backendReceiveSection);
   }
 
   const elBase = compileAgentPromptToPlatform(

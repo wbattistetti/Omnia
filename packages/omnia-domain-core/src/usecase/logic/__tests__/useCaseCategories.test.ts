@@ -194,6 +194,28 @@ describe('resolveUseCaseListDisplayLayout', () => {
 
   });
 
+  it('pins start use case first in uncategorized flat list', () => {
+    const useCases = [
+      { ...uc('a', 'Primo'), category_id: undefined, sort_order: 0 },
+      { ...uc('b', 'Secondo'), category_id: undefined, sort_order: 1 },
+      { ...uc('c', 'Start'), category_id: undefined, sort_order: 2 },
+    ];
+    const layout = resolveUseCaseListDisplayLayout([], useCases, { startUseCaseId: 'c' });
+    expect(layout.uncategorized.map((u) => u.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('pins start use case first within its category subset', () => {
+    const categories = [{ id: 'cat_sel', label: 'Selezione', sort_order: 0 }];
+    const useCases = [
+      { ...uc('in1', 'Uno'), category_id: 'cat_sel', sort_order: 0 },
+      { ...uc('start', 'Start'), category_id: 'cat_sel', sort_order: 1 },
+    ];
+    const layout = resolveUseCaseListDisplayLayout(categories, useCases, {
+      startUseCaseId: 'start',
+    });
+    expect(layout.categoryGroups[0]?.cases.map((u) => u.id)).toEqual(['start', 'in1']);
+  });
+
 });
 
 

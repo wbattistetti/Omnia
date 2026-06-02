@@ -189,7 +189,10 @@ export function buildReviewAgentDockValue(
     useCaseComposerError: live.useCaseComposerError,
     onClearUseCaseComposerError: live.onClearUseCaseComposerError,
     onCreateUseCase: handleCreateUseCase,
-    onSplitRootUseCaseDraft: async (draftText) => parseRootUseCaseDraftSegmentsFallback(draftText),
+    onSplitRootUseCaseDraft: async (draftText) => ({
+      labels: parseRootUseCaseDraftSegmentsFallback(draftText),
+      startLabel: null,
+    }),
     onRootUseCaseBatchCreated: live.wizard.onRootUseCaseBatchCreated,
     onRegenerateAgentMessage: () => reviewIaDisabledAsync('Rigenera messaggio agente'),
     onAnnotateAgentMessageForJson: () => reviewIaDisabledAsync('Annota messaggio JSON'),

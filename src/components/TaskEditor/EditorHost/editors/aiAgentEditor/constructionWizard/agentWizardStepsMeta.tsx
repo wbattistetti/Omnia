@@ -40,7 +40,7 @@ export const AGENT_WIZARD_STEPS_META: readonly AgentWizardStepMeta[] = [
     label: 'Knowledge Base',
     title: 'Documenti e conoscenza',
     tutorial:
-      'Carica documenti (.txt, .xlsx) collegati al task. L\'analisi markdown arricchisce il contesto dell\'agente.',
+      'Carica documenti (.txt, .csv, .xlsx) collegati al task. L\'analisi markdown arricchisce il contesto dell\'agente.',
     icon: BookOpen,
   },
   {

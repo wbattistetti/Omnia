@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { columnNameToVariable } from '../kbDocumentColumnMap';
-import { parseKbTextContent } from '../parseKbDocument';
+import { parseKbCsvContent, parseKbTextContent } from '../parseKbDocument';
 
 describe('columnNameToVariable', () => {
   it('derives ids only from column headers (no semantic aliases)', () => {
@@ -30,5 +30,25 @@ describe('parseKbTextContent', () => {
 
   it('throws on empty file', () => {
     expect(() => parseKbTextContent('   \n  ')).toThrow(/vuoto/i);
+  });
+
+  it('parseKbCsvContent skips banner rows before column headers', () => {
+    const text = [
+      'ultimo aggiornamento dati: 02/04/2026,,,,,,,',
+      'PAROS,,,,,,,',
+      'COGNOME,NOME,SESSO',
+      'Arcidiacono,Barbara,F',
+    ].join('\n');
+    const result = parseKbCsvContent(text);
+    expect(result.format).toBe('csv');
+    expect(result.variables.map((v) => v.internalName)).toEqual(['cognome', 'nome', 'sesso']);
+  });
+
+  it('parses comma-separated header row (CSV)', () => {
+    const text = 'ID,NOME,EMAIL\n1,Mario,mario@example.com';
+    const result = parseKbTextContent(text, { format: 'csv' });
+    expect(result.format).toBe('csv');
+    expect(result.variables.map((v) => v.internalName)).toEqual(['id', 'nome', 'email']);
+    expect(result.variables.map((v) => v.sourceColumn)).toEqual(['ID', 'NOME', 'EMAIL']);
   });
 });

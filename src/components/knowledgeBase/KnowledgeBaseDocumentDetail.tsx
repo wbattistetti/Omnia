@@ -9,6 +9,7 @@
 import React from 'react';
 
 import type { StagedKbDocument, KbDocumentPatch } from '@domain/knowledgeBase/kbDocumentTypes';
+import { buildKbTextPreview } from '@domain/knowledgeBase/kbTextPreview';
 
 import { useKbDocumentContent } from './useKbDocumentContent';
 
@@ -51,8 +52,26 @@ export function KnowledgeBaseDocumentDetail({
 }: KnowledgeBaseDocumentDetailProps): React.ReactElement {
 
   const repoId = doc.id?.trim() || doc.repositoryDocumentId?.trim();
+  const snippetPreview = String(doc.markdownSnippet ?? '').trim();
+  const [filePreview, setFilePreview] = React.useState('');
 
-  const content = useKbDocumentContent(projectId, repoId);
+  React.useEffect(() => {
+    if (snippetPreview || doc.file.size === 0) {
+      setFilePreview('');
+      return;
+    }
+    let cancelled = false;
+    void buildKbTextPreview(doc.file).then((text) => {
+      if (!cancelled) setFilePreview(String(text ?? '').trim());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc.id, doc.file, snippetPreview]);
+
+  const content = useKbDocumentContent(projectId, repoId, {
+    localFallbackText: snippetPreview || filePreview,
+  });
 
 
 

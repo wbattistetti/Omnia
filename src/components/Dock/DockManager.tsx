@@ -593,6 +593,8 @@ function TabSet(props: {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const [region, setRegion] = React.useState<DockRegion | null>(null);
   const hideTabStrip = props.tabs.length === 1 && props.tabs[0]?.type === 'chat';
+  /** Tab già visitati: restano montati (display:none) per non perdere stato flow/editor al cambio tab. */
+  const [mountedTabIds, setMountedTabIds] = React.useState<Set<string>>(() => new Set());
 
   React.useEffect(() => {
     const activeTab = props.tabs[props.active];
@@ -600,6 +602,33 @@ function TabSet(props: {
       props.onActiveTabChanged?.(activeTab);
     }
   }, [props.active, props.tabs, props.onActiveTabChanged]);
+
+  React.useEffect(() => {
+    const activeTab = props.tabs[props.active];
+    if (!activeTab) return;
+    setMountedTabIds((prev) => {
+      if (prev.has(activeTab.id)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab.id);
+      return next;
+    });
+  }, [props.active, props.tabs]);
+
+  React.useEffect(() => {
+    const openIds = new Set(props.tabs.map((t) => t.id));
+    setMountedTabIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (openIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      if (!changed && next.size === prev.size) return prev;
+      return next;
+    });
+  }, [props.tabs]);
+
+  const activeTab = props.tabs[props.active];
 
   const computeRegion = (e: React.DragEvent<HTMLDivElement>): DockRegion => {
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
@@ -755,40 +784,30 @@ function TabSet(props: {
         </div>
         );
       })()}
-      {/* ✅ Key stabile sul contenuto del tab per preservare lo stato quando si cambia tab */}
-      {(() => {
-        const activeTab = props.tabs[props.active];
-        // ✅ LOG DISABILITATO - troppo rumoroso
-        // console.log('[DEBUG_MEMO] TabSet rendering content', {
-        //   activeTabId: activeTab?.id,
-        //   activeTabType: activeTab?.type,
-        //   activeIndex: props.active,
-        //   tabsCount: props.tabs.length,
-        //   willRender: !!activeTab
-        // });
-        if (!activeTab) return null;
-
-        // Key = tab id (unique). Do not use legacy `act` or varying instanceId — that remounts and flickers.
-        const stableKey = activeTab.id;
-
-        // ✅ LOG DISABILITATO - troppo rumoroso
-        // console.log('[DEBUG_DOCK_KEY] TabSet stableKey calculated', {
-        //   activeTabId: activeTab.id,
-        //   activeTabType: activeTab.type,
-        //   stableKey,
-        //   instanceId: (activeTab as any).act?.instanceId
-        // });
-
-        return (
-          <div
-            key={stableKey}
-            className="w-full min-h-0 flex-1"
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, backgroundColor: '#ffffff', overflow: 'hidden' }}
-          >
-            {props.renderTabContent(activeTab)}
-          </div>
-        );
-      })()}
+      {/* Tab visitati restano montati: evita remount flow/editor al cambio tab nel tabset. */}
+      <div className="relative flex min-h-0 w-full flex-1 flex-col">
+        {props.tabs.map((tab) => {
+          if (!mountedTabIds.has(tab.id)) return null;
+          const isActive = tab.id === activeTab?.id;
+          return (
+            <div
+              key={tab.id}
+              className="w-full min-h-0 flex-1"
+              style={{
+                display: isActive ? 'flex' : 'none',
+                flexDirection: 'column',
+                flex: 1,
+                minHeight: 0,
+                backgroundColor: '#ffffff',
+                overflow: 'hidden',
+              }}
+              aria-hidden={!isActive}
+            >
+              {props.renderTabContent(tab)}
+            </div>
+          );
+        })}
+      </div>
       {!!region && (
         <div className="pointer-events-none absolute inset-0">
           <DockOverlay region={region} hostRef={hostRef} />

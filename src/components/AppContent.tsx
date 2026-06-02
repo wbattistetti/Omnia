@@ -1979,8 +1979,56 @@ export const AppContent: React.FC<AppContentProps> = ({
                     position: 'relative',
                   }}
                 >
+                  {/*
+                    Flow workspace resta montato sotto lo Studio: chiudere «Configurazione»
+                    non deve rifare loadFlow / remount ReactFlow.
+                  */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minHeight: 0,
+                      minWidth: 0,
+                      visibility: showBackendBuilder ? 'hidden' : 'visible',
+                      pointerEvents: showBackendBuilder ? 'none' : 'auto',
+                    }}
+                    aria-hidden={showBackendBuilder}
+                  >
+                    <FlowWorkspaceProvider
+                      key={currentPid ?? '__no_project__'}
+                      workspaceProjectId={currentPid ?? null}
+                    >
+                      <WorkspaceDockLifecycle
+                        projectId={currentPid}
+                        skipPersist={Boolean(currentProject && isDraftProjectId(currentProject.id))}
+                        dockTree={dockTree}
+                        setDockTree={setDockTree}
+                      />
+                      <DockManagerWithFlows
+                        root={dockTree}
+                        setRoot={setDockTree}
+                        renderTabContent={renderTabContent}
+                        flowsRef={flowsRef}
+                        editorCloseRefsMap={editorCloseRefsMap}
+                        markFlowsPersistedRef={markFlowsPersistedRef}
+                      />
+                    </FlowWorkspaceProvider>
+                  </div>
                   {showBackendBuilder ? (
-                    <div style={{ flex: 1, minHeight: 0 }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        zIndex: 20,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: 0,
+                        minWidth: 0,
+                        backgroundColor: '#0f172a',
+                      }}
+                    >
                       <BackendBuilderStudio
                         projectId={currentPid}
                         projectData={currentProject ?? undefined}
@@ -1991,38 +2039,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                         }}
                       />
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        position: 'relative',
-                        flex: 1,
-                        minHeight: 0,
-                        minWidth: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                      }}
-                    >
-                      <FlowWorkspaceProvider
-                        key={currentPid ?? '__no_project__'}
-                        workspaceProjectId={currentPid ?? null}
-                      >
-                        <WorkspaceDockLifecycle
-                          projectId={currentPid}
-                          skipPersist={Boolean(currentProject && isDraftProjectId(currentProject.id))}
-                          dockTree={dockTree}
-                          setDockTree={setDockTree}
-                        />
-                        <DockManagerWithFlows
-                          root={dockTree}
-                          setRoot={setDockTree}
-                          renderTabContent={renderTabContent}
-                          flowsRef={flowsRef}
-                          editorCloseRefsMap={editorCloseRefsMap}
-                          markFlowsPersistedRef={markFlowsPersistedRef}
-                        />
-                      </FlowWorkspaceProvider>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
                 {showGlobalDebugger && globalDebuggerFlowProps && (
                   <>

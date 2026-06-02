@@ -1,5 +1,5 @@
 /**
- * ConvAI: appendix contratti backend nel prompt da `convaiBackendToolTaskIds` + task repository.
+ * ConvAI: sezione slim BACKEND RECEIVE nel prompt da catalogo backend + task repository.
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -25,25 +25,37 @@ const minimalStructured = JSON.stringify({
   },
 });
 
+const backendWithReceive = {
+  id: 'bk1',
+  type: TaskType.BackendCall,
+  label: 'Slots',
+  backendToolDescription: 'Restituisce slot ISO.',
+  endpoint: { url: 'https://x/', method: 'GET', headers: {} },
+  outputs: [{ apiField: 'slots', variable: 's' }],
+  backendCallSpecMeta: {
+    schemaVersion: 1 as const,
+    lastImportedAt: '2026-01-01T00:00:00.000Z',
+    contentHash: 'h',
+    importState: 'ok' as const,
+    structuralFingerprint: 'fp',
+    openapiOutputJsonSchemaByApiName: {
+      slots: { type: 'array', items: { type: 'object' } },
+    },
+    openapiInputUiKindByApiName: {},
+    openapiInputEnumByApiName: {},
+  },
+} as Task;
+
 describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
   beforeEach(() => {
     getTask.mockReset();
   });
 
-  it('replaces missing context with backend contract appendix', () => {
-    getTask.mockImplementation((id: string) =>
-      id === 'bk1'
-        ? ({
-            id: 'bk1',
-            type: TaskType.BackendCall,
-            label: 'Slots',
-            backendToolDescription: 'Restituisce slot ISO.',
-            endpoint: { url: 'https://x/', method: 'GET', headers: {} },
-          } as Task)
-        : null
-    );
+  it('merges slim BACKEND RECEIVE when backend has response schema', () => {
+    getTask.mockImplementation((id: string) => (id === 'bk1' ? backendWithReceive : null));
 
     const task = {
+      id: 'agent1',
       agentStructuredSectionsJson: minimalStructured,
       agentPrompt: '',
       agentPromptTargetPlatform: 'elevenlabs',
@@ -54,21 +66,20 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     } as Task;
 
     const out = resolveElevenLabsAgentPromptFromTask(task);
-    expect(out).toContain('Contratto tool backend');
-    expect(out).toContain('Slots');
-    expect(out).toContain('Restituisce slot ISO');
-    expect(out).not.toMatch(/### Context\n\nmissing/m);
+    expect(out).toContain('BACKEND RECEIVE (webhook tools)');
+    expect(out).toContain('← slots:');
+    expect(out).not.toContain('Restituisce slot ISO');
+    expect(out).not.toContain('Contratto tool backend');
   });
 
-  it('adds USE OF BACKENDS from manualCatalogBackendTaskIds when override JSON has no backend ids', () => {
+  it('adds BACKEND RECEIVE from manualCatalogBackendTaskIds when override JSON has no backend ids', () => {
     getTask.mockImplementation((id: string) =>
       id === 'catBk'
         ? ({
+            ...backendWithReceive,
             id: 'catBk',
-            type: TaskType.BackendCall,
             label: 'Catalog API',
             backendToolDescription: 'Chiama il catalogo.',
-            endpoint: { url: 'https://z/', method: 'GET', headers: {} },
           } as Task)
         : null
     );
@@ -84,10 +95,10 @@ describe('resolveElevenLabsAgentPromptFromTask ConvAI appendix', () => {
     const out = resolveElevenLabsAgentPromptFromTask(task, {
       manualCatalogBackendTaskIds: ['catBk'],
     });
-    expect(out).toContain('USE OF BACKENDS');
+    expect(out).toContain('BACKEND RECEIVE (webhook tools)');
     expect(out).toContain('Catalog API');
-    expect(out).toContain('Chiama il catalogo');
-    expect(out).not.toMatch(/### Context\n\nmissing/m);
+    expect(out).toContain('← slots:');
+    expect(out).not.toContain('Chiama il catalogo');
   });
 
   it('includes use case dialogues under Examples when no motor snapshot (legacy merge)', () => {

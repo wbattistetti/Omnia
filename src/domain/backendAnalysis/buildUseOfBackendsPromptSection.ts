@@ -1,12 +1,14 @@
 /**
- * Sezione compatta «USE OF BACKENDS» per prompt runtime / deploy (ElevenLabs e altre piattaforme).
- * Per ogni parametro: type/format OpenAPI oppure MISSING (validator deterministico).
+ * Sezione backend nel prompt agente: contratto OpenAPI + note d'uso.
+ * - `slim` (default deploy ConvAI): solo RECEIVE + note comportamentali (SEND è nei webhook).
+ * - `full`: contratto SEND+RECEIVE legacy (preview piattaforme senza tool webhook).
  */
 
 import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import { deriveExportedToolName } from '@domain/iaAgentTools/backendToolDerivation';
 import {
   buildOpenApiParamContractLines,
+  buildOpenApiParamContractPreamble,
   type OpenApiParamContractLine,
 } from '@domain/openApi/buildOpenApiParamContractLines';
 import { TaskType, type Task } from '@types/taskTypes';
@@ -22,6 +24,10 @@ import { filterBackendAnalysisDocumentToManualCatalog } from './pruneBackendAnal
 import type { ManualCatalogEntry } from '@domain/backendCatalog/catalogTypes';
 
 export const USE_OF_BACKENDS_SECTION_HEADER = '## USE OF BACKENDS:';
+/** Deploy ElevenLabs: RECEIVE + note; parametri SEND restano negli schema webhook. */
+export const BACKEND_RECEIVE_SECTION_HEADER = '## BACKEND RECEIVE (webhook tools):';
+
+export type BackendPromptSectionMode = 'full' | 'slim';
 
 const DEFAULT_MAX_CHARS = 4_200;
 const MAX_BACKENDS = 10;
@@ -29,9 +35,15 @@ const MAX_PARAMS_PER_DIRECTION = 14;
 const MAX_HOW_TO = 220;
 const MAX_GLOBAL_NOTE = 320;
 const MAX_TOOL_DESC = 140;
-/** Regex: sezione USE OF BACKENDS fino al prossimo H2 o fine file. */
-const USE_OF_BACKENDS_SECTION_RE =
-  /## USE OF BACKENDS:\s*\n[\s\S]*?(?=\n## [^\n#]|$)/;
+/** Regex: sezione backend (full o slim) fino al prossimo H2 o fine file. */
+const BACKEND_PROMPT_SECTION_RE =
+  /## (?:USE OF BACKENDS|BACKEND RECEIVE \(webhook tools\)):\s*\n[\s\S]*?(?=\n## [^\n#]|$)/;
+
+export function resolveBackendPromptSectionHeader(
+  mode: BackendPromptSectionMode = 'slim'
+): string {
+  return mode === 'full' ? USE_OF_BACKENDS_SECTION_HEADER : BACKEND_RECEIVE_SECTION_HEADER;
+}
 
 function clip(text: string, max: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -84,13 +96,20 @@ function formatBackendBlock(
   label: string,
   task: Task | null | undefined,
   toolName?: string,
-  manualEntry?: ManualCatalogEntry
+  manualEntry?: ManualCatalogEntry,
+  mode: BackendPromptSectionMode = 'full'
 ): string {
   const contractLines = task ? buildOpenApiParamContractLines(task) : [];
   const hasHowTo = Boolean(backend?.howToUseMarkdown.trim());
   const hasContract = contractLines.length > 0;
+  const receiveLines = formatContractDirectionBlock(contractLines, 'output', '←');
+  const sendLines = formatContractDirectionBlock(contractLines, 'input', '→');
+  const hasReceive = receiveLines.length > 0;
+  const hasSend = sendLines.length > 0;
 
-  if (!hasContract && !hasHowTo) {
+  if (mode === 'slim') {
+    if (!hasHowTo && !hasReceive) return '';
+  } else if (!hasContract && !hasHowTo) {
     const desc = task
       ? String((task as Task).backendToolDescription ?? '').trim()
       : '';
@@ -102,7 +121,7 @@ function formatBackendBlock(
     toolName ? `### ${label} (tool: \`${toolName}\`)` : `### ${label}`
   );
 
-  if (task) {
+  if (mode === 'full' && task) {
     const { url, method } = resolveBackendEndpoint(task, manualEntry);
     if (url) lines.push(`URL: ${url}`);
     if (method) lines.push(`Method: ${method}`);
@@ -110,17 +129,25 @@ function formatBackendBlock(
 
   if (hasHowTo && backend) {
     lines.push(`Use: ${clip(backend.howToUseMarkdown, MAX_HOW_TO)}`);
-  } else if (task) {
+  } else if (mode === 'full' && task) {
     const desc = String((task as Task).backendToolDescription ?? '').trim();
     if (desc) lines.push(`Use: ${clip(desc, MAX_TOOL_DESC)}`);
   }
 
-  if (hasContract) {
+  if (mode === 'slim' && hasReceive) {
+    lines.push(
+      'Receive contract (OpenAPI — for fillFrom / tokenBindings):',
+      ...receiveLines
+    );
+  } else if (mode === 'full' && hasContract) {
+    lines.push(...buildOpenApiParamContractPreamble(), '');
     lines.push(
       'Contract (OpenAPI — type/format o MISSING; oggetti espansi sotto):',
-      ...formatContractDirectionBlock(contractLines, 'input', '→'),
-      ...formatContractDirectionBlock(contractLines, 'output', '←')
+      ...sendLines,
+      ...receiveLines
     );
+  } else if (mode === 'slim' && hasSend && !hasReceive && hasHowTo) {
+    lines.push('SEND: see webhook tool schema.');
   }
 
   return lines.filter(Boolean).join('\n');
@@ -150,7 +177,14 @@ export function buildUseOfBackendsBodyFromDocument(
     const task = taskRepository.getTask(backend.catalogEntryId);
     const toolName = resolveToolName(backend.catalogEntryId);
     const entry = manualEntries?.find((e) => e.id === backend.catalogEntryId);
-    const block = formatBackendBlock(backend, backend.displayLabel, task, toolName, entry);
+    const block = formatBackendBlock(
+      backend,
+      backend.displayLabel,
+      task,
+      toolName,
+      entry,
+      'full'
+    );
     if (block) parts.push(block, '');
   }
 
@@ -192,17 +226,20 @@ function backendRecordByCatalogId(
 }
 
 /**
- * Sezione markdown «USE OF BACKENDS» per prompt deploy (contratto OpenAPI + uso IA opzionale).
+ * Sezione markdown backend per prompt deploy.
+ * Default `slim`: RECEIVE + note (SEND negli schema webhook ConvAI).
  */
 export function buildUseOfBackendsPromptSection(params: {
   catalog?: ProjectBackendCatalogBlob;
   agentTaskId: string;
   manualCatalogBackendTaskIds?: readonly string[];
   maxChars?: number;
+  mode?: BackendPromptSectionMode;
 }): string {
   const agentTaskId = String(params.agentTaskId ?? '').trim();
   if (!agentTaskId) return '';
 
+  const mode = params.mode ?? 'slim';
   const maxChars = params.maxChars ?? DEFAULT_MAX_CHARS;
   const catalog = params.catalog;
   const doc = catalog ? resolveAnalysisDocument(catalog, agentTaskId) : null;
@@ -249,7 +286,7 @@ export function buildUseOfBackendsPromptSection(params: {
       entry?.label?.trim() || String(task.label ?? '').trim() || tid;
     const backend = backendRecordByCatalogId(doc, tid);
     const toolName = resolveToolName(tid);
-    const block = formatBackendBlock(backend, label, task, toolName, entry);
+    const block = formatBackendBlock(backend, label, task, toolName, entry, mode);
     if (block) bodyParts.push(block, '');
   }
 
@@ -269,18 +306,18 @@ export function buildUseOfBackendsPromptSection(params: {
   const body = bodyParts.join('\n').trim();
   if (!body) return '';
 
-  const section = `${USE_OF_BACKENDS_SECTION_HEADER}\n\n${body}`;
+  const section = `${resolveBackendPromptSectionHeader(mode)}\n\n${body}`;
   if (section.length <= maxChars) return section;
   return `${section.slice(0, maxChars - 1)}…`;
 }
 
-/** Rimuove una eventuale sezione USE OF BACKENDS dal markdown Context. */
+/** Rimuove una eventuale sezione backend (full o slim) dal markdown Context. */
 export function stripUseOfBackendsFromContext(contextMarkdown: string): string {
-  return contextMarkdown.replace(USE_OF_BACKENDS_SECTION_RE, '').trim();
+  return contextMarkdown.replace(BACKEND_PROMPT_SECTION_RE, '').trim();
 }
 
 /**
- * Inserisce o **sostituisce** la sezione USE OF BACKENDS nel Context (sempre versione fresca).
+ * Inserisce o **sostituisce** la sezione backend nel Context (sempre versione fresca).
  */
 export function mergeUseOfBackendsIntoContext(contextMarkdown: string, section: string): string {
   const extra = section.trim();

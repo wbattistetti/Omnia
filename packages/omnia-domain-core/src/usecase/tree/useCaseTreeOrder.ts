@@ -5,9 +5,15 @@
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
+export type OrderUseCasesWithDepthOptions = {
+  /** Use case Start (apertura sessione): mostrato in testa; tolto Start → ordine naturale. */
+  startUseCaseId?: string | null;
+};
+
 /** Returns ordered list and depth (0 = root) per use case id. */
 export function orderUseCasesWithDepth(
-  cases: readonly AIAgentUseCase[]
+  cases: readonly AIAgentUseCase[],
+  options?: OrderUseCasesWithDepthOptions
 ): { ordered: AIAgentUseCase[]; depthById: Record<string, number> } {
   const ids = new Set(cases.map((c) => c.id));
   const sanitized: AIAgentUseCase[] = cases.map((c) => {
@@ -47,5 +53,21 @@ export function orderUseCasesWithDepth(
     }
   };
   walk(null, 0);
-  return { ordered, depthById };
+
+  return { ordered: pinStartUseCaseFirst(ordered, options?.startUseCaseId), depthById };
+}
+
+/** Sposta lo use case Start in testa; tolto Start → ordine invariato. */
+export function pinStartUseCaseFirst(
+  cases: readonly AIAgentUseCase[],
+  startUseCaseId?: string | null
+): AIAgentUseCase[] {
+  const startId = String(startUseCaseId ?? '').trim();
+  if (!startId || cases.length === 0) return [...cases];
+  const startIdx = cases.findIndex((c) => c.id === startId);
+  if (startIdx <= 0) return [...cases];
+  const next = [...cases];
+  const [startRow] = next.splice(startIdx, 1);
+  next.unshift(startRow);
+  return next;
 }

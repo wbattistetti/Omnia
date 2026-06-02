@@ -19,6 +19,11 @@ import {
   type ParameterAuditProfile,
 } from './parameterReadinessSemantics';
 import { summarizeOpenApiSchemaFragment } from './summarizeOpenApiSchemaFragment';
+import {
+  CONVAI_OPTIONAL_EMPTY_STRING_RULE_ID,
+  CONVAI_OPTIONAL_EMPTY_STRING_RULE_SHORT,
+  formatConvaiOptionalFieldSemanticsReportSection,
+} from './convaiOptionalFieldSemantics';
 import { TaskType, type Task } from '@types/taskTypes';
 
 /** Extension OpenAPI consigliate per hint NL → parametri backend. */
@@ -81,6 +86,8 @@ export type BackendWebhookReadiness = {
   toolDescriptionOk: boolean;
   deriveToolError: string | null;
   importState: string;
+  /** Regola ConvAI documentata sul task (Read API). */
+  convaiOptionalRuleDocumented: boolean;
   entries: ParameterReadinessEntry[];
   blockers: number;
   warnings: number;
@@ -690,6 +697,8 @@ export function buildBackendWebhookReadiness(task: Task): BackendWebhookReadines
     toolDescriptionOk: toolDesc.length >= MIN_DESCRIPTION_LEN,
     deriveToolError,
     importState,
+    convaiOptionalRuleDocumented:
+      meta?.convaiOptionalEmptyStringRuleId === CONVAI_OPTIONAL_EMPTY_STRING_RULE_ID,
     entries: sorted,
     blockers,
     warnings,
@@ -861,6 +870,7 @@ export function formatWebhookReadinessReport(report: AgentWebhookReadinessReport
     '  RECEIVE passivo = contatori/metriche backend (OK, nessun mapping NL).',
     `Extension consigliate: ${AGENT_HINT_EXTENSION_KEYS.join(', ')}`,
     '',
+    ...formatConvaiOptionalFieldSemanticsReportSection(),
   ];
 
   if (report.backends.length === 0) {
@@ -872,6 +882,13 @@ export function formatWebhookReadinessReport(report: AgentWebhookReadinessReport
     lines.push('═'.repeat(72));
     lines.push(`Backend: ${b.taskLabel} (task ${b.taskId})`);
     lines.push(`Tool ConvAI: ${b.toolName} · import OpenAPI: ${b.importState}`);
+    if (!b.convaiOptionalRuleDocumented) {
+      lines.push(
+        `WARNING: regola ConvAI «"" = assente» non documentata sul task — eseguire «Recupera specifiche» (Read API). Atteso: ${CONVAI_OPTIONAL_EMPTY_STRING_RULE_ID}`
+      );
+    } else {
+      lines.push(`ConvAI optional semantics: ${CONVAI_OPTIONAL_EMPTY_STRING_RULE_SHORT}`);
+    }
     if (b.deriveToolError) {
       lines.push(`Tool derivazione: ERRORE — ${b.deriveToolError}`);
     }
@@ -905,7 +922,8 @@ export function formatWebhookReadinessReport(report: AgentWebhookReadinessReport
   lines.push('— Fine report —');
   lines.push(
     'Azioni suggerite per il team backend: arricchire lo OpenAPI con type/format/enum, description',
-    'con esempi NL, e x-agent-instructions dove il mapping naturale non è ovvio.'
+    'con esempi NL, x-agent-instructions dove il mapping naturale non è ovvio,',
+    'e implementare la regola standard: stringhe vuote "" su campi opzionali = campo assente.',
   );
   return lines.join('\n');
 }

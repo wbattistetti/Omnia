@@ -18,6 +18,10 @@ import {
   groupReportEntriesByTree,
   summarizeReadinessGroup,
 } from '@domain/openApi/webhookOpenApiReadiness';
+import {
+  CONVAI_OPTIONAL_EMPTY_STRING_RULE_SHORT,
+  CONVAI_OPTIONAL_EMPTY_STRING_RULE_TITLE,
+} from '@domain/openApi/convaiOptionalFieldSemantics';
 export type WebhookReadinessReportViewProps = {
   readonly report: AgentWebhookReadinessReport;
 };
@@ -438,6 +442,13 @@ function BackendSection({ backend }: { backend: BackendWebhookReadiness }): Reac
                 Descrizione tool ConvAI assente o troppo corta
               </p>
             ) : null}
+            {!backend.convaiOptionalRuleDocumented ? (
+              <p className="mt-1 flex items-start gap-1 text-[11px] text-amber-200">
+                <AlertTriangle size={12} className="shrink-0" aria-hidden />
+                Regola ConvAI «&quot;&quot; = assente» non documentata — rieseguire «Recupera specifiche» sul
+                Backend Call
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -464,6 +475,14 @@ export function WebhookReadinessReportView({
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-violet-700/45 bg-violet-950/25 px-3 py-2.5 text-[11px] leading-relaxed text-violet-100/95">
+        <p className="font-semibold text-violet-100">{CONVAI_OPTIONAL_EMPTY_STRING_RULE_TITLE}</p>
+        <p className="mt-1 text-violet-200/90">{CONVAI_OPTIONAL_EMPTY_STRING_RULE_SHORT}</p>
+        <p className="mt-1 text-[10px] text-violet-300/80">
+          Vale per tutti i backend tool webhook (agenda-solver, next-window, …). Documentato in OpenAPI al
+          «Recupera specifiche» e normalizzato dal gateway Omnia prima del forward.
+        </p>
+      </div>
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
         <span className="rounded bg-red-900/45 px-2 py-0.5 font-semibold text-red-200">
           {report.totalBlockers} BLOCKER

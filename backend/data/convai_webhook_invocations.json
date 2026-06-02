@@ -1,0 +1,43 @@
+{
+  "records": [
+    {
+      "id": "ffe60dd7-b2af-4c73-a949-9e0af78a16c5",
+      "ts": "2026-06-01T01:41:39.454Z",
+      "projectId": "proj_69c403214f",
+      "agentTaskId": "g_85f421d36cf25bf3b0df5484eda25a4a-ko2zi61vx",
+      "backendTaskId": "g_c4af5ff45b1b52a547061b37749cd109",
+      "backendLabel": "next-window",
+      "gatewayPath": "/api/runtime/convai-webhook/proj_69c403214f/g_85f421d36cf25bf3b0df5484eda25a4a-ko2zi61vx/g_c4af5ff45b1b52a547061b37749cd109",
+      "upstreamUrl": "https://gbqdapomdtxbhmftkbir.supabase.co/functions/v1/agenda-solver/next-window",
+      "forwardMethod": "POST",
+      "requestBodyFromClient": "{\"windowDays\":\"\"}",
+      "requestBodyAfterSendHints": "{\"windowDays\":\"\"}",
+      "upstreamStatus": 500,
+      "upstreamResponsePreview": "{\"error\":\"Cannot read properties of undefined (reading 'windowDays')\"}",
+      "durationMs": 21214,
+      "sendHintsApplied": 0,
+      "error": "upstream_http_500"
+    },
+    {
+      "id": "77a10841-55d2-4934-b793-da4e796c65d3",
+      "ts": "2026-06-01T01:41:32.340Z",
+      "projectId": "proj_69c403214f",
+      "agentTaskId": "g_85f421d36cf25bf3b0df5484eda25a4a-ko2zi61vx",
+      "backendTaskId": "g_c4af5ff45b1b52a547061b37749cd109",
+      "backendLabel": "next-window",
+      "gatewayPath": "/api/runtime/convai-webhook/proj_69c403214f/g_85f421d36cf25bf3b0df5484eda25a4a-ko2zi61vx/g_c4af5ff45b1b52a547061b37749cd109",
+      "upstreamUrl": "https://gbqdapomdtxbhmftkbir.supabase.co/functions/v1/agenda-solver/next-window",
+      "forwardMethod": "POST",
+      "requestBodyFromClient": "{\"windowDays\":10}",
+      "requestBodyAfterSendHints": "{\"windowDays\":10}",
+      "upstreamStatus": 200,
+      "upstreamResponsePreview": "{\"done\":false,\"window\":{\"start\":\"2026-07-31\",\"end\":\"2026-08-14\"},\"slots\":[{\"date\":\"2026-07-31\",\"time\":\"17:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-03\",\"time\":\"14:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-03\",\"time\":\"15:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-04\",\"time\":\"12:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-05\",\"time\":\"08:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-05\",\"time\":\"09:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-05\",\"time\":\"11:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-06\",\"time\":\"16:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-07\",\"time\":\"12:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-07\",\"time\":\"15:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-11\",\"time\":\"10:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-11\",\"time\":\"14:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-12\",\"time\":\"15:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-13\",\"time\":\"11:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-14\",\"time\":\"11:00\",\"duration\":60,\"score\":0},{\"date\":\"2026-08-14\",\"time\":\"15:00\",\"duration\":60,\"score\":0}],\"summary\":{\"windowDays\":10,\"totalSlots\":100,\"freeSlots\":16,\"filteredSlots\":16}}",
+      "durationMs": 14555,
+      "sendHintsApplied": 0,
+      "error": null
+    }
+  ],
+  "meta": {
+    "updatedAt": "2026-06-01T01:41:39.455Z"
+  }
+}

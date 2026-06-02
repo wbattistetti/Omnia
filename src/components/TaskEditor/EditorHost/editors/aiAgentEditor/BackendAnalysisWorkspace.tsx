@@ -34,7 +34,7 @@ import {
 
 } from '@domain/backendAnalysis/backendAnalysisDisplayRules';
 
-import { catalogEntryHasCompleteIaAnalysis } from '@domain/backendAnalysis/mergeCatalogEntryAnalysis';
+import { catalogEntryHasCompleteIaAnalysis, catalogEntryHasSubstantiveAnalysis } from '@domain/backendAnalysis/mergeCatalogEntryAnalysis';
 
 import { defaultIncompleteAgentSystemPrompt } from '@domain/backendAnalysis/backendAnalysisUxNormalize';
 import {
@@ -275,11 +275,13 @@ export function CatalogBackendAccordion({
 
   const sectionId = howToUseSectionId(backend.catalogEntryId);
 
-  const showHowTo = embedInCatalog || backendHowToUseHasContent(backend);
+  const showHowTo = embedInCatalog
+    ? catalogEntryHasSubstantiveAnalysis(backend)
+    : backendHowToUseHasContent(backend);
 
   const showParams =
     embedInCatalog
-      ? Object.keys(backend.parameters).length > 0
+      ? catalogEntryHasSubstantiveAnalysis(backend) && Object.keys(backend.parameters).length > 0
       : backendHasParameterAnalysis(backend);
 
 
@@ -308,11 +310,6 @@ export function CatalogBackendAccordion({
           <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-300/90">
             Come usare il backend
           </h4>
-          {embedInCatalog && !backend.howToUseMarkdown.trim() ? (
-            <p className="mb-2 text-[11px] leading-snug text-slate-500">
-              Vuoto: avvia «Analizza» sulla riga del backend o compila qui dopo l’analisi IA.
-            </p>
-          ) : null}
           <BackendAnalysisSectionWithReview
             sectionId={sectionId}
             value={howToEditorValue}

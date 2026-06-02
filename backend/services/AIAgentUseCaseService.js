@@ -1506,17 +1506,26 @@ async function createUseCase({
 }
 
 const SPLIT_ROOT_USE_CASE_DRAFT_SYSTEM = `You analyze designer text pasted into the root use case composer in OMNIA.
-Respond with a single valid JSON object only (no markdown fences, no commentary): { "labels": ["...", ...] }.
+Respond with a single valid JSON object only (no markdown fences, no commentary):
+{ "labels": ["...", ...], "startLabelIndex": number | null }
 
-Decide how many DISTINCT use cases exist from MEANING and intent — NOT from punctuation.
-Semicolons, commas, and line breaks may be formatting only (one paragraph can be one use case).
+Decide how many DISTINCT use cases exist from MEANING and intent — NOT from punctuation alone.
+Semicolons, commas, and line breaks may be formatting only (one paragraph can yield many use cases).
 
-Rules:
+Rules for "labels" count:
 - Return between 1 and ${SPLIT_ROOT_USE_CASE_DRAFT_MAX_LABELS} entries in "labels".
+- If the designer explicitly asks to create/generate N use cases (e.g. "crea 5 use case"), derive about N distinct conversational patterns from the description — do NOT split only on punctuation.
+- If the paste is an intentional list (one short item per line, numbered list, or clearly separate scenario titles), return one label per listed item.
+- If the paste is a free narrative / paragraph describing a service flow, decompose into distinct conversational patterns (booking, cancellation, info, escalation, …) even when written as one paragraph.
+- If a single coherent micro-scenario with one pattern only, return exactly one label.
 - Each label is a short draft title or one-line scenario intent (max ~120 characters), in OUTPUT_LANGUAGE when set.
 - Do NOT include labels that duplicate scenarios already in EXISTING_CATALOG (same meaning, not just similar wording).
-- If the paste is a single coherent scenario, return exactly one label.
-- If the paste lists multiple independent scenarios, return one label per scenario.`;
+
+Rules for "startLabelIndex" (session opening use case):
+- Set startLabelIndex to the 0-based index in "labels" ONLY when the designer EXPLICITLY describes how the virtual agent must OPEN the conversation / greet at session start (e.g. opening greeting, first message, "all'inizio", "all'apertura", "saluto iniziale", "when the call starts").
+- The Start use case is the conversational pattern for that opening — not every greeting mentioned later in the flow.
+- If no explicit opening instruction, or ambiguous, set startLabelIndex to null.
+- At most one Start; index must be valid for "labels" or null.`;
 
 /**
  * @param {string} outputLanguage
@@ -1537,7 +1546,7 @@ ${String(draftText || '').slice(0, 24000)}
 EXISTING_CATALOG (do not duplicate by meaning):
 ${JSON.stringify(catalog).slice(0, 14000)}
 
-Return JSON only: { "labels": [ "draft label 1", ... ] }`;
+Return JSON only: { "labels": [ "draft label 1", ... ], "startLabelIndex": 0 | null }`;
 }
 
 /**
@@ -1594,7 +1603,22 @@ async function splitRootUseCaseDraft({
   if (labels.length === 0) {
     throw new Error('Invalid JSON: labels array empty');
   }
-  return { labels };
+  let startLabelIndex = null;
+  if (parsed.startLabelIndex === null) {
+    startLabelIndex = null;
+  } else if (
+    typeof parsed.startLabelIndex === 'number' &&
+    Number.isInteger(parsed.startLabelIndex)
+  ) {
+    startLabelIndex = parsed.startLabelIndex;
+  }
+  if (
+    startLabelIndex !== null &&
+    (startLabelIndex < 0 || startLabelIndex >= labels.length)
+  ) {
+    startLabelIndex = null;
+  }
+  return { labels, startLabelIndex };
 }
 
 function buildRegenerateTurnUserMessage(outputLanguage, useCase, turnId) {

@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react';
 import { KbMarkdownMonaco } from '@components/workspaces/elevenlabs/kb/KbMarkdownMonaco';
 import type { KbFileFormat } from '@domain/knowledgeBase/kbFileKinds';
 import { isKbBinaryViewerFormat } from '@domain/knowledgeBase/kbFileKinds';
+import { normalizeKbDocumentText } from '@domain/knowledgeBase/kbDocumentTextNormalize';
 import {
   isKbTabularPreviewName,
   parseKbTabularDocument,
@@ -86,7 +87,11 @@ export function KnowledgeBaseDocumentReader({
   const tabular = React.useMemo(() => {
     if (isKbBinaryViewerFormat(format)) return null;
     if (!text.trim() || !shouldTryTabularParse(documentName, format)) return null;
-    return parseKbTabularDocument(text, { knownColumnHeaders });
+    const body = normalizeKbDocumentText(text);
+    return (
+      parseKbTabularDocument(body, { knownColumnHeaders }) ??
+      parseKbTabularDocument(body, {})
+    );
   }, [text, documentName, format, knownColumnHeaders]);
 
   const body = (() => {

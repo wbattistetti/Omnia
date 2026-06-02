@@ -25,6 +25,8 @@ function embeddedToolbarSignature(buttons: ToolbarButton[]): string {
       subBusy: Boolean(b?.subAction?.busy),
       subBusyLabel: b?.subAction?.busyLabel ?? '',
       subDisabled: Boolean(b?.subAction?.disabled),
+      gwSubBusy: Boolean(b?.gatewaySubAction?.busy),
+      gwSubDisabled: Boolean(b?.gatewaySubAction?.disabled),
     }))
   );
 }
@@ -32,20 +34,27 @@ function embeddedToolbarSignature(buttons: ToolbarButton[]): string {
 export function EmbeddedBackendCallEditor({
   task,
   endpointExternalRevision = 0,
+  agentTaskId,
   /**
    * Se `true` (default), la riga endpoint è nascosta (URL gestito dall’header catalogo import).
    * In modalità «specs» emulate l’URL è opzionale e si modifica nell’editor.
    */
   hideEndpointRow = true,
   workspaceInspectorEmbed = false,
+  /** Scroll unificato sulla colonna catalogo (Descrizione / Analisi / mapping). */
+  catalogColumnScroll = false,
 }: {
   task: Task;
   /** Incrementato dal parent quando URL/metodo sono aggiornati fuori dall'editor (header accordion). */
   endpointExternalRevision?: number;
+  /** Task AI Agent padre — abilita test via gateway ConvAI. */
+  agentTaskId?: string;
   hideEndpointRow?: boolean;
   /** ElevenLabs workspace inspector: scroll unico sul pannello padre. */
   workspaceInspectorEmbed?: boolean;
+  catalogColumnScroll?: boolean;
 }) {
+  const scrollInParent = workspaceInspectorEmbed || catalogColumnScroll;
   const [toolbarButtons, setToolbarButtons] = React.useState<ToolbarButton[]>([]);
   const [signatureSubOpen, setSignatureSubOpen] = React.useState(false);
   const lastToolbarSigRef = React.useRef<string | null>(null);
@@ -61,7 +70,7 @@ export function EmbeddedBackendCallEditor({
 
   return (
     <BackendCallEmbeddedLayout
-      deferScrollToParent={workspaceInspectorEmbed}
+      deferScrollToParent={scrollInParent}
       toolbar={
         <EmbeddedBackendToolbar
           buttons={toolbarButtons}
@@ -75,9 +84,10 @@ export function EmbeddedBackendCallEditor({
         hideHeader
         hideEndpointRow={hideEndpointRow}
         endpointExternalRevision={endpointExternalRevision}
+        convaiGatewayTestAgentTaskId={agentTaskId}
         embeddedSignatureSubToolbarOpen={signatureSubOpen}
         embeddedCloseSignatureToolbar={() => setSignatureSubOpen(false)}
-        workspaceInspectorEmbed={workspaceInspectorEmbed}
+        workspaceInspectorEmbed={scrollInParent}
         onToolbarUpdate={handleToolbarUpdate}
       />
     </BackendCallEmbeddedLayout>

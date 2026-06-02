@@ -111,8 +111,10 @@ export interface AIAgentEditorDockContextValue {
     holdComposerBusy?: boolean;
     deferSiblingReorder?: boolean;
   }) => Promise<string>;
-  /** Root INVIO: LLM split draft into 1..N labels (semantic). */
-  onSplitRootUseCaseDraft: (draftText: string) => Promise<string[]>;
+  /** Root INVIO: LLM split draft into 1..N labels + optional Start (semantic). */
+  onSplitRootUseCaseDraft: (
+    draftText: string
+  ) => Promise<import('./parseRootUseCaseDraft').SplitRootUseCaseDraftResult>;
   /** After a root batch finishes: merge highlight ids (amber border + New chip). */
   onRootUseCaseBatchCreated: (createdIds: readonly string[]) => void;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;

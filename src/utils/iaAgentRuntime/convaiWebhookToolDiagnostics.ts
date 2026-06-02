@@ -7,7 +7,7 @@
  * costruzione del `conversation_config` (che può fallire in silenzio se il prompt è incompleto).
  */
 import type { CompilationError } from '@components/FlowCompiler/types';
-import { loadDevTunnelPortMapFromStorage } from '@domain/devTunnel/devTunnelCompileBridge';
+import { analyzeLocalhostEndpointReachability } from '@domain/devTunnel/devTunnelCompileBridge';
 import { deriveBackendToolDefinition } from '@domain/iaAgentTools/backendToolDerivation';
 import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
@@ -20,43 +20,9 @@ import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
 import type { Task } from '@types/taskTypes';
 
-const LOCAL_RE = /https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)/gi;
-
-/** Host locale senza `:porta` — non è possibile mappare ngrok per porta; è sempre irraggiungibile da ConvAI. */
-const LOCAL_HOST_NO_EXPLICIT_PORT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?=\/|\?|#|$)/i;
-
-function collectPortsInString(s: string): number[] {
-  const out: number[] = [];
-  let m: RegExpExecArray | null;
-  LOCAL_RE.lastIndex = 0;
-  while ((m = LOCAL_RE.exec(s)) !== null) {
-    const p = parseInt(m[1], 10);
-    if (Number.isFinite(p)) out.push(p);
-  }
-  return out;
-}
-
 function analyzeUnreachable(endpoint: string): { unreachable: boolean; message?: string } {
-  const trimmed = endpoint.trim();
-  if (!trimmed) return { unreachable: false };
-
-  if (LOCAL_HOST_NO_EXPLICIT_PORT_RE.test(trimmed)) {
-    return {
-      unreachable: true,
-      message:
-        'Webhook non raggiungibile: URL verso host locale senza porta esplicita (usa http://localhost:PORTA/…). Un agente esterno richiede porta esplicita e tunnel verso quella porta.',
-    };
-  }
-
-  const ports = collectPortsInString(trimmed);
-  if (ports.length === 0) return { unreachable: false };
-  const map = loadDevTunnelPortMapFromStorage();
-  const missing = [...new Set(ports)].filter((p) => !String(map[p] ?? '').trim());
-  if (missing.length === 0) return { unreachable: false };
-  return {
-    unreachable: true,
-    message: `Webhook non raggiungibile: porta/e locale/i ${missing.join(', ')} senza tunnel attivo (Impostazioni tunnel / ngrok).`,
-  };
+  const reach = analyzeLocalhostEndpointReachability(endpoint);
+  return { unreachable: reach.unreachable, message: reach.message };
 }
 
 function dedupeConvaiWebhookDiagnostics(rows: FlowConvaiWebhookDiagnostic[]): FlowConvaiWebhookDiagnostic[] {

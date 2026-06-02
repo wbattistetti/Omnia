@@ -12,7 +12,7 @@
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
 import { rewriteCompilePayloadWithDevTunnel } from '@domain/devTunnel/devTunnelCompileBridge';
-import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import { resolveConvaiAgentLanguageForSync } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentOutputLanguage';
 import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
 import { taskRepository } from '@services/TaskRepository';
 import { buildElevenLabsConvaiPromptTools } from './elevenLabsConvaiToolsPayload';
@@ -188,11 +188,7 @@ export function conversationConfigFragmentFromIaAgentConfig(
       : {};
 
   const voiceId = primaryVoiceId(cfg);
-  const langRaw =
-    typeof cfg.voice?.language === 'string' && cfg.voice.language.trim().length > 0
-      ? cfg.voice.language.trim()
-      : 'en';
-  const lang = normalizeLanguage(langRaw) ?? 'en';
+  const lang = resolveConvaiAgentLanguageForSync(cfg.voice?.language);
 
   const llmModel = mapConvaiLlmForAgentLanguage(
     lang,

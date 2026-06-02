@@ -1286,7 +1286,7 @@ export interface SplitRootUseCaseDraftParams {
  */
 export async function splitRootUseCaseDraftApi(
   params: SplitRootUseCaseDraftParams
-): Promise<{ labels: string[] }> {
+): Promise<{ labels: string[]; startLabelIndex: number | null }> {
   const { draftText, allUseCases, provider, model, outputLanguage } = params;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
@@ -1308,7 +1308,7 @@ export async function splitRootUseCaseDraftApi(
       signal: controller.signal,
     });
     const body = (await parseDesignApiJsonResponse(res)) as
-      | { success: true; labels: unknown }
+      | { success: true; labels: unknown; startLabelIndex?: unknown }
       | AIAgentDesignApiError;
     if (!res.ok || !body || typeof body !== 'object' || !('success' in body) || !body.success) {
       emitDesignAiLlmBurstFromErrorResponse(res, body);
@@ -1327,7 +1327,22 @@ export async function splitRootUseCaseDraftApi(
     if (labels.length === 0) {
       throw new Error('Risposta non valida: labels vuoto.');
     }
-    return { labels };
+    let startLabelIndex: number | null = null;
+    if (body.startLabelIndex === null) {
+      startLabelIndex = null;
+    } else if (
+      typeof body.startLabelIndex === 'number' &&
+      Number.isInteger(body.startLabelIndex)
+    ) {
+      startLabelIndex = body.startLabelIndex;
+    }
+    if (
+      startLabelIndex !== null &&
+      (startLabelIndex < 0 || startLabelIndex >= labels.length)
+    ) {
+      startLabelIndex = null;
+    }
+    return { labels, startLabelIndex };
   } finally {
     clearTimeout(timeout);
   }

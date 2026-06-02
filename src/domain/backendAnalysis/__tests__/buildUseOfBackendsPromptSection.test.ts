@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { TaskType, type Task } from '@types/taskTypes';
 import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import {
+  BACKEND_RECEIVE_SECTION_HEADER,
   USE_OF_BACKENDS_SECTION_HEADER,
   buildUseOfBackendsPromptSection,
   mergeUseOfBackendsIntoContext,
@@ -120,6 +121,7 @@ describe('buildUseOfBackendsPromptSection', () => {
       catalog,
       agentTaskId: 'agent1',
       manualCatalogBackendTaskIds: ['bk1'],
+      mode: 'full',
     });
 
     expect(section).toContain(USE_OF_BACKENDS_SECTION_HEADER);
@@ -149,6 +151,7 @@ describe('buildUseOfBackendsPromptSection', () => {
     const section = buildUseOfBackendsPromptSection({
       agentTaskId: 'agent1',
       manualCatalogBackendTaskIds: ['bk1'],
+      mode: 'full',
     });
 
     expect(section).toContain('URL: https://api.example.com/v1/next-window');
@@ -172,6 +175,7 @@ describe('buildUseOfBackendsPromptSection', () => {
     const section = buildUseOfBackendsPromptSection({
       agentTaskId: 'agent1',
       manualCatalogBackendTaskIds: ['bk1'],
+      mode: 'full',
     });
 
     expect(section).toContain(OPENAPI_CONTRACT_MISSING_PREFIX);
@@ -193,11 +197,58 @@ describe('buildUseOfBackendsPromptSection', () => {
     const section = buildUseOfBackendsPromptSection({
       agentTaskId: 'agent1',
       manualCatalogBackendTaskIds: ['bk2'],
+      mode: 'full',
     });
 
     expect(section).toContain('### Catalog API');
     expect(section).toContain(OPENAPI_CONTRACT_MISSING_PREFIX);
     expect(section).toContain('→ query:');
+  });
+
+  it('slim mode omits SEND, URL and Method but keeps RECEIVE', () => {
+    getTask.mockImplementation((id: string) => (id === 'bk1' ? bk1Task : null));
+
+    const section = buildUseOfBackendsPromptSection({
+      agentTaskId: 'agent1',
+      manualCatalogBackendTaskIds: ['bk1'],
+      mode: 'slim',
+    });
+
+    expect(section).toContain(BACKEND_RECEIVE_SECTION_HEADER);
+    expect(section).toContain('← slots:');
+    expect(section).not.toContain('→ windowDays:');
+    expect(section).not.toContain('URL:');
+    expect(section).not.toContain('Method:');
+  });
+
+  it('slim mode returns empty when only SEND and tool description exist', () => {
+    getTask.mockImplementation(() =>
+      ({
+        id: 'bk3',
+        type: TaskType.BackendCall,
+        label: 'Write only',
+        backendToolDescription: 'Solo invio dati.',
+        inputs: [{ apiParam: 'payload', variable: 'p' }],
+        backendCallSpecMeta: {
+          schemaVersion: 1 as const,
+          lastImportedAt: '2026-01-01T00:00:00.000Z',
+          contentHash: 'h',
+          importState: 'ok' as const,
+          structuralFingerprint: 'fp',
+          openapiInputJsonSchemaByApiName: { payload: { type: 'object' } },
+          openapiInputUiKindByApiName: {},
+          openapiInputEnumByApiName: {},
+        },
+      }) as Task
+    );
+
+    const section = buildUseOfBackendsPromptSection({
+      agentTaskId: 'agent1',
+      manualCatalogBackendTaskIds: ['bk3'],
+      mode: 'slim',
+    });
+
+    expect(section).toBe('');
   });
 
   it('mergeUseOfBackendsIntoContext replaces stale section', () => {
@@ -209,5 +260,10 @@ describe('buildUseOfBackendsPromptSection', () => {
     expect(updated).toContain('### New');
     expect(updated).not.toContain('### Old');
     expect(stripUseOfBackendsFromContext(updated)).toBe('intro');
+    const slimOld = `${BACKEND_RECEIVE_SECTION_HEADER}\n\n### Old receive`;
+    const slimNew = `${BACKEND_RECEIVE_SECTION_HEADER}\n\n### New receive`;
+    const slimUpdated = mergeUseOfBackendsIntoContext(slimOld, slimNew);
+    expect(slimUpdated).toContain('### New receive');
+    expect(slimUpdated).not.toContain('### Old receive');
   });
 });

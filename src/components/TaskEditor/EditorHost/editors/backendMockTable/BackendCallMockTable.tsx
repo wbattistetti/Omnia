@@ -13,6 +13,7 @@ import {
 import {
   isBackendMockRowIncompleteForBulkTest,
   isBackendMockTableReadyForBulkTest,
+  listMissingDesignRequiredSendWireKeysForMockTest,
 } from '../../../../../domain/backendTest/backendMockTestReadiness';
 import type { MappingEntry } from '../../../../FlowMappingPanel/mappingTypes';
 import type { BackendOutputDef } from '../../../../../utils/backendCall/mapJsonResponseToWireOutputs';
@@ -51,10 +52,16 @@ export type BackendCallMockTableProps = {
   highlightIncompleteRows?: boolean;
   /** Incrementato dal parent per avviare «Test API» su tutte le righe senza ref imperativo. */
   bulkTestNonce?: number;
+  /** Come {@link bulkTestNonce} ma POST al gateway ConvAI (percorso ElevenLabs). */
+  bulkGatewayTestNonce?: number;
+  /** URL gateway (ngrok o localhost:3100) per test via gateway. */
+  convaiGatewayPublicUrl?: string | null;
   /** Striscia endpoint (internalName): completa righe mock se le celle sono vuote. */
   endpointInvocationFallback?: Record<string, string>;
   onBulkTestStart?: () => void;
-  onBulkTestEnd?: () => void;
+  onBulkTestEnd?: (result: 'ok' | 'skipped') => void;
+  /** Righe obbligatorie mancanti o tabella non pronta (dopo commit cella in editing). */
+  onBulkTestSkipped?: (message: string) => void;
 };
 
 export function BackendCallMockTable({
@@ -74,9 +81,12 @@ export function BackendCallMockTable({
   inputUiKindByInternalName,
   highlightIncompleteRows,
   bulkTestNonce,
+  bulkGatewayTestNonce,
+  convaiGatewayPublicUrl,
   endpointInvocationFallback,
   onBulkTestStart,
   onBulkTestEnd,
+  onBulkTestSkipped,
 }: BackendCallMockTableProps) {
     const [editingCell, setEditingCell] = useState<{ rowId: string; type: 'input' | 'output'; param: string } | null>(
       null
@@ -186,10 +196,12 @@ export function BackendCallMockTable({
       sendEntries: mappingSend,
       outputDefs,
       endpointInvocationFallback,
+      convaiGatewayPublicUrl,
     });
 
     /** Test bulk: righe senza obbligatori SEND mancanti (opzionali vuoti ok). */
-    const runBulkTestOnFilledRows = useCallback(async () => {
+    const runBulkTestOnFilledRows = useCallback(
+      async (viaConvaiGateway: boolean) => {
       const currentRows = getRowsForTest();
       const names = allMockInputInternalNames;
       if (names.length === 0) {
@@ -258,12 +270,18 @@ export function BackendCallMockTable({
       );
 
       try {
-        await Promise.all(ids.map((id) => runRow(id, { forceHttp: true })));
-        logBackendCallTest('runBulkTestOnFilledRows: Promise.all completato', { rowIds: ids });
+        await Promise.all(
+          ids.map((id) => runRow(id, { forceHttp: true, viaConvaiGateway }))
+        );
+        logBackendCallTest('runBulkTestOnFilledRows: Promise.all completato', {
+          rowIds: ids,
+          viaConvaiGateway,
+        });
       } finally {
         commitPendingCellEdit();
       }
-    }, [
+    },
+      [
       commitPendingCellEdit,
       getRowsForTest,
       allMockInputInternalNames,
@@ -277,7 +295,46 @@ export function BackendCallMockTable({
       endpoint.method,
       endpoint.headers,
       portalConnectionId,
-    ]);
+    ]
+    );
+
+    const runBulkPreflightOrSkip = useCallback(
+      (onSkipped: (message: string) => void): boolean => {
+        commitPendingCellEdit();
+        const currentRows = getRowsForTest();
+        const fallback = endpointInvocationFallback ?? {};
+        if (
+          allMockInputInternalNames.length === 0 ||
+          !isBackendMockTableReadyForBulkTest(mappingSend, currentRows, fallback)
+        ) {
+          const missing =
+            allMockInputInternalNames.length === 0
+              ? []
+              : listMissingDesignRequiredSendWireKeysForMockTest(
+                  mappingSend,
+                  currentRows,
+                  fallback
+                );
+          onSkipped(
+            allMockInputInternalNames.length === 0
+              ? 'Nessun parametro SEND: usa «Check Update» sull’endpoint operativo prima di testare.'
+              : missing.length > 0
+                ? `Parametri obbligatori mancanti: ${missing.join(', ')}. Compila Signature o le celle SEND (✓ per salvare).`
+                : 'Impossibile avviare il test: verifica la tabella SEND e riprova.'
+          );
+          logBackendCallTest('runBulkTestOnFilledRows: skip (tabella non pronta dopo commit cella)');
+          return false;
+        }
+        return true;
+      },
+      [
+        allMockInputInternalNames.length,
+        commitPendingCellEdit,
+        endpointInvocationFallback,
+        getRowsForTest,
+        mappingSend,
+      ]
+    );
 
     const lastHandledBulkNonce = useRef(0);
     useEffect(() => {
@@ -287,13 +344,61 @@ export function BackendCallMockTable({
       logBackendCallTest('MockTable: effetto bulkTestNonce', { bulkTestNonce });
       void (async () => {
         onBulkTestStart?.();
+        let result: 'ok' | 'skipped' = 'ok';
         try {
-          await runBulkTestOnFilledRows();
+          if (!runBulkPreflightOrSkip((msg) => onBulkTestSkipped?.(msg))) {
+            result = 'skipped';
+            return;
+          }
+          await runBulkTestOnFilledRows(false);
         } finally {
-          onBulkTestEnd?.();
+          onBulkTestEnd?.(result);
         }
       })();
-    }, [bulkTestNonce, runBulkTestOnFilledRows, onBulkTestStart, onBulkTestEnd]);
+    }, [
+      bulkTestNonce,
+      runBulkTestOnFilledRows,
+      runBulkPreflightOrSkip,
+      onBulkTestStart,
+      onBulkTestEnd,
+      onBulkTestSkipped,
+    ]);
+
+    const lastHandledGatewayBulkNonce = useRef(0);
+    useEffect(() => {
+      if (bulkGatewayTestNonce == null || bulkGatewayTestNonce <= 0) return;
+      if (bulkGatewayTestNonce === lastHandledGatewayBulkNonce.current) return;
+      lastHandledGatewayBulkNonce.current = bulkGatewayTestNonce;
+      logBackendCallTest('MockTable: effetto bulkGatewayTestNonce', { bulkGatewayTestNonce });
+      void (async () => {
+        onBulkTestStart?.();
+        let result: 'ok' | 'skipped' = 'ok';
+        try {
+          if (!String(convaiGatewayPublicUrl ?? '').trim()) {
+            onBulkTestSkipped?.(
+              'Test via gateway: URL mancante. Apri il backend dal tab Backends dell’agente AI (serve projectId + agentTaskId).'
+            );
+            result = 'skipped';
+            return;
+          }
+          if (!runBulkPreflightOrSkip((msg) => onBulkTestSkipped?.(msg))) {
+            result = 'skipped';
+            return;
+          }
+          await runBulkTestOnFilledRows(true);
+        } finally {
+          onBulkTestEnd?.(result);
+        }
+      })();
+    }, [
+      bulkGatewayTestNonce,
+      convaiGatewayPublicUrl,
+      runBulkTestOnFilledRows,
+      runBulkPreflightOrSkip,
+      onBulkTestStart,
+      onBulkTestEnd,
+      onBulkTestSkipped,
+    ]);
 
     const cleanParkedColumns = useCallback(() => {
       if (!columns?.length || !onColumnsChange) return;

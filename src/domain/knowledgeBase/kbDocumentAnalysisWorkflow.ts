@@ -84,6 +84,18 @@ export function shouldRunObservationReview(baseline: string, draft: string): boo
   return analysisDraftDiffersFromBaseline(draft, baseline);
 }
 
+/**
+ * Routes «Esegui» to observation review only when an agent baseline exists.
+ * First user trace (no baseline yet) must use refine/propose, not review.
+ */
+export function shouldKbAnalysisRouteToObservationReview(
+  baseline: string,
+  draft: string
+): boolean {
+  if (!normalizeAnalysisText(baseline)) return false;
+  return shouldRunObservationReview(baseline, draft);
+}
+
 export function isKbAnalysisObservationKind(raw: unknown): raw is KbAnalysisObservationKind {
   return typeof raw === 'string' && (OBSERVATION_KINDS as readonly string[]).includes(raw);
 }

@@ -3,6 +3,7 @@
  */
 
 import { findExcelHeaderRowIndex } from './detectExcelHeaderRow';
+import { normalizeKbDocumentText, splitKbDocumentLines } from './kbDocumentTextNormalize';
 
 export type KbTabularGrid = {
   headers: readonly string[];
@@ -27,8 +28,49 @@ function detectDelimiter(line: string): string {
   return best && best[1] > 0 ? best[0] : '\t';
 }
 
+/** RFC-style quoted fields for comma/semicolon-separated rows. */
+function parseDelimitedRow(line: string, delimiter: string): string[] {
+  if (delimiter !== ',' && delimiter !== ';') {
+    if (delimiter === '\t') return line.split('\t');
+    return line.split(delimiter);
+  }
+
+  const out: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i]!;
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cell += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cell += ch;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+    if (ch === delimiter) {
+      out.push(cell.trim());
+      cell = '';
+      continue;
+    }
+    cell += ch;
+  }
+  out.push(cell.trim());
+  return out;
+}
+
 function splitWithDelimiter(line: string, delimiter: string): string[] {
   if (delimiter === '\t') return line.split('\t');
+  if (delimiter === ',' || delimiter === ';') return parseDelimitedRow(line, delimiter);
   return line.split(delimiter);
 }
 
@@ -75,7 +117,7 @@ export type ParseKbTabularOptions = {
  */
 /** Prose KB markdown (## sections, lists) — not a delimiter table. */
 export function looksLikeProseMarkdown(text: string): boolean {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const lines = splitKbDocumentLines(text);
   let headings = 0;
   let listOrBold = 0;
   for (const line of lines) {
@@ -100,10 +142,7 @@ export function parseKbTabularDocument(
   }
 
   const maxRows = opts.maxRows ?? 500;
-  const lines = text
-    .replace(/^\uFEFF/, '')
-    .split(/\r?\n/)
-    .map((l) => l.trimEnd());
+  const lines = splitKbDocumentLines(text).map((l) => l.trimEnd());
 
   const nonEmptyIndices = lines
     .map((l, i) => (l.trim().length > 0 ? i : -1))
@@ -169,9 +208,7 @@ export function parseKbTabularText(text: string, maxRows = 500): KbTabularGrid |
 }
 
 function parseKbTabularTextLegacy(text: string, maxRows: number): KbTabularGrid | null {
-  const lines = text
-    .replace(/^\uFEFF/, '')
-    .split(/\r?\n/)
+  const lines = splitKbDocumentLines(text)
     .map((l) => l.trimEnd())
     .filter((l) => l.length > 0);
   if (lines.length < 2) return null;
@@ -224,7 +261,7 @@ function parsePipeCells(line: string): string[] {
 
 /** True if text contains a GitHub-style pipe table. */
 export function looksLikeMarkdownPipeTable(text: string): boolean {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const lines = splitKbDocumentLines(text);
   let rowCount = 0;
   for (const line of lines) {
     if (isMarkdownTableRow(line)) rowCount += 1;
@@ -240,7 +277,7 @@ export function parseMarkdownPipeTable(
   opts: ParseKbTabularOptions = {}
 ): KbTabularParseResult | null {
   const maxRows = opts.maxRows ?? 500;
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const lines = splitKbDocumentLines(text);
 
   let headerIndex = -1;
   for (let i = 0; i < lines.length; i++) {

@@ -21,7 +21,7 @@
  */
 
 import React from 'react';
-import { BookOpen, Check, DollarSign, Lock, Unplug } from 'lucide-react';
+import { BookOpen, Check, DollarSign, Lock, Unplug, Activity } from 'lucide-react';
 import {
   AGENT_WIZARD_STEP_COUNT,
   type AgentWizardStepIndex,
@@ -48,12 +48,16 @@ export interface AIAgentConstructionStepperProps {
   /** Callback di selezione della vista "Costi". Se omesso, il pulsante non viene reso. */
   readonly onSelectCosts?: () => void;
   /**
+   * Vista guardalog webhook ConvAI (ElevenLabs → gateway → backend). Separata dagli step ufficiali.
+   */
+  readonly webhookLogActive?: boolean;
+  readonly onSelectWebhookLog?: () => void;
+  /**
    * Pannello Interface agente (INPUT/OUTPUT) aperto sul passo Backend. Separato dagli step
    * ufficiali, tra «Voce» e «Costi di design».
    */
   readonly interfaceActive?: boolean;
   /** Toggle pannello Interface sul passo Backend (step 2). */
-  readonly interfaceActive?: boolean;
   readonly onToggleInterface?: () => void;
   /**
    * Slot opzionale renderizzato all'estrema destra dello stepper, dopo il pulsante "Costi".
@@ -99,6 +103,8 @@ export function AIAgentConstructionStepper({
   glowStepIndex = null,
   costsActive = false,
   onSelectCosts,
+  webhookLogActive = false,
+  onSelectWebhookLog,
   interfaceActive = false,
   onToggleInterface,
   deploySlot = null,
@@ -134,7 +140,7 @@ export function AIAgentConstructionStepper({
         */}
         {AGENT_WIZARD_STEPS_META.map((meta) => {
           const isBackendStep = meta.index === 2;
-          const isCurrent = !costsActive && meta.index === currentStep;
+          const isCurrent = !costsActive && !webhookLogActive && meta.index === currentStep;
           const isComplete = completion[meta.index] === true;
           const isEnabled = enabled[meta.index] === true;
           const Icon = meta.icon;
@@ -261,6 +267,26 @@ export function AIAgentConstructionStepper({
               </button>
             </li>
           </>
+        ) : null}
+        {onSelectWebhookLog ? (
+          <li>
+            <button
+              type="button"
+              aria-current={webhookLogActive ? 'page' : undefined}
+              aria-label="Guardalog webhook: traccia invocazioni ConvAI verso i backend collegati"
+              title="Cruscotto webhook: body IN da ElevenLabs, forward upstream e risposta RECEIVE"
+              onClick={onSelectWebhookLog}
+              className={
+                'flex h-10 min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors ' +
+                (webhookLogActive
+                  ? 'bg-sky-600 text-sky-50 border-sky-400 shadow-sm ring-2 ring-sky-300/50'
+                  : 'border-sky-600/45 bg-slate-900/90 text-sky-200 hover:border-sky-500/70 hover:bg-slate-800 hover:text-sky-100')
+              }
+            >
+              <Activity size={15} aria-hidden className="shrink-0 opacity-90" strokeWidth={2} />
+              <span className="whitespace-nowrap">Webhook log</span>
+            </button>
+          </li>
         ) : null}
         {reviewPublishSlot || deploySlot ? (
           <li className="ml-auto flex shrink-0 items-center gap-2">

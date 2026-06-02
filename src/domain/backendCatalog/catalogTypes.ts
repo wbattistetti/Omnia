@@ -94,6 +94,8 @@ export interface BackendCallSpecMeta {
    * Vuoto = nessun problema rilevato sullo snapshot materializzato.
    */
   openapiCompileErrors?: string[];
+  /** Regola ConvAI «"" = assente» documentata sui frammenti schema al Read API. */
+  convaiOptionalEmptyStringRuleId?: string;
 }
 
 /** Come è stata creata la riga nel catalogo (wizard passo Backend). */

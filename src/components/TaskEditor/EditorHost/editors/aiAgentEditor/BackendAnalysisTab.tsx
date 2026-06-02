@@ -53,7 +53,7 @@ import {
   createReviewSessionItems,
   observationsForFinalize,
   resolveBackendAnalysisToolbarPresentation,
-  shouldRunObservationReview,
+  shouldKbAnalysisRouteToObservationReview,
   type KbAnalysisReviewSessionItem,
 } from '@domain/backendAnalysis/backendAnalysisWorkflow';
 import type { ManualCatalogEntry } from '@domain/backendCatalog/catalogTypes';
@@ -199,7 +199,7 @@ export function BackendAnalysisTab({
 
   const allConfirmed = reviewItems ? allReviewItemsConfirmed(reviewItems) : false;
   const confirmedCount = reviewItems ? countConfirmedReviewItems(reviewItems) : 0;
-  const draftDiffersFromBaseline = shouldRunObservationReview(baseline, draft);
+  const routeToObservationReview = shouldKbAnalysisRouteToObservationReview(baseline, draft);
   const reviewHasDisagreement = reviewItems ? hasReviewDisagreement(reviewItems) : false;
   const showGuide = !analysisStarted;
 
@@ -355,10 +355,9 @@ export function BackendAnalysisTab({
     if (!canRunAgent || !draft.trim() || !projectId?.trim()) return;
     setBusy(true);
     setError(null);
-    setAnalysisStarted(true);
     try {
       const base = apiBase();
-      if (draftDiffersFromBaseline) {
+      if (routeToObservationReview) {
         const review = await reviewBackendAnalysisObservations({
           ...base,
           agentBaselineMarkdown: baseline,
@@ -383,7 +382,7 @@ export function BackendAnalysisTab({
   }, [
     canRunAgent,
     draft,
-    draftDiffersFromBaseline,
+    routeToObservationReview,
     projectId,
     baseline,
     apiBase,

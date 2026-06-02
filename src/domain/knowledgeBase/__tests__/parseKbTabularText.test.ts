@@ -15,6 +15,23 @@ describe('parseKbTabularText', () => {
     expect(parsed!.grid.rows[0]).toEqual(['Rossi', 'Mario']);
   });
 
+  it('skips banner rows in comma-separated CSV (Medici export)', () => {
+    const text = [
+      'ultimo aggiornamento dati: 02/04/2026,,,,,,,',
+      'PAROS,,,,,,,',
+      'COGNOME,NOME,SESSO,ID Dottore,Divisione (Name),,"prestazione default (service)","codice prest default (serviceId)"',
+      'Arcidiacono,Barbara,F,56,OCULISTICA,,oculistica,206',
+      'Arisi,Mariachiara,F,5,DERMATOLOGIA,,dermatologica,2',
+    ].join('\n');
+    const parsed = parseKbTabularDocument(text, {
+      knownColumnHeaders: ['ultimo aggiornamento dati: 02/04/2026'],
+    });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.preamble.length).toBeGreaterThanOrEqual(2);
+    expect(parsed!.grid.headers.some((h) => h.includes('COGNOME'))).toBe(true);
+    expect(parsed!.grid.rows[0]).toContain('Arcidiacono');
+  });
+
   it('skips banner rows and aligns Medici-style sheet', () => {
     const text = [
       'ultimo aggiornamento dati: 02/04/2026',
@@ -34,6 +51,19 @@ describe('parseKbTabularText', () => {
     expect(parsed!.grid.headers.some((h) => h.includes('COGNOME'))).toBe(true);
     expect(parsed!.grid.rows[0]).toContain('Arcidiacono');
     expect(parsed!.grid.rows[0]).toContain('Barbara');
+  });
+
+  it('parses CSV with classic Mac CR line endings', () => {
+    const text = [
+      'ultimo aggiornamento dati: 02/04/2026,,,,,,,',
+      'PAROS,,,,,,,',
+      'COGNOME,NOME,SESSO',
+      'Arcidiacono,Barbara,F',
+    ].join('\r');
+    const parsed = parseKbTabularDocument(text);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.grid.headers).toEqual(['COGNOME', 'NOME', 'SESSO']);
+    expect(parsed!.grid.rows[0]).toEqual(['Arcidiacono', 'Barbara', 'F']);
   });
 
   it('returns null for single-column text', () => {

@@ -2,7 +2,7 @@
  * Shared KB upload + tabular parse for task editor and ElevenLabs workspace hooks.
  */
 
-import { isKbTxtFile, isKbXlsxFile, parseKbFile } from '@workspaces/elevenlabs/parseKbDocument';
+import { parseKbFile } from '@workspaces/elevenlabs/parseKbDocument';
 import { uploadKbDocumentToProject, deleteKbDocumentFromProject } from '@services/kbDocumentRepositoryApi';
 import { buildKbTextPreview, fileToBase64 } from './kbTextPreview';
 import {
@@ -28,6 +28,28 @@ export function stageKbFilesFromUpload(files: readonly File[]): StagedKbDocument
   });
 }
 
+/** Client-side text/TSV preview so the reader works before or without repository upload. */
+export async function bootstrapKbDocumentLocalPreview(
+  docId: string,
+  file: File,
+  setDocuments: KbDocumentListUpdater
+): Promise<string> {
+  try {
+    const preview = String((await buildKbTextPreview(file)) ?? '').trim();
+    if (!preview) return '';
+    setDocuments((prev) =>
+      prev.map((d) =>
+        d.id === docId && !String(d.markdownSnippet ?? '').trim()
+          ? { ...d, markdownSnippet: preview }
+          : d
+      )
+    );
+    return preview;
+  } catch {
+    return '';
+  }
+}
+
 /** Upload bytes to project repository; patches `repositoryDocumentId` or parse error. */
 export async function ingestKbFileToRepository(
   projectId: string | undefined,
@@ -35,6 +57,8 @@ export async function ingestKbFileToRepository(
   file: File,
   setDocuments: KbDocumentListUpdater
 ): Promise<void> {
+  const textPreview = await bootstrapKbDocumentLocalPreview(docId, file, setDocuments);
+
   const pid = String(projectId || '').trim();
   if (!pid) {
     setDocuments((prev) =>
@@ -42,8 +66,8 @@ export async function ingestKbFileToRepository(
         d.id === docId
           ? {
               ...d,
-              parseStatus: 'error' as const,
-              parseError: 'projectId mancante: impossibile salvare nel repository.',
+              parseError:
+                'Salva il progetto per archiviare il file nel repository (anteprima locale disponibile).',
             }
           : d
       )
@@ -51,11 +75,8 @@ export async function ingestKbFileToRepository(
     return;
   }
   try {
-    const [contentBase64, textPreview] = await Promise.all([
-      fileToBase64(file),
-      buildKbTextPreview(file),
-    ]);
-    const meta = await uploadKbDocumentToProject(pid, {
+    const contentBase64 = await fileToBase64(file);
+    await uploadKbDocumentToProject(pid, {
       name: file.name,
       mimeType: file.type || 'application/octet-stream',
       contentBase64,
@@ -79,14 +100,21 @@ export async function ingestKbFileToRepository(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setDocuments((prev) =>
-      prev.map((d) =>
-        d.id === docId ? { ...d, parseStatus: 'error' as const, parseError: message } : d
-      )
+      prev.map((d) => {
+        if (d.id !== docId) return d;
+        const keepReady = Boolean(d.variables?.length) || Boolean(textPreview);
+        return {
+          ...d,
+          parseStatus: keepReady ? ('ready' as const) : ('error' as const),
+          parseError: message,
+          ...(textPreview && !d.markdownSnippet?.trim() ? { markdownSnippet: textPreview } : {}),
+        };
+      })
     );
   }
 }
 
-/** Deterministic column extraction for .txt / .xlsx. */
+/** Deterministic column extraction for .txt / .csv / .xlsx. */
 export async function ingestKbTabularParse(
   docId: string,
   file: File,
@@ -133,7 +161,7 @@ export function runKbDocumentIngest(
   doc: StagedKbDocument,
   setDocuments: KbDocumentListUpdater
 ): void {
-  if (isKbTxtFile(doc.file) || isKbXlsxFile(doc.file)) {
+  if (isKbParsableTabular(doc.file)) {
     void ingestKbTabularParse(doc.id, doc.file, setDocuments);
   }
   void ingestKbFileToRepository(projectId, doc.id, doc.file, setDocuments);

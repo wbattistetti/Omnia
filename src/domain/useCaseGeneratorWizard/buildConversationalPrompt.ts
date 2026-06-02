@@ -31,7 +31,8 @@ import {
 } from './catalogFormat';
 import { serializeConversationalCatalog } from './serializeConversationalCatalog';
 import {
-  areAllUseCasesProjectable,
+  formatNonProjectableUseCasesErrorDetail,
+  listNonProjectableIncludedUseCases,
   projectAllUseCasesToConversationalJson,
 } from './useCaseJsonProjection';
 import { buildConversationalRulesPromptSection } from '@domain/conversationalRules/buildConversationalRulesPromptSection';
@@ -141,8 +142,8 @@ Regole obbligatorie
 6. Usa lo \`scenario\` LLM (intestazione UC o campo \`s\` / \`scenario\`) per decidere QUANDO applicare l'use case.
 7. Il \`label\` interno e gli id tecnici non vanno citati all'utente.
 8. Se la variante ha \`tokenBindings\`: per ogni token usa \`fillFrom\` (campo RECEIVE) per popolare il valore; \`toolName\` e \`sendParams\` indicano quale tool backend invocare e con quali parametri SEND.
-9. Se l'use case ha \`slotBackendContract\`: è la mappa canonica slot_id → { tool, receive, send? }; allinea \`tokenBindings\` a questa mappa. I dettagli OpenAPI dei tool restano nel blocco globale USE OF BACKENDS (non duplicare per UC).
-10. Se \`tokenBindings\` include \`sendPath\`, \`valueKind\` e \`role\`: sono hint SEND su path OpenAPI del tool (vedi USE OF BACKENDS); valorizza i parametri SEND del body tool in contesto, senza inventare path. Per date relative usa \`valueKind\` (es. end_of_month, tomorrow, specific_date) quando presente.
+9. Se l'use case ha \`slotBackendContract\`: è la mappa canonica slot_id → { tool, receive, send? }; allinea \`tokenBindings\` a questa mappa. I campi RECEIVE per \`fillFrom\` sono nel blocco BACKEND RECEIVE; non duplicare per UC.
+10. Se \`tokenBindings\` include \`sendPath\`, \`valueKind\` e \`role\`: usa lo schema del tool webhook indicato da \`toolName\`; non inventare path. Per date relative usa \`valueKind\` (es. end_of_month, tomorrow, specific_date) quando presente.
 
 ${catalogHeading}
 Ogni voce elenca lo scenario LLM e il template da compilare (almeno una variante per UC).`;
@@ -166,9 +167,12 @@ export function buildConversationalPrompt(
         'Il pulsante «Crea prompt conversazionale» non dovrebbe essere visibile in questo stato.'
     );
   }
-  if (!areAllUseCasesProjectable(useCases)) {
+  const lexicon = options.lexicon;
+  const bindings = options.backendOutputSlotBindings;
+  const nonProjectable = listNonProjectableIncludedUseCases(useCases, lexicon, bindings);
+  if (nonProjectable.length > 0) {
     throw new Error(
-      'buildConversationalPrompt: almeno uno use case non ha un messaggio agente canonico compilabile.'
+      `buildConversationalPrompt: ${formatNonProjectableUseCasesErrorDetail(nonProjectable)}`
     );
   }
 

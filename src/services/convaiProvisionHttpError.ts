@@ -109,7 +109,14 @@ export function formatListAgentsHttpError(res: Response, requestUrl: string, res
   return parts.join(' ');
 }
 
-export function formatDeleteAgentHttpError(res: Response, agentId: string, responseText: string): string {
+export type ConvaiAgentHttpOperation = 'deleteAgent' | 'patchAgent';
+
+export function formatConvaiAgentHttpError(
+  operation: ConvaiAgentHttpOperation,
+  res: Response,
+  agentId: string,
+  responseText: string
+): string {
   const trimmed = responseText.trim();
   let data: Record<string, unknown> = {};
   if (trimmed) {
@@ -117,7 +124,7 @@ export function formatDeleteAgentHttpError(res: Response, agentId: string, respo
       data = JSON.parse(trimmed) as Record<string, unknown>;
     } catch {
       const snippet = trimmed.length > BODY_SNIPPET_MAX ? `${trimmed.slice(0, BODY_SNIPPET_MAX)}…` : trimmed;
-      return `deleteAgent: HTTP ${res.status} — ${snippet || '(corpo vuoto)'} [agent ${agentId}]`;
+      return `${operation}: HTTP ${res.status} — ${snippet || '(corpo vuoto)'} [agent ${agentId}]`;
     }
   }
 
@@ -135,9 +142,14 @@ export function formatDeleteAgentHttpError(res: Response, agentId: string, respo
         ? data.httpStatus
         : null;
 
-  const parts: string[] = [`deleteAgent: ${err}`];
+  const parts: string[] = [`${operation}: ${err}`];
   if (upstream != null && upstream !== res.status) parts.push(`(upstream HTTP ${upstream})`);
   if (detail) parts.push(`— ${detail}`);
   parts.push(`[agent ${agentId}]`);
   return parts.join(' ');
+}
+
+/** @deprecated Prefer {@link formatConvaiAgentHttpError} with `deleteAgent`. */
+export function formatDeleteAgentHttpError(res: Response, agentId: string, responseText: string): string {
+  return formatConvaiAgentHttpError('deleteAgent', res, agentId, responseText);
 }

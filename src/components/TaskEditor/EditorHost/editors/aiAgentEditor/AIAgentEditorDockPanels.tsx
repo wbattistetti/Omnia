@@ -348,7 +348,9 @@ export function EditorUseCasesPanel({
       onDismissError={onClearUseCaseComposerError}
       onCreateUseCase={catalogOnCreate}
       onSplitRootUseCaseDraft={
-        isErrorHandlingCatalog ? async () => [] : onSplitRootUseCaseDraft
+        isErrorHandlingCatalog
+          ? async () => ({ labels: [], startLabel: null })
+          : onSplitRootUseCaseDraft
       }
       onRootUseCaseBatchCreated={
         isErrorHandlingCatalog ? () => {} : onRootUseCaseBatchCreated

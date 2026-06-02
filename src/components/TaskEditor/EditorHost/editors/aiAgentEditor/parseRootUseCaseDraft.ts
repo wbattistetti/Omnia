@@ -11,8 +11,11 @@ export const ROOT_USE_CASE_BATCH_MAX = 30;
 /** Minimum draft length to call the split LLM when an API is available. */
 export const ROOT_USE_CASE_DRAFT_MIN_LLM_CHARS = 8;
 
-/** Emergency fallback: split on line breaks, comma, or semicolon. */
-const ROOT_BATCH_SPLIT_FALLBACK = /[;,\r\n]+/;
+/** Max chars per segment to treat semicolon-separated text as an intentional list. */
+const FALLBACK_LIST_ITEM_MAX_CHARS = 120;
+
+/** Max chars per segment for comma-separated short lists. */
+const FALLBACK_COMMA_LIST_MAX_CHARS = 80;
 
 /**
  * Normalizes text for duplicate detection (label, payoff, behavior, draft segment).
@@ -41,14 +44,47 @@ export function buildExistingRootDraftDedupKeys(catalog: readonly AIAgentUseCase
   return keys;
 }
 
+function looksLikeListSegment(text: string, maxChars: number): boolean {
+  const t = text.trim();
+  if (!t || t.length > maxChars) return false;
+  if (/[.!?]\s+\p{L}/u.test(t)) return false;
+  return true;
+}
+
 /**
- * Splits draft text into segment labels (trimmed, non-empty) — fallback when LLM is unavailable.
+ * Emergency fallback when LLM split is unavailable.
+ * Prefers newlines; splits on `;`/`,` only when segments look like a short list, not prose.
  */
 export function parseRootUseCaseDraftSegmentsFallback(raw: string): string[] {
-  return String(raw || '')
-    .split(ROOT_BATCH_SPLIT_FALLBACK)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return [];
+
+  if (/\r?\n/.test(trimmed)) {
+    const lines = trimmed.split(/\r?\n+/).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (lines.length > 1) return lines;
+  }
+
+  if (trimmed.includes(';')) {
+    const parts = trimmed.split(/[;]+/).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (
+      parts.length > 1 &&
+      parts.every((p) => looksLikeListSegment(p, FALLBACK_LIST_ITEM_MAX_CHARS))
+    ) {
+      return parts;
+    }
+  }
+
+  if (trimmed.includes(',')) {
+    const parts = trimmed.split(/,+/).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (
+      parts.length >= 3 &&
+      parts.every((p) => looksLikeListSegment(p, FALLBACK_COMMA_LIST_MAX_CHARS))
+    ) {
+      return parts;
+    }
+  }
+
+  return [trimmed];
 }
 
 /** @deprecated Prefer {@link parseRootUseCaseDraftSegmentsFallback}; kept for tests and legacy imports. */
@@ -91,17 +127,37 @@ export function dedupeRootDraftLabels(
   return { toCreate, skippedCount };
 }
 
+/** LLM / API result for semantic root draft split. */
+export type SplitRootUseCaseDraftResult = {
+  labels: string[];
+  /** Draft label marked as session Start, if any. */
+  startLabel: string | null;
+};
+
 export interface ResolveRootUseCaseDraftResult {
   labels: string[];
   skippedCount: number;
   usedLlm: boolean;
+  /** Label to mark as Start after creation; null if none or deduped out. */
+  startLabel: string | null;
 }
 
 export interface ResolveRootUseCaseDraftParams {
   raw: string;
   catalog: readonly AIAgentUseCase[];
   /** When set and draft length >= {@link ROOT_USE_CASE_DRAFT_MIN_LLM_CHARS}, always used first. */
-  splitApi?: (draft: string) => Promise<string[]>;
+  splitApi?: (draft: string) => Promise<SplitRootUseCaseDraftResult>;
+}
+
+function resolveStartLabelFromText(
+  startLabel: string | null | undefined,
+  toCreate: readonly string[]
+): string | null {
+  const raw = String(startLabel ?? '').trim();
+  if (!raw) return null;
+  const key = normalizeRootUseCaseDraftDedupKey(raw);
+  const match = toCreate.find((label) => normalizeRootUseCaseDraftDedupKey(label) === key);
+  return match ?? null;
 }
 
 /**
@@ -112,27 +168,32 @@ export async function resolveRootUseCaseDraftForCreateAsync(
 ): Promise<ResolveRootUseCaseDraftResult> {
   const trimmed = String(params.raw || '').trim();
   if (!trimmed) {
-    return { labels: [], skippedCount: 0, usedLlm: false };
+    return { labels: [], skippedCount: 0, usedLlm: false, startLabel: null };
   }
 
   const catalogKeys = buildExistingRootDraftDedupKeys(params.catalog);
-  let segments: string[];
+  let segments: string[] = [];
   let usedLlm = false;
+  let llmStartLabel: string | null = null;
 
   if (trimmed.length >= ROOT_USE_CASE_DRAFT_MIN_LLM_CHARS && params.splitApi) {
     usedLlm = true;
     try {
       const fromLlm = await params.splitApi(trimmed);
-      segments = Array.isArray(fromLlm)
-        ? fromLlm.map((s) => String(s || '').trim()).filter((s) => s.length > 0)
+      segments = Array.isArray(fromLlm.labels)
+        ? fromLlm.labels.map((s) => String(s || '').trim()).filter((s) => s.length > 0)
         : [];
+      llmStartLabel = fromLlm.startLabel ?? null;
     } catch {
-      segments =
-        trimmed.length > 0 ? parseRootUseCaseDraftSegmentsFallback(trimmed) : [trimmed];
+      segments = parseRootUseCaseDraftSegmentsFallback(trimmed);
     }
   } else if (trimmed.length >= ROOT_USE_CASE_DRAFT_MIN_LLM_CHARS) {
     segments = parseRootUseCaseDraftSegmentsFallback(trimmed);
   } else {
+    segments = [trimmed];
+  }
+
+  if (segments.length === 0 && trimmed.length > 0) {
     segments = [trimmed];
   }
 
@@ -141,5 +202,7 @@ export async function resolveRootUseCaseDraftForCreateAsync(
   }
 
   const { toCreate, skippedCount } = dedupeRootDraftLabels(segments, catalogKeys);
-  return { labels: toCreate, skippedCount, usedLlm };
+  const startLabel = resolveStartLabelFromText(llmStartLabel, toCreate);
+
+  return { labels: toCreate, skippedCount, usedLlm, startLabel };
 }

@@ -19,6 +19,9 @@ export const LABEL_GENERATE_MORE_USE_CASES = 'Crea altri use case';
 /** Guida sotto la textbox con lista già popolata (aggiunta da input utente). */
 export const HINT_ADD_USE_CASES_FROM_INPUT =
   'Incolla o scrivi uno o più scenari qui sotto: INVIO e l’IA li analizza e li aggiunge alla lista.';
+/** Placeholder textarea root composer (lista use case già popolata). */
+export const PLACEHOLDER_ROOT_USE_CASE_DRAFT =
+  'Descrivi in modo molto libero gli scenari che vorresti includere e premi enter o clicca sul pulsante a fianco. Omnia analizzerà il testo e suggerirà gli use case appropriati con descrizioni complete e suggerendo i messaggi per l\'agente.';
 /** In-tab / toolbar status while Create or Refine is in flight. */
 export const LABEL_GENERATING_IA_AGENT = 'generating IA agent...';
 /** Status while IA creates a single root/child use case. */

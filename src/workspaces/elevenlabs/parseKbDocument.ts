@@ -1,5 +1,5 @@
 /**
- * Parses KB documents (.txt tabular, .xlsx) and extracts column → variable mappings.
+ * Parses KB documents (.txt / .csv tabular, .xlsx) and extracts column → variable mappings.
  */
 
 import {
@@ -8,6 +8,8 @@ import {
   toKbPlaceholder,
 } from './kbDocumentColumnMap';
 import { detectExcelHeaderRow } from '@domain/knowledgeBase/detectExcelHeaderRow';
+import { normalizeKbDocumentText } from '@domain/knowledgeBase/kbDocumentTextNormalize';
+import { parseKbTabularDocument } from '@domain/knowledgeBase/parseKbTabularText';
 import {
   KB_XLSX_HEADER_SCAN_ROWS,
   readXlsxWorkbookLimited,
@@ -20,14 +22,14 @@ export type KbExtractedVariable = {
 };
 
 export type KbParseResult = {
-  format: 'txt' | 'xlsx';
+  format: 'txt' | 'csv' | 'xlsx';
   variables: KbExtractedVariable[];
   /** Maps variable id → original column header (same labels as in the file). */
   variableDictionary: Record<string, string>;
 };
 
 export type KbParseError = {
-  format: 'txt' | 'xlsx' | 'unknown';
+  format: 'txt' | 'csv' | 'xlsx' | 'unknown';
   message: string;
 };
 
@@ -95,9 +97,12 @@ function extractColumnsFromFirstLine(firstLine: string): string[] {
 /**
  * First non-empty line = header row; each cell is one variable (name from column only).
  */
-export function parseKbTextContent(text: string): KbParseResult {
-  const normalized = text.replace(/^\uFEFF/, '');
-  const firstLine = normalized.split(/\r?\n/).find((l) => l.trim().length > 0) ?? '';
+export function parseKbTextContent(
+  text: string,
+  opts?: { format?: 'txt' | 'csv' }
+): KbParseResult {
+  const normalized = normalizeKbDocumentText(text);
+  const firstLine = normalized.split('\n').find((l) => l.trim().length > 0) ?? '';
   if (!firstLine.trim()) {
     throw new Error('File di testo vuoto o senza intestazione.');
   }
@@ -110,10 +115,25 @@ export function parseKbTextContent(text: string): KbParseResult {
 
   const variables = dedupeVariables(columns);
   return {
-    format: 'txt',
+    format: opts?.format ?? 'txt',
     variables,
     variableDictionary: buildDictionary(variables),
   };
+}
+
+/** Comma/semicolon-separated tabular file (skips banner rows above column headers). */
+export function parseKbCsvContent(text: string): KbParseResult {
+  const tabular = parseKbTabularDocument(normalizeKbDocumentText(text));
+  const headers = (tabular?.grid.headers ?? []).map((h) => h.trim()).filter(Boolean);
+  if (headers.length >= 2) {
+    const variables = dedupeVariables(headers);
+    return {
+      format: 'csv',
+      variables,
+      variableDictionary: buildDictionary(variables),
+    };
+  }
+  return parseKbTextContent(text, { format: 'csv' });
 }
 
 async function readXlsxColumnHeaders(file: File): Promise<string[]> {
@@ -161,11 +181,25 @@ export function isKbXlsxFile(file: File): boolean {
   );
 }
 
+export function isKbCsvFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith('.csv') ||
+    name.endsWith('.tsv') ||
+    file.type === 'text/csv' ||
+    file.type === 'text/tab-separated-values'
+  );
+}
+
 export async function parseKbFile(file: File): Promise<KbParseResult> {
   if (isKbXlsxFile(file)) return parseKbXlsxFile(file);
+  if (isKbCsvFile(file)) {
+    const text = await file.text();
+    return parseKbCsvContent(text);
+  }
   if (isKbTxtFile(file)) {
     const text = await file.text();
     return parseKbTextContent(text);
   }
-  throw new Error('Formato non supportato. Usa file .txt (tabellare) o .xlsx.');
+  throw new Error('Formato non supportato. Usa file .txt, .csv (tabellare) o .xlsx.');
 }

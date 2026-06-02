@@ -21,6 +21,7 @@ import {
 import { EditorBackendsPanel } from '../EditorBackendsPanel';
 import { EditorIaRuntimePanel } from '../EditorIaRuntimePanel';
 import { EditorTaskCostsPanel } from '../EditorTaskCostsPanel';
+import { EditorWebhookInvocationsPanel } from '../EditorWebhookInvocationsPanel';
 import {
   ElevenLabsImportRecapBanner,
   type ElevenLabsImportRecapBannerProps,
@@ -34,10 +35,14 @@ export interface AIAgentConstructionWizardShellProps {
   readonly stepHeaderAction?: React.ReactNode;
   readonly costsActive?: boolean;
   readonly onSelectCosts?: () => void;
+  readonly webhookLogActive?: boolean;
+  readonly onSelectWebhookLog?: () => void;
   readonly interfaceActive?: boolean;
   readonly onToggleInterface?: () => void;
   readonly taskId?: string;
+  readonly projectId?: string;
   readonly taskLabel?: string;
+  readonly backendToolTaskIds?: readonly string[];
   readonly deploySlot?: React.ReactNode;
   readonly reviewPublishSlot?: React.ReactNode;
   readonly bypassGating?: boolean;
@@ -63,10 +68,14 @@ export function AIAgentConstructionWizardShell({
   stepHeaderAction = null,
   costsActive = false,
   onSelectCosts,
+  webhookLogActive = false,
+  onSelectWebhookLog,
   interfaceActive = false,
   onToggleInterface,
   taskId,
+  projectId,
   taskLabel,
+  backendToolTaskIds = [],
   deploySlot = null,
   reviewPublishSlot = null,
   bypassGating = false,
@@ -89,6 +98,8 @@ export function AIAgentConstructionWizardShell({
         glowStepIndex={glowStepIndex}
         costsActive={costsActive}
         onSelectCosts={onSelectCosts}
+        webhookLogActive={webhookLogActive}
+        onSelectWebhookLog={onSelectWebhookLog}
         interfaceActive={interfaceActive}
         onToggleInterface={onToggleInterface}
         deploySlot={deploySlot}
@@ -102,7 +113,22 @@ export function AIAgentConstructionWizardShell({
           onDismiss={onDismissElevenLabsRecap}
         />
       ) : null}
-      {costsActive ? (
+      {webhookLogActive ? (
+        <main className="flex-1 min-h-0 overflow-hidden">
+          {typeof taskId === 'string' && taskId && typeof projectId === 'string' && projectId ? (
+            <EditorWebhookInvocationsPanel
+              projectId={projectId}
+              agentTaskId={taskId}
+              taskLabel={taskLabel || ''}
+              backendTaskIds={backendToolTaskIds}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center px-6 text-sm text-slate-400">
+              Progetto o task non identificato: impossibile filtrare il guardalog webhook.
+            </div>
+          )}
+        </main>
+      ) : costsActive ? (
         <main className="flex-1 min-h-0 overflow-hidden">
           {typeof taskId === 'string' && taskId ? (
             <EditorTaskCostsPanel taskId={taskId} taskLabel={taskLabel || ''} />

@@ -17,6 +17,8 @@ export type UseCaseBundleGenerateButtonProps = {
   hasExistingUseCases?: boolean;
   /** Compatto: accanto alla textbox in riga. */
   layout?: 'inline' | 'block';
+  /** Accento bordo/pulsante: default violet; sky nel composer root. */
+  accentTone?: 'violet' | 'sky';
   /** CTA empty state: pulsante più grande e leggibile. */
   size?: 'default' | 'lg';
   className?: string;
@@ -27,6 +29,7 @@ export function UseCaseBundleGenerateButton({
   onGenerate,
   hasExistingUseCases = false,
   layout = 'inline',
+  accentTone = 'violet',
   size = 'default',
   className = '',
 }: UseCaseBundleGenerateButtonProps): React.ReactElement {
@@ -55,8 +58,16 @@ export function UseCaseBundleGenerateButton({
     size === 'lg'
       ? 'gap-2.5 px-5 py-3 text-sm sm:text-base'
       : 'gap-2 px-3 py-2 text-xs sm:text-sm';
-  const inlineClass = `inline-flex shrink-0 items-center justify-center rounded-lg border border-violet-500/45 bg-violet-600/25 font-semibold text-violet-50 transition-colors hover:bg-violet-600/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 ${sizeClass}`;
-  const blockClass = `inline-flex w-full max-w-md items-center justify-center rounded-xl border border-violet-500/50 bg-violet-600/30 font-semibold text-violet-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-violet-400/60 hover:bg-violet-600/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:opacity-45 ${sizeClass}`;
+  const skyInlineClass = `inline-flex shrink-0 items-center justify-center rounded-lg border-2 border-sky-400/60 bg-sky-600/20 font-semibold text-sky-50 transition-colors hover:border-sky-300/70 hover:bg-sky-600/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/45 disabled:cursor-not-allowed disabled:opacity-50 ${sizeClass}`;
+  const skyBlockClass = `inline-flex w-full max-w-md items-center justify-center rounded-xl border-2 border-sky-400/60 bg-sky-600/25 font-semibold text-sky-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-sky-300/70 hover:bg-sky-600/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/45 disabled:opacity-45 ${sizeClass}`;
+  const inlineClass =
+    accentTone === 'sky'
+      ? skyInlineClass
+      : `inline-flex shrink-0 items-center justify-center rounded-lg border border-violet-500/45 bg-violet-600/25 font-semibold text-violet-50 transition-colors hover:bg-violet-600/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:cursor-not-allowed disabled:opacity-50 ${sizeClass}`;
+  const blockClass =
+    accentTone === 'sky'
+      ? skyBlockClass
+      : `inline-flex w-full max-w-md items-center justify-center rounded-xl border border-violet-500/50 bg-violet-600/30 font-semibold text-violet-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-violet-400/60 hover:bg-violet-600/45 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 disabled:opacity-45 ${sizeClass}`;
 
   return (
     <>

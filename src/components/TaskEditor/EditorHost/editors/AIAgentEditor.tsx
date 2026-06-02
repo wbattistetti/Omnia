@@ -1039,10 +1039,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * cliccando il pulsante "$" oppure cliccando uno qualunque degli step ufficiali (1..5).
    */
   const [costsViewActive, setCostsViewActive] = React.useState(false);
+  const [webhookLogViewActive, setWebhookLogViewActive] = React.useState(false);
 
   const onSelectWizardStep = React.useCallback(
     (next: AgentWizardStepIndex) => {
       setCostsViewActive(false);
+      setWebhookLogViewActive(false);
       if (next !== 2) setAgentInterfacePanelOpen(false);
       stepSetter(next);
     },
@@ -1051,6 +1053,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const openSlotMappingForMappingWork = React.useCallback(() => {
     setCostsViewActive(false);
+    setWebhookLogViewActive(false);
     setAgentInterfacePanelOpen(false);
     onSelectWizardStep(AGENT_WIZARD_PROMPTS_STEP_INDEX);
     useCaseGenWizard.selectStep(0);
@@ -1095,10 +1098,17 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
 
   const onSelectCostsView = React.useCallback(() => {
     setCostsViewActive(true);
+    setWebhookLogViewActive(false);
+    setAgentInterfacePanelOpen(false);
+  }, []);
+  const onSelectWebhookLogView = React.useCallback(() => {
+    setWebhookLogViewActive(true);
+    setCostsViewActive(false);
     setAgentInterfacePanelOpen(false);
   }, []);
   const onToggleInterfaceView = React.useCallback(() => {
     setCostsViewActive(false);
+    setWebhookLogViewActive(false);
     setAgentInterfacePanelOpen((prev) => {
       const next = !prev;
       if (next) stepSetter(2);
@@ -1110,6 +1120,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       const view = (ev as CustomEvent<TutorEnsureViewDetail>).detail?.view;
       if (!view) return;
       setCostsViewActive(false);
+      setWebhookLogViewActive(false);
       if (view === 'knowledgeBase') {
         setAgentInterfacePanelOpen(false);
         stepSetter(1);
@@ -1157,7 +1168,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCaseComposerBusy: c.useCaseComposerBusy,
     useCaseBundleGenerationBusy: c.useCaseBundleGenerationBusy,
     knowledgeBaseActive: false,
-    interfaceActive: agentInterfacePanelOpen && !costsViewActive,
+    interfaceActive: agentInterfacePanelOpen && !costsViewActive && !webhookLogViewActive,
     scriptContext: {
       designDescriptionTrimmed: c.designDescription.trim(),
       hasAgentGeneration: c.hasAgentGeneration,
@@ -1713,13 +1724,17 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               completion={completion}
               onSelectStep={onSelectWizardStep}
               glowStepIndex={recentlyEnteredWizard ? AGENT_WIZARD_FIRST_STEP_INDEX : null}
-              stepHeaderAction={costsViewActive ? null : wizardStepHeaderAction}
+              stepHeaderAction={costsViewActive || webhookLogViewActive ? null : wizardStepHeaderAction}
               costsActive={costsViewActive}
               onSelectCosts={onSelectCostsView}
-              interfaceActive={agentInterfacePanelOpen && !costsViewActive}
+              webhookLogActive={webhookLogViewActive}
+              onSelectWebhookLog={onSelectWebhookLogView}
+              interfaceActive={agentInterfacePanelOpen && !costsViewActive && !webhookLogViewActive}
               onToggleInterface={onToggleInterfaceView}
               taskId={instanceId}
+              projectId={projectId}
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
+              backendToolTaskIds={backendToolTaskIds}
               deploySlot={deploySlot}
               reviewPublishSlot={reviewPublishSlot}
               bypassGating={c.hasAgentGeneration}

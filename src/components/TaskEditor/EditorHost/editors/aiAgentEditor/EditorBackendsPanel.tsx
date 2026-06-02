@@ -1,6 +1,6 @@
 /**
  * Tab Dockview "Backends": catalogo manuale (accordion).
- * Header collassato: nome, URL, metodo / Recupera. Espanso: Tool + elimina, descrizione, SEND/RECEIVE allineati alla colonna URL.
+ * Header collassato: nome, URL, metodo / Recupera. Espanso: descrizione, SEND/RECEIVE allineati alla colonna URL.
  */
 
 import React from 'react';
@@ -82,6 +82,14 @@ function showBackendIdentityFields(entry: ManualCatalogEntry): boolean {
   return Boolean(entry.importSpecRevealed || entry.frozenMeta?.importState === 'ok');
 }
 
+/** Scroll unificato colonna espansa catalogo (Descrizione → Analisi → mapping). */
+const BACKEND_EXPANDED_BODY_SCROLL =
+  'min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pr-0.5 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.75)_rgba(15,23,42,0.92)] [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-500/75 [&::-webkit-scrollbar-thumb]:hover:bg-slate-400/85 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-900/80';
+
+/** Lista catalogo con più backend: scroll tra le righe accordion. */
+const BACKEND_CATALOG_LIST_SCROLL =
+  'flex-1 min-h-0 space-y-2 overflow-y-auto overflow-x-hidden overscroll-contain pr-0.5 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.75)_rgba(15,23,42,0.92)] [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-500/75 [&::-webkit-scrollbar-thumb]:hover:bg-slate-400/85 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-900/80';
+
 export function ManualBackendAccordion({
   entry,
   expanded,
@@ -91,7 +99,6 @@ export function ManualBackendAccordion({
   onPatch,
   onRemove,
   onExpandEntry,
-  convaiToolToggle,
   onPortalAuthRequired,
   onSyncPortalConnection,
   autoFetchAfterPortalEntryId,
@@ -113,8 +120,6 @@ export function ManualBackendAccordion({
   onPatch: (id: string, patch: Partial<ManualCatalogEntry>) => void;
   onRemove: (id: string) => void;
   onExpandEntry: (id: string) => void;
-  /** ElevenLabs: includi questo backend nei tool ConvAI dell’agente. */
-  convaiToolToggle?: { checked: boolean; onChange: (checked: boolean) => void };
   onPortalAuthRequired: (origin: string, entryId: string) => void;
   onSyncPortalConnection: (meta: PortalConnectionMeta) => void;
   /** Dopo OAuth: ritenta Recupera specifiche una volta. */
@@ -150,6 +155,8 @@ export function ManualBackendAccordion({
   const canShowParameterPanel = creationMode === 'emulate' || showIdentity;
   const agentAnalysisCtx = useOptionalAgentBackendAnalysis();
   const backendAnalysisEdit = useOptionalBackendAnalysisEdit();
+  const dockCtx = useOptionalAIAgentEditorDock();
+  const agentTaskId = String(dockCtx?.instanceId ?? '').trim() || undefined;
   const backendAnalysisRecord = agentAnalysisCtx?.document.backends[entry.id];
   const entryNeedsIaAnalysis =
     !backendAnalysisRecord || catalogEntryNeedsIaAnalysis(backendAnalysisRecord);
@@ -764,9 +771,11 @@ export function ManualBackendAccordion({
           >
             {!embedInWorkspaceInspector ? <div className="w-9 shrink-0" aria-hidden /> : null}
             <div
-              className={`flex min-w-0 flex-col gap-2 ${
-                embedInWorkspaceInspector ? '' : 'min-h-0 flex-1 overflow-hidden'
-              }`}
+              className={
+                embedInWorkspaceInspector
+                  ? 'flex min-w-0 flex-col gap-2'
+                  : `${BACKEND_EXPANDED_BODY_SCROLL} flex min-w-0 flex-col gap-2`
+              }
             >
               {showIdentity ? (
                 <div className="min-w-0 shrink-0 rounded-md border border-slate-800/80 bg-slate-950/30">
@@ -810,40 +819,25 @@ export function ManualBackendAccordion({
               ) : null}
 
               {expanded && canShowParameterPanel && agentAnalysisCtx ? (
-                <BackendCatalogEntryAnalysisPanel catalogEntryId={entry.id} />
-              ) : null}
-
-              {convaiToolToggle ? (
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 text-xs text-slate-400">
-                    <input
-                      type="checkbox"
-                      className="mt-0"
-                      checked={convaiToolToggle.checked}
-                      onChange={(e) => convaiToolToggle.onChange(e.target.checked)}
-                      title="Includi come tool ConvAI (function calling) per questo agente"
-                    />
-                    <span>Tool</span>
-                  </label>
-                </div>
+                <BackendCatalogEntryAnalysisPanel catalogEntryId={entry.id} defaultOpen={false} />
               ) : null}
 
               {editorTask ? (
                 <div
                   className={
-                    fillAvailableHeight
-                      ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-                      : embedInWorkspaceInspector
-                        ? 'flex flex-col'
-                        : 'flex h-[min(88dvh,920px)] min-h-[240px] flex-1 flex-col overflow-hidden'
+                    embedInWorkspaceInspector
+                      ? 'flex flex-col'
+                      : 'flex min-h-[min(420px,50vh)] shrink-0 flex-col'
                   }
                 >
                   <EmbeddedBackendCallEditor
                     key={`${editorTask.id}-${endpointRev}`}
                     task={editorTask}
+                    agentTaskId={agentTaskId}
                     endpointExternalRevision={endpointRev}
                     hideEndpointRow={creationMode === 'import'}
                     workspaceInspectorEmbed={embedInWorkspaceInspector}
+                    catalogColumnScroll={!embedInWorkspaceInspector}
                   />
                 </div>
               ) : expanded && !canShowParameterPanel ? (
@@ -1031,7 +1025,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
   );
   const soleExpandedManualId =
     expandedManualIds.length === 1 ? expandedManualIds[0]! : null;
-  /** Wizard: un solo backend espanso → riempie il viewport del passo; scroll solo nei tree SEND/RECEIVE. */
+  /** Wizard: un solo backend espanso → riempie il viewport; scroll unificato sulla colonna espansa. */
   const wizardFillViewport = wizardUi && soleExpandedManualId !== null;
 
   const interfaceOpen = Boolean(dockCtx?.agentInterfacePanelOpen);
@@ -1254,8 +1248,8 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
               interfaceOpen
                 ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
                 : wizardFillViewport
-                  ? 'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-0.5'
-                  : 'flex-1 min-h-0 space-y-2 overflow-y-auto pr-0.5'
+                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden pr-0.5'
+                  : BACKEND_CATALOG_LIST_SCROLL
             }
             data-ia-runtime-focus="tools"
           >
@@ -1271,21 +1265,7 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
             </button>
           ) : null}
           {manualEntries.length === 0 ? null : (
-            manualEntries.map((e) => {
-              const cfg = dockCtx?.iaRuntimeConfig;
-              const convaiToolToggle =
-                elevenLabsBackendToolsVisible && dockCtx && cfg
-                  ? {
-                      checked: new Set(cfg.convaiBackendToolTaskIds ?? []).has(e.id),
-                      onChange: (checked: boolean) => {
-                        const next = new Set(cfg.convaiBackendToolTaskIds ?? []);
-                        if (checked) next.add(e.id);
-                        else next.delete(e.id);
-                        onIaRuntimeFromBackends({ ...cfg, convaiBackendToolTaskIds: [...next] });
-                      },
-                    }
-                  : undefined;
-              return (
+            manualEntries.map((e) => (
                 <ManualBackendAccordion
                   key={e.id}
                   entry={e}
@@ -1306,14 +1286,12 @@ export function EditorBackendsPanel(_props: IDockviewPanelProps) {
                     setExpandedIds((s) => new Set(s).add(e.id));
                     setAnalysisPanelEntryIds((s) => new Set(s).add(e.id));
                   }}
-                  convaiToolToggle={convaiToolToggle}
                   onPortalAuthRequired={handlePortalAuthRequired}
                   onSyncPortalConnection={mergePortalConnections}
                   autoFetchAfterPortalEntryId={autoFetchAfterPortalEntryId}
                   onAutoFetchConsumed={() => setAutoFetchAfterPortalEntryId(null)}
                 />
-              );
-            })
+            ))
           )}
           </div>
           {interfaceOpen && dockCtx ? (

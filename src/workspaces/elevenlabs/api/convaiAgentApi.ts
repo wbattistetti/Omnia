@@ -3,6 +3,7 @@
  */
 
 import {
+  formatConvaiAgentHttpError,
   formatDeleteAgentHttpError,
   formatListAgentsHttpError,
 } from '@services/convaiProvisionHttpError';
@@ -141,6 +142,6 @@ export async function patchConvaiAgent(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(formatDeleteAgentHttpError(res, id, text));
+    throw new Error(formatConvaiAgentHttpError('patchAgent', res, id, text));
   }
 }

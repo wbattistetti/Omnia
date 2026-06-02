@@ -18,6 +18,10 @@ import {
   buildSendBindingRowFieldsForApiParam,
   type SendBindingRowFieldsContext,
 } from '../domain/backendCall/sendBindingRowFields';
+import {
+  CONVAI_OPTIONAL_EMPTY_STRING_RULE_ID,
+  enrichOpenApiInputSchemasForConvaiOptionalSemantics,
+} from '../domain/openApi/convaiOptionalFieldSemantics';
 
 type IoRow = {
   internalName: string;
@@ -326,6 +330,15 @@ export async function runBackendCallReadApiForTask(
       ? rebuildOutputRows(mergeOutputs, outputNames, outputDesc, used, forceRefresh)
       : (outputsEmpty || forceRefresh ? [] : prevOutputs);
 
+    const enrichedInputSchemas =
+      fields.inputJsonSchemaByApiName && Object.keys(fields.inputJsonSchemaByApiName).length > 0
+        ? enrichOpenApiInputSchemasForConvaiOptionalSemantics(
+            fields.inputJsonSchemaByApiName,
+            fields.requestBodyRequiredPropertyNames,
+            sendBinding?.optionalApiParams
+          )
+        : undefined;
+
     const prevEp = (task as Task & { endpoint?: { url?: string; method?: string; headers?: Record<string, string> } })
       .endpoint;
     const endpointBase =
@@ -360,8 +373,8 @@ export async function runBackendCallReadApiForTask(
           : {}),
         openapiInputUiKindByApiName: inputUiKindByApiName,
         openapiInputEnumByApiName: inputEnumByApiName,
-        ...(fields.inputJsonSchemaByApiName && Object.keys(fields.inputJsonSchemaByApiName).length > 0
-          ? { openapiInputJsonSchemaByApiName: fields.inputJsonSchemaByApiName }
+        ...(enrichedInputSchemas && Object.keys(enrichedInputSchemas).length > 0
+          ? { openapiInputJsonSchemaByApiName: enrichedInputSchemas }
           : {}),
         ...(fields.outputJsonSchemaByApiName && Object.keys(fields.outputJsonSchemaByApiName).length > 0
           ? { openapiOutputJsonSchemaByApiName: fields.outputJsonSchemaByApiName }
@@ -373,6 +386,7 @@ export async function runBackendCallReadApiForTask(
         openApiMethodLockUrlSnapshot: effectiveMethodLock ? op.trim() : null,
         openApiLockedHttpMethod: effectiveMethodLock ? resolvedMethodUpper : null,
         openapiCompileErrors,
+        convaiOptionalEmptyStringRuleId: CONVAI_OPTIONAL_EMPTY_STRING_RULE_ID,
       },
       inputs: nextInputs,
       outputs: nextOutputs,

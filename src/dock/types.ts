@@ -45,6 +45,15 @@ export type ToolbarButton = {
     busy?: boolean;
     busyLabel?: string;
   };
+  /** Secondo sottopulsante (es. «Via gateway» accanto a «Esegui»). */
+  gatewaySubAction?: {
+    label: string;
+    onClick?: () => void;
+    title?: string;
+    disabled?: boolean;
+    busy?: boolean;
+    busyLabel?: string;
+  };
 };
 
 // Flow tab - for flowchart canvas

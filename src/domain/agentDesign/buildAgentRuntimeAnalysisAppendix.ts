@@ -55,7 +55,7 @@ export function mergeRuntimeAnalysisIntoContext(
   const base = contextMarkdown.trim();
   const extra = appendix.trim();
   if (!extra) return base;
-  if (base.includes(RUNTIME_KB_HEADER) || base.includes('## USE OF BACKENDS:')) {
+  if (base.includes(RUNTIME_KB_HEADER) || base.includes('## USE OF BACKENDS:') || base.includes('## BACKEND RECEIVE (webhook tools):')) {
     return base;
   }
   const marker = '\n\n---\n\n### Riferimenti analisi (KB e backend)\n\n';

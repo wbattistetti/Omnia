@@ -12,7 +12,8 @@ import {
 } from './buildConversationalPrompt';
 import { serializeConversationalCatalog } from './serializeConversationalCatalog';
 import {
-  areAllUseCasesProjectable,
+  formatNonProjectableUseCasesErrorDetail,
+  listNonProjectableIncludedUseCases,
   projectAllUseCasesToConversationalJson,
 } from './useCaseJsonProjection';
 import { measurePromptText, type PromptTextMetrics } from './promptTextMetrics';
@@ -49,8 +50,15 @@ export function buildConversationalPromptFormatSizes(
   useCases: readonly AIAgentUseCase[],
   options: Omit<BuildConversationalPromptOptions, 'catalogFormat'> = {}
 ): ConversationalPromptFormatSizes {
-  if (!areAllUseCasesProjectable(useCases)) {
-    throw new Error('buildConversationalPromptFormatSizes: use case non proiettabili.');
+  const nonProjectable = listNonProjectableIncludedUseCases(
+    useCases,
+    options.lexicon,
+    options.backendOutputSlotBindings
+  );
+  if (nonProjectable.length > 0) {
+    throw new Error(
+      `buildConversationalPromptFormatSizes: ${formatNonProjectableUseCasesErrorDetail(nonProjectable)}`
+    );
   }
   const includeLog = options.includeLog === true;
   const projected = projectAllUseCasesToConversationalJson(useCases, {

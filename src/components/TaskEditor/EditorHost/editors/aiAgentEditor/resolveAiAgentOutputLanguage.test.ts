@@ -3,7 +3,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveAiAgentOutputLanguage } from './resolveAiAgentOutputLanguage';
+import {
+  resolveAiAgentOutputLanguage,
+  resolveConvaiAgentLanguageForSync,
+} from './resolveAiAgentOutputLanguage';
 
 /** In-memory store: global test setup mocks localStorage with vi.fn() (no real storage). */
 const lsStore: Record<string, string> = {};
@@ -52,5 +55,25 @@ describe('resolveAiAgentOutputLanguage', () => {
     const spy = vi.spyOn(window.navigator, 'language', 'get').mockReturnValue('en_GB');
     expect(resolveAiAgentOutputLanguage().tag).toBe('en-GB');
     spy.mockRestore();
+  });
+});
+
+describe('resolveConvaiAgentLanguageForSync', () => {
+  beforeEach(() => {
+    Object.keys(lsStore).forEach((k) => {
+      delete lsStore[k];
+    });
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      Object.prototype.hasOwnProperty.call(lsStore, key) ? lsStore[key] : null
+    );
+  });
+
+  it('prefers project.lang over runtime voice language', () => {
+    localStorage.setItem('project.lang', 'it');
+    expect(resolveConvaiAgentLanguageForSync('en-US')).toBe('it');
+  });
+
+  it('uses voice language when project.lang is missing', () => {
+    expect(resolveConvaiAgentLanguageForSync('pt-BR')).toBe('pt');
   });
 });

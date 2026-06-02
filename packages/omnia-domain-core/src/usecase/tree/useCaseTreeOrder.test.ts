@@ -48,4 +48,16 @@ describe('orderUseCasesWithDepth', () => {
     const { ordered } = orderUseCasesWithDepth(cases);
     expect(ordered.map((u) => u.id)).toEqual(['r1', 'c1', 'c2', 'r2']);
   });
+
+  it('pins startUseCaseId at the top without changing sort_order', () => {
+    const cases: AIAgentUseCase[] = [
+      uc('uc-1', null, 0, 'One'),
+      uc('uc-11', null, 10, 'Eleven'),
+    ];
+    const pinned = orderUseCasesWithDepth(cases, { startUseCaseId: 'uc-11' });
+    expect(pinned.ordered.map((u) => u.id)).toEqual(['uc-11', 'uc-1']);
+
+    const natural = orderUseCasesWithDepth(cases, { startUseCaseId: '' });
+    expect(natural.ordered.map((u) => u.id)).toEqual(['uc-1', 'uc-11']);
+  });
 });

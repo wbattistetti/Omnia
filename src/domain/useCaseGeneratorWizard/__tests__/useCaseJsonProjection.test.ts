@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   areAllUseCasesProjectable,
+  formatNonProjectableUseCasesErrorDetail,
+  listNonProjectableIncludedUseCases,
   buildUseCaseLogValue,
   compileUseCaseConversationalText,
   isUseCaseProjectable,
@@ -278,6 +280,18 @@ describe('areAllUseCasesProjectable', () => {
         makeUseCase({ id: 'uc-2', included_in_conversations: false }),
       ])
     ).toBe(false);
+  });
+});
+
+describe('listNonProjectableIncludedUseCases', () => {
+  it('lists catalog numbers for included use cases without compilable message', () => {
+    const bad = listNonProjectableIncludedUseCases([
+      makeUseCase({ id: 'uc-1', sort_order: 0 }),
+      makeUseCase({ id: 'uc-2', sort_order: 1, dialogue: [] }),
+    ]);
+    expect(bad).toHaveLength(1);
+    expect(bad[0]?.catalogNumber).toBe(2);
+    expect(formatNonProjectableUseCasesErrorDetail(bad)).toMatch(/n\. catalogo: 2/);
   });
 });
 

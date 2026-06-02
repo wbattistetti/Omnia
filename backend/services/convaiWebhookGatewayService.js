@@ -6,6 +6,8 @@
 'use strict';
 
 const { applySendHintsToBody } = require('./sendHintRuntime/applySendPathToBody');
+const { appendInvocation } = require('./convaiWebhookInvocationLogService');
+const { stripEmptyConvaiOptionalFieldsInPlace } = require('./convaiOptionalFieldSemantics');
 
 function isRecord(x) {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -64,6 +66,7 @@ function createConvaiWebhookGatewayHandler(deps) {
   const { loadProjectTask } = deps;
 
   return async function handleConvaiWebhookGateway(req, res) {
+    const started = Date.now();
     const projectId = String(req.params.projectId ?? '').trim();
     const agentTaskId = String(req.params.agentTaskId ?? '').trim();
     const backendTaskId = String(req.params.backendTaskId ?? '').trim();
@@ -71,6 +74,15 @@ function createConvaiWebhookGatewayHandler(deps) {
     if (!projectId || !agentTaskId || !backendTaskId) {
       return res.status(400).json({ error: 'missing_path_params' });
     }
+
+    /** @type {Record<string, unknown>} */
+    let logContext = {
+      projectId,
+      agentTaskId,
+      backendTaskId,
+      gatewayPath: req.originalUrl || req.url || '',
+      forwardMethod: 'POST',
+    };
 
     let agentTask;
     let backendTask;
@@ -88,8 +100,21 @@ function createConvaiWebhookGatewayHandler(deps) {
 
     const { url: targetUrl, method: targetMethod, headers: targetHeaders } = readBackendEndpoint(backendTask);
     if (!targetUrl) {
+      appendInvocation({
+        ...logContext,
+        backendLabel: String(backendTask.label ?? '').trim() || null,
+        upstreamUrl: null,
+        durationMs: Date.now() - started,
+        error: 'backend_missing_endpoint_url',
+      });
       return res.status(502).json({ error: 'backend_missing_endpoint_url' });
     }
+
+    logContext = {
+      ...logContext,
+      backendLabel: String(backendTask.label ?? '').trim() || null,
+      upstreamUrl: targetUrl,
+    };
 
     const hints = agentTask ? parseSendHintsJson(agentTask.agentBackendOutputSlotBindingsJson) : [];
 
@@ -102,6 +127,10 @@ function createConvaiWebhookGatewayHandler(deps) {
       }
     }
 
+    const requestBodyFromClient = { ...bodyObj };
+    /** ConvAI/ElevenLabs: "" su opzionali = omit (regola standard backend webhook). */
+    stripEmptyConvaiOptionalFieldsInPlace(bodyObj);
+
     const applied = applySendHintsToBody(bodyObj, hints, { referenceDate: new Date() });
     if (applied > 0) {
       console.log('[convai-webhook-gateway] applied sendHints', {
@@ -113,6 +142,7 @@ function createConvaiWebhookGatewayHandler(deps) {
     }
 
     const forwardMethod = targetMethod || 'POST';
+    logContext.forwardMethod = forwardMethod;
     const forwardHeaders = new Headers();
     for (const [k, v] of Object.entries(targetHeaders)) {
       if (!isHopByHopHeader(k)) forwardHeaders.set(k, v);
@@ -135,15 +165,34 @@ function createConvaiWebhookGatewayHandler(deps) {
     try {
       const upstream = await fetch(targetUrl, fetchInit);
       const text = await upstream.text();
+      appendInvocation({
+        ...logContext,
+        requestBodyFromClient,
+        requestBodyAfterSendHints: bodyObj,
+        upstreamStatus: upstream.status,
+        upstreamResponsePreview: text,
+        durationMs: Date.now() - started,
+        sendHintsApplied: applied,
+        error: upstream.status >= 400 ? `upstream_http_${upstream.status}` : null,
+      });
       res.status(upstream.status);
       const ct = upstream.headers.get('content-type');
       if (ct) res.setHeader('content-type', ct);
       return res.send(text);
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error('[convai-webhook-gateway] forward', { targetUrl, err });
+      appendInvocation({
+        ...logContext,
+        requestBodyFromClient,
+        requestBodyAfterSendHints: bodyObj,
+        durationMs: Date.now() - started,
+        sendHintsApplied: applied,
+        error: message,
+      });
       return res.status(502).json({
         error: 'upstream_forward_failed',
-        message: err instanceof Error ? err.message : String(err),
+        message,
       });
     }
   };

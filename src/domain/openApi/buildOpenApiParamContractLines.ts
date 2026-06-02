@@ -12,6 +12,7 @@ import {
   type OpenApiCompileValidationInput,
 } from './collectOpenApiCompileErrors';
 import { summarizeOpenApiSchemaFragment } from './summarizeOpenApiSchemaFragment';
+import { buildOpenApiConvaiContractPreambleLines } from './convaiOptionalFieldSemantics';
 
 export const OPENAPI_CONTRACT_MISSING_PREFIX = 'MISSING:';
 
@@ -319,6 +320,11 @@ export function buildOpenApiParamContractLines(task: Task): OpenApiParamContract
   const issuesByPath = meta ? groupCompileIssuesByPath(validationInputFromMeta(meta)) : new Map();
   const wire = collectParamKeysFromBackendCallTask(task);
   return wire.map((wp) => lineForWireParam(wp, meta, issuesByPath));
+}
+
+/** Preamble contratto OpenAPI visibile a designer (USE OF BACKENDS, report). */
+export function buildOpenApiParamContractPreamble(): readonly string[] {
+  return buildOpenApiConvaiContractPreambleLines();
 }
 
 export function collectOpenApiCompileErrorMessages(task: Task): string[] {

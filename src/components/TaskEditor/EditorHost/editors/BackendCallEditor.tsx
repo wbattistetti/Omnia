@@ -55,6 +55,8 @@ import { ConnectPortalModal } from '@components/portalAuth/ConnectPortalModal';
 import { upsertProjectPortalConnection } from '@domain/portalAuth/projectPortalConnections';
 import type { PortalConnectionMeta } from '@domain/portalAuth/portalConnectionTypes';
 import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
+import { analyzeLocalhostEndpointReachability } from '@domain/devTunnel/devTunnelCompileBridge';
+import { resolveConvaiWebhookGatewayTestUrl } from '../../../../utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
 import type {
   BackendInputAdvancementEntry,
   BackendRecalculationEntry,
@@ -287,10 +289,13 @@ export default function BackendCallEditor({
   embeddedCloseSignatureToolbar,
   /** Workspace ElevenLabs: scroll sul pannello inspector, non su SEND/RECEIVE. */
   workspaceInspectorEmbed = false,
+  /** Task AI Agent padre (tab Backends): abilita «Esegui via gateway». */
+  convaiGatewayTestAgentTaskId,
 }: EditorProps & {
   embeddedSignatureSubToolbarOpen?: boolean;
   embeddedCloseSignatureToolbar?: () => void;
   workspaceInspectorEmbed?: boolean;
+  convaiGatewayTestAgentTaskId?: string;
 }) {
   // ✅ RINOMINATO: act → task
   const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
@@ -371,6 +376,11 @@ export default function BackendCallEditor({
   const [jsonSnippetError, setJsonSnippetError] = React.useState<string | null>(null);
   const [bulkApiTestBusy, setBulkApiTestBusy] = React.useState(false);
   const [bulkTestNonce, setBulkTestNonce] = React.useState(0);
+  const [bulkGatewayTestNonce, setBulkGatewayTestNonce] = React.useState(0);
+  const [convaiGatewayPublicUrlForTest, setConvaiGatewayPublicUrlForTest] = React.useState<
+    string | null
+  >(null);
+  const bulkTestModeRef = React.useRef<'direct' | 'gateway'>('direct');
 
   /** WireKey SEND con editor avanzamento a pannello intero aperto. */
   const [advancementEditorWireKey, setAdvancementEditorWireKey] = React.useState<string | null>(null);
@@ -1352,6 +1362,7 @@ export default function BackendCallEditor({
   );
 
   const [highlightIncompleteRows, setHighlightIncompleteRows] = React.useState(false);
+  const [testBulkFeedback, setTestBulkFeedback] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (mockTableReadyForBulkTest) setHighlightIncompleteRows(false);
@@ -1372,6 +1383,47 @@ export default function BackendCallEditor({
     }
     return 'Esegui chiamate HTTP reali (proxy) su tutte le righe pronte; opzionali vuoti sono ammessi.';
   }, [testApiReadiness]);
+
+  const convaiGatewayTestAvailable = Boolean(
+    String(convaiGatewayTestAgentTaskId ?? '').trim() && String(projectId ?? '').trim() && instanceId
+  );
+
+  const resolveConvaiGatewayPublicUrl = React.useCallback((): string | null => {
+    if (!convaiGatewayTestAvailable) return null;
+    const backendTask = taskRepository.getTask(instanceId) as Task | null;
+    if (!backendTask) return null;
+    const built = resolveConvaiWebhookGatewayTestUrl({
+      backendTask,
+      projectId: String(projectId ?? '').trim(),
+      agentTaskId: String(convaiGatewayTestAgentTaskId ?? '').trim(),
+    });
+    return built.ok ? built.publicUrl : null;
+  }, [convaiGatewayTestAgentTaskId, convaiGatewayTestAvailable, instanceId, projectId]);
+
+  const executeBulkGatewayTitle = React.useMemo(() => {
+    if (!convaiGatewayTestAvailable) {
+      return 'Test via gateway disponibile solo dal tab Backends dell’agente AI.';
+    }
+    const url = resolveConvaiGatewayPublicUrl();
+    if (!url) {
+      return 'Impossibile costruire URL gateway (projectId, agentTaskId o backend mancante).';
+    }
+    const reach = analyzeLocalhostEndpointReachability(url);
+    if (reach.unreachable) {
+      return (
+        reach.message ??
+        'Avvia il tunnel dev (ngrok sulla porta 3100) per testare via gateway come ElevenLabs.'
+      );
+    }
+    return `Esegui via gateway Omnia (${url}) — stesso percorso ElevenLabs: sendHints agente → upstream.`;
+  }, [convaiGatewayTestAvailable, resolveConvaiGatewayPublicUrl]);
+
+  const convaiGatewayTestBlocked = React.useMemo(() => {
+    if (!convaiGatewayTestAvailable) return true;
+    const url = resolveConvaiGatewayPublicUrl();
+    if (!url) return true;
+    return analyzeLocalhostEndpointReachability(url).unreachable;
+  }, [convaiGatewayTestAvailable, resolveConvaiGatewayPublicUrl]);
 
   /** Prefill mock table da letterali SEND; ritorna se gli obbligatori sono soddisfatti. */
   const prefillMockTableAndCheckReady = React.useCallback((): boolean => {
@@ -1421,12 +1473,112 @@ export default function BackendCallEditor({
     backendCallSpecMeta,
   ]);
 
-  /** Toolbar «Test Backend»: apre solo la tabella (nessuna chiamata HTTP). */
+  /** Pulsante «Esegui» / secondo click «Test Backend»: chiamate HTTP reali sulle righe pronte. */
+  const handleExecuteBulkTest = React.useCallback(() => {
+    bulkTestModeRef.current = 'direct';
+    logBackendCallTest('handleExecuteBulkTest: click', { testApiReadiness, bulkApiTestBusy });
+    if (bulkApiTestBusy) return;
+    if (mockTableAllInputInternalNames.length === 0) {
+      setTestBulkFeedback(
+        'Nessun parametro SEND in tabella: usa «Check Update» sull’endpoint operativo (o incolla JSON) prima di testare.'
+      );
+      return;
+    }
+    prefillMockTableAndCheckReady();
+    setTestBulkFeedback('Chiamata HTTP in corso verso l’endpoint operativo…');
+    flushSync(() => setBulkApiTestBusy(true));
+    setBulkTestNonce((n) => {
+      const next = n + 1;
+      logBackendCallTest('handleExecuteBulkTest: avvio bulk', { bulkTestNonce: { from: n, to: next } });
+      return next;
+    });
+  }, [bulkApiTestBusy, mockTableAllInputInternalNames.length, prefillMockTableAndCheckReady, testApiReadiness]);
+
+  /** Pulsante «Via gateway»: POST al gateway ConvAI (percorso ElevenLabs). */
+  const handleExecuteBulkGatewayTest = React.useCallback(() => {
+    bulkTestModeRef.current = 'gateway';
+    logBackendCallTest('handleExecuteBulkGatewayTest: click', {
+      testApiReadiness,
+      bulkApiTestBusy,
+      convaiGatewayTestAvailable,
+    });
+    if (bulkApiTestBusy) return;
+    if (!convaiGatewayTestAvailable) {
+      setTestBulkFeedback(
+        'Test via gateway: apri il backend dal tab Backends dell’agente AI (serve projectId + agentTaskId).'
+      );
+      return;
+    }
+    const gatewayUrl = resolveConvaiGatewayPublicUrl();
+    if (!gatewayUrl) {
+      setTestBulkFeedback(
+        'Test via gateway: impossibile costruire l’URL (verifica projectId, agentTaskId e backend).'
+      );
+      return;
+    }
+    const reach = analyzeLocalhostEndpointReachability(gatewayUrl);
+    if (reach.unreachable) {
+      setTestBulkFeedback(
+        reach.message ??
+          'Test via gateway: avvia il tunnel dev (Impostazioni → Tunnel dev / ngrok sulla porta 3100).'
+      );
+      return;
+    }
+    if (mockTableAllInputInternalNames.length === 0) {
+      setTestBulkFeedback(
+        'Nessun parametro SEND in tabella: usa «Check Update» sull’endpoint operativo (o incolla JSON) prima di testare.'
+      );
+      return;
+    }
+    prefillMockTableAndCheckReady();
+    setConvaiGatewayPublicUrlForTest(gatewayUrl);
+    setTestBulkFeedback(`Chiamata via gateway in corso (${gatewayUrl})…`);
+    flushSync(() => setBulkApiTestBusy(true));
+    setBulkGatewayTestNonce((n) => {
+      const next = n + 1;
+      logBackendCallTest('handleExecuteBulkGatewayTest: avvio bulk gateway', {
+        bulkGatewayTestNonce: { from: n, to: next },
+        gatewayUrl,
+      });
+      return next;
+    });
+  }, [
+    bulkApiTestBusy,
+    convaiGatewayTestAvailable,
+    mockTableAllInputInternalNames.length,
+    prefillMockTableAndCheckReady,
+    resolveConvaiGatewayPublicUrl,
+    testApiReadiness,
+  ]);
+
+  const handleBulkTestSkipped = React.useCallback((message: string) => {
+    setHighlightIncompleteRows(true);
+    setTestBulkFeedback(message);
+  }, []);
+
+  const handleExecuteBulkTestRef = React.useRef(handleExecuteBulkTest);
+  handleExecuteBulkTestRef.current = handleExecuteBulkTest;
+  const handleExecuteBulkGatewayTestRef = React.useRef(handleExecuteBulkGatewayTest);
+  handleExecuteBulkGatewayTestRef.current = handleExecuteBulkGatewayTest;
+  const handleOpenTestTableRef = React.useRef<() => void>(() => {});
+  const handleReadApiRef = React.useRef<() => void>(() => {});
+
+  /** Toolbar «Test Backend»: apre la tabella; se già aperta esegue il test HTTP. */
   const handleOpenTestTable = React.useCallback(() => {
     embeddedCloseSignatureToolbar?.();
-    logBackendCallTest('handleOpenTestTable: click', { testApiReadiness });
+    logBackendCallTest('handleOpenTestTable: click', { testApiReadiness, showTableView });
+
+    if (showTableView) {
+      handleExecuteBulkTestRef.current();
+      return;
+    }
+
     setShowTableView(true);
+    setTestBulkFeedback(null);
     if (mockTableAllInputInternalNames.length === 0) {
+      setTestBulkFeedback(
+        'Tabella aperta. Usa «Check Update» per caricare i parametri SEND, poi compila le celle e clicca di nuovo «Test Backend» o «Esegui».'
+      );
       logBackendCallTest('handleOpenTestTable: stop (needs_setup — nessun input SEND)');
       return;
     }
@@ -1436,29 +1588,12 @@ export default function BackendCallEditor({
     embeddedCloseSignatureToolbar,
     mockTableAllInputInternalNames.length,
     prefillMockTableAndCheckReady,
+    showTableView,
     testApiReadiness,
   ]);
 
-  /** Pulsante «Esegui» nella tabella: chiamate HTTP reali sulle righe pronte. */
-  const handleExecuteBulkTest = React.useCallback(() => {
-    logBackendCallTest('handleExecuteBulkTest: click', { testApiReadiness });
-    if (mockTableAllInputInternalNames.length === 0) {
-      return;
-    }
-    const canBulk = prefillMockTableAndCheckReady();
-    if (!canBulk) {
-      logBackendCallTest('handleExecuteBulkTest: incomplete — obbligatori SEND mancanti');
-      setHighlightIncompleteRows(true);
-      return;
-    }
-    setHighlightIncompleteRows(false);
-    flushSync(() => setBulkApiTestBusy(true));
-    setBulkTestNonce((n) => {
-      const next = n + 1;
-      logBackendCallTest('handleExecuteBulkTest: avvio bulk', { bulkTestNonce: { from: n, to: next } });
-      return next;
-    });
-  }, [mockTableAllInputInternalNames.length, prefillMockTableAndCheckReady, testApiReadiness]);
+  handleOpenTestTableRef.current = handleOpenTestTable;
+  handleReadApiRef.current = handleReadApi;
 
   /** Tooltip celle: descrizione parametro + «. Clicca per editare.» */
   const inputTooltipByInternalName = React.useMemo(() => {
@@ -1553,8 +1688,10 @@ export default function BackendCallEditor({
 
     const testApiTitle =
       testApiReadiness === 'needs_setup'
-        ? 'Apri la tabella di test (serve almeno un parametro SEND da Read API).'
-        : 'Apri la tabella di test Real backend call. Le chiamate HTTP si avviano con «Esegui» nella barra sopra la griglia.';
+        ? 'Apri la tabella di test (serve almeno un parametro SEND da Check Update).'
+        : showTableView
+          ? 'Esegui la chiamata HTTP sulle righe pronte (stesso effetto di «Esegui»).'
+          : 'Apri la tabella di test Real backend call; poi clicca di nuovo o usa «Esegui» per la chiamata HTTP.';
 
     const setEmulationMode = () =>
       setConfig((prev) => ({ ...prev, mockTableDefaultExecutionMode: BackendExecutionMode.MOCK }));
@@ -1593,7 +1730,7 @@ export default function BackendCallEditor({
       {
         buttonId: 'show-table',
         icon: <Table2 size={16} />,
-        label: 'Emulation table',
+        label: 'Emulate backend',
         onClick: () => {
           setShowTableView((prev) => {
             if (!prev) embeddedCloseSignatureToolbar?.();
@@ -1610,7 +1747,7 @@ export default function BackendCallEditor({
         buttonId: 'read-api',
         icon: <BookOpen size={16} />,
         label: readApiBusy ? 'Checking…' : 'Check Update',
-        onClick: () => void handleReadApi(),
+        onClick: () => void handleReadApiRef.current(),
         title: 'Verify if parameters are up-to-date with backend',
         disabled: readApiBusy,
         visible: readApiToolbarVisible,
@@ -1618,26 +1755,39 @@ export default function BackendCallEditor({
       {
         buttonId: 'test-backend',
         icon: <FlaskConical size={16} />,
-        label: 'Test Backend',
-        onClick: () => void handleOpenTestTable(),
+        label: 'Test backend',
+        onClick: () => void handleOpenTestTableRef.current(),
         title: testApiTitle,
         disabled: false,
         active: showTableView,
         successHighlight: showTableView && testApiReadiness === 'ready' && !bulkApiTestBusy,
-        visible: operationalUrlNonEmpty && mockExecMode === BackendExecutionMode.REAL,
+        visible: operationalUrlNonEmpty,
         subAction: {
           label: 'Esegui',
           busyLabel: 'Sto testando il backend',
-          busy: bulkApiTestBusy,
-          onClick: () => void handleExecuteBulkTest(),
+          busy: bulkApiTestBusy && bulkTestModeRef.current === 'direct',
+          onClick: () => void handleExecuteBulkTestRef.current(),
           title: bulkApiTestBusy
-            ? 'Chiamata HTTP in corso…'
+            ? bulkTestModeRef.current === 'direct'
+              ? 'Chiamata HTTP in corso…'
+              : executeBulkTitle
             : executeBulkTitle,
-          disabled:
-            bulkApiTestBusy ||
-            mockTableAllInputInternalNames.length === 0 ||
-            testApiReadiness === 'needs_setup',
+          disabled: bulkApiTestBusy,
         },
+        gatewaySubAction: convaiGatewayTestAvailable
+          ? {
+              label: 'Via gateway',
+              busyLabel: 'Gateway…',
+              busy: bulkApiTestBusy && bulkTestModeRef.current === 'gateway',
+              onClick: () => void handleExecuteBulkGatewayTestRef.current(),
+              title: bulkApiTestBusy
+                ? bulkTestModeRef.current === 'gateway'
+                  ? 'Chiamata via gateway in corso…'
+                  : executeBulkGatewayTitle
+                : executeBulkGatewayTitle,
+              disabled: bulkApiTestBusy || convaiGatewayTestBlocked,
+            }
+          : undefined,
       },
       // Utility
       {
@@ -1698,9 +1848,9 @@ export default function BackendCallEditor({
     operationalUrlNonEmpty,
     readApiBusy,
     bulkApiTestBusy,
-    handleReadApi,
-    handleOpenTestTable,
-    handleExecuteBulkTest,
+    convaiGatewayTestAvailable,
+    convaiGatewayTestBlocked,
+    executeBulkGatewayTitle,
     executeBulkTitle,
     mockTableAllInputInternalNames.length,
     missingFieldsTotal,
@@ -1842,11 +1992,32 @@ export default function BackendCallEditor({
         {/* Two Column Layout: Input (left) + Output (right) OR Table View */}
         {showTableView ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {testBulkFeedback ? (
+              <div
+                className="shrink-0 border-b border-sky-600/40 bg-sky-950/45 px-4 py-2 text-xs leading-relaxed text-sky-100/95"
+                role="status"
+              >
+                {testBulkFeedback}
+              </div>
+            ) : null}
             <BackendCallMockTable
               bulkTestNonce={bulkTestNonce}
+              bulkGatewayTestNonce={bulkGatewayTestNonce}
+              convaiGatewayPublicUrl={convaiGatewayPublicUrlForTest}
               endpointInvocationFallback={literalFallbackFromSend}
               onBulkTestStart={() => setBulkApiTestBusy(true)}
-              onBulkTestEnd={() => setBulkApiTestBusy(false)}
+              onBulkTestSkipped={handleBulkTestSkipped}
+              onBulkTestEnd={(result) => {
+                setBulkApiTestBusy(false);
+                if (result === 'ok') {
+                  setHighlightIncompleteRows(false);
+                  setTestBulkFeedback(
+                    bulkTestModeRef.current === 'gateway'
+                      ? 'Test via gateway completato: controlla RECEIVE e avvisi ⚠ per riga (percorso ElevenLabs).'
+                      : 'Test completato: controlla le colonne RECEIVE e gli eventuali avvisi ⚠ per riga.'
+                  );
+                }
+              }}
               highlightIncompleteRows={highlightIncompleteRows}
               inputTooltipByInternalName={inputTooltipByInternalName}
               outputValueTooltipByInternalName={outputValueTooltipByInternalName}

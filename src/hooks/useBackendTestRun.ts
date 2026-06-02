@@ -17,6 +17,7 @@ import {
   BACKEND_CALL_PROXY_ENVELOPE_NOT_JSON,
   type BackendCallProxyResponse,
 } from '../services/backendCallTestProxyApi';
+import { forwardBackendCallViaConvaiGateway } from '../services/convaiGatewayTestApi';
 import { stableJsonStringify } from '../utils/stableJsonStringify';
 import type { MappingEntry } from '../components/FlowMappingPanel/mappingTypes';
 import type { BackendOutputDef } from '../utils/backendCall/mapJsonResponseToWireOutputs';
@@ -115,6 +116,8 @@ export type UseBackendTestRunParams = {
   endpointInvocationFallback?: Record<string, string>;
   /** Send hints agente (surface → sendPath ISO): applicati al body POST prima del proxy. */
   agentSlotBindings?: AgentBackendOutputSlotBindings | null;
+  /** URL gateway ConvAI pubblico (ngrok o localhost:3100) per test «via gateway». */
+  convaiGatewayPublicUrl?: string | null;
 };
 
 function applySendHintsToBuiltBody(
@@ -145,7 +148,7 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
     p.onRowsUpdate((rows) => rows.map((r) => (r.id === rowId ? mergeRow(r, patch) : r)));
   }, []);
 
-  const runRow = useCallback(async (rowId: string, options?: { forceHttp?: boolean }) => {
+  const runRow = useCallback(async (rowId: string, options?: { forceHttp?: boolean; viaConvaiGateway?: boolean }) => {
     const p = pRef.current;
     const row = p.getRows().find((r) => r.id === rowId);
     if (!row) {
@@ -156,12 +159,14 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
     const userMode: BackendExecutionMode =
       row.testRun?.executionMode ?? p.defaultExecutionMode ?? BackendExecutionMode.MOCK;
     const forceHttp = Boolean(options?.forceHttp);
+    const viaConvaiGateway = Boolean(options?.viaConvaiGateway);
     const useMockPath = !forceHttp && userMode === BackendExecutionMode.MOCK;
 
     logBackendCallTest('runRow: inizio', {
       rowId,
       userMode,
       forceHttp,
+      viaConvaiGateway,
       method: p.endpointMethod,
       url: p.endpointUrl,
     });
@@ -198,29 +203,47 @@ export function useBackendTestRun(params: UseBackendTestRunParams) {
         sendEntries: p.sendEntries,
         rowInputs: mergedInputs,
       });
-      const bodyJson = applySendHintsToBuiltBody(built.bodyJson, p.agentSlotBindings);
+      const applyClientSendHints = !viaConvaiGateway;
+      const bodyJson = applyClientSendHints
+        ? applySendHintsToBuiltBody(built.bodyJson, p.agentSlotBindings)
+        : built.bodyJson;
       const builtForProxy =
         bodyJson === built.bodyJson ? built : { ...built, bodyJson };
 
       const emptyBody = isEmptyBackendTestBodyJson(builtForProxy.bodyJson);
       logBackendCallTest('runRow: richiesta HTTP', {
         rowId,
-        url: built.url,
+        url: viaConvaiGateway ? p.convaiGatewayPublicUrl : built.url,
         method: built.method,
         bodyJson: builtForProxy.bodyJson,
         mergedInputs,
         endpointFallbackKeys: Object.keys(p.endpointInvocationFallback ?? {}),
         emptyBody,
-        sendHintsApplied: Boolean(p.agentSlotBindings?.sendHints?.length),
+        viaConvaiGateway,
+        sendHintsApplied: applyClientSendHints && Boolean(p.agentSlotBindings?.sendHints?.length),
       });
       if (emptyBody) {
         warnBackendCallTest(
           'Body POST vuoto ({}) — nessun param SEND in riga né letterale in Signature. Il backend userà solo i suoi default; la tabella mostrerà la risposta reale (niente merge con output vecchi).',
-          { rowId, url: builtForProxy.url }
+          { rowId, url: viaConvaiGateway ? p.convaiGatewayPublicUrl : builtForProxy.url }
         );
       }
 
-      const proxy = await forwardBackendCallViaProxy(builtForProxy);
+      let proxy: BackendCallProxyResponse;
+      if (viaConvaiGateway) {
+        const gatewayUrl = String(p.convaiGatewayPublicUrl ?? '').trim();
+        if (!gatewayUrl) {
+          throw new Error(
+            'Test via gateway: URL mancante (projectId / agentTaskId). Apri il backend dal tab Backends dell’agente AI.'
+          );
+        }
+        proxy = await forwardBackendCallViaConvaiGateway({
+          gatewayPublicUrl: gatewayUrl,
+          bodyJson: builtForProxy.bodyJson,
+        });
+      } else {
+        proxy = await forwardBackendCallViaProxy(builtForProxy);
+      }
 
       if (proxy.error === BACKEND_CALL_PROXY_ENVELOPE_NOT_JSON) {
         const hint =

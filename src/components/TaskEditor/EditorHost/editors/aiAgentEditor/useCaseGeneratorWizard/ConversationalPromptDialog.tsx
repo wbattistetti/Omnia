@@ -8,8 +8,6 @@ import type { editor as monacoEditorNs } from 'monaco-editor';
 import { Bot, Clipboard, ClipboardCheck, Sparkles, X } from 'lucide-react';
 import Modal from '@components/Modal';
 import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContext';
-import { taskRepository } from '@services/TaskRepository';
-import { TaskType } from '@types/taskTypes';
 import { SyncElevenLabsAgentDialog } from '../SyncElevenLabsAgentDialog';
 import { buildConvaiAgentSyncParams } from '@domain/convai/buildConvaiAgentSyncParams';
 import type { ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
@@ -45,6 +43,8 @@ import {
   formatCompactCount,
   measurePromptText,
 } from '@domain/useCaseGeneratorWizard/promptTextMetrics';
+import { buildConvaiWebhookUrlPreviewRows } from '@utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
+import { BackendWebhookUrlPreviewPanel } from './BackendWebhookUrlPreviewPanel';
 
 export interface ConversationalPromptDialogProps {
   open: boolean;
@@ -121,17 +121,6 @@ export function ConversationalPromptDialog({
   const [syncAgentOpen, setSyncAgentOpen] = React.useState(false);
   const [syncActionError, setSyncActionError] = React.useState<string | null>(null);
 
-  const catalogBackendTaskIds = React.useMemo(() => {
-    const fromProp = (manualCatalogBackendTaskIds ?? [])
-      .map((id) => String(id ?? '').trim())
-      .filter(Boolean);
-    const ids = fromProp.length > 0 ? fromProp : (backendCatalog?.manualEntries ?? []).map((e) => e.id);
-    return ids.filter((id) => {
-      const t = taskRepository.getTask(id);
-      return t?.type === TaskType.BackendCall;
-    });
-  }, [backendCatalog?.manualEntries, manualCatalogBackendTaskIds, open]);
-
   const persistElevenLabsSyncResult = React.useCallback(
     (result: ConvaiAgentSyncResult) => {
       if (!projectData || !pdUpdate?.updateDataDirectly) return;
@@ -191,6 +180,26 @@ export function ConversationalPromptDialog({
     ]
   );
 
+  const catalogLabelsByBackendId = React.useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const e of backendCatalog?.manualEntries ?? []) {
+      const id = String(e.id ?? '').trim();
+      const label = String(e.label ?? '').trim();
+      if (id && label) out[id] = label;
+    }
+    return out;
+  }, [backendCatalog?.manualEntries]);
+
+  const backendWebhookUrlPreviews = React.useMemo(() => {
+    if (!open || !convaiSyncParams) return [];
+    return buildConvaiWebhookUrlPreviewRows({
+      agentTask: convaiSyncParams.agentTask,
+      projectId: convaiSyncParams.projectId,
+      manualCatalogBackendTaskIds: convaiSyncParams.manualCatalogBackendTaskIds,
+      catalogLabelsByBackendId,
+    });
+  }, [catalogLabelsByBackendId, convaiSyncParams, open]);
+
   const sectionsResult = React.useMemo(() => {
     if (!open) return { sections: null as ReturnType<typeof buildExternalAgentPromptSections> | null, error: null as string | null };
     try {
@@ -248,12 +257,6 @@ export function ConversationalPromptDialog({
       setSyncActionError('Task agente non disponibile.');
       return;
     }
-    if (catalogBackendTaskIds.length === 0) {
-      setSyncActionError(
-        'Nessun backend in catalogo. Completa il passo Backends (URL + Descrizione ConvAI + Check Update).'
-      );
-      return;
-    }
     if (!mergedPrompt.trim()) {
       setSyncActionError(
         'Prompt completo vuoto. Compila use case, backend o knowledge base prima di aggiornare l’agente.'
@@ -261,7 +264,7 @@ export function ConversationalPromptDialog({
       return;
     }
     setSyncAgentOpen(true);
-  }, [agentTaskId, catalogBackendTaskIds.length, mergedPrompt]);
+  }, [agentTaskId, mergedPrompt]);
 
   const activeEditorText = React.useMemo(() => {
     if (!sectionsResult.sections) return '';
@@ -501,7 +504,7 @@ export function ConversationalPromptDialog({
             {activeTab === 'use-cases'
               ? 'Catalogo use case e regole conversazionali. Le pillole modificano solo questa sezione.'
               : activeTab === 'backends'
-                ? 'USE OF BACKENDS: type/format OpenAPI per parametro (oggetti espansi); MISSING in rosso. Senza testo IA al posto dello schema.'
+                ? 'BACKEND RECEIVE: campi risposta OpenAPI (fillFrom) e note d’uso; parametri SEND sono negli schema webhook tool.'
                 : 'Sintesi documenti knowledge base con analisi completata.'}{' '}
             <span className="text-violet-200/90">Copia tutto</span> unisce le tre sezioni nell’ordine:
             use case → backend → knowledge base.
@@ -516,6 +519,9 @@ export function ConversationalPromptDialog({
             <div className="shrink-0 rounded-md border border-amber-500/55 bg-amber-950/45 px-3 py-2 text-xs text-amber-100">
               Impossibile copiare: {copyError}. Puoi selezionare manualmente il testo e usare Ctrl+C.
             </div>
+          ) : null}
+          {activeTab === 'backends' ? (
+            <BackendWebhookUrlPreviewPanel rows={backendWebhookUrlPreviews} />
           ) : null}
           <div
             ref={monacoHostRef}

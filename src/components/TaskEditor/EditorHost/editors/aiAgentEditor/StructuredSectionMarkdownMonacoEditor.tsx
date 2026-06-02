@@ -71,6 +71,8 @@ export function StructuredSectionMarkdownMonacoEditor({
   );
 
   const [draft, setDraft] = React.useState(effectiveValue);
+  const draftRef = React.useRef(draft);
+  draftRef.current = draft;
 
   const { applyDecorations } = useDesignerDraftInsertHighlight({
     editorRef,
@@ -79,7 +81,10 @@ export function StructuredSectionMarkdownMonacoEditor({
     enabled: Boolean(designerHighlightBaseline.trim()),
   });
 
+  /** Sync parent → editor only when not typing (undo/redo, tab switch); avoids dictation/IME fights. */
   React.useEffect(() => {
+    if (editorRef.current?.hasTextFocus()) return;
+    if (draftRef.current === effectiveValue) return;
     setDraft(effectiveValue);
   }, [effectiveValue]);
 
@@ -157,8 +162,12 @@ export function StructuredSectionMarkdownMonacoEditor({
           if (!readOnly) onRedoRequest();
         });
       }
+
+      editor.onDidBlurEditorText(() => {
+        if (!readOnly) commitDraft(draftRef.current);
+      });
     },
-    [readOnly, onUndoRequest, onRedoRequest, applyDecorations]
+    [readOnly, onUndoRequest, onRedoRequest, applyDecorations, commitDraft]
   );
 
   const handleChange = React.useCallback(

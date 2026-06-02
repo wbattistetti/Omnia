@@ -54,7 +54,11 @@ export function isKbParsableTabular(file: File): boolean {
   return (
     name.endsWith('.xlsx') ||
     name.endsWith('.txt') ||
+    name.endsWith('.csv') ||
+    name.endsWith('.tsv') ||
     file.type === 'text/plain' ||
+    file.type === 'text/csv' ||
+    file.type === 'text/tab-separated-values' ||
     file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   );
 }

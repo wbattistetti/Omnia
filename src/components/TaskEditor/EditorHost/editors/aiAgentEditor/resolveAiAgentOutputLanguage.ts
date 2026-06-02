@@ -50,3 +50,30 @@ export function resolveAiAgentOutputLanguage(): ResolvedAiAgentOutputLanguage {
   }
   return { tag: browserLanguageTag(), source: 'browser' };
 }
+
+/** ISO 639-1 da tag BCP-47 (es. `it-IT` → `it`). */
+export function iso6391FromLanguageTag(tag: string): string | null {
+  const t = tag.trim().toLowerCase();
+  if (!t) return null;
+  const code = t.split('-')[0] ?? '';
+  if (code === 'it' || code === 'en' || code === 'pt') return code;
+  if (code.length === 2) return code;
+  return null;
+}
+
+/**
+ * Lingua per `conversation_config.agent.language` in sync ConvAI ElevenLabs.
+ * Priorità: `project.lang`, poi `cfg.voice.language`, infine `it`.
+ */
+export function resolveConvaiAgentLanguageForSync(iaVoiceLanguage?: string | null): string {
+  const { tag, source } = resolveAiAgentOutputLanguage();
+  if (source === 'project') {
+    const fromProject = iso6391FromLanguageTag(tag);
+    if (fromProject) return fromProject;
+  }
+  const fromCfg = iso6391FromLanguageTag(String(iaVoiceLanguage ?? '').trim());
+  if (fromCfg) return fromCfg;
+  const fromBrowser = iso6391FromLanguageTag(tag);
+  if (fromBrowser) return fromBrowser;
+  return 'it';
+}

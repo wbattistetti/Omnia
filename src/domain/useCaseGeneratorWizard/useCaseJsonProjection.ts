@@ -451,10 +451,60 @@ export function areAllUseCasesProjectable(
     (uc) => isUseCaseIncludedInConversations(uc) && !isStartAgentUseCase(uc)
   );
   if (included.length === 0) return false;
+  return listNonProjectableIncludedUseCases(useCases, lexicon, bindings).length === 0;
+}
+
+/** Use case incluso nel prompt ma senza frase agente tokenizzabile. */
+export type NonProjectableUseCaseRef = {
+  readonly useCaseId: string;
+  readonly catalogNumber: number | undefined;
+  readonly label: string;
+};
+
+/**
+ * Use case inclusi in conversazione che non hanno messaggio agente compilabile
+ * (dialogue/frasi vuote o compile senza `tokenizedText`).
+ */
+export function listNonProjectableIncludedUseCases(
+  useCases: readonly AIAgentUseCase[],
+  lexicon: ProjectSlotLexicon = emptyProjectSlotLexicon(),
+  bindings: AgentBackendOutputSlotBindings = emptyAgentBackendOutputSlotBindings()
+): NonProjectableUseCaseRef[] {
+  const included = useCases.filter(
+    (uc) => isUseCaseIncludedInConversations(uc) && !isStartAgentUseCase(uc)
+  );
+  const numberById = buildUseCaseCatalogNumberById(included);
+  const out: NonProjectableUseCaseRef[] = [];
   for (const uc of included) {
-    if (!isUseCaseProjectable(uc, lexicon, bindings)) return false;
+    if (isUseCaseProjectable(uc, lexicon, bindings)) continue;
+    out.push({
+      useCaseId: uc.id,
+      catalogNumber: numberById.get(uc.id),
+      label: typeof uc.label === 'string' ? uc.label.trim() : '',
+    });
   }
-  return true;
+  return out;
+}
+
+/** Dettaglio umano per errori `buildConversationalPrompt` (numeri catalogo 1-based). */
+export function formatNonProjectableUseCasesErrorDetail(
+  refs: readonly NonProjectableUseCaseRef[]
+): string {
+  if (refs.length === 0) {
+    return 'nessun use case incluso con messaggio agente compilabile.';
+  }
+  const count = refs.length;
+  const numbers = refs
+    .map((r) => r.catalogNumber)
+    .filter((n): n is number => typeof n === 'number' && n > 0)
+    .sort((a, b) => a - b);
+  if (numbers.length > 0) {
+    return `${count} use case senza messaggio compilabile (n. catalogo: ${numbers.join(', ')}).`;
+  }
+  const fallback = refs
+    .map((r) => (r.label.trim() ? `«${r.label.trim()}»` : r.useCaseId))
+    .join(', ');
+  return `${count} use case senza messaggio compilabile (${fallback}).`;
 }
 
 /**

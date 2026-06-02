@@ -96,6 +96,7 @@ import {
   LABEL_POLISH_USE_CASE_SCENARIO_PENDING,
   LABEL_REGENERATE_AGENT_EXAMPLE,
   LABEL_REGENERATE_USE_CASE_FOR_SCENARIO,
+  PLACEHOLDER_ROOT_USE_CASE_DRAFT,
   TOOLTIP_POLISH_USE_CASE_SCENARIO,
 } from './constants';
 import {
@@ -249,7 +250,9 @@ export interface AIAgentUseCaseComposerProps {
     deferSiblingReorder?: boolean;
   }) => Promise<string>;
   /** Root INVIO: semantic split via LLM (Prompts catalog only). */
-  onSplitRootUseCaseDraft?: (draftText: string) => Promise<string[]>;
+  onSplitRootUseCaseDraft?: (
+    draftText: string
+  ) => Promise<import('./parseRootUseCaseDraft').SplitRootUseCaseDraftResult>;
   /** Fine batch root: evidenzia tutti gli id creati (bordo ambra + chip New). */
   onRootUseCaseBatchCreated?: (createdIds: readonly string[]) => void;
   onRegenerateUseCase: (useCaseId: string) => void | Promise<void | AIAgentUseCase | null>;
@@ -465,8 +468,11 @@ export function AIAgentUseCaseComposer({
   const showStyleLearningNotesPanel =
     useCaseStyleLearningNotes.trim().length > 0 || styleLearningNotesEditorOpen;
   const { ordered } = React.useMemo(
-    () => orderUseCasesWithDepth(catalogUseCases),
-    [catalogUseCases]
+    () =>
+      orderUseCasesWithDepth(catalogUseCases, {
+        startUseCaseId: isConversationalRulesCatalog ? undefined : startUseCaseId,
+      }),
+    [catalogUseCases, isConversationalRulesCatalog, startUseCaseId]
   );
   const highlightIdSet = React.useMemo(() => new Set(highlightIds), [highlightIds]);
   /** Rimuove chip/bordo «New» solo dopo un’azione designer esplicita (voto, commit testo, …). */
@@ -672,8 +678,24 @@ export function AIAgentUseCaseComposer({
     () =>
       isConversationalRulesCatalog
         ? null
-        : resolveUseCaseListDisplayLayout(useCaseCategories, filteredOrdered),
-    [isConversationalRulesCatalog, useCaseCategories, filteredOrdered]
+        : resolveUseCaseListDisplayLayout(useCaseCategories, filteredOrdered, {
+            startUseCaseId,
+          }),
+    [isConversationalRulesCatalog, startUseCaseId, useCaseCategories, filteredOrdered]
+  );
+
+  const pinStartUseCaseListRow = React.useCallback(
+    (rows: UseCaseListRow[]): UseCaseListRow[] => {
+      const startId = String(startUseCaseId ?? '').trim();
+      if (!startId || isConversationalRulesCatalog) return rows;
+      const idx = rows.findIndex((r) => r.kind === 'use_case' && r.useCase.id === startId);
+      if (idx <= 0) return rows;
+      const next = [...rows];
+      const [row] = next.splice(idx, 1);
+      next.unshift(row);
+      return next;
+    },
+    [isConversationalRulesCatalog, startUseCaseId]
   );
 
   const useCaseListRows = React.useMemo((): UseCaseListRow[] => {
@@ -706,8 +728,8 @@ export function AIAgentUseCaseComposer({
         });
       }
     }
-    return rows;
-  }, [filteredOrdered, useCaseListLayout]);
+    return pinStartUseCaseListRow(rows);
+  }, [filteredOrdered, pinStartUseCaseListRow, useCaseListLayout]);
 
   const [collapsedCategoryIds, setCollapsedCategoryIds] = React.useState<Set<string>>(
     () => new Set()
@@ -749,10 +771,12 @@ export function AIAgentUseCaseComposer({
     setSelectedId((prev) => {
       if (pending) return pending;
       if (prev && useCases.some((u) => u.id === prev)) return prev;
-      const { ordered: o } = orderUseCasesWithDepth(useCases);
+      const { ordered: o } = orderUseCasesWithDepth(useCases, {
+        startUseCaseId: isConversationalRulesCatalog ? undefined : startUseCaseId,
+      });
       return o[0]?.id ?? null;
     });
-  }, [editorTaskInstanceId, useCases, setSelectedId]);
+  }, [editorTaskInstanceId, isConversationalRulesCatalog, startUseCaseId, useCases, setSelectedId]);
 
   /** Stable selection while the list is non-empty (avoids empty right pane before effect runs). */
   const effectiveSelectedId = React.useMemo(() => {
@@ -1646,6 +1670,7 @@ export function AIAgentUseCaseComposer({
         segmentCount: resolved.labels.length,
         skippedCount: resolved.skippedCount,
         usedLlm: resolved.usedLlm,
+        startLabelPreview: resolved.startLabel?.slice(0, 80) ?? null,
         partsPreview: resolved.labels.map((p) => p.slice(0, 80)),
       });
 
@@ -1677,6 +1702,7 @@ export function AIAgentUseCaseComposer({
       const batchScope = resolved.labels.length > 1 ? 'batch' : 'single';
       const deferReorder = batchScope === 'batch';
       const createdIds: string[] = [];
+      const labelToCreatedId = new Map<string, string>();
       for (let i = 0; i < resolved.labels.length; i++) {
         const label = resolved.labels[i];
         const isLast = i === resolved.labels.length - 1;
@@ -1689,8 +1715,18 @@ export function AIAgentUseCaseComposer({
           deferSiblingReorder: deferReorder,
           skipSelectAfterCreate: true,
         });
-        if (createdId) createdIds.push(createdId);
+        if (createdId) {
+          createdIds.push(createdId);
+          labelToCreatedId.set(label, createdId);
+        }
         logUseCaseRootBatch('batch_segment_ok', { index: i, total: resolved.labels.length });
+      }
+      if (resolved.startLabel && onStartUseCaseIdChange) {
+        const startId = labelToCreatedId.get(resolved.startLabel);
+        if (startId) {
+          onStartUseCaseIdChange(startId);
+          logUseCaseRootBatch('handleCreateRoot_start_set', { startId });
+        }
       }
       logUseCaseRootBatch('handleCreateRoot_batch_complete', { createdCount: createdIds.length });
       if (createdIds.length > 0) {
@@ -1716,6 +1752,7 @@ export function AIAgentUseCaseComposer({
     isConversationalRulesCatalog,
     onSplitRootUseCaseDraft,
     onRootUseCaseBatchCreated,
+    onStartUseCaseIdChange,
     createUseCase,
   ]);
 
@@ -2892,17 +2929,6 @@ export function AIAgentUseCaseComposer({
                   />
                 </div>
               ) : null}
-              {!isConversationalRulesCatalog && startUseCaseId.trim() ? (
-                <p className="shrink-0 px-3 pt-2 text-[11px] text-orange-200/90">
-                  Use case Start:{' '}
-                  <span className="font-semibold text-orange-100">
-                    {catalogUseCases.find((u) => u.id === startUseCaseId)?.label?.trim() ||
-                      startUseCaseId}
-                  </span>
-                  . Passa su un altro use case e clicca «Start» per cambiare, o clicca di nuovo
-                  Start per rimuovere.
-                </p>
-              ) : null}
               {!showUseCaseEmptyTutor ? (
                 <UseCaseRootComposerHeader
                   rootDraftRef={rootDraftRef}
@@ -2939,7 +2965,7 @@ export function AIAgentUseCaseComposer({
                   placeholder={
                     isConversationalRulesCatalog
                       ? 'Una o più regole: una riga per titolo, oppure separa con ; o ,. INVIO crea tutte in sequenza.'
-                      : 'Incolla o scrivi uno o più scenari (anche un paragrafo). INVIO: l’IA decide quanti use case creare.'
+                      : PLACEHOLDER_ROOT_USE_CASE_DRAFT
                   }
                   showAnalyzeChip={showRootAnalyzeChip}
                   rootChipBusy={rootChipBusy}

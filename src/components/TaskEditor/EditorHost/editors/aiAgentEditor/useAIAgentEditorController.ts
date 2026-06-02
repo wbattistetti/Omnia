@@ -99,6 +99,7 @@ import { mergeSendHintsIntoBindings, updateSendHintForSurface } from '@domain/ba
 import type { TokenSendRole } from '@domain/backendOutputSlotBinding/types';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { buildAgentWebhookReadinessReport } from '@domain/openApi/webhookOpenApiReadiness';
+import { shouldRunBackendIaCompileMapping } from '@domain/useCaseBundle/catalogCompileBackendGate';
 import { computeCatalogCompileValidation } from './useCaseBundle/catalogCompileValidation';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
@@ -1180,20 +1181,15 @@ export function useAIAgentEditorController({
 
       let lexicon = projectSlotLexicon;
       const { surfaces, phraseTokens } = collectCatalogCompileInputs(useCases, lexicon);
-      const needsIaMapping = surfaces.length > 0 || phraseTokens.length > 0;
+      const compileMappingInputs = {
+        surfaceCount: surfaces.length,
+        phraseTokenCount: phraseTokens.length,
+      };
       const sendLeaves = backendLinked
         ? collectBackendSendLeavesFromTasks(backendIds, getBackendTask)
         : [];
 
-      if (needsIaMapping) {
-        if (!backendLinked) {
-          const msg =
-            'Compila: collega almeno un task Backend al catalogo per mappare automaticamente i token.';
-          setUseCaseComposerError(msg);
-          setCompileMappingBanner(msg);
-          openSlotMappingOnCompileFailRef.current?.();
-          return false;
-        }
+      if (shouldRunBackendIaCompileMapping(compileMappingInputs, backendLinked)) {
         if (!provider.trim() || !model.trim()) {
           const msg =
             'Compila: imposta provider e modello in Omnia Tutor (LLM designer) per la mappatura automatica.';
@@ -2988,11 +2984,11 @@ export function useAIAgentEditorController({
   );
 
   const handleSplitRootUseCaseDraft = React.useCallback(
-    async (draftText: string): Promise<string[]> => {
+    async (draftText: string): Promise<import('./parseRootUseCaseDraft').SplitRootUseCaseDraftResult> => {
       const draft = String(draftText || '').trim();
-      if (!draft) return [];
+      if (!draft) return { labels: [], startLabel: null };
       const { tag: outputLanguage } = resolveAiAgentOutputLanguage();
-      const { labels } = await splitRootUseCaseDraftApi({
+      const { labels, startLabelIndex } = await splitRootUseCaseDraftApi({
         draftText: draft,
         allUseCases: useCases,
         provider,
@@ -3000,10 +2996,17 @@ export function useAIAgentEditorController({
         outputLanguage,
         callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_SPLIT_ROOT_DRAFT),
       });
+      const startLabel =
+        typeof startLabelIndex === 'number' &&
+        startLabelIndex >= 0 &&
+        startLabelIndex < labels.length
+          ? labels[startLabelIndex]
+          : null;
       logUseCaseRootBatch('controller_splitRootUseCaseDraft_ok', {
         labelCount: labels.length,
+        startLabelPreview: startLabel?.slice(0, 80) ?? null,
       });
-      return labels;
+      return { labels, startLabel };
     },
     [useCases, provider, model, buildCallMeta]
   );

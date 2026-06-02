@@ -6,7 +6,6 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { formatUseCaseBundleProgressBanner } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import {
-  HINT_ADD_USE_CASES_FROM_INPUT,
   LABEL_ANALYZE_AND_CREATE_USE_CASES,
 } from '../constants';
 import { UseCaseBundleGenerateButton } from './UseCaseBundleGenerateButton';
@@ -87,8 +86,7 @@ export function UseCaseRootComposerHeader({
   const canGenerateBundle = typeof onGenerateUseCaseBundle === 'function';
 
   return (
-    <div className="shrink-0 border-b border-slate-700/50 px-2 pt-2 pb-2 space-y-1.5 sm:px-3">
-      <p className="text-[11px] leading-snug text-slate-400">{HINT_ADD_USE_CASES_FROM_INPUT}</p>
+    <div className="shrink-0 border-b border-slate-700/50 px-2 pt-2 pb-2 sm:px-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
         <textarea
           ref={rootDraftRef}
@@ -100,7 +98,7 @@ export function UseCaseRootComposerHeader({
           onKeyDown={onRootDraftKeyDown}
           disabled={rootComposerLocked}
           placeholder={placeholder}
-          className="min-h-[36px] min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-transparent focus:ring-2 focus:ring-violet-500 disabled:opacity-60 sm:text-sm"
+          className="min-h-[52px] min-w-0 flex-1 resize-none overflow-hidden rounded-md border-2 border-sky-400/60 bg-slate-900/95 px-2.5 py-2 text-xs text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-slate-300/95 focus:border-sky-300/80 focus:outline-none focus:ring-2 focus:ring-sky-400/40 disabled:opacity-60 sm:text-sm"
         />
         {canGenerateBundle ? (
           <UseCaseBundleGenerateButton
@@ -108,6 +106,7 @@ export function UseCaseRootComposerHeader({
             onGenerate={onGenerateUseCaseBundle}
             hasExistingUseCases={hasExistingUseCases}
             layout="inline"
+            accentTone="sky"
             className="sm:mt-0.5"
           />
         ) : null}

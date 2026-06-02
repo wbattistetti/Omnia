@@ -1,5 +1,5 @@
 /**
- * Prompt esterno unificato: use case + USE OF BACKENDS + knowledge base (tab dialog «Copia tutto»).
+ * Prompt esterno unificato: use case + BACKEND RECEIVE (slim) + knowledge base (tab dialog «Copia tutto»).
  */
 
 import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
@@ -85,7 +85,7 @@ export function emptyExternalPromptPlaceholder(tab: ExternalAgentPromptTabId): s
     case 'use-cases':
       return '(Use case non disponibili: compila il catalogo prima di copiare.)';
     case 'backends':
-      return '(Nessuna sezione USE OF BACKENDS.\nRecupera le specifiche OpenAPI e usa «Analizza» nella tab Backends, poi salva il progetto.)';
+      return '(Nessuna sezione BACKEND RECEIVE.\nCollega backend al catalogo ConvAI e completa OpenAPI RECEIVE dove usi fillFrom nei token.)';
     case 'knowledge-base':
       return '(Nessuna sintesi knowledge base.\nCarica documenti nella tab Knowledge base ed esegui l’analisi.)';
     default:

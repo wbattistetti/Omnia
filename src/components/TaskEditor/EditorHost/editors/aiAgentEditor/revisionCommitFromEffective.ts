@@ -38,7 +38,8 @@ export function commitEffectiveTextChange(params: CommitEffectiveTextParams): Co
   }
 
   if (otMode) {
-    return { kind: 'ot', ops: diffToOps(baseText, targetEffective) };
+    /** Ops apply to {@link otCurrentText}, not {@link baseText} — see `commitOperations`. */
+    return { kind: 'ot', ops: diffToOps(currentEffective, targetEffective) };
   }
 
   const doc = buildLinearDocument(baseText, deletedMask, inserts);

@@ -1,5 +1,5 @@
 /**
- * Analisi di un singolo backend nel catalogo (accordion + azioni review/aggiorna).
+ * Analisi di un singolo backend nel catalogo (accordion + Esegui/Aggiorna).
  */
 
 import React from 'react';
@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { runMergedAnalysisToolbarAction } from '@domain/knowledgeBase/analysisToolbarExecute';
 import {
   catalogEntryHasCompleteIaAnalysis,
-  catalogEntryNeedsIaAnalysis,
+  catalogEntryHasSubstantiveAnalysis,
 } from '@domain/backendAnalysis/mergeCatalogEntryAnalysis';
 import { catalogEntryAnalysisStaleAfterSpecRefresh } from '@domain/backendAnalysis/catalogEntryAnalysisStaleAfterSpecRefresh';
 import { taskRepository } from '@services/TaskRepository';
@@ -20,11 +20,14 @@ export type BackendCatalogEntryAnalysisPanelProps = {
   defaultOpen?: boolean;
 };
 
+const PRIMARY_BTN =
+  'inline-flex shrink-0 items-center gap-1 rounded border border-cyan-600/70 bg-cyan-600/90 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm shadow-cyan-950/40 hover:bg-cyan-500 disabled:opacity-50';
+
 export function BackendCatalogEntryAnalysisPanel({
   catalogEntryId,
-  defaultOpen = true,
+  defaultOpen = false,
 }: BackendCatalogEntryAnalysisPanelProps): React.ReactElement | null {
-  const { document, analysisLaunched, manualEntries } = useAgentBackendAnalysis();
+  const { document, manualEntries } = useAgentBackendAnalysis();
   const edit = useBackendAnalysisEdit();
   const backend = document.backends[catalogEntryId];
   const catalogEntry = manualEntries.find((e) => e.id === catalogEntryId);
@@ -33,18 +36,34 @@ export function BackendCatalogEntryAnalysisPanel({
 
   const busy = edit.catalogEntryAnalysisBusyId === catalogEntryId;
   const analysisError =
-    edit.catalogEntryAnalysisErrorId === catalogEntryId
-      ? edit.catalogEntryAnalysisError
-      : null;
+    edit.catalogEntryAnalysisErrorId === catalogEntryId ? edit.catalogEntryAnalysisError : null;
   const analysisJustDone = edit.catalogEntryAnalysisDoneId === catalogEntryId;
+
+  const hasStartedAnalysis = backend ? catalogEntryHasSubstantiveAnalysis(backend) : false;
+  const canExpandBody = Boolean(backend) && hasStartedAnalysis && !busy;
+
+  React.useEffect(() => {
+    if (!canExpandBody && open) setOpen(false);
+  }, [canExpandBody, open]);
 
   if (!backend) return null;
 
   const presentation = edit.getBackendSectionToolbarPresentation(catalogEntryId);
   const sectionBusy = edit.sectionReviewBusy;
   const analysisComplete = catalogEntryHasCompleteIaAnalysis(backend);
-  const showReviewHint =
-    !busy && analysisComplete && !presentation.executeVisible && !sectionBusy;
+  const analysisStaleAfterSpecRefresh =
+    Boolean(catalogEntry) &&
+    catalogEntryAnalysisStaleAfterSpecRefresh(catalogEntry!, backend, liveTask);
+
+  const primaryLabel = hasStartedAnalysis || analysisStaleAfterSpecRefresh ? 'Aggiorna' : 'Esegui';
+
+  const onPrimaryAnalysis = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (busy || sectionBusy || !edit.canRunReview) return;
+    void edit.runCatalogEntryAnalysis(catalogEntryId, {
+      force: hasStartedAnalysis || analysisStaleAfterSpecRefresh,
+    });
+  };
 
   const onToolbarAction = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -57,23 +76,6 @@ export function BackendCatalogEntryAnalysisPanel({
     });
   };
 
-  const onRerunAnalysis = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (busy || sectionBusy) return;
-    void edit.runCatalogEntryAnalysis(catalogEntryId, { force: true });
-  };
-
-  const onUpdateAnalysisAfterSpecRefresh = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (busy || sectionBusy) return;
-    void edit.runCatalogEntryAnalysis(catalogEntryId, { force: true });
-  };
-
-  const needsIaAnalysis = catalogEntryNeedsIaAnalysis(backend);
-  const analysisStaleAfterSpecRefresh =
-    Boolean(catalogEntry) &&
-    catalogEntryAnalysisStaleAfterSpecRefresh(catalogEntry!, backend, liveTask);
-
   const actionClass =
     'inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-semibold disabled:opacity-50 ' +
     (presentation.executeEmphasized
@@ -82,80 +84,66 @@ export function BackendCatalogEntryAnalysisPanel({
 
   return (
     <div className="min-w-0 shrink-0 rounded-md border border-violet-900/40 bg-violet-950/10">
-      <div className="flex w-full flex-wrap items-center gap-2 px-2 py-1.5">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs font-semibold text-violet-100/95 hover:text-violet-50"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-        >
-          {open ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-violet-400/80" aria-hidden />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-violet-400/80" aria-hidden />
-          )}
-          Analisi
-          {busy ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-300" aria-hidden />
-          ) : null}
-        </button>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {analysisStaleAfterSpecRefresh && !busy ? (
-            <button
-              type="button"
-              disabled={sectionBusy || !edit.canRunReview}
-              onClick={onUpdateAnalysisAfterSpecRefresh}
-              className="rounded border border-amber-600/70 bg-amber-950/50 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-900/55 disabled:opacity-50"
-              title="Firma OpenAPI aggiornata: rigenera l’analisi IA sui nuovi parametri SEND/RECEIVE"
-            >
-              Aggiorna analisi
-            </button>
-          ) : null}
-          {needsIaAnalysis && !busy && !analysisStaleAfterSpecRefresh ? (
-            <button
-              type="button"
-              disabled={sectionBusy || !edit.canRunReview}
-              onClick={onRerunAnalysis}
-              className="rounded border border-cyan-700/60 bg-cyan-950/40 px-2 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-900/50 disabled:opacity-50"
-              title={
-                analysisLaunched
-                  ? 'Prima analisi IA per questo backend'
-                  : 'Avvia analisi IA (salva il progetto dopo per conservarla)'
-              }
-            >
-              Analizza
-            </button>
-          ) : null}
-          {!needsIaAnalysis && !analysisStaleAfterSpecRefresh && !busy ? (
-            <button
-              type="button"
-              disabled={sectionBusy || !edit.canRunReview}
-              onClick={onRerunAnalysis}
-              className="rounded border border-slate-600/60 bg-slate-900/50 px-2 py-0.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800/60 disabled:opacity-50"
-              title="Rigenera l’analisi IA per questo backend"
-            >
-              Rigenera
-            </button>
-          ) : null}
-          {presentation.executeVisible ? (
-            <button
-              type="button"
-              disabled={!presentation.executeEnabled || sectionBusy || busy}
-              onClick={onToolbarAction}
-              className={actionClass}
-              title="Confronta le tue modifiche con l’analisi IA e aggiorna"
-            >
-              {sectionBusy ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : null}
-              {presentation.executeLabel}
-            </button>
-          ) : null}
-        </div>
+      <div className="flex w-full flex-wrap items-center gap-1.5 px-2 py-1.5">
+        {canExpandBody ? (
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center text-violet-400/80 hover:text-violet-200"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-label={open ? 'Comprimi analisi' : 'Espandi analisi'}
+          >
+            {open ? (
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+            )}
+          </button>
+        ) : (
+          <span className="inline-flex w-3.5 shrink-0" aria-hidden />
+        )}
+
+        <span className="text-xs font-semibold text-violet-100/95">Analisi</span>
+
+        {busy ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-300" aria-hidden />
+        ) : (
+          <button
+            type="button"
+            disabled={sectionBusy || !edit.canRunReview}
+            onClick={onPrimaryAnalysis}
+            className={PRIMARY_BTN}
+            title={
+              primaryLabel === 'Esegui'
+                ? 'Avvia la prima analisi IA per questo backend'
+                : analysisStaleAfterSpecRefresh
+                  ? 'Rigenera l’analisi sui parametri SEND/RECEIVE aggiornati'
+                  : 'Rigenera l’analisi IA per questo backend'
+            }
+          >
+            {primaryLabel}
+          </button>
+        )}
+
+        {presentation.executeVisible ? (
+          <button
+            type="button"
+            disabled={!presentation.executeEnabled || sectionBusy || busy}
+            onClick={onToolbarAction}
+            className={`${actionClass} ml-auto`}
+            title="Confronta le tue modifiche con l’analisi IA e aggiorna"
+          >
+            {sectionBusy ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : null}
+            {presentation.executeLabel}
+          </button>
+        ) : null}
       </div>
+
       {analysisStaleAfterSpecRefresh && !busy && !analysisError ? (
         <p className="border-t border-amber-900/40 bg-amber-950/20 px-2 py-1.5 text-[11px] leading-snug text-amber-100/90">
           Firma backend aggiornata (Recupera specifiche): premi{' '}
-          <span className="font-semibold">Aggiorna analisi</span> per rigenerare ruoli e descrizioni
-          sui parametri attuali.
+          <span className="font-semibold">Aggiorna</span> per rigenerare ruoli e descrizioni sui
+          parametri attuali.
         </p>
       ) : null}
       {busy ? (
@@ -175,22 +163,12 @@ export function BackendCatalogEntryAnalysisPanel({
       ) : null}
       {analysisJustDone && !analysisError && !analysisComplete && !busy ? (
         <p className="border-t border-amber-900/40 bg-amber-950/20 px-2 py-2 text-[11px] text-amber-100/90">
-          Analisi parziale: compila «Come usare» o rigenera con «Rigenera IA» se mancano ruoli e
-          descrizioni parametri.
+          Analisi parziale: compila «Come usare» o premi «Aggiorna» se mancano ruoli e descrizioni
+          parametri.
         </p>
       ) : null}
-      {!busy && !analysisError && needsIaAnalysis && !analysisJustDone ? (
-        <p className="border-t border-violet-900/25 px-2 py-1.5 text-[11px] text-slate-400">
-          Analisi non ancora compilata: premi «Analizza» sulla riga del backend o qui sopra.
-        </p>
-      ) : null}
-      {showReviewHint ? (
-        <p className="border-t border-violet-900/25 px-2 py-1.5 text-[11px] leading-snug text-slate-500">
-          Modifica «Come usare» o l’analisi di un parametro (icona matita): in alto apparirà{' '}
-          <span className="text-violet-200/90">Rivedi modifiche</span>.
-        </p>
-      ) : null}
-      {open && !busy ? (
+
+      {open && canExpandBody ? (
         <div
           className="max-h-[min(52vh,560px)] min-h-0 overflow-y-auto overflow-x-hidden border-t border-violet-900/30 px-2 pb-2 pt-1 pr-1"
           data-backend-analysis-scroll

@@ -32,10 +32,10 @@ describe('buildConversationalPrompt', () => {
   it('throws when at least one use case has no canonical assistant message', () => {
     expect(() =>
       buildConversationalPrompt([
-        makeUseCase(),
-        makeUseCase({ id: 'uc-2', dialogue: [] }),
+        makeUseCase({ id: 'uc-1', sort_order: 0 }),
+        makeUseCase({ id: 'uc-2', sort_order: 1, dialogue: [] }),
       ])
-    ).toThrow(/non ha un messaggio agente canonico/);
+    ).toThrow(/1 use case senza messaggio compilabile.*n\. catalogo: 2/);
   });
 
   it('contains the operative header in IT', () => {

@@ -8,6 +8,8 @@ import {
   normalizeAnalysisText,
   parseKbAnalysisObservationReview,
   resolveKbAnalysisToolbarPresentation,
+  shouldKbAnalysisRouteToObservationReview,
+  shouldKbAnalysisRouteToObservationReview,
   shouldRunObservationReview,
 } from '../kbDocumentAnalysisWorkflow';
 
@@ -22,6 +24,8 @@ describe('kbDocumentAnalysisWorkflow', () => {
     expect(analysisDraftDiffersFromBaseline('x', '')).toBe(true);
     expect(shouldRunObservationReview('', 'user draft')).toBe(true);
     expect(shouldRunObservationReview('agent', 'user draft')).toBe(true);
+    expect(shouldKbAnalysisRouteToObservationReview('', 'user draft')).toBe(false);
+    expect(shouldKbAnalysisRouteToObservationReview('agent', 'user draft')).toBe(true);
   });
 
   it('maps presentation to chip labels', () => {

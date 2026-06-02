@@ -15,16 +15,20 @@ import {
   resolveAgentStartPromptSpeechText,
 } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import { resolveStartUseCaseSpeechText } from '@domain/useCaseGeneratorWizard/startUseCase';
-import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { openApiCompileErrorsFromTask } from '@domain/openApi/openApiCompileErrorsFromTask';
 import { buildConvaiWebhookToolFromBackendTask } from '@utils/iaAgentRuntime/elevenLabsConvaiToolsPayload';
+import {
+  collectConvaiWebhookTunnelReadinessForSync,
+  prepareConvaiWebhookToolForElevenLabsApi,
+  resolveConvaiSyncBackendTaskIds,
+} from '@utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
 import {
   conversationConfigForConvaiApi,
   CONVAI_DEFAULT_FIRST_MESSAGE,
   buildConvaiTtsBlockForApi,
   mapConvaiLlmForAgentLanguage,
 } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
-import { normalizeLanguage } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
+import { resolveConvaiAgentLanguageForSync } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentOutputLanguage';
 import { resolveTaskIaConfig } from '@utils/iaAgentRuntime/resolveTaskIaConfig';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import { patchConvaiAgent } from '@workspaces/elevenlabs/api/convaiAgentApi';
@@ -99,12 +103,7 @@ function buildSyncPromptText(
 }
 
 function resolveBackendTaskIds(params: ConvaiAgentSyncParams): string[] {
-  const cfg = resolveTaskIaConfig(params.agentTask);
-  const fromCfg = (cfg.convaiBackendToolTaskIds ?? [])
-    .map((x) => String(x || '').trim())
-    .filter(Boolean);
-  const fromCatalog = params.manualCatalogBackendTaskIds ?? [];
-  return mergeConvaiBackendToolIdLists(fromCfg, fromCatalog);
+  return resolveConvaiSyncBackendTaskIds(params);
 }
 
 function usesBookFromAgenda(tools: ConvaiAgentSyncToolResult[], backendIds: string[]): boolean {
@@ -159,6 +158,22 @@ export async function syncConvaiAgentFromOmnia(
   }
 
   const backendIds = resolveBackendTaskIds(params);
+  const useDevTunnelForWebhook = params.useDevTunnelForWebhook !== false;
+  const tunnelReadiness = collectConvaiWebhookTunnelReadinessForSync({
+    ...params,
+    useDevTunnelForWebhook,
+  });
+  if (useDevTunnelForWebhook && !tunnelReadiness.ready) {
+    return {
+      ok: false,
+      failure: {
+        phase: 'validate',
+        message: tunnelReadiness.errors[0] ?? 'Tunnel dev mancante per webhook ConvAI.',
+        compileErrors: tunnelReadiness.errors.length > 1 ? tunnelReadiness.errors : undefined,
+      },
+    };
+  }
+
   const allCompileErrors: string[] = [];
   for (const bid of backendIds) {
     const bt = taskRepository.getTask(bid);
@@ -228,9 +243,16 @@ export async function syncConvaiAgentFromOmnia(
   }
 
   const tools: ConvaiAgentSyncToolResult[] = [];
+  const projectId = String(params.projectId ?? '').trim();
+  const agentTaskId = String(agentTask.id ?? '').trim();
   for (const bid of backendIds) {
     const bt = taskRepository.getTask(bid)!;
-    const built = buildConvaiWebhookToolFromBackendTask(bt);
+    const built = prepareConvaiWebhookToolForElevenLabsApi({
+      backendTask: bt,
+      projectId,
+      agentTaskId,
+      useDevTunnel: useDevTunnelForWebhook,
+    });
     if (!built.ok) {
       return {
         ok: false,
@@ -300,11 +322,7 @@ export async function syncConvaiAgentFromOmnia(
     adv.llm && typeof adv.llm === 'object' && !Array.isArray(adv.llm)
       ? (adv.llm as Record<string, unknown>)
       : {};
-  const langRaw =
-    typeof cfg.voice?.language === 'string' && cfg.voice.language.trim()
-      ? cfg.voice.language.trim()
-      : 'it';
-  const lang = normalizeLanguage(langRaw) ?? 'it';
+  const lang = resolveConvaiAgentLanguageForSync(cfg.voice?.language);
   const llmModel = mapConvaiLlmForAgentLanguage(
     lang,
     typeof llm.model === 'string' && llm.model.trim() ? llm.model.trim() : 'gpt-4o'

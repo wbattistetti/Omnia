@@ -103,6 +103,7 @@ const { bookFromAgendaRuntimeTrace } = require('./middleware/bookFromAgendaRunti
 const AIHealthChecker = require('./health/AIHealthChecker');
 const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalog/catalogRoutes');
 const { mountAiCostRoutes } = require('./services/aiCost/aiCostRoutes');
+const { mountConvaiWebhookInvocationRoutes } = require('./services/convaiWebhookInvocationRoutes');
 const { syncPricingFromOpenRouter } = require('./services/aiCost/pricingSync');
 const { getUsdToEur } = require('./services/aiCost/exchangeRateSync');
 const {
@@ -208,6 +209,7 @@ app.use(bookFromAgendaRuntimeTrace);
 
 mountIaCatalog(app);
 mountAiCostRoutes(app);
+mountConvaiWebhookInvocationRoutes(app);
 
 // AI cost catalog: best-effort prefetch on startup (pricing from OpenRouter, USD->EUR from frankfurter.dev).
 // Failures are non-fatal: the cost calculator still records calls with costUsd=0 when pricing is missing.
@@ -7818,7 +7820,11 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         taskLabel: callMeta.taskLabel,
         aiProviderService,
       });
-      return res.json({ success: true, labels: split.labels });
+      return res.json({
+        success: true,
+        labels: split.labels,
+        startLabelIndex: split.startLabelIndex ?? null,
+      });
     }
 
     if (action === 'create_use_case') {

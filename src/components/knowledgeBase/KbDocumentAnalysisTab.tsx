@@ -30,7 +30,7 @@ import {
   mergeKbAnalysisToolbarPresentations,
   observationsForFinalize,
   resolveKbAnalysisToolbarPresentation,
-  shouldRunObservationReview,
+  shouldKbAnalysisRouteToObservationReview,
   type KbAnalysisReviewSessionItem,
   type KbAnalysisToolbarPresentation,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
@@ -135,7 +135,9 @@ export function KbDocumentAnalysisTab({
   }, [doc.id, doc.documentAnalysisMarkdown]);
 
   const repoId = doc.id?.trim() || doc.repositoryDocumentId?.trim() || undefined;
-  const content = useKbDocumentContent(projectId, repoId);
+  const content = useKbDocumentContent(projectId, repoId, {
+    localFallbackText: String(doc.markdownSnippet ?? '').trim(),
+  });
   const canEdit = !disabled && doc.parseStatus !== 'parsing';
   const hasModel = Boolean(provider?.trim() && model?.trim());
   const hasRepo = Boolean(repoId);
@@ -143,7 +145,7 @@ export function KbDocumentAnalysisTab({
 
   const allConfirmed = reviewItems ? allReviewItemsConfirmed(reviewItems) : false;
   const confirmedCount = reviewItems ? countConfirmedReviewItems(reviewItems) : 0;
-  const draftDiffersFromBaseline = shouldRunObservationReview(baseline, draft);
+  const routeToObservationReview = shouldKbAnalysisRouteToObservationReview(baseline, draft);
   const reviewHasDisagreement = reviewItems ? hasReviewDisagreement(reviewItems) : false;
 
   const canRunAgent =
@@ -257,7 +259,6 @@ export function KbDocumentAnalysisTab({
     if (!canRunAgent || !draft.trim() || !projectId?.trim() || !repoId) return;
     setBusy(true);
     setError(null);
-    setAnalysisStarted(true);
     try {
       const base = apiBase(
         projectId.trim(),
@@ -270,7 +271,7 @@ export function KbDocumentAnalysisTab({
         callMeta
       );
 
-      if (draftDiffersFromBaseline) {
+      if (routeToObservationReview) {
         const review = await reviewKbDocumentAnalysisObservations({
           ...base,
           agentBaselineMarkdown: baseline,
@@ -294,7 +295,7 @@ export function KbDocumentAnalysisTab({
   }, [
     canRunAgent,
     draft,
-    draftDiffersFromBaseline,
+    routeToObservationReview,
     projectId,
     repoId,
     doc.name,
@@ -684,9 +685,12 @@ export function KbDocumentAnalysisTab({
                 />
               </KbDocumentAnalysisEditProvider>
             ) : (
-              <p className="p-3 text-sm text-slate-500">
-                Avvia l&apos;analisi con «clicca qui» o scrivi una bozza e premi Esegui.
-              </p>
+              <KbDocumentAnalysisWorkspace
+                draft={draft}
+                agentBaseline={baseline}
+                onDraftChange={canEdit && !busy ? persistDraft : () => {}}
+                readOnly={!canEdit || busy}
+              />
             )}
           </div>
         )}

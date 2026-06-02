@@ -30,6 +30,14 @@ export type ConvaiAgentSyncParams = ConvaiAgentSyncPromptOptions & {
   newAgentName?: string;
   /** Aggiorna agente esistente (refresh completo prompt/tool/KB). */
   agentId?: string;
+  /**
+   * Se true (default sync con tunnel): rewrite URL webhook con ngrok e valida reachability.
+   * Se false: URL gateway localhost (prompt/tool su ElevenLabs; webhook non raggiungibili da cloud).
+   */
+  useDevTunnelForWebhook?: boolean;
+  /** Nodo workflow selezionato in UI (metadata; sync root per ora). */
+  syncTargetWorkflowNodeId?: string;
+  syncTargetWorkflowNodeLabel?: string;
 };
 
 export type ConvaiAgentSyncToolResult = {

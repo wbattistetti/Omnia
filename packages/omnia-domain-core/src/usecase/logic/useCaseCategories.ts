@@ -11,6 +11,7 @@
 import type { AIAgentUseCase, AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
 
 import { applyNarrativeOrder } from './useCaseNarrativeOrder';
+import { pinStartUseCaseFirst } from '../tree/useCaseTreeOrder';
 
 
 
@@ -22,7 +23,10 @@ const LABEL_PREFIX_PATTERN = /^([^:]{2,48}):\s*(.+)$/;
 
 
 
-function sortUseCasesWithinCategorySubset(subset: readonly AIAgentUseCase[]): AIAgentUseCase[] {
+function sortUseCasesWithinCategorySubset(
+  subset: readonly AIAgentUseCase[],
+  startUseCaseId?: string | null
+): AIAgentUseCase[] {
 
   const ids = new Set(subset.map((c) => c.id));
 
@@ -74,7 +78,7 @@ function sortUseCasesWithinCategorySubset(subset: readonly AIAgentUseCase[]): AI
 
   walk(null);
 
-  return out;
+  return pinStartUseCaseFirst(out, startUseCaseId);
 
 }
 
@@ -414,7 +418,9 @@ export function groupUseCasesByCategory(
 
   categories: readonly AIAgentUseCaseCategory[],
 
-  useCases: readonly AIAgentUseCase[]
+  useCases: readonly AIAgentUseCase[],
+
+  startUseCaseId?: string | null
 
 ): UseCaseCategoryGroup[] {
 
@@ -436,7 +442,7 @@ export function groupUseCasesByCategory(
 
     if (subset.length === 0) continue;
 
-    groups.push({ category, cases: sortUseCasesWithinCategorySubset(subset) });
+    groups.push({ category, cases: sortUseCasesWithinCategorySubset(subset, startUseCaseId) });
 
   }
 
@@ -482,7 +488,9 @@ export function resolveUseCaseListDisplayLayout(
 
   categories: readonly AIAgentUseCaseCategory[],
 
-  useCases: readonly AIAgentUseCase[]
+  useCases: readonly AIAgentUseCase[],
+
+  options?: { startUseCaseId?: string | null }
 
 ): UseCaseListDisplayLayout {
 
@@ -492,13 +500,17 @@ export function resolveUseCaseListDisplayLayout(
 
   }
 
+  const startUseCaseId = options?.startUseCaseId;
+
   const uncategorized = sortUseCasesWithinCategorySubset(
 
-    useCases.filter((u) => !getValidUseCaseCategoryId(u, categories))
+    useCases.filter((u) => !getValidUseCaseCategoryId(u, categories)),
+
+    startUseCaseId
 
   );
 
-  const categoryGroups = groupUseCasesByCategory(categories, useCases);
+  const categoryGroups = groupUseCasesByCategory(categories, useCases, startUseCaseId);
 
   return { categoryGroups, uncategorized };
 

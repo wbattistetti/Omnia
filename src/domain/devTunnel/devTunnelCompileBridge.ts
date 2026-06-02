@@ -79,6 +79,57 @@ function extractLocalhostPortsFromValue(v: unknown, into: Set<number>): void {
   }
 }
 
+const LOCALHOST_WITH_PORT_RE = /https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)/gi;
+
+/** Host locale senza `:porta` — non mappabile su ngrok per porta. */
+const LOCALHOST_NO_EXPLICIT_PORT_RE =
+  /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?=\/|\?|#|$)/i;
+
+/** Porte localhost citate in una stringa URL. */
+export function collectLocalhostPortsFromString(s: string): number[] {
+  const out: number[] = [];
+  let m: RegExpExecArray | null;
+  LOCALHOST_WITH_PORT_RE.lastIndex = 0;
+  while ((m = LOCALHOST_WITH_PORT_RE.exec(s)) !== null) {
+    const p = parseInt(m[1], 10);
+    if (Number.isFinite(p)) out.push(p);
+  }
+  return out;
+}
+
+export type LocalhostEndpointReachability = {
+  unreachable: boolean;
+  message?: string;
+  missingPorts?: number[];
+};
+
+/**
+ * True se l’endpoint è ancora localhost senza tunnel pubblico mappato (ConvAI / agenti cloud).
+ */
+export function analyzeLocalhostEndpointReachability(endpoint: string): LocalhostEndpointReachability {
+  const trimmed = endpoint.trim();
+  if (!trimmed) return { unreachable: false };
+
+  if (LOCALHOST_NO_EXPLICIT_PORT_RE.test(trimmed)) {
+    return {
+      unreachable: true,
+      message:
+        'Webhook non raggiungibile: URL verso host locale senza porta esplicita (usa http://localhost:PORTA/…). Un agente esterno richiede porta esplicita e tunnel verso quella porta.',
+    };
+  }
+
+  const ports = collectLocalhostPortsFromString(trimmed);
+  if (ports.length === 0) return { unreachable: false };
+  const map = loadDevTunnelPortMapFromStorage();
+  const missing = [...new Set(ports)].filter((p) => !String(map[p] ?? '').trim());
+  if (missing.length === 0) return { unreachable: false };
+  return {
+    unreachable: true,
+    missingPorts: missing,
+    message: `Webhook non raggiungibile: porta/e locale/i ${missing.join(', ')} senza tunnel attivo (Impostazioni → Tunnel dev / ngrok → Avvia tunnel per la porta ${missing.join(' e ')}).`,
+  };
+}
+
 /**
  * Raccoglie porte TCP da URL che puntano a localhost / 127.0.0.1 / [::1] in qualsiasi stringa o oggetto annidato.
  */

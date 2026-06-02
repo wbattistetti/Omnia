@@ -3,6 +3,7 @@
  */
 
 import { detectKbFileFormat } from './kbFileKinds';
+import { normalizeKbDocumentText } from './kbDocumentTextNormalize';
 import { KB_XLSX_PREVIEW_ROWS, readXlsxWorkbookLimited } from './xlsxLimitedRead';
 
 const DEFAULT_MAX_LINES = 200;
@@ -34,11 +35,11 @@ export async function buildKbTextPreview(
   }
 
   const text = await file.text();
-  return trimPreview(text.replace(/^\uFEFF/, ''), maxLines, maxChars);
+  return trimPreview(normalizeKbDocumentText(text), maxLines, maxChars);
 }
 
 function trimPreview(text: string, maxLines: number, maxChars: number): string {
-  const lines = text.split(/\r?\n/).slice(0, maxLines);
+  const lines = normalizeKbDocumentText(text).split('\n').slice(0, maxLines);
   let out = lines.join('\n');
   if (out.length > maxChars) out = out.slice(0, maxChars);
   return out;

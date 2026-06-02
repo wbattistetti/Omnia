@@ -4,7 +4,7 @@
 
 import type { Task } from '@types/taskTypes';
 import { openApiCompileErrorsFromTask } from '@domain/openApi/openApiCompileErrorsFromTask';
-import { buildConvaiWebhookToolFromBackendTask } from '@utils/iaAgentRuntime/elevenLabsConvaiToolsPayload';
+import { prepareConvaiWebhookToolForElevenLabsApi } from '@utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import {
   appendConvaiToolToAgent,
@@ -28,6 +28,10 @@ export type PublishConvaiWebhookFailure = {
  */
 export async function publishConvaiWebhookToAgent(params: {
   backendTask: Task;
+  /** Progetto Omnia — obbligatorio per URL gateway webhook in dev. */
+  projectId?: string;
+  /** Task AI Agent — obbligatorio per URL gateway webhook in dev. */
+  agentTaskId?: string;
   /** Agente esistente (se `newAgentName` è vuoto). */
   agentId?: string;
   /** Se valorizzato, crea prima un nuovo agente ConvAI con questo nome. */
@@ -77,7 +81,11 @@ export async function publishConvaiWebhookToAgent(params: {
     };
   }
 
-  const built = buildConvaiWebhookToolFromBackendTask(params.backendTask);
+  const built = prepareConvaiWebhookToolForElevenLabsApi({
+    backendTask: params.backendTask,
+    projectId: String(params.projectId ?? '').trim(),
+    agentTaskId: String(params.agentTaskId ?? '').trim(),
+  });
   if (!built.ok) {
     return { ok: false, failure: { phase: 'build', message: built.error } };
   }

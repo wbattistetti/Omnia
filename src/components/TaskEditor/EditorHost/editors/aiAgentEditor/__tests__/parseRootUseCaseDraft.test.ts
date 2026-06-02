@@ -26,11 +26,17 @@ function stubUseCase(partial: Partial<AIAgentUseCase> & { id: string; label: str
 }
 
 describe('parseRootUseCaseDraftSegmentsFallback', () => {
-  it('splits on semicolon', () => {
+  it('splits on semicolon when segments look like a short list', () => {
     expect(parseRootUseCaseDraftSegmentsFallback('a;b;c')).toEqual(['a', 'b', 'c']);
   });
 
-  it('splits on comma', () => {
+  it('does not split prose with semicolons inside sentences', () => {
+    const prose =
+      "L'agente saluta; chiede il nome; propone l'appuntamento. Poi conferma la data.";
+    expect(parseRootUseCaseDraftSegmentsFallback(prose)).toEqual([prose]);
+  });
+
+  it('splits on comma for short list items', () => {
     expect(parseRootUseCaseDraftSegmentsFallback('a, b, c')).toEqual(['a', 'b', 'c']);
   });
 
@@ -40,6 +46,12 @@ describe('parseRootUseCaseDraftSegmentsFallback', () => {
 
   it('trims and drops empties', () => {
     expect(parseRootUseCaseDraftSegmentsFallback(' x ;  ; y ')).toEqual(['x', 'y']);
+  });
+
+  it('keeps a single paragraph as one segment', () => {
+    const paragraph =
+      'Descrivi un call center con prenotazioni, cancellazioni e informazioni orari in un unico flusso.';
+    expect(parseRootUseCaseDraftSegmentsFallback(paragraph)).toEqual([paragraph]);
   });
 });
 
@@ -65,7 +77,7 @@ describe('dedupeRootDraftLabels', () => {
 
 describe('resolveRootUseCaseDraftForCreateAsync', () => {
   it('calls splitApi when draft is long enough', async () => {
-    const splitApi = vi.fn().mockResolvedValue(['Alpha', 'Beta']);
+    const splitApi = vi.fn().mockResolvedValue({ labels: ['Alpha', 'Beta'], startLabel: 'Alpha' });
     const draft = 'x'.repeat(ROOT_USE_CASE_DRAFT_MIN_LLM_CHARS);
     const result = await resolveRootUseCaseDraftForCreateAsync({
       raw: draft,
@@ -75,9 +87,24 @@ describe('resolveRootUseCaseDraftForCreateAsync', () => {
     expect(splitApi).toHaveBeenCalledWith(draft);
     expect(result.usedLlm).toBe(true);
     expect(result.labels).toEqual(['Alpha', 'Beta']);
+    expect(result.startLabel).toBe('Alpha');
   });
 
-  it('falls back to punctuation split when splitApi throws', async () => {
+  it('drops startLabel when deduped out of batch', async () => {
+    const splitApi = vi.fn().mockResolvedValue({
+      labels: ['Existing', 'New one'],
+      startLabel: 'Existing',
+    });
+    const result = await resolveRootUseCaseDraftForCreateAsync({
+      raw: 'x'.repeat(ROOT_USE_CASE_DRAFT_MIN_LLM_CHARS),
+      catalog: [stubUseCase({ id: '1', label: 'Existing' })],
+      splitApi,
+    });
+    expect(result.labels).toEqual(['New one']);
+    expect(result.startLabel).toBeNull();
+  });
+
+  it('falls back to conservative split when splitApi throws', async () => {
     const splitApi = vi.fn().mockRejectedValue(new Error('fail'));
     const result = await resolveRootUseCaseDraftForCreateAsync({
       raw: 'one; two',
@@ -86,6 +113,7 @@ describe('resolveRootUseCaseDraftForCreateAsync', () => {
     });
     expect(result.usedLlm).toBe(true);
     expect(result.labels).toEqual(['one', 'two']);
+    expect(result.startLabel).toBeNull();
   });
 
   it('uses single segment for short draft without splitApi', async () => {
@@ -95,6 +123,7 @@ describe('resolveRootUseCaseDraftForCreateAsync', () => {
     });
     expect(result.labels).toEqual(['short']);
     expect(result.usedLlm).toBe(false);
+    expect(result.startLabel).toBeNull();
   });
 
   it('normalizes dedup keys without punctuation', () => {
