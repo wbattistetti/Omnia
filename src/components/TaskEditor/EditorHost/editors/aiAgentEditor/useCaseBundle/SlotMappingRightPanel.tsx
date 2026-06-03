@@ -8,16 +8,17 @@
 
 import React from 'react';
 
-import { Loader2, ScanSearch } from 'lucide-react';
+import { Loader2, RefreshCw, RotateCcw, ScanSearch } from 'lucide-react';
 
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 
 import {
-  CORE_SLOT_IDS,
   isUnclassifiedSlotId,
+  listRegisteredSlotIds,
   normalizeSlotId,
   normalizeSurface,
 } from '@domain/useCaseBundle/projectSlotLexicon';
+import { SlotDictionarySection } from './SlotDictionarySection';
 
 import { VoteThumbPair } from '../VoteThumbPair';
 
@@ -176,11 +177,11 @@ export function SlotMappingRightPanel({
       if (!isUnclassifiedSlotId(id)) mapped.add(id);
     }
     const mappedSorted = [...mapped].sort((a, b) => a.localeCompare(b));
-    const otherSorted = [...CORE_SLOT_IDS]
+    const otherSorted = listRegisteredSlotIds(lexicon)
       .filter((id) => !mapped.has(id))
       .sort((a, b) => a.localeCompare(b));
     return { mappedCategoryOptions: mappedSorted, otherCategoryOptions: otherSorted };
-  }, [lexicon.entries]);
+  }, [lexicon]);
 
   const lensActiveSurface = ctx?.lensActiveSurface ?? null;
 
@@ -229,13 +230,69 @@ export function SlotMappingRightPanel({
   const mappingBanner = dock?.compileMappingBanner?.trim() ?? '';
   const mappingNeedsWork = mappingBanner.startsWith('MAPPING');
   const compileBusy = dock?.compilePhrasesBusy === true;
+  const canCompile =
+    Boolean(dock?.compileUseCasePhrasesForCatalog) && !compileBusy;
+  const canRebuild =
+    Boolean(dock?.rebuildSlotMappingFromScratch) && !compileBusy;
+
+  const handleAggiorna = React.useCallback(async () => {
+    if (!dock?.compileUseCasePhrasesForCatalog || compileBusy) return;
+    await dock.compileUseCasePhrasesForCatalog();
+  }, [compileBusy, dock]);
+
+  const handleRebuild = React.useCallback(async () => {
+    if (!dock?.rebuildSlotMappingFromScratch || compileBusy) return;
+    const confirmed = window.confirm(
+      'Rebuild Slot Mapping da zero?\n\nVerranno azzerati dizionario slot, binding backend e approvazioni mapping prima della nuova compilazione.'
+    );
+    if (!confirmed) return;
+    await dock.rebuildSlotMappingFromScratch();
+  }, [compileBusy, dock]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50 dark:bg-slate-950">
       <div className="shrink-0 border-b border-violet-500/25 bg-slate-50 px-4 py-2.5 dark:border-violet-500/30 dark:bg-slate-950">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">
-          Slot Mapping
-        </h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-violet-300">
+            Slot Mapping
+          </h2>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void handleAggiorna()}
+              disabled={!canCompile}
+              title="Aggiorna mapping e frasi dal catalogo (incrementale)"
+              className={[
+                'inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+                canCompile
+                  ? 'border-violet-400/45 text-violet-100 hover:bg-violet-500/15'
+                  : 'cursor-not-allowed border-slate-700/60 text-slate-500',
+              ].join(' ')}
+            >
+              {compileBusy ? (
+                <Loader2 size={12} className="animate-spin" aria-hidden />
+              ) : (
+                <RefreshCw size={12} aria-hidden />
+              )}
+              <span>Aggiorna</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRebuild()}
+              disabled={!canRebuild}
+              title="Rebuild da zero: reset mapping e ricompila"
+              className={[
+                'inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-violet-500/80',
+                canRebuild
+                  ? 'border-amber-500/40 text-amber-200 hover:bg-amber-500/10'
+                  : 'cursor-not-allowed border-slate-700/60 text-slate-500',
+              ].join(' ')}
+            >
+              <RotateCcw size={12} aria-hidden />
+              <span>Rebuild</span>
+            </button>
+          </div>
+        </div>
         {compileBusy ? (
           <p className="mt-1.5 flex items-center gap-2 text-[11px] leading-snug text-violet-200">
             <Loader2 size={14} className="shrink-0 animate-spin" aria-hidden />
@@ -255,6 +312,7 @@ export function SlotMappingRightPanel({
           </p>
         )}
       </div>
+      <SlotDictionarySection lexicon={lexicon} />
 
 
 

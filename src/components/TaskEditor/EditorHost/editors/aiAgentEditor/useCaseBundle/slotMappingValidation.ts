@@ -4,6 +4,11 @@
 
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
+  getSlotDefinition,
+  listRegisteredSlotIds,
+  slotBindingStatus,
+} from '@domain/useCaseBundle/dynamicSlotRegistry';
+import {
   isUnclassifiedSlotId,
   type ProjectSlotLexicon,
 } from '@domain/useCaseBundle/projectSlotLexicon';
@@ -51,6 +56,15 @@ export function computeSlotMappingValidation(
   const stale = countStaleCompiledPhrases(useCases);
   if (stale > 0) {
     reasons.push(`${stale} frase/i da allineare`);
+  }
+
+  let unboundSlots = 0;
+  for (const slotId of listRegisteredSlotIds(lexicon)) {
+    const def = getSlotDefinition(lexicon, slotId);
+    if (slotBindingStatus(def) !== 'ok') unboundSlots += 1;
+  }
+  if (unboundSlots > 0) {
+    reasons.push(`${unboundSlots} slot senza binding nel dizionario`);
   }
 
   if (reasons.length === 0) {

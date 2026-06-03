@@ -765,13 +765,13 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const tokenizedByUseCaseId = React.useMemo<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const u of c.useCases) {
-      const compiled = compileUseCaseConversationalText(u);
+      const compiled = compileUseCaseConversationalText(u, c.projectSlotLexicon);
       if (compiled?.tokenizedText) {
         out[u.id] = compiled.tokenizedText;
       }
     }
     return out;
-  }, [c.useCases]);
+  }, [c.useCases, c.projectSlotLexicon]);
 
   /**
    * Stable refs — inline `() => c.handleX()` in render made `primaryToolbarButtons` new every frame
@@ -1556,6 +1556,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     agentUseCasesJson: c.agentUseCasesJson,
     agentConversationalRulesJson: c.agentConversationalRulesJson,
     compileUseCasePhrasesForCatalog: c.compileUseCasePhrasesForCatalog,
+    rebuildSlotMappingFromScratch: c.rebuildSlotMappingFromScratch,
     compilePhrasesBusy: c.compilePhrasesBusy,
     compileMappingBanner: c.compileMappingBanner,
     registerOpenSlotMappingOnCompileFail: c.registerOpenSlotMappingOnCompileFail,
@@ -1566,6 +1567,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     approveLexiconSurface: c.approveLexiconSurface,
     revokeLexiconSurface: c.revokeLexiconSurface,
     updateLexiconSlotId: c.updateLexiconSlotId,
+    upsertDesignerSlotRegistry: c.upsertDesignerSlotRegistry,
+    assignDesignerSurfaceSlotMapping: c.assignDesignerSurfaceSlotMapping,
     updateSurfaceSendHint: c.updateSurfaceSendHint,
     parameterDestinationCatalog: c.parameterDestinationCatalog,
     applyParameterDestination: c.applyParameterDestination,

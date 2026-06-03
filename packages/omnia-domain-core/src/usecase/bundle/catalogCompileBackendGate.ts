@@ -15,12 +15,18 @@ export function catalogHasCompileMappingInputs(
 }
 
 /**
- * True solo quando serve la proposta IA con contesto OpenAPI backend.
- * Senza backend collegati la compile prosegue con lessico + `compileAllUseCases` (es. agente solo KB).
+ * True quando la compile deve invocare la proposta IA lessico/slot (con o senza backend).
+ */
+export function shouldRunIaCompileSlotMapping(inputs: CatalogCompileIaMappingInputs): boolean {
+  return catalogHasCompileMappingInputs(inputs);
+}
+
+/**
+ * @deprecated Usare {@link shouldRunIaCompileSlotMapping}. Mantenuto per chiamate legacy.
  */
 export function shouldRunBackendIaCompileMapping(
   inputs: CatalogCompileIaMappingInputs,
-  backendLinked: boolean
+  _backendLinked: boolean
 ): boolean {
-  return catalogHasCompileMappingInputs(inputs) && backendLinked;
+  return shouldRunIaCompileSlotMapping(inputs);
 }

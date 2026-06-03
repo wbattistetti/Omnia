@@ -63,14 +63,17 @@ import {
   compileAllUseCases,
 } from '@domain/useCaseBundle/semanticCompile';
 import {
-  CORE_SLOT_IDS,
+  emptyProjectSlotLexicon,
   isUnclassifiedSlotId,
+  isValidSlotId,
+  listRegisteredSlotIds,
   mergeMappingsIntoLexicon,
   normalizeSlotId,
   normalizeSurface,
   pruneLexiconOrphans,
 } from '@domain/useCaseBundle/projectSlotLexicon';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import { upsertDesignerSlotRegistryEntry } from '@domain/useCaseBundle/dynamicSlotRegistry';
 import {
   emptyAgentBackendOutputSlotBindings,
   parseAgentBackendOutputSlotBindingsJson,
@@ -99,7 +102,7 @@ import { mergeSendHintsIntoBindings, updateSendHintForSurface } from '@domain/ba
 import type { TokenSendRole } from '@domain/backendOutputSlotBinding/types';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { buildAgentWebhookReadinessReport } from '@domain/openApi/webhookOpenApiReadiness';
-import { shouldRunBackendIaCompileMapping } from '@domain/useCaseBundle/catalogCompileBackendGate';
+import { shouldRunIaCompileSlotMapping } from '@domain/useCaseBundle/catalogCompileBackendGate';
 import { computeCatalogCompileValidation } from './useCaseBundle/catalogCompileValidation';
 import { normalizeEntityType } from '@types/dataEntityTypes';
 import { AI_CALL_PURPOSE } from '@domain/aiCalls/purposes';
@@ -546,17 +549,13 @@ export function useAIAgentEditorController({
   );
 
   const parameterDestinationCatalog = React.useMemo(() => {
-    const mapped = new Set<string>(CORE_SLOT_IDS);
-    for (const e of projectSlotLexicon.entries) {
-      const id = e.slot_id.trim().toLowerCase();
-      if (id && id !== 'undefined') mapped.add(id);
-    }
+    const mapped = new Set<string>(listRegisteredSlotIds(projectSlotLexicon));
     return buildParameterDestinationCatalog(
       backendSendLeavesByTask,
       backendReceiveLeavesByTask,
       [...mapped]
     );
-  }, [backendSendLeavesByTask, backendReceiveLeavesByTask, projectSlotLexicon.entries]);
+  }, [backendSendLeavesByTask, backendReceiveLeavesByTask, projectSlotLexicon]);
   /** Set in `loadFromRepository`: task has `agentIaRuntimeOverrideJson` vs copy of global defaults. */
   const [iaRuntimeLoadedFrom, setIaRuntimeLoadedFrom] = React.useState<'saved_override' | 'global_defaults'>(
     'global_defaults'
@@ -1161,7 +1160,11 @@ export function useAIAgentEditorController({
     openSlotMappingOnCompileFailRef.current = open;
   }, []);
 
-  const compileUseCasePhrasesForCatalog = React.useCallback(async () => {
+  const runCompileUseCasePhrasesForCatalog = React.useCallback(
+    async (seed?: {
+      lexicon?: ProjectSlotLexicon;
+      bindings?: AgentBackendOutputSlotBindings;
+    }) => {
     setCompilePhrasesBusy(true);
     try {
       const backendIds = mergeConvaiBackendToolIdLists(
@@ -1170,7 +1173,7 @@ export function useAIAgentEditorController({
       );
       const backendLinked = backendIds.length > 0;
       const getBackendTask = (id: string) => taskRepository.getTask(id);
-      let bindings = backendOutputSlotBindings;
+      let bindings = seed?.bindings ?? backendOutputSlotBindings;
       if (backendLinked) {
         const fp = buildBindingsFingerprint(backendIds, getBackendTask);
         if (fp !== bindings.sourceFingerprint) {
@@ -1179,7 +1182,7 @@ export function useAIAgentEditorController({
         }
       }
 
-      let lexicon = projectSlotLexicon;
+      let lexicon = seed?.lexicon ?? projectSlotLexicon;
       const { surfaces, phraseTokens } = collectCatalogCompileInputs(useCases, lexicon);
       const compileMappingInputs = {
         surfaceCount: surfaces.length,
@@ -1189,10 +1192,10 @@ export function useAIAgentEditorController({
         ? collectBackendSendLeavesFromTasks(backendIds, getBackendTask)
         : [];
 
-      if (shouldRunBackendIaCompileMapping(compileMappingInputs, backendLinked)) {
+      if (shouldRunIaCompileSlotMapping(compileMappingInputs)) {
         if (!provider.trim() || !model.trim()) {
           const msg =
-            'Compila: imposta provider e modello in Omnia Tutor (LLM designer) per la mappatura automatica.';
+            'Compila: imposta provider e modello in Omnia Tutor (LLM designer) per il dizionario slot IA.';
           setUseCaseComposerError(msg);
           setCompileMappingBanner(msg);
           return false;
@@ -1292,19 +1295,40 @@ export function useAIAgentEditorController({
     } finally {
       setCompilePhrasesBusy(false);
     }
-  }, [
-    useCases,
-    projectSlotLexicon,
-    instanceId,
-    projectId,
-    backendOutputSlotBindings,
-    iaRuntimeConfig.convaiBackendToolTaskIds,
-    manualCatalogBackendTaskIds,
-    provider,
-    model,
-    buildCallMeta,
-    reconcileLexiconOrphansWithCatalog,
-  ]);
+    },
+    [
+      useCases,
+      projectSlotLexicon,
+      instanceId,
+      projectId,
+      backendOutputSlotBindings,
+      iaRuntimeConfig.convaiBackendToolTaskIds,
+      manualCatalogBackendTaskIds,
+      provider,
+      model,
+      buildCallMeta,
+      reconcileLexiconOrphansWithCatalog,
+    ]
+  );
+
+  const compileUseCasePhrasesForCatalog = React.useCallback(
+    async () => runCompileUseCasePhrasesForCatalog(),
+    [runCompileUseCasePhrasesForCatalog]
+  );
+
+  const rebuildSlotMappingFromScratch = React.useCallback(async () => {
+    const cleanLexicon = emptyProjectSlotLexicon();
+    const cleanBindings = emptyAgentBackendOutputSlotBindings();
+    setProjectSlotLexicon(cleanLexicon);
+    saveProjectSlotLexicon(projectId ?? null, cleanLexicon);
+    setBackendOutputSlotBindings(cleanBindings);
+    setCompileMappingBanner('MAPPING — Rebuild in corso: rigenerazione dizionario slot da zero…');
+    setUseCaseComposerError(null);
+    return runCompileUseCasePhrasesForCatalog({
+      lexicon: cleanLexicon,
+      bindings: cleanBindings,
+    });
+  }, [projectId, runCompileUseCasePhrasesForCatalog]);
 
   const patchLexiconEntries = React.useCallback(
     (map: (entries: ProjectSlotLexicon['entries']) => ProjectSlotLexicon['entries']) => {
@@ -1465,6 +1489,39 @@ export function useAIAgentEditorController({
       setDirty(true);
     },
     [patchLexiconEntries, backendSendParamLeaves, backendSendLeavesByTask]
+  );
+
+  const upsertDesignerSlotRegistry = React.useCallback(
+    (slotId: string, description: string) => {
+      setProjectSlotLexicon((prev) => {
+        const next = upsertDesignerSlotRegistryEntry(prev, slotId, { description });
+        saveProjectSlotLexicon(projectId ?? null, next);
+        return next;
+      });
+      setDirty(true);
+    },
+    [projectId]
+  );
+
+  /** Surface leggibile → slot_id nel lessico progetto (dopo Aggiorna nel layer semantico). */
+  const assignDesignerSurfaceSlotMapping = React.useCallback(
+    (surface: string, slotId: string, description: string) => {
+      const surf = String(surface ?? '').trim();
+      const sid = normalizeSlotId(slotId);
+      if (!surf || !isValidSlotId(sid) || isUnclassifiedSlotId(sid)) return;
+      setProjectSlotLexicon((prev) => {
+        const merged = mergeMappingsIntoLexicon(
+          prev,
+          [{ surface: surf, slot_id: sid }],
+          { approve: true }
+        ).lexicon;
+        const next = upsertDesignerSlotRegistryEntry(merged, sid, { description });
+        saveProjectSlotLexicon(projectId ?? null, next);
+        return next;
+      });
+      setDirty(true);
+    },
+    [projectId]
   );
 
   const hydratedRef = React.useRef(false);
@@ -3475,6 +3532,7 @@ export function useAIAgentEditorController({
     setAgentStartUseCaseId,
     agentConversationalRulesJson: serializeConversationalRules(conversationalRules),
     compileUseCasePhrasesForCatalog,
+    rebuildSlotMappingFromScratch,
     compilePhrasesBusy,
     buildWebhookReadinessReport,
     compileMappingBanner,
@@ -3488,6 +3546,8 @@ export function useAIAgentEditorController({
     approveLexiconSurface,
     revokeLexiconSurface,
     updateLexiconSlotId,
+    upsertDesignerSlotRegistry,
+    assignDesignerSurfaceSlotMapping,
     updateSurfaceSendHint,
     applyParameterDestination,
     markAgentEditorDirty: () => setDirty(true),

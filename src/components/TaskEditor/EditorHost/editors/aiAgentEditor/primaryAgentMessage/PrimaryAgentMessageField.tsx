@@ -16,7 +16,6 @@ import { AgentMessageSelectionTokenPopover } from '../AgentMessageSelectionToken
 import { VoteThumbPair } from '../VoteThumbPair';
 import type { DesignerFieldVote } from '../useCaseComposerDesignerVotes';
 import { SeedHighlightedText } from '@components/common/SeedHighlightedText';
-import { TokenizedHighlightedText } from '../useCaseGeneratorWizard/TokenizedHighlightedText';
 import {
   UC_AGENT_ROW_EDIT_BTN,
   UC_AGENT_VOTE_BTN,
@@ -33,11 +32,21 @@ import {
   resolveAgentMessageIconKind,
 } from './agentMessageIconKind';
 import { DoubleMessageIcon } from './DoubleMessageIcon';
+import { SemanticLayerIconStack } from './SemanticLayerIconStack';
 import { StyleVariationsDoubleMessageIcon } from './StyleVariationsDoubleMessageIcon';
 import type { PhraseParametricRevertPickProps } from '../useCaseBundle/PhraseParametricEditor';
 import { AgentMessageStyleExamplesPanel } from '../AgentMessageStyleExamplesPanel';
 import { useStylePhraseExamplesPanel } from '../useStylePhraseExamplesPanel';
 import { StylePhraseToolbarButtons } from '../StylePhraseToolbarButtons';
+import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import {
+  isUnclassifiedSlotId,
+  listRegisteredSlotIds,
+  normalizeSlotId,
+} from '@domain/useCaseBundle/projectSlotLexicon';
+import { replaceSlotIdInTokenizedText } from '@domain/useCaseBundle/semanticTokenText';
+import { SemanticTokenMessageLayer } from '../useCaseBundle/SemanticTokenMessageLayer';
+import type { SlotIdPickerCommitPayload } from '../useCaseBundle/SlotIdPickerPopover';
 
 export type { PhraseParametricRevertPickProps as ParametricEditorPickRevertContext };
 
@@ -47,7 +56,20 @@ export type PrimaryAgentMessageFieldProps = {
   busy?: boolean;
   wizardCompact?: boolean;
   searchSeed?: string;
+  /** Testo con token semantici (slot) per la riga espandibile sotto il messaggio leggibile. */
+  semanticDisplayText?: string;
+  /** @deprecated Usare {@link semanticDisplayText}. */
   tokenizedDisplayText?: string;
+  onSemanticTextChange?: (next: string, mode: 'live' | 'commit') => void;
+  /** Lessico progetto per picker slot semantici e descrizioni runtime. */
+  projectSlotLexicon?: ProjectSlotLexicon;
+  /** Persiste descrizione/label slot nel registro progetto. */
+  onUpsertSlotRegistry?: (slotId: string, description: string) => void;
+  /** Commit slot dal picker (persistenza UC + lessico); se assente usa handler interno. */
+  onSemanticSlotCommit?: (
+    oldToken: string,
+    payload: import('../useCaseBundle/SlotIdPickerPopover').SlotIdPickerCommitPayload
+  ) => void;
   assistantVote?: DesignerFieldVote;
   onAssistantVote?: (choice: DesignerFieldVote) => void;
   assistantContentBaseline?: string;
@@ -78,13 +100,21 @@ const EDIT_MODE_ICON_PX = 21;
 const INLINE_ACTIONS =
   'inline-flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/agentmsg-row:opacity-100 group-focus-within/agentmsg-row:opacity-100';
 
+/** Spazio verticale tra riga leggibile e riga semantica (~2 righe). */
+const UC_SEMANTIC_LAYER_GAP = 'mt-4 pt-3';
+
 export function PrimaryAgentMessageField({
   useCase,
   text,
   busy = false,
   wizardCompact = true,
   searchSeed = '',
+  semanticDisplayText: semanticDisplayTextProp,
   tokenizedDisplayText,
+  onSemanticTextChange,
+  projectSlotLexicon,
+  onUpsertSlotRegistry,
+  onSemanticSlotCommit,
   assistantVote,
   onAssistantVote,
   assistantContentBaseline,
@@ -106,11 +136,92 @@ export function PrimaryAgentMessageField({
 }: PrimaryAgentMessageFieldProps): React.ReactElement {
   const { provider, model } = useAIProvider();
   const outputLanguage = resolveAiAgentOutputLanguage().tag;
+
+  const semanticDisplayText = (semanticDisplayTextProp ?? tokenizedDisplayText ?? '').trim();
+  const hasSemanticLayer = semanticDisplayText.length > 0;
+  const useSemanticStack =
+    hasSemanticLayer && Boolean(onSemanticTextChange) && Boolean(projectSlotLexicon);
+
+  const { mappedCategoryOptions, otherCategoryOptions } = React.useMemo(() => {
+    const lexicon = projectSlotLexicon;
+    if (!lexicon) {
+      return { mappedCategoryOptions: [] as string[], otherCategoryOptions: [] as string[] };
+    }
+    const mapped = new Set<string>();
+    for (const e of lexicon.entries) {
+      const id = normalizeSlotId(e.slot_id);
+      if (!isUnclassifiedSlotId(id)) mapped.add(id);
+    }
+    const mappedSorted = [...mapped].sort((a, b) => a.localeCompare(b));
+    const otherSorted = listRegisteredSlotIds(lexicon)
+      .filter((id) => !mapped.has(id))
+      .sort((a, b) => a.localeCompare(b));
+    return { mappedCategoryOptions: mappedSorted, otherCategoryOptions: otherSorted };
+  }, [projectSlotLexicon]);
+
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(text);
+  const [semanticDraft, setSemanticDraft] = React.useState(semanticDisplayText);
   const [parametricExpanded, setParametricExpanded] = React.useState(false);
   const [revertPickMode, setRevertPickMode] = React.useState(false);
   const [revertSelectedRowId, setRevertSelectedRowId] = React.useState<string | null>(null);
+  const [semanticOpen, setSemanticOpen] = React.useState(false);
+
+  const activeSemanticText = editing ? semanticDraft : semanticDisplayText;
+
+  const handleSemanticSlotCommit = React.useCallback(
+    (oldToken: string, payload: SlotIdPickerCommitPayload) => {
+      if (onSemanticSlotCommit) {
+        if (editing) {
+          const nextText = replaceSlotIdInTokenizedText(
+            activeSemanticText,
+            oldToken,
+            payload.slotId
+          );
+          if (nextText !== activeSemanticText) setSemanticDraft(nextText);
+        }
+        onSemanticSlotCommit(oldToken, payload);
+        return;
+      }
+      const nextText = replaceSlotIdInTokenizedText(activeSemanticText, oldToken, payload.slotId);
+      onUpsertSlotRegistry?.(payload.slotId, payload.description);
+
+      if (nextText === activeSemanticText) return;
+
+      if (editing) {
+        setSemanticDraft(nextText);
+        return;
+      }
+      onSemanticTextChange?.(nextText, 'commit');
+    },
+    [
+      activeSemanticText,
+      editing,
+      onSemanticSlotCommit,
+      onSemanticTextChange,
+      onUpsertSlotRegistry,
+    ]
+  );
+
+  const renderSemanticLayerBody = () => {
+    if (!semanticOpen || !useSemanticStack || !projectSlotLexicon) return null;
+    return (
+      <div
+        className={`w-full min-w-0 border-t border-violet-500/30 ${UC_SEMANTIC_LAYER_GAP}`}
+      >
+        <SemanticTokenMessageLayer
+          text={activeSemanticText}
+          lexicon={projectSlotLexicon}
+          mappedOptions={mappedCategoryOptions}
+          otherOptions={otherCategoryOptions}
+          disabled={busy}
+          interactive={!busy}
+          onSlotCommit={handleSemanticSlotCommit}
+          className="text-violet-100/95"
+        />
+      </div>
+    );
+  };
 
   const parametricRows = React.useMemo(() => {
     const phrase = ensureUseCasePhrases(useCase).phrases?.[0];
@@ -120,6 +231,10 @@ export function PrimaryAgentMessageField({
   React.useEffect(() => {
     if (!editing) setDraft(text);
   }, [text, editing]);
+
+  React.useEffect(() => {
+    if (!editing) setSemanticDraft(semanticDisplayText);
+  }, [semanticDisplayText, editing]);
 
   React.useEffect(() => {
     if (editing) setParametricExpanded(true);
@@ -174,27 +289,41 @@ export function PrimaryAgentMessageField({
     setRevertPickMode(false);
   }, []);
 
-  const readOnlyTokenized = Boolean(tokenizedDisplayText?.trim());
   const showParametricBody = parametricEnabled && (parametricExpanded || editing);
 
   const beginEdit = React.useCallback(() => {
-    if (busy || readOnlyTokenized || editing) return;
+    if (busy || editing) return;
     setDraft(text);
+    setSemanticDraft(semanticDisplayText);
     setEditing(true);
     onPhraseDraftChange?.(text);
-  }, [busy, readOnlyTokenized, editing, text, onPhraseDraftChange]);
+  }, [busy, editing, text, semanticDisplayText, onPhraseDraftChange]);
 
   const cancelEdit = React.useCallback(() => {
     setEditing(false);
     setDraft(text);
+    setSemanticDraft(semanticDisplayText);
     onPhraseDraftChange?.(null);
-  }, [text, onPhraseDraftChange]);
+  }, [text, semanticDisplayText, onPhraseDraftChange]);
 
   const commitEdit = React.useCallback(() => {
     onTextChange(draft, 'commit');
+    if (
+      onSemanticTextChange &&
+      semanticDraft.trim() !== semanticDisplayText
+    ) {
+      onSemanticTextChange(semanticDraft, 'commit');
+    }
     setEditing(false);
     onPhraseDraftChange?.(null);
-  }, [draft, onTextChange, onPhraseDraftChange]);
+  }, [
+    draft,
+    semanticDraft,
+    semanticDisplayText,
+    onSemanticTextChange,
+    onTextChange,
+    onPhraseDraftChange,
+  ]);
 
   const tokenField = useAgentMessageTextField({
     text: draft,
@@ -268,7 +397,28 @@ export function PrimaryAgentMessageField({
       node
     );
 
+  const wrapSemanticLeadingIcon = (node: React.ReactNode) =>
+    leadingIconColumnClassName ? (
+      <span className="inline-flex w-6 shrink-0 flex-col items-center justify-start gap-0 pt-0.5">
+        {node}
+      </span>
+    ) : (
+      node
+    );
+
+  const renderSemanticIconStack = () =>
+    wrapSemanticLeadingIcon(
+      <SemanticLayerIconStack
+        semanticOpen={semanticOpen}
+        disabled={busy}
+        onToggleSemantic={() => setSemanticOpen((open) => !open)}
+      />
+    );
+
   const renderLeadingMessageIcon = (opts: { styleToggleInteractive: boolean }) => {
+    if (useSemanticStack && iconKind === 'single') {
+      return renderSemanticIconStack();
+    }
     if (iconKind === 'style' && opts.styleToggleInteractive) {
       return wrapLeadingIcon(styleToggleButton);
     }
@@ -344,7 +494,7 @@ export function PrimaryAgentMessageField({
           onVote={onAssistantVote}
         />
       ) : null}
-      {!editing && !readOnlyTokenized ? (
+      {!editing ? (
         <button
           type="button"
           disabled={busy}
@@ -399,15 +549,6 @@ export function PrimaryAgentMessageField({
     if (hideCanonicalPhraseText && !editing) {
       return null;
     }
-    if (tokenizedDisplayText?.trim()) {
-      return (
-        <TokenizedHighlightedText
-          text={tokenizedDisplayText}
-          inlineFlow
-          className="inline min-w-0 whitespace-pre-wrap"
-        />
-      );
-    }
     if (!text.trim()) {
       return (
         <span className="inline whitespace-pre-wrap text-slate-500">
@@ -430,6 +571,63 @@ export function PrimaryAgentMessageField({
     );
   };
 
+  const renderDisplayContentColumn = () => (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className={`${UC_RESPONSE_ROW_CONTENT} ${displayTextClass}`}>
+        {renderDisplayBody()}
+        {inlineToolbar}
+      </div>
+      {renderSemanticLayerBody()}
+    </div>
+  );
+
+  const renderNaturalEditTextarea = () => (
+    <>
+      <BracketTokenHighlightedTextarea
+        ref={tokenField.textareaRef}
+        value={draft}
+        disabled={busy}
+        rows={2}
+        autoFocus
+        spellCheck
+        lang={outputLanguage}
+        aria-label="Messaggio agente"
+        placeholder="Testo esempio per il messaggio agente…"
+        containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px] w-full`}
+        onChange={(e) => {
+          const v = e.target.value;
+          setDraft(v);
+          onPhraseDraftChange?.(v);
+          tokenField.syncSelection();
+        }}
+        onMouseDown={tokenField.markPointerSelectingMouse}
+        onTouchStart={tokenField.markPointerSelectingTouch}
+        onMouseUp={tokenField.syncSelection}
+        onSelect={tokenField.syncSelection}
+        onKeyUp={tokenField.syncSelection}
+        onScroll={tokenField.queueRecalcTokenAnchor}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelEdit();
+          }
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            commitEdit();
+          }
+        }}
+      />
+      {selectionTokenPopover}
+    </>
+  );
+
+  const renderEditTextColumn = () => (
+    <div className="flex min-w-0 flex-1 flex-col">
+      {renderNaturalEditTextarea()}
+      {renderSemanticLayerBody()}
+    </div>
+  );
+
   const parametricToggleButton = wrapLeadingIcon(
     <button
       type="button"
@@ -448,45 +646,12 @@ export function PrimaryAgentMessageField({
   );
 
   const renderCanonicalEdit = () => (
-    <div className="flex w-full flex-wrap items-center gap-x-[5px] gap-y-2">
-      {parametricToggleButton}
-      <div className="min-w-0 flex-1 flex-col">
-        <BracketTokenHighlightedTextarea
-          ref={tokenField.textareaRef}
-          value={draft}
-          disabled={busy}
-          rows={2}
-          autoFocus
-          spellCheck
-          lang={outputLanguage}
-          aria-label="Messaggio agente"
-          placeholder="Testo esempio per il messaggio agente…"
-          containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px] w-full`}
-          onChange={(e) => {
-            const v = e.target.value;
-            setDraft(v);
-            onPhraseDraftChange?.(v);
-            tokenField.syncSelection();
-          }}
-          onMouseDown={tokenField.markPointerSelectingMouse}
-          onTouchStart={tokenField.markPointerSelectingTouch}
-          onMouseUp={tokenField.syncSelection}
-          onSelect={tokenField.syncSelection}
-          onKeyUp={tokenField.syncSelection}
-          onScroll={tokenField.queueRecalcTokenAnchor}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              cancelEdit();
-            }
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              commitEdit();
-            }
-          }}
-        />
-        {selectionTokenPopover}
+    <div className="flex w-full flex-wrap items-start gap-x-[5px] gap-y-2">
+      <div className="flex shrink-0 flex-col items-center gap-1">
+        {parametricToggleButton}
+        {useSemanticStack ? renderSemanticIconStack() : null}
       </div>
+      {renderEditTextColumn()}
       <span className="inline-flex shrink-0 items-center gap-0.5">
         {renderStyleToolbarButtons(true, true)}
         <button
@@ -592,21 +757,21 @@ export function PrimaryAgentMessageField({
             <div
               className={`group/agentmsg-row flex w-full min-w-0 gap-x-[5px] rounded py-0 ${showParametricBody ? 'items-center' : 'flex-wrap items-center gap-y-1 cursor-pointer'}`}
               onDoubleClick={(e) => {
-                if (showParametricBody || busy || readOnlyTokenized) return;
+                if (showParametricBody || busy) return;
                 if ((e.target as HTMLElement).closest('button')) return;
                 e.preventDefault();
                 e.stopPropagation();
                 beginEdit();
               }}
             >
-              {parametricToggleButton}
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                {parametricToggleButton}
+                {useSemanticStack && !showParametricBody ? renderSemanticIconStack() : null}
+              </div>
               {showParametricBody ? (
                 parametricExpandedHeader
               ) : (
-                <div className={`${UC_RESPONSE_ROW_CONTENT} ${displayTextClass}`}>
-                  {renderDisplayBody()}
-                  {inlineToolbar}
-                </div>
+                renderDisplayContentColumn()
               )}
             </div>
             {showParametricBody ? (
@@ -626,47 +791,11 @@ export function PrimaryAgentMessageField({
     return (
       <div className="space-y-2" data-uc-primary-agent-message={useCase.id}>
         <div
-          className="flex min-h-[52px] flex-wrap items-center gap-x-[5px] gap-y-2"
+          className="flex min-h-[52px] flex-wrap items-start gap-x-[5px] gap-y-2"
           onDoubleClick={(e) => e.stopPropagation()}
         >
           {renderLeadingMessageIcon({ styleToggleInteractive: false })}
-          <div className="min-w-0 flex-1 flex-col">
-            <BracketTokenHighlightedTextarea
-              ref={tokenField.textareaRef}
-              value={draft}
-              disabled={busy}
-              rows={2}
-              autoFocus
-              spellCheck
-              lang={outputLanguage}
-              aria-label="Messaggio agente"
-              placeholder="Testo esempio per il messaggio agente…"
-              containerClassName={`${UC_CLASSIC_TEXTAREA_AGENT} min-h-[52px] w-full`}
-              onChange={(e) => {
-                const v = e.target.value;
-                setDraft(v);
-                onPhraseDraftChange?.(v);
-                tokenField.syncSelection();
-              }}
-              onMouseDown={tokenField.markPointerSelectingMouse}
-              onTouchStart={tokenField.markPointerSelectingTouch}
-              onMouseUp={tokenField.syncSelection}
-              onSelect={tokenField.syncSelection}
-              onKeyUp={tokenField.syncSelection}
-              onScroll={tokenField.queueRecalcTokenAnchor}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  cancelEdit();
-                }
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  commitEdit();
-                }
-              }}
-            />
-            {selectionTokenPopover}
-          </div>
+          {renderEditTextColumn()}
           <span className="inline-flex shrink-0 items-center gap-0.5">
             {renderStyleToolbarButtons(true, true)}
             <button
@@ -707,10 +836,7 @@ export function PrimaryAgentMessageField({
         }}
       >
         {renderLeadingMessageIcon({ styleToggleInteractive: true })}
-        <div className={`${UC_RESPONSE_ROW_CONTENT} ${displayTextClass}`}>
-          {renderDisplayBody()}
-          {inlineToolbar}
-        </div>
+        {renderDisplayContentColumn()}
       </div>
       {styleExamplesPanel}
     </div>

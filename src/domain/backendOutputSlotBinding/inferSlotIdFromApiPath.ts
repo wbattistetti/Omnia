@@ -1,57 +1,62 @@
 /**
- * Euristica deterministica: path RECEIVE OpenAPI → `slot_id` del lessico (`CORE_SLOT_IDS`).
+ * Euristica deterministica: path RECEIVE OpenAPI → `slot_id` dinamico (snake_case dal path).
  */
 
-import { CORE_SLOT_IDS, UNCLASSIFIED_SLOT_ID } from '@domain/useCaseBundle/projectSlotLexicon';
-
-const CORE_SET = new Set<string>(CORE_SLOT_IDS);
+import { isUnclassifiedSlotId, isValidSlotId, UNCLASSIFIED_SLOT_ID } from '@domain/useCaseBundle/projectSlotLexicon';
 
 /** Segmento path normalizzato (ultima parte o intero path lowercased). */
 function pathHaystack(apiPath: string): string {
   return apiPath.trim().toLowerCase().replace(/\[(\d+|\w+)\]/g, '[]');
 }
 
+const SKIP_LEAF = new Set([
+  'slots',
+  'summary',
+  'done',
+  'window',
+  'items',
+  'results',
+  'data',
+  'response',
+  'body',
+]);
+
 /**
- * Suggerisce uno `slot_id` canonico da un `apiPath` RECEIVE, o `undefined` se non mappabile.
+ * Deriva uno `slot_id` leggibile dall'ultimo segmento significativo del path RECEIVE.
  */
 export function inferSlotIdFromApiPath(apiPath: string): string | undefined {
   const p = pathHaystack(apiPath);
-  if (!p || p === 'slots' || p === 'summary' || p === 'done' || p === 'window') return undefined;
+  if (!p) return undefined;
 
-  const rules: ReadonlyArray<{ test: RegExp; slotId: string }> = [
-    { test: /(starttime|start_time|ora|time\b|orario)/, slotId: 'orario' },
-    { test: /\bgiorno\b|daynumber|day_number|slot.*day/, slotId: 'data' },
-    { test: /(weekday|dayofweek|giornosettimana|day_name)/, slotId: 'giornosettimana' },
-    { test: /(relativedate|relative_date|datarelativa)/, slotId: 'datarelativa' },
-    { test: /(\bdate\b|\.date|data\b)/, slotId: 'data' },
-    { test: /\bmonth\b/, slotId: 'mese' },
-    { test: /(prestazione|service|treatment|appointmenttype)/, slotId: 'prestazione' },
-    { test: /\bemail\b/, slotId: 'email' },
-    { test: /(telefono|phone|mobile)/, slotId: 'telefono' },
-    { test: /(importo|amount|price|cost)/, slotId: 'importo' },
-    { test: /\bnome\b|name\b|firstname/, slotId: 'nome' },
-    { test: /(conferma|confirm)/, slotId: 'formulaconferma' },
-    { test: /(daynumber|numerogiorno)/, slotId: 'numerogiorno' },
-  ];
-
-  for (const { test, slotId } of rules) {
-    if (test.test(p) && CORE_SET.has(slotId)) return slotId;
+  const segments = p.split(/[.[\]]+/).map((s) => s.trim()).filter(Boolean);
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i]!;
+    if (SKIP_LEAF.has(seg) || /^\d+$/.test(seg)) continue;
+    const slotId = seg
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .replace(/_+/g, '_');
+    if (isValidSlotId(slotId) && !isUnclassifiedSlotId(slotId)) return slotId;
   }
+
+  const fallback = segments
+    .filter((s) => !SKIP_LEAF.has(s))
+    .slice(-2)
+    .join('_')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (isValidSlotId(fallback) && !isUnclassifiedSlotId(fallback)) return fallback;
   return undefined;
 }
 
 export function inferFormatForSlotId(slotId: string): string | undefined {
-  switch (slotId) {
-    case 'data':
-      return 'YYYY-MM-DD';
-    case 'orario':
-      return 'HH:mm';
-    default:
-      return undefined;
-  }
+  const s = slotId.toLowerCase();
+  if (s.includes('data') || s.includes('date') || s.includes('giorno')) return 'YYYY-MM-DD';
+  if (s.includes('ora') || s.includes('time') || s.includes('orario')) return 'HH:mm';
+  return undefined;
 }
 
 export function isClassifiedSlotId(slotId: string): boolean {
   const s = slotId.trim().toLowerCase();
-  return Boolean(s) && s !== UNCLASSIFIED_SLOT_ID && CORE_SET.has(s);
+  return Boolean(s) && s !== UNCLASSIFIED_SLOT_ID && isValidSlotId(s);
 }

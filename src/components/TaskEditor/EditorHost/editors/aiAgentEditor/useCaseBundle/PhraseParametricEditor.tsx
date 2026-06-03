@@ -7,7 +7,9 @@ import React from 'react';
 import { LayoutGrid, Plus, Table, Variable, X } from 'lucide-react';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import { ensureUseCasePhrases } from '@domain/useCaseBundle/migrateUseCase';
-import { PARAMETRIC_CATALOG_DIMENSIONS } from '@domain/useCaseBundle/parametricPhraseHelpers';
+import { parametricCatalogDimensionsFromLexicon } from '@domain/useCaseBundle/parametricPhraseHelpers';
+import { emptyProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import { useOptionalAIAgentEditorDock } from '../AIAgentEditorDockContext';
 import type {
   AIAgentPhraseParametricConfig,
   AIAgentPhraseParametricDimension,
@@ -73,6 +75,14 @@ export function PhraseParametricEditor({
   onExpandCartesian,
   cartesianFeedback,
 }: PhraseParametricEditorProps): React.ReactElement {
+  const dock = useOptionalAIAgentEditorDock();
+  const catalogDimensions = React.useMemo(
+    () =>
+      parametricCatalogDimensionsFromLexicon(
+        dock?.projectSlotLexicon ?? emptyProjectSlotLexicon()
+      ),
+    [dock?.projectSlotLexicon]
+  );
   const uc = ensureUseCasePhrases(useCase);
   const phrase = uc.phrases?.[0];
   const cfg: AIAgentPhraseParametricConfig = phrase?.parametric ?? {
@@ -218,7 +228,7 @@ export function PhraseParametricEditor({
                 Parametro libero…
               </button>
               <div className="border-t border-slate-700/60" />
-              {PARAMETRIC_CATALOG_DIMENSIONS.map((c) => {
+              {catalogDimensions.map((c) => {
                 const alreadyAdded = addedCatalogKeys.has(c.key);
                 return (
                   <button

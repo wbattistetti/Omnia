@@ -49,9 +49,12 @@ export function PromptsOperationalOverlay({
   onRevokeLexiconEntry,
   onUpdateLexiconSlotId,
 }: PromptsOperationalOverlayProps): React.ReactElement {
+  const panelWidthClass =
+    mode === 'slotMapping' ? 'w-[min(640px,94vw)]' : 'w-[min(420px,92%)]';
+
   return (
     <div
-      className="absolute inset-y-0 right-0 z-20 flex w-[min(420px,92%)] flex-col border-l border-slate-300/80 bg-slate-50 shadow-[-8px_0_24px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950"
+      className={`absolute inset-y-0 right-0 z-20 flex flex-col border-l border-slate-300/80 bg-slate-50 shadow-[-8px_0_24px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950 ${panelWidthClass}`}
       {...tutorIdProps(MODE_UI_ID[mode])}
       role="dialog"
       aria-label={MODE_LABELS[mode]}

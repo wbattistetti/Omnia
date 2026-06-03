@@ -1,6 +1,6 @@
 /**
- * Sync completa agente ConvAI ElevenLabs: system prompt (use case + backend + KB testo),
- * tool webhook catalogo, documenti KB nativi ElevenLabs.
+ * Sync completa agente ConvAI ElevenLabs: system prompt (use case + backend),
+ * tool webhook catalogo, documenti KB nativi ElevenLabs (non embedded nel prompt).
  */
 
 import { TaskType, type Task } from '@types/taskTypes';
@@ -8,7 +8,6 @@ import {
   mergeExternalAgentPromptSections,
   buildExternalAgentPromptSections,
 } from '@domain/agentDesign/buildMergedExternalAgentPrompt';
-import { KNOWLEDGE_BASE_PROMPT_HEADER } from '@domain/agentDesign/buildKbRuntimePromptSection';
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import {
   parseAgentStartPromptJson,
@@ -31,10 +30,15 @@ import {
 import { resolveConvaiAgentLanguageForSync } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentOutputLanguage';
 import { resolveTaskIaConfig } from '@utils/iaAgentRuntime/resolveTaskIaConfig';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
-import { patchConvaiAgent } from '@workspaces/elevenlabs/api/convaiAgentApi';
+import { getConvaiAgentDetail, patchConvaiAgent } from '@workspaces/elevenlabs/api/convaiAgentApi';
 import { createConvaiTool } from '@workspaces/elevenlabs/api/convaiToolApi';
-import { createConvaiKbDocumentFromText } from '@workspaces/elevenlabs/api/convaiKnowledgeBaseApi';
 import { taskRepository } from '@services/TaskRepository';
+import {
+  parseAgentElevenLabsConvaiLinkJson,
+  type AgentElevenLabsConvaiLink,
+} from '@domain/convai/agentElevenLabsConvaiLink';
+import { extractKnowledgeBaseDocumentIdsFromConvaiConfig } from '@domain/convai/extractConvaiAgentKnowledgeBaseIds';
+import { syncConvaiKbDocuments } from '@domain/convai/syncConvaiKbDocuments';
 import {
   listKbDocumentsForConvaiUpload,
   resolveKbTextForConvaiUploadAsync,
@@ -72,10 +76,7 @@ async function resolveKbTextsForConvaiSync(
   return out;
 }
 
-function buildSyncPromptText(
-  params: ConvaiAgentSyncParams,
-  kbResolved: readonly ResolvedKbForSync[]
-): string {
+function buildSyncPromptText(params: ConvaiAgentSyncParams): string {
   const startPrompt = parseAgentStartPromptJson(
     String(params.agentTask.agentStartPromptJson ?? '')
   );
@@ -93,12 +94,6 @@ function buildSyncPromptText(
     manualCatalogBackendTaskIds: params.manualCatalogBackendTaskIds,
     knowledgeBaseDocuments: [],
   });
-  if (kbResolved.length > 0) {
-    const kbBlocks = kbResolved.map(
-      ({ doc, text }) => `**${doc.name}**\n${text.slice(0, 6_000)}`
-    );
-    sections.knowledgeBase = `${KNOWLEDGE_BASE_PROMPT_HEADER}\n\n${kbBlocks.join('\n\n')}`;
-  }
   return mergeExternalAgentPromptSections(sections).trim();
 }
 
@@ -145,8 +140,23 @@ export async function syncConvaiAgentFromOmnia(
     };
   }
 
+  const agentTaskIdForLink = String(agentTask.id ?? '').trim();
+  const freshAgentTask = agentTaskIdForLink
+    ? taskRepository.getTask(agentTaskIdForLink)
+    : undefined;
+  const existingLink = parseAgentElevenLabsConvaiLinkJson(
+    String(
+      freshAgentTask?.agentElevenLabsConvaiLinkJson ??
+        agentTask.agentElevenLabsConvaiLinkJson ??
+        ''
+    )
+  );
+
   const newName = String(params.newAgentName ?? '').trim();
   let agentId = String(params.agentId ?? '').trim();
+  if (!agentId && !newName && existingLink?.agentId) {
+    agentId = existingLink.agentId;
+  }
   if (!newName && !agentId) {
     return {
       ok: false,
@@ -221,7 +231,7 @@ export async function syncConvaiAgentFromOmnia(
 
   let promptText: string;
   try {
-    promptText = buildSyncPromptText(params, kbResolved);
+    promptText = buildSyncPromptText(params);
   } catch (e) {
     return {
       ok: false,
@@ -237,7 +247,7 @@ export async function syncConvaiAgentFromOmnia(
       failure: {
         phase: 'build_prompt',
         message:
-          'Prompt agente vuoto. Compila use case, backend o knowledge base prima di aggiornare l’agente.',
+          'Prompt agente vuoto. Compila use case o backend prima di aggiornare l’agente.',
       },
     };
   }
@@ -282,26 +292,37 @@ export async function syncConvaiAgentFromOmnia(
     promptText = `${promptText}\n\n${BOOK_FROM_AGENDA_PROMPT_APPEND}`;
   }
 
-  const kbRefs: { type: string; name: string; id: string; usage_mode: string }[] = [];
-  for (const { doc, text } of kbResolved) {
+  let kbSync: Awaited<ReturnType<typeof syncConvaiKbDocuments>>;
+  const isAgentUpdate = !newName && Boolean(agentId);
+  let remoteIdsOnAgent: string[] = [];
+  if (isAgentUpdate && agentId) {
     try {
-      const created = await createConvaiKbDocumentFromText({ name: doc.name, text });
-      kbRefs.push({
-        type: 'text',
-        name: created.name,
-        id: created.id,
-        usage_mode: 'auto',
-      });
-    } catch (e) {
-      return {
-        ok: false,
-        failure: {
-          phase: 'upload_kb',
-          message: e instanceof Error ? e.message : String(e),
-        },
-      };
+      const detail = await getConvaiAgentDetail(agentId);
+      remoteIdsOnAgent = extractKnowledgeBaseDocumentIdsFromConvaiConfig(
+        detail.conversationConfig
+      );
+    } catch {
+      remoteIdsOnAgent = [];
     }
   }
+  try {
+    kbSync = await syncConvaiKbDocuments({
+      docs: kbResolved,
+      existingLink,
+      isAgentUpdate,
+      remoteIdsOnAgent,
+      omniaDocNames: kbResolved.map(({ doc }) => String(doc.name ?? '').trim()).filter(Boolean),
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      failure: {
+        phase: 'upload_kb',
+        message: e instanceof Error ? e.message : String(e),
+      },
+    };
+  }
+  const kbRefs = kbSync.kbRefs;
 
   if (kbDocs.length > 0 && kbRefs.length === 0) {
     const hint =
@@ -394,15 +415,35 @@ export async function syncConvaiAgentFromOmnia(
     }
   }
 
+  const agentDisplayName =
+    String(params.agentDisplayName ?? '').trim() ||
+    newName ||
+    existingLink?.agentName?.trim() ||
+    agentId;
+
+  const link: AgentElevenLabsConvaiLink = {
+    schemaVersion: 1,
+    agentId,
+    agentName: agentDisplayName,
+    lastSyncedAt: new Date().toISOString(),
+    kbRemoteByOmniaDocId: kbSync.kbRemoteByOmniaDocId,
+    lastKbRemoteIds: kbSync.lastKbRemoteIds,
+  };
+
   return {
     ok: true,
     result: {
       agentId,
+      agentName: agentDisplayName,
+      link,
       promptCharCount: promptText.length,
       tools,
       kbDocumentIds: kbRefs.map((k) => k.id),
       kbCandidateCount: kbDocs.length,
       kbUploadedCount: kbRefs.length,
+      kbDeletedRemoteIds: kbSync.deletedRemoteIds,
+      kbUpdatedCount: kbSync.kbUpdatedCount,
+      kbCreatedCount: kbSync.kbCreatedCount,
     },
   };
 }

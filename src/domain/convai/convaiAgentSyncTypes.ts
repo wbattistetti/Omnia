@@ -9,6 +9,7 @@ import type { AgentBehaviorMode } from '@domain/useCaseGeneratorWizard/buildConv
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import type { Task } from '@types/taskTypes';
+import type { AgentElevenLabsConvaiLink } from './agentElevenLabsConvaiLink';
 
 export type ConvaiAgentSyncPromptOptions = {
   useCases: readonly AIAgentUseCase[];
@@ -30,6 +31,8 @@ export type ConvaiAgentSyncParams = ConvaiAgentSyncPromptOptions & {
   newAgentName?: string;
   /** Aggiorna agente esistente (refresh completo prompt/tool/KB). */
   agentId?: string;
+  /** Nome agente per persistenza link (es. selezione albero). */
+  agentDisplayName?: string;
   /**
    * Se true (default sync con tunnel): rewrite URL webhook con ngrok e valida reachability.
    * Se false: URL gateway localhost (prompt/tool su ElevenLabs; webhook non raggiungibili da cloud).
@@ -48,6 +51,10 @@ export type ConvaiAgentSyncToolResult = {
 
 export type ConvaiAgentSyncResult = {
   agentId: string;
+  /** Nome agente ElevenLabs al momento del sync. */
+  agentName?: string;
+  /** Collegamento persistibile task ↔ agente + mapping KB. */
+  link: AgentElevenLabsConvaiLink;
   promptCharCount: number;
   tools: ConvaiAgentSyncToolResult[];
   kbDocumentIds: string[];
@@ -55,6 +62,10 @@ export type ConvaiAgentSyncResult = {
   kbCandidateCount: number;
   /** Documenti effettivamente caricati su ElevenLabs. */
   kbUploadedCount: number;
+  /** Id KB remoti eliminati durante overwrite (solo update agente). */
+  kbDeletedRemoteIds?: string[];
+  kbUpdatedCount?: number;
+  kbCreatedCount?: number;
 };
 
 export type ConvaiAgentSyncFailurePhase =

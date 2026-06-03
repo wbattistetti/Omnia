@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeSlotMappingValidation } from '../slotMappingValidation';
+import { mergeSlotDefinitionsIntoLexicon } from '@domain/useCaseBundle/dynamicSlotRegistry';
 import { emptyProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 
@@ -13,8 +14,16 @@ const baseUseCase: AIAgentUseCase = {
 
 describe('computeSlotMappingValidation', () => {
   it('returns valid when all criteria met', () => {
+    const withRegistry = mergeSlotDefinitionsIntoLexicon(emptyProjectSlotLexicon(), [
+      {
+        slotId: 'data',
+        valueType: 'date',
+        description: 'Data appuntamento',
+        binding: { kind: 'kb', path: 'kb.slots.date' },
+      },
+    ]);
     const lexicon = {
-      ...emptyProjectSlotLexicon(),
+      ...withRegistry,
       entries: [{ surface: 'domani', slot_id: 'data', approved: true }],
     };
     expect(computeSlotMappingValidation(lexicon, [baseUseCase]).status).toBe('valid');

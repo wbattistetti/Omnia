@@ -68,6 +68,8 @@ const AI_AGENT_INSTANCE_FIELD_KEYS = [
   'agentUseCaseStyleLearningNotes',
   'agentPromptTargetPlatform',
   'agentIaRuntimeOverrideJson',
+  /** Collegamento persistente task ↔ agente ElevenLabs ConvAI (sync KB). */
+  'agentElevenLabsConvaiLinkJson',
   'agentImmediateStart',
   'agentConstructionPhase',
   'agentWizardCurrentStep',

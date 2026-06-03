@@ -881,6 +881,13 @@ export interface ProposeCompileSlotMappingsApiParams {
 export async function proposeCompileSlotMappingsApi(
   params: ProposeCompileSlotMappingsApiParams
 ): Promise<{
+  slot_definitions?: Array<{
+    slotId: string;
+    label?: string;
+    valueType?: import('@domain/useCaseBundle/dynamicSlotRegistry').DynamicSlotValueType;
+    description?: string;
+    binding?: import('@domain/useCaseBundle/dynamicSlotRegistry').DynamicSlotBindingSource;
+  }>;
   lexicon_mappings: Array<{ surface: string; slot_id: string }>;
   backend_bindings: Array<{
     apiPath: string;

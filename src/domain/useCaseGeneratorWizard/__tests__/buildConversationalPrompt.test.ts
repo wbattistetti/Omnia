@@ -45,6 +45,17 @@ describe('buildConversationalPrompt', () => {
     expect(prompt).toContain('Catalogo use case (JSON)');
   });
 
+  it('includes Template-Only + UKS rule before mandatory rules', () => {
+    const prompt = buildConversationalPrompt([makeUseCase()]);
+    expect(prompt).toContain('Regola vincolante: Template-Only + UKS');
+    expect(prompt).toContain('Vietato testo libero');
+    expect(prompt).toContain('Rispondere solo con `USECASE: "UKS"`');
+    const templateOnlyIdx = prompt.indexOf('Template-Only + UKS');
+    const mandatoryIdx = prompt.indexOf('Regole obbligatorie');
+    expect(templateOnlyIdx).toBeGreaterThan(-1);
+    expect(mandatoryIdx).toBeGreaterThan(templateOnlyIdx);
+  });
+
   it('emits a JSON block per use case with structural fields only (no plaintext duplicate)', () => {
     const prompt = buildConversationalPrompt([
       makeUseCase({
@@ -130,12 +141,8 @@ describe('buildConversationalPrompt', () => {
       expect(headerIdx).toBeGreaterThan(-1);
       expect(instructionIdx).toBeGreaterThan(headerIdx);
       expect(firstBlockIdx).toBeGreaterThan(instructionIdx);
-      /**
-       * Lo snippet di esempio per il caso "non riconosciuto" deve usare il prefisso
-       * `NUOVO_` (MAIUSCOLO) per essere distinguibile a colpo d'occhio dai trace dei
-       * use case censiti, e racchiudere il nome in virgolette doppie.
-       */
-      expect(prompt).toMatch(/USECASE:\s*"NUOVO_/);
+      expect(prompt).toContain('non inventare frasi né trace `NUOVO_*`');
+      expect(prompt).toContain('rispondi solo con `USECASE: "UKS"`');
     });
 
     it('is deterministic also with includeLog=true', () => {

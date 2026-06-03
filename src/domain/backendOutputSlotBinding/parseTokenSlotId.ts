@@ -1,17 +1,27 @@
 /**
- * Deriva lo `slot_id` base da un nome token nella frase compilata (`data2` → `data`).
+ * Deriva lo `slot_id` base da un nome token nella frase compilata.
  */
 
-import { normalizeSlotId } from '@domain/useCaseBundle/projectSlotLexicon';
+import { isValidSlotId, normalizeSlotId } from '@domain/useCaseBundle/projectSlotLexicon';
 
 export function parseBaseSlotIdFromToken(token: string): string {
   const t = token.trim().toLowerCase();
   if (!t) return '';
-  const mUnderscore = /^([a-z]+)_(\d+)$/.exec(t);
-  if (mUnderscore) return normalizeSlotId(mUnderscore[1]!);
-  const m = /^([a-z]+)(\d+)$/.exec(t);
-  if (m) return normalizeSlotId(m[1]!);
-  const mPrefix = /^([a-z]+)_/.exec(t);
-  if (mPrefix) return normalizeSlotId(mPrefix[1]!);
-  return normalizeSlotId(t);
+
+  /** Suffisso numerico variante: `medico_richiesto_1` → `medico_richiesto`. */
+  const numbered = /^(.+)_(\d+)$/.exec(t);
+  if (numbered) {
+    const base = normalizeSlotId(numbered[1]!);
+    if (isValidSlotId(base)) return base;
+  }
+
+  const compactNum = /^([a-z]+)(\d+)$/.exec(t);
+  if (compactNum) {
+    const base = normalizeSlotId(compactNum[1]!);
+    if (isValidSlotId(base)) return base;
+  }
+
+  const direct = normalizeSlotId(t);
+  if (isValidSlotId(direct)) return direct;
+  return '';
 }

@@ -16,7 +16,8 @@
  */
 
 const SILENT_404_ENDPOINTS: string[] = [
-  // Add endpoint suffixes here that should suppress 404 console errors
+  /** Purge KB: id stale → ElevenLabs 404 atteso durante sync agente. */
+  '/elevenlabs/knowledge-base/',
 ];
 
 /**

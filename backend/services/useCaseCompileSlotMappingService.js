@@ -1,43 +1,65 @@
 /**
- * Proposta IA mapping compile: path-first RECEIVE/SEND + lessico canonico.
+ * Proposta IA mapping compile: dizionario slot dinamico + binding backend/KB/dialogo.
  */
 
 const { extractJsonString } = require('./AIAgentDesignService');
-const { COMPILE_SLOT_MAPPING_SYSTEM, CORE_SLOT_IDS } = require('./useCaseCompileSlotMappingPrompts');
+const { COMPILE_SLOT_MAPPING_SYSTEM } = require('./useCaseCompileSlotMappingPrompts');
 
 const TIMEOUT_MS = Number.parseInt(process.env.USE_CASE_COMPILE_SLOT_MAPPING_TIMEOUT_MS || '120000', 10);
 
-const TOKEN_BASE_TO_CANONICAL = {
-  giorno: 'data',
-  ora: 'orario',
-  time: 'orario',
-};
+const VALID_VALUE_TYPES = new Set([
+  'string',
+  'date',
+  'time',
+  'enum',
+  'number',
+  'boolean',
+  'list',
+  'unknown',
+]);
 
 function normalizeSurface(s) {
   return String(s ?? '').trim().toLowerCase();
 }
 
+function isValidSlotId(s) {
+  return /^[a-z][a-z0-9_]*$/.test(s) && !s.includes('__') && s !== 'undefined' && s !== 'slot';
+}
+
 function normalizeProposalSlotId(raw) {
   const s = String(raw ?? '').trim().toLowerCase();
-  if (!s) return null;
-  if (CORE_SLOT_IDS.includes(s)) return s;
-  if (TOKEN_BASE_TO_CANONICAL[s] && CORE_SLOT_IDS.includes(TOKEN_BASE_TO_CANONICAL[s])) {
-    return TOKEN_BASE_TO_CANONICAL[s];
+  if (!isValidSlotId(s)) return null;
+  return s;
+}
+
+function parseBinding(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const kind = raw.kind;
+  if (kind === 'dialog' && typeof raw.path === 'string' && raw.path.trim()) {
+    return { kind: 'dialog', path: raw.path.trim() };
   }
-  const m = /^([a-z]+)\d+$/.exec(s);
-  if (m) {
-    const base = m[1];
-    if (CORE_SLOT_IDS.includes(base)) return base;
-    if (TOKEN_BASE_TO_CANONICAL[base]) return TOKEN_BASE_TO_CANONICAL[base];
+  if (kind === 'kb' && typeof raw.path === 'string' && raw.path.trim()) {
+    return { kind: 'kb', path: raw.path.trim() };
   }
-  const mUnderscoreNum = /^([a-z]+)_(\d+)$/.exec(s);
-  if (mUnderscoreNum && TOKEN_BASE_TO_CANONICAL[mUnderscoreNum[1]]) {
-    return TOKEN_BASE_TO_CANONICAL[mUnderscoreNum[1]];
+  if (kind === 'backend_receive' && typeof raw.apiPath === 'string' && raw.apiPath.trim()) {
+    return {
+      kind: 'backend_receive',
+      apiPath: raw.apiPath.trim(),
+      ...(typeof raw.toolName === 'string' && raw.toolName.trim()
+        ? { toolName: raw.toolName.trim() }
+        : {}),
+    };
   }
-  const mPrefix = /^([a-z]+)_/.exec(s);
-  if (mPrefix && TOKEN_BASE_TO_CANONICAL[mPrefix[1]]) {
-    return TOKEN_BASE_TO_CANONICAL[mPrefix[1]];
+  if (kind === 'backend_send' && typeof raw.sendPath === 'string' && raw.sendPath.trim()) {
+    return {
+      kind: 'backend_send',
+      sendPath: raw.sendPath.trim(),
+      ...(typeof raw.toolName === 'string' && raw.toolName.trim()
+        ? { toolName: raw.toolName.trim() }
+        : {}),
+    };
   }
+  if (kind === 'unbound') return { kind: 'unbound' };
   return null;
 }
 
@@ -54,38 +76,50 @@ function buildUserMessage({
   const leaves = Array.isArray(sendParamLeaves) ? sendParamLeaves : [];
   const receiveLeaves = Array.isArray(receiveParamLeaves) ? receiveParamLeaves : [];
   const tokens = Array.isArray(phraseTokens) ? phraseTokens : [];
-  return `CORE_SLOT_IDS (canonical slot_id — required on contracts/lexicon):
-${JSON.stringify(CORE_SLOT_IDS)}
+  const hasBackend = tools.length > 0 || receivePaths.length > 0;
+
+  return `No predefined slot vocabulary. Invent slot_ids for this task only.
 
 Surfaces (literal [inner] text from phrases):
 ${JSON.stringify(surfaces.slice(0, 80))}
 
-Phrase tokens (compiled names e.g. giorno_1, ora_2 — bind to RECEIVE when possible):
+Phrase tokens (compiled token names in agent templates):
 ${JSON.stringify(tokens.slice(0, 80))}
 
-Backend tools (exact toolName; receivePathTree shows nested RECEIVE structure):
+Backend tools (exact toolName; receivePathTree — omit binding if empty):
 ${JSON.stringify(tools.slice(0, 20), null, 0)}
 
-Flat RECEIVE api paths (default backendTaskId="${String(backendTaskId || '').trim()}"):
+Flat RECEIVE api paths (backendTaskId="${String(backendTaskId || '').trim()}"):
 ${JSON.stringify(receivePaths.slice(0, 120))}
 
-RECEIVE param leaves (OpenAPI walk — bind phrase_tokens here; use exact path):
+RECEIVE param leaves:
 ${JSON.stringify(receiveLeaves.slice(0, 96))}
 
-SEND param leaves (use ONLY these sendPath values in send_hints):
+SEND param leaves:
 ${JSON.stringify(leaves.slice(0, 80))}
 
 Return JSON:
 {
-  "lexicon_mappings": [ { "surface": "giorno_1", "slot_id": "data" } ],
-  "token_bindings": [ { "token": "giorno_1", "apiPath": "slots[].date", "slotId": "data", "format": "YYYY-MM-DD" } ],
-  "backend_bindings": [ { "apiPath": "slots[].date", "slotId": "data", "tokenInPhrase": "data", "format": "YYYY-MM-DD" } ],
-  "slot_contracts": [ { "slotId": "data", "toolName": "<from backend_tools>", "receive": "slots[].date", "send": [], "backendTaskId": "<id>", "format": "YYYY-MM-DD" } ],
-  "send_hints": [ { "surface": "fine mese", "slotId": "datarelativa", "role": "constraint", "sendPath": "<from SEND leaves>", "valueKind": "end_of_month" } ]
+  "slot_definitions": [
+    {
+      "slotId": "medico_richiesto",
+      "label": "Medico richiesto",
+      "valueType": "string",
+      "description": "Nome del medico nominato dal paziente",
+      "binding": { "kind": "dialog", "path": "dialog.medico_scelto" }
+    }
+  ],
+  "lexicon_mappings": [ { "surface": "medico_richiesto", "slot_id": "medico_richiesto" } ],
+  "token_bindings": [],
+  "backend_bindings": [],
+  "slot_contracts": [],
+  "send_hints": []
 }
-REQUIRED: lexicon_mappings must cover every surface listed. token_bindings must cover every phrase_token mappable to RECEIVE.
-For each phrase_token also add a lexicon_mappings row (surface = token, slot_id canonical).
-slot_contracts: one row per canonical slot_id used. Valid JSON only.`;
+REQUIRED:
+- slot_definitions for every slot_id you use
+- lexicon_mappings must cover EVERY surface and phrase_token listed
+- ${hasBackend ? 'Use RECEIVE/SEND paths only from lists above when binding backend.' : 'No backend: use kb or dialog bindings only; leave token_bindings/backend_bindings empty unless paths exist.'}
+Valid JSON only.`;
 }
 
 function parseProposal(parsed, sendParamLeaves, allowedReceivePaths) {
@@ -95,12 +129,37 @@ function parseProposal(parsed, sendParamLeaves, allowedReceivePaths) {
       .filter(Boolean)
   );
 
+  const slot_definitions = Array.isArray(parsed.slot_definitions)
+    ? parsed.slot_definitions
+        .map((r) => {
+          if (!r || typeof r !== 'object') return null;
+          const slotId = normalizeProposalSlotId(r.slotId ?? r.slot_id);
+          if (!slotId) return null;
+          const valueType =
+            typeof r.valueType === 'string' && VALID_VALUE_TYPES.has(r.valueType.trim())
+              ? r.valueType.trim()
+              : 'unknown';
+          const description =
+            typeof r.description === 'string' ? r.description.trim() : '';
+          const binding = parseBinding(r.binding) ?? { kind: 'unbound' };
+          const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim() : slotId;
+          return {
+            slotId,
+            label,
+            valueType,
+            description,
+            binding,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
   const lexicon_mappings = Array.isArray(parsed.lexicon_mappings)
     ? parsed.lexicon_mappings
         .map((r) => {
           if (!r || typeof r !== 'object') return null;
           const surface = normalizeSurface(r.surface);
-          const slot_id = normalizeProposalSlotId(r.slot_id);
+          const slot_id = normalizeProposalSlotId(r.slot_id ?? r.slotId);
           if (!surface || !slot_id) return null;
           return { surface, slot_id };
         })
@@ -203,7 +262,14 @@ function parseProposal(parsed, sendParamLeaves, allowedReceivePaths) {
         .filter(Boolean)
     : [];
 
-  return { lexicon_mappings, backend_bindings, token_bindings, slot_contracts, send_hints };
+  return {
+    slot_definitions,
+    lexicon_mappings,
+    backend_bindings,
+    token_bindings,
+    slot_contracts,
+    send_hints,
+  };
 }
 
 async function proposeCompileSlotMappings(params) {
@@ -228,6 +294,7 @@ async function proposeCompileSlotMappings(params) {
   const uniqueTokens = [...new Set(phraseTokens.map((t) => String(t).trim().toLowerCase()).filter(Boolean))];
   if (uniqueSurfaces.length === 0 && uniqueTokens.length === 0 && receivePaths.length === 0) {
     return {
+      slot_definitions: [],
       lexicon_mappings: [],
       backend_bindings: [],
       token_bindings: [],

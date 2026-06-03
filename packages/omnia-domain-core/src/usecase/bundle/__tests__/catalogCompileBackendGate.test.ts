@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   catalogHasCompileMappingInputs,
   shouldRunBackendIaCompileMapping,
+  shouldRunIaCompileSlotMapping,
 } from '../catalogCompileBackendGate';
 
 describe('catalogCompileBackendGate', () => {
@@ -11,12 +12,10 @@ describe('catalogCompileBackendGate', () => {
     expect(catalogHasCompileMappingInputs({ surfaceCount: 0, phraseTokenCount: 2 })).toBe(true);
   });
 
-  it('shouldRunBackendIaCompileMapping requires backend when inputs exist', () => {
+  it('shouldRunIaCompileSlotMapping runs when surfaces or tokens exist (no backend required)', () => {
     const inputs = { surfaceCount: 3, phraseTokenCount: 1 };
-    expect(shouldRunBackendIaCompileMapping(inputs, false)).toBe(false);
-    expect(shouldRunBackendIaCompileMapping(inputs, true)).toBe(true);
-    expect(
-      shouldRunBackendIaCompileMapping({ surfaceCount: 0, phraseTokenCount: 0 }, true)
-    ).toBe(false);
+    expect(shouldRunIaCompileSlotMapping(inputs)).toBe(true);
+    expect(shouldRunIaCompileSlotMapping({ surfaceCount: 0, phraseTokenCount: 0 })).toBe(false);
+    expect(shouldRunBackendIaCompileMapping(inputs, false)).toBe(true);
   });
 });

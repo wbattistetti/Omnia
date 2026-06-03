@@ -11,6 +11,11 @@ import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard
 import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
 import { TaskType, type Task } from '@types/taskTypes';
 import { taskRepository } from '@services/TaskRepository';
+import {
+  parseAgentElevenLabsConvaiLinkJson,
+  resolveLinkedConvaiAgentId,
+} from '@domain/convai/agentElevenLabsConvaiLink';
+import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 
 export type BuildConvaiAgentSyncParamsInput = {
   agentTaskId: string;
@@ -44,6 +49,11 @@ export function buildConvaiAgentSyncParams(
   const includeLog = input.includeLog ?? agentTask.agentLogUseCase === true;
   const includeBackendLog = input.includeBackendLog ?? agentTask.agentLogBackendCalls === true;
 
+  const link = parseAgentElevenLabsConvaiLinkJson(agentTask.agentElevenLabsConvaiLinkJson);
+  const session = getConvaiSessionBinding(agentTaskId);
+  const linkedAgentId = resolveLinkedConvaiAgentId(link, session?.agentId);
+  const agentId = String(input.agentId ?? linkedAgentId ?? '').trim() || undefined;
+
   return {
     agentTask,
     projectId: String(input.projectId ?? '').trim() || undefined,
@@ -57,6 +67,7 @@ export function buildConvaiAgentSyncParams(
     manualCatalogBackendTaskIds: input.manualCatalogBackendTaskIds,
     knowledgeBaseDocuments: input.knowledgeBaseDocuments,
     newAgentName: input.newAgentName,
-    agentId: input.agentId,
+    agentId,
+    agentDisplayName: link?.agentName,
   };
 }

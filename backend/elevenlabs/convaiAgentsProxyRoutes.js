@@ -306,6 +306,28 @@ function mountConvaiAgentsProxyRoutes(app) {
     }
   });
 
+  app.get('/elevenlabs/knowledge-base', async (req, res) => {
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const q = new URLSearchParams();
+      const pageSize = String(req.query.page_size || '100').trim() || '100';
+      q.set('page_size', pageSize);
+      if (req.query.cursor) q.set('cursor', String(req.query.cursor));
+      if (req.query.search) q.set('search', String(req.query.search));
+      const upstream = `/convai/knowledge-base?${q.toString()}`;
+      const { status, body } = await proxyToElevenLabs('GET', upstream);
+      if (status >= 400) {
+        console.warn('[elevenlabs:listKb] upstream', status, body.slice(0, 400));
+      }
+      res.status(status).type('application/json; charset=utf-8').send(body);
+    } catch (err) {
+      sendFatal(res, 'listKb', err);
+    }
+  });
+
   app.post('/elevenlabs/knowledge-base/text', async (req, res) => {
     try {
       const apiKey = getApiKey();
@@ -331,6 +353,74 @@ function mountConvaiAgentsProxyRoutes(app) {
       res.status(status).type('application/json; charset=utf-8').send(body);
     } catch (err) {
       sendFatal(res, 'createKbText', err);
+    }
+  });
+
+  app.patch('/elevenlabs/knowledge-base/:documentationId', async (req, res) => {
+    const id = String(req.params.documentationId || '').trim();
+    if (!id) return sendJson(res, 400, { error: 'documentationId required' });
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const requestObj =
+        req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+      const name = String(requestObj.name ?? '').trim();
+      const content = String(requestObj.content ?? requestObj.text ?? '').trim();
+      const payload = JSON.stringify({
+        ...(name ? { name } : {}),
+        ...(content ? { content } : {}),
+      });
+      const { status, body } = await proxyToElevenLabs(
+        'PATCH',
+        `/convai/knowledge-base/${encodeURIComponent(id)}`,
+        payload
+      );
+      if (status >= 400) {
+        console.warn('[elevenlabs:patchKbText] upstream', status, 'id=', id, body.slice(0, 400));
+      }
+      res.status(status).type('application/json; charset=utf-8').send(body);
+    } catch (err) {
+      sendFatal(res, 'patchKbText', err);
+    }
+  });
+
+function isElevenLabsKbDocumentNotFound(status, body) {
+  if (status !== 404) return false;
+  try {
+    const parsed = body.trim() ? JSON.parse(body) : {};
+    const detail = parsed.detail;
+    if (detail && typeof detail === 'object') {
+      const code = String(detail.code ?? detail.status ?? '').trim();
+      if (code === 'document_not_found') return true;
+    }
+  } catch {
+    /* ignore parse errors */
+  }
+  return /document_not_found|not found/i.test(String(body ?? ''));
+}
+
+  app.delete('/elevenlabs/knowledge-base/:documentationId', async (req, res) => {
+    const id = String(req.params.documentationId || '').trim();
+    if (!id) return sendJson(res, 400, { error: 'documentationId required' });
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const force = String(req.query.force ?? '').toLowerCase() === 'true';
+      const upstream = `/convai/knowledge-base/${encodeURIComponent(id)}${force ? '?force=true' : ''}`;
+      const { status, body } = await proxyToElevenLabs('DELETE', upstream);
+      if (isElevenLabsKbDocumentNotFound(status, body)) {
+        return res.status(204).end();
+      }
+      if (status >= 400) {
+        console.warn('[elevenlabs:deleteKb] upstream', status, 'id=', id, body.slice(0, 400));
+      }
+      res.status(status).type('application/json; charset=utf-8').send(body);
+    } catch (err) {
+      sendFatal(res, 'deleteKb', err);
     }
   });
 
@@ -364,7 +454,7 @@ function mountConvaiAgentsProxyRoutes(app) {
   });
 
   console.log(
-    '[iaCatalog] ElevenLabs ConvAI proxy: createAgent, agents, tools, knowledge-base/text'
+    '[iaCatalog] ElevenLabs ConvAI proxy: createAgent, agents, tools, knowledge-base (list/text/patch/delete)'
   );
 }
 

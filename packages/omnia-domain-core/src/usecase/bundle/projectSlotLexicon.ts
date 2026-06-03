@@ -1,29 +1,20 @@
 /**
- * Lessico slot a livello progetto: surface → slot_id, registry tipi e varianti linguistiche.
+ * Lessico slot a livello progetto: surface → slot_id, registro dinamico (nessun vocabolario statico).
  */
 
 import type { SlotSurfaceMapping } from './schema';
+import type { DynamicSlotBindingSource, DynamicSlotValueType } from './dynamicSlotRegistry';
 
-export const LEXICON_SCHEMA_VERSION = 1 as const;
+export const LEXICON_SCHEMA_VERSION = 2 as const;
 
 /** Placeholder quando la surface non ha ancora una categoria (ex `slot`). */
 export const UNCLASSIFIED_SLOT_ID = 'undefined' as const;
 
-/** Vocabolario chiuso iniziale (estendibile con approvazione designer). */
-export const CORE_SLOT_IDS = [
-  'prestazione',
-  'data',
-  'datarelativa',
-  'orario',
-  'giornosettimana',
-  'numerogiorno',
-  'mese',
-  'formulaconferma',
-  'nome',
-  'email',
-  'telefono',
-  'importo',
-] as const;
+/**
+ * @deprecated Nessun vocabolario core: usare {@link listRegisteredSlotIds} sul lessico progetto.
+ * Mantenuto vuoto per compatibilità import legacy.
+ */
+export const CORE_SLOT_IDS: readonly string[] = [];
 
 /** True se la categoria non è stata assegnata (include legacy `slot`). */
 export function isUnclassifiedSlotId(slotId: string): boolean {
@@ -37,8 +28,6 @@ export function normalizeSlotId(slotId: string): string {
   return s === 'slot' ? UNCLASSIFIED_SLOT_ID : s;
 }
 
-export type CoreSlotId = (typeof CORE_SLOT_IDS)[number];
-
 export interface LexiconEntry {
   surface: string;
   slot_id: string;
@@ -50,6 +39,15 @@ export interface LexiconEntry {
 
 export interface SlotRegistryEntry {
   linguisticVariants?: string[];
+  /** Etichetta leggibile per il designer. */
+  label?: string;
+  valueType?: DynamicSlotValueType;
+  description?: string;
+  binding?: DynamicSlotBindingSource;
+  /** Proposta IA in attesa di revisione. */
+  proposedByAi?: boolean;
+  /** Se true, la compile IA non sovrascrive label/descrizione/binding. */
+  designerLocked?: boolean;
 }
 
 export interface ProjectSlotLexicon {
@@ -69,11 +67,7 @@ export function emptyProjectSlotLexicon(): ProjectSlotLexicon {
   return {
     lexiconSchemaVersion: LEXICON_SCHEMA_VERSION,
     entries: [],
-    slotRegistry: {
-      formulaconferma: {
-        linguisticVariants: ['va bene', 'giusto', 'corretto', 'perfetto'],
-      },
-    },
+    slotRegistry: {},
   };
 }
 
@@ -81,8 +75,10 @@ export function normalizeSurface(surface: string): string {
   return surface.trim().toLowerCase();
 }
 
+/** snake_case: lettere, cifre, underscore (no doppio underscore iniziale). */
 export function isValidSlotId(slotId: string): boolean {
-  return /^[a-z][a-z0-9]*$/.test(slotId);
+  const s = slotId.trim().toLowerCase();
+  return /^[a-z][a-z0-9_]*$/.test(s) && !s.includes('__');
 }
 
 export function parseProjectSlotLexiconJson(raw: string | undefined | null): ProjectSlotLexicon {
@@ -108,9 +104,7 @@ export function parseProjectSlotLexiconJson(raw: string | undefined | null): Pro
         });
       }
     }
-    const slotRegistry: Record<string, SlotRegistryEntry> = {
-      ...emptyProjectSlotLexicon().slotRegistry,
-    };
+    const slotRegistry: Record<string, SlotRegistryEntry> = {};
     if (o.slotRegistry && typeof o.slotRegistry === 'object') {
       for (const [k, val] of Object.entries(o.slotRegistry as Record<string, unknown>)) {
         if (!val || typeof val !== 'object') continue;
@@ -118,7 +112,16 @@ export function parseProjectSlotLexiconJson(raw: string | undefined | null): Pro
         const linguisticVariants = Array.isArray(vo.linguisticVariants)
           ? vo.linguisticVariants.filter((x): x is string => typeof x === 'string')
           : undefined;
-        slotRegistry[k.toLowerCase()] = { ...(linguisticVariants ? { linguisticVariants } : {}) };
+        const binding = parseBindingField(vo.binding);
+        slotRegistry[k.toLowerCase()] = {
+          ...(typeof vo.label === 'string' && vo.label.trim() ? { label: vo.label.trim() } : {}),
+          ...(isValueType(vo.valueType) ? { valueType: vo.valueType } : {}),
+          ...(typeof vo.description === 'string' ? { description: vo.description } : {}),
+          ...(binding ? { binding } : {}),
+          ...(vo.proposedByAi === true ? { proposedByAi: true } : {}),
+          ...(vo.designerLocked === true ? { designerLocked: true } : {}),
+          ...(linguisticVariants ? { linguisticVariants } : {}),
+        };
       }
     }
     return {
@@ -284,3 +287,50 @@ export function lookupLexiconSlotId(
   if (!hit || isUnclassifiedSlotId(hit.slot_id)) return null;
   return hit.slot_id;
 }
+
+function isValueType(v: unknown): v is DynamicSlotValueType {
+  return (
+    v === 'string' ||
+    v === 'date' ||
+    v === 'time' ||
+    v === 'enum' ||
+    v === 'number' ||
+    v === 'boolean' ||
+    v === 'list' ||
+    v === 'unknown'
+  );
+}
+
+function parseBindingField(raw: unknown): DynamicSlotBindingSource | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const kind = o.kind;
+  if (kind === 'dialog' && typeof o.path === 'string' && o.path.trim()) {
+    return { kind: 'dialog', path: o.path.trim() };
+  }
+  if (kind === 'kb' && typeof o.path === 'string' && o.path.trim()) {
+    return { kind: 'kb', path: o.path.trim() };
+  }
+  if (kind === 'backend_receive' && typeof o.apiPath === 'string' && o.apiPath.trim()) {
+    return {
+      kind: 'backend_receive',
+      apiPath: o.apiPath.trim(),
+      ...(typeof o.toolName === 'string' && o.toolName.trim()
+        ? { toolName: o.toolName.trim() }
+        : {}),
+    };
+  }
+  if (kind === 'backend_send' && typeof o.sendPath === 'string' && o.sendPath.trim()) {
+    return {
+      kind: 'backend_send',
+      sendPath: o.sendPath.trim(),
+      ...(typeof o.toolName === 'string' && o.toolName.trim()
+        ? { toolName: o.toolName.trim() }
+        : {}),
+    };
+  }
+  if (kind === 'unbound') return { kind: 'unbound' };
+  return undefined;
+}
+
+export { listRegisteredSlotIds } from './dynamicSlotRegistry';

@@ -4,6 +4,11 @@
 
 import type { SlotSurfaceMapping } from '@domain/useCaseBundle/schema';
 import { mergeMappingsIntoLexicon, type ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
+import {
+  mergeSlotDefinitionsIntoLexicon,
+  type DynamicSlotBindingSource,
+  type DynamicSlotValueType,
+} from '@domain/useCaseBundle/dynamicSlotRegistry';
 import type {
   AgentBackendOutputSlotBindings,
   BackendOutputSlotBindingRow,
@@ -18,6 +23,13 @@ import { isSendPathAllowed } from './surfaceSendHints';
 import { normalizeProposalSlotId } from './resolveCanonicalSlotId';
 
 export interface CompileSlotMappingProposal {
+  slot_definitions?: Array<{
+    slotId: string;
+    label?: string;
+    valueType?: DynamicSlotValueType;
+    description?: string;
+    binding?: DynamicSlotBindingSource;
+  }>;
   lexicon_mappings: Array<{ surface: string; slot_id: string }>;
   backend_bindings: Array<{
     apiPath: string;
@@ -120,7 +132,23 @@ export function applyCompileSlotMappingProposal(
     seenSurfaces.add(surface);
     slotMappings.push({ surface, slot_id });
   }
-  const { lexicon: mergedLexicon } = mergeMappingsIntoLexicon(lexicon, slotMappings, {
+  let workingLexicon = lexicon;
+  if (proposal.slot_definitions?.length) {
+    workingLexicon = mergeSlotDefinitionsIntoLexicon(
+      workingLexicon,
+      proposal.slot_definitions.map((d) => ({
+        slotId: d.slotId,
+        label: d.label,
+        valueType: d.valueType,
+        description: d.description,
+        binding: d.binding,
+        proposedByAi: true,
+      })),
+      { overwriteProposedOnly: true }
+    );
+  }
+
+  const { lexicon: mergedLexicon } = mergeMappingsIntoLexicon(workingLexicon, slotMappings, {
     sourceTaskId: options.sourceTaskId,
     upgradeUnclassified: true,
     approveClassifiedProposals: true,

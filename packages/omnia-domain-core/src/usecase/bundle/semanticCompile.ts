@@ -18,15 +18,14 @@ import {
   type ProjectSlotLexicon,
   isValidSlotId,
   isUnclassifiedSlotId,
-  CORE_SLOT_IDS,
   UNCLASSIFIED_SLOT_ID,
   normalizeSlotId,
   normalizeSurface,
 } from './projectSlotLexicon';
 
-/** Opzioni compile catalogo: classificazione solo da lessico/IA, senza euristiche locali. */
+/** Opzioni compile catalogo: classificazione solo da lessico/IA (nessun vocabolario statico). */
 export type SemanticCompileOptions = {
-  /** Se false, non usa DOMAIN_SLOT_HINTS né autoTokenize (default true). */
+  /** @deprecated Ignorato: nessuna euristica dominio predefinita. */
   inferDomainHints?: boolean;
   /** Se true, usa anche voci lessico non ancora approvate (dopo proposta IA). */
   useLexiconClassifiedEntries?: boolean;
@@ -36,17 +35,6 @@ export const CATALOG_IA_FIRST_COMPILE_OPTIONS: SemanticCompileOptions = {
   inferDomainHints: false,
   useLexiconClassifiedEntries: true,
 };
-
-const DOMAIN_SLOT_HINTS: ReadonlyArray<{ pattern: RegExp; slot_id: string }> = [
-  { pattern: /^giorno_\d+$/i, slot_id: 'data' },
-  { pattern: /^ora_\d+$/i, slot_id: 'orario' },
-  { pattern: /^(cardiolog|ortoped|dermatolog|ocul|ginecolog|neurolog|urolog)/i, slot_id: 'prestazione' },
-  { pattern: /^(eco|rx|rmn|tac|visita)\b/i, slot_id: 'prestazione' },
-  { pattern: /^domani$/i, slot_id: 'datarelativa' },
-  { pattern: /^dopodomani$/i, slot_id: 'datarelativa' },
-  { pattern: /^fine\s+(del\s+)?mese$/i, slot_id: 'datarelativa' },
-  { pattern: /^inizio\s+(del\s+)?mese$/i, slot_id: 'datarelativa' },
-];
 
 function uniqueTokens(tokenizedText: string): string[] {
   const seen = new Set<string>();
@@ -76,14 +64,9 @@ function inferSlotIdForSurface(
     return UNCLASSIFIED_SLOT_ID;
   }
 
-  const trimmed = surface.trim();
-  for (const hint of DOMAIN_SLOT_HINTS) {
-    if (hint.pattern.test(trimmed)) return hint.slot_id;
-  }
-
-  const inferred = autoTokenizeAnnotated(`[${trimmed}]`);
+  const inferred = autoTokenizeAnnotated(`[${surface.trim()}]`);
   const base = normalizeSlotId(inferred.brackets[0]?.finalName ?? UNCLASSIFIED_SLOT_ID);
-  if ((CORE_SLOT_IDS as readonly string[]).includes(base)) return base;
+  if (isValidSlotId(base) && !isUnclassifiedSlotId(base)) return base;
   return UNCLASSIFIED_SLOT_ID;
 }
 

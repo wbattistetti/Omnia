@@ -11,6 +11,7 @@ import { useProjectData, useProjectDataUpdate } from '@context/ProjectDataContex
 import { SyncElevenLabsAgentDialog } from '../SyncElevenLabsAgentDialog';
 import { buildConvaiAgentSyncParams } from '@domain/convai/buildConvaiAgentSyncParams';
 import type { ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
+import { persistConvaiAgentSyncLinkOnTask } from '@domain/convai/persistConvaiAgentSyncLinkOnTask';
 import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTypes';
 import {
   buildExternalAgentPromptSections,
@@ -122,7 +123,13 @@ export function ConversationalPromptDialog({
   const [syncActionError, setSyncActionError] = React.useState<string | null>(null);
 
   const persistElevenLabsSyncResult = React.useCallback(
-    (result: ConvaiAgentSyncResult) => {
+    async (result: ConvaiAgentSyncResult) => {
+      const tid = String(agentTaskId ?? '').trim();
+      const pid = String(pdUpdate?.getCurrentProjectId() ?? projectData?.projectId ?? '').trim();
+      if (tid && result.link) {
+        await persistConvaiAgentSyncLinkOnTask(tid, result, pid || undefined);
+      }
+
       if (!projectData || !pdUpdate?.updateDataDirectly) return;
       const catalog = projectData.backendCatalog;
       const prev = catalog?.manualEntries ?? [];
@@ -146,7 +153,7 @@ export function ConversationalPromptDialog({
         },
       });
     },
-    [pdUpdate, projectData]
+    [agentTaskId, pdUpdate, projectData]
   );
 
   const convaiSyncParams = React.useMemo(

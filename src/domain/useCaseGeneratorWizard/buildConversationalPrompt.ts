@@ -44,14 +44,15 @@ import {
 } from './agentStartPrompt';
 import { buildStartUseCaseRuleSection } from './startUseCase';
 import { buildBackendCallDebugPromptSection } from './backendCallDebugPrompt';
+import { buildSlotLexiconGlossaryPromptSection } from '@domain/useCaseBundle/dynamicSlotRegistry';
 
 /**
  * Opzioni di build del prompt finale. `includeLog`:
  *  - inietta nel JSON di ogni use case il campo `log: "USECASE: \"<NOME>\""` (vedi
  *    {@link projectAllUseCasesToConversationalJson});
- *  - antepone in testa al blocco "Catalogo use case" un'istruzione testuale che spiega
- *    al motore esterno come gestire il caso "input non riconosciuto" — classificarlo,
- *    inventare un titolo breve, restituire `USECASE: "NUOVO_<TITOLO>"` come trace.
+ *  - antepone in testa al blocco "Catalogo use case" un'istruzione testuale di logging
+ *    (marker `log` per UC riconosciuti; UKS se nessun template applicabile — vedi
+ *    {@link PROMPT_TEMPLATE_ONLY_UKS_IT}).
  *
  * Default `false` (back-compat): i task gi\u00e0 pubblicati continuano a generare lo stesso
  * prompt di prima finch\u00e9 il designer non attiva il toggle "Logga Use Case" dal menu Upload.
@@ -79,21 +80,53 @@ export interface BuildConversationalPromptOptions {
 }
 
 /**
- * Istruzione testuale "non riconosciuto" iniettata in testa al blocco catalogo quando
- * `includeLog` è `true`. Tenuta come template costante, in italiano, coerente per stile
- * e tono con {@link PROMPT_HEADER_IT} (lo stesso motore esterno legge entrambi).
- *
- * Formato del trace nuovo intenzionalmente diverso dallo standard `USECASE: "<N> — <NOME>"`:
- * il prefisso `NUOVO_` permette al designer (che vede i log runtime) di riconoscere a
- * colpo d'occhio gli use case "non in catalogo" da promuovere in design-time. Tutto in
- * MAIUSCOLO e il nome tra virgolette doppie, allineato al formato del campo `log` nel
- * JSON ({@link buildUseCaseLogValue}).
+ * Regola vincolante Template-Only + UKS: ogni turno deve usare un solo template del
+ * catalogo oppure dichiarare UKS senza testo libero.
+ */
+const PROMPT_TEMPLATE_ONLY_UKS_IT = `Regola vincolante: Template-Only + UKS
+Obbligatoria per ogni turno
+
+Output vincolato
+Ogni turno deve essere esattamente una frase del catalogo (\`tokenizedExample\` o equivalente DSL), con sostituzione dei soli token \`[ … ]\`.
+
+Vietato testo libero.
+
+Vietato modificare o aggiungere parole fuori dal template.
+
+Fallback UKS
+Se non esiste alcun template applicabile:
+
+Non inventare frasi.
+
+Rispondere solo con \`USECASE: "UKS"\`.
+
+Marker USECASE
+
+Deve apparire solo in fondo alla frase (o da solo nel caso UKS).
+
+Mai dentro il corpo del testo.
+
+Esempi negativi (da non produrre)
+
+❌ «Grazie per la conferma. Procedo a cercare la disponibilità… USECASE:6»
+
+❌ «Ho controllato, il dottor Lorenzi è disponibile… USECASE:17» (non da template).
+
+Esempi positivi (corretti)
+
+✅ «Per [prestazione], preferisce prima visita o visita di controllo?» seguito dal campo \`log\` dell'use case (es. \`USECASE: "6 — TIPOLOGIA VISITA"\`).
+
+✅ \`USECASE: "UKS"\` (quando non c'è template applicabile).`;
+
+/**
+ * Istruzione testuale di logging iniettata in testa al blocco catalogo quando
+ * `includeLog` è `true`. Coerente con {@link PROMPT_TEMPLATE_ONLY_UKS_IT}.
  */
 const PROMPT_LOG_INSTRUCTION_IT = `Logging use case
-Per ogni risposta, alla fine del testo restituisci anche il marker dello use case applicato:
-- Se hai riconosciuto uno dei casi del catalogo qui sotto, copia letteralmente il valore del campo \`log\` di quello use case (formato: \`USECASE: "<NUMERO> — <NOME>"\`, es. \`USECASE: "3 — SALUTO CLIENTE"\`; numero e nome in MAIUSCOLO).
-- Se NESSUN use case del catalogo si applica all'input dell'utente, classificalo tu: scegli un titolo breve in SNAKE_CASE MAIUSCOLO che descriva l'intento, e termina la risposta con \`USECASE: "NUOVO_<TITOLO>"\` (esempio: \`USECASE: "NUOVO_RICHIESTA_RIMBORSO"\`).
-- Il marker va sempre alla fine, su nuova riga, senza altre parole prima o dopo.`;
+Per ogni risposta restituisci il marker dello use case applicato, rispettando la Regola Template-Only + UKS:
+- Se hai riconosciuto uno dei casi del catalogo qui sotto: una sola frase dal template compilato, poi copia letteralmente il valore del campo \`log\` di quello use case (formato: \`USECASE: "<NUMERO> — <NOME>"\`, es. \`USECASE: "3 — SALUTO CLIENTE"\`; numero e nome in MAIUSCOLO).
+- Se NESSUN template del catalogo è applicabile: non inventare frasi né trace \`NUOVO_*\`; rispondi solo con \`USECASE: "UKS"\`.
+- Il marker va sempre in fondo (preferibilmente su nuova riga). Mai nel corpo del testo.`;
 
 /**
  * Sezione testuale iniziale del prompt: istruzioni operative per il motore esterno.
@@ -104,17 +137,15 @@ Per ogni risposta, alla fine del testo restituisci anche il marker dello use cas
  */
 function buildUksInstruction(agentBehavior: AgentBehaviorMode): string {
   const base = `Use Case non riconosciuto (UKS)
-Se NESSUN use case del catalogo si applica all'input, NON forzare un mapping. Termina la risposta con \`USECASE: "UKS"\` su nuova riga.`;
+Se NESSUN template del catalogo è applicabile al turno, NON forzare un mapping su un use case numerato.
+Rispetta la Regola Template-Only + UKS: rispondi esclusivamente con \`USECASE: "UKS"\` (nessun altro testo).`;
   switch (agentBehavior) {
     case 'A':
-      return `${base}
-Comportamento A: rispondi in modo colloquiale libero (fuori dai template del catalogo), poi il marker UKS.`;
     case 'B':
-      return `${base}
-Comportamento B: rispondi ESATTAMENTE «Non ho capito, può ripetere?» e il marker UKS.`;
+      return base;
     case 'C':
       return `${base}
-Comportamento C: al primo tentativo fallito rispondi «Non ho capito, può ripetere?»; al secondo tentativo fallito di seguito comunica che passerai a un operatore umano, poi UKS.`;
+Comportamento C: tieni traccia internamente dei turni UKS consecutivi; dopo due UKS di seguito segnala in design-time che serve un nuovo use case o passaggio operatore — senza aggiungere testo libero in risposta.`;
     default:
       return base;
   }
@@ -133,9 +164,11 @@ function buildPromptHeaderIt(catalogFormat: ConversationalCatalogFormat): string
   return `Ruolo
 Sei l'agente virtuale di un servizio fissato dal progettista. Devi parlare e rispondere ESCLUSIVAMENTE come definito dal catalogo use case più sotto.
 
+${PROMPT_TEMPLATE_ONLY_UKS_IT}
+
 Regole obbligatorie
 1. Per ogni interazione, scegli un solo use case tra quelli applicabili (il più adatto al turno); usa una sola variante — ${templateHint}; ${variantHint}.
-2. Nel catalogo NON inventare frasi: sostituisci SOLO i token tra \`[…]\`. Fuori catalogo (UKS) vale la sezione UKS sotto.
+2. Nel catalogo NON inventare frasi: sostituisci SOLO i token tra \`[…]\`. Fuori catalogo: solo UKS come in «Template-Only + UKS» sopra.
 3. I token tra parentesi quadre vanno sostituiti con valori coerenti col contesto; per token di stile \`«…»\` usa \`tokens_stile\` / blocco STYLE se presente.
 4. NON lasciare parentesi quadre visibili nella risposta finale.
 5. Non cambiare le stringhe fuori dai token: copia letterale il testo fisso del template.
@@ -212,10 +245,13 @@ export function buildConversationalPrompt(
   const backendDebugSection = buildBackendCallDebugPromptSection(
     options.includeBackendLog === true
   );
+  const slotGlossarySection =
+    lexicon != null ? buildSlotLexiconGlossaryPromptSection(lexicon) : '';
   const bodyParts = [
     startUseCaseSection.trim(),
     startAgentSection.trim(),
     backendDebugSection.trim(),
+    slotGlossarySection.trim(),
     catalogSection.trim(),
     rulesSection.trim(),
   ].filter(Boolean);

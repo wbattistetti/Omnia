@@ -16,7 +16,6 @@ import {
 } from '@domain/aiAgentUseCase/useCaseResponseTasks';
 import { isMessageLikeEscalationTask } from '@responseEditor/utils/escalationHelpers';
 import { ensureUseCasePhrases, syncDialogueFromPrimaryPhrase } from '@domain/useCaseBundle/migrateUseCase';
-import { syncPrimaryPhraseNaturalFromAssistantTurn } from '@domain/useCaseBundle/phraseVariantHelpers';
 import {
   getPrimaryPhraseStyleTokens,
   patchStyleTokenVariants,
@@ -41,6 +40,14 @@ import type { PatchUseCaseResponseTasksFn } from './usePatchUseCaseResponseTasks
 import { PrimaryAgentMessageField } from './primaryAgentMessage';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
+import {
+  patchPrimaryPhraseVariantTokenizedText,
+  patchPrimaryPhraseSemanticSlotAssignment,
+  syncPrimaryPhraseNaturalFromAssistantTurn,
+} from '@domain/useCaseBundle/phraseVariantHelpers';
+import { resolveNaturalSurfaceAtTokenIndex } from '@domain/useCaseBundle/semanticTokenText';
+import { variantNaturalText } from '@domain/useCaseBundle/semanticCompile';
+import { useOptionalAIAgentEditorDock } from './AIAgentEditorDockContext';
 import { useUseCaseWizardListToolbarOptional } from './useCaseGeneratorWizard/UseCaseWizardListToolbarContext';
 import {
   applyUseCaseValidatedOnMessageCommit,
@@ -190,6 +197,7 @@ export function UseCaseResponseEditor({
   const hasOnlyMessage = tasks.length === 1 && messageTasks.length === 1 && actionTasks.length === 0;
 
   const listToolbarCtx = useUseCaseWizardListToolbarOptional();
+  const dock = useOptionalAIAgentEditorDock();
 
   const actionsDropIdleLabel = React.useMemo(
     () => (
@@ -212,10 +220,65 @@ export function UseCaseResponseEditor({
     [listToolbarCtx]
   );
 
-  const tokenized =
-    showTokenizedAgentMessage && tokenizedByUseCaseId
-      ? tokenizedByUseCaseId[useCase.id] ?? ''
-      : '';
+  const semanticLayerText = (tokenizedByUseCaseId?.[useCase.id] ?? '').trim();
+
+  const primaryNaturalText = React.useMemo(() => {
+    const base = ensureUseCasePhrases(useCase);
+    const phrase = base.phrases?.[0];
+    if (!phrase) return '';
+    const variant =
+      phrase.variants.find((v) => v.variantId === 'default') ?? phrase.variants[0];
+    return variant ? variantNaturalText(phrase, variant) : phrase.naturalText;
+  }, [useCase]);
+
+  const onSemanticTextChange = React.useCallback(
+    (next: string, mode: 'live' | 'commit') => {
+      if (mode === 'live') return;
+      if (busy) return;
+      onPatchUseCase((uc) => {
+        if (uc.id !== useCase.id) return uc;
+        return patchPrimaryPhraseVariantTokenizedText(uc, next);
+      });
+    },
+    [busy, onPatchUseCase, useCase.id]
+  );
+
+  const onSemanticSlotCommit = React.useCallback(
+    (oldToken: string, payload: { slotId: string; description: string }) => {
+      if (busy) return;
+      const current = semanticLayerText;
+      onPatchUseCase((uc) => {
+        if (uc.id !== useCase.id) return uc;
+        return patchPrimaryPhraseSemanticSlotAssignment(uc, {
+          tokenizedText: current,
+          oldToken,
+          newSlotId: payload.slotId,
+        });
+      });
+      const surface = resolveNaturalSurfaceAtTokenIndex(
+        primaryNaturalText,
+        current,
+        oldToken
+      );
+      if (surface) {
+        dock?.assignDesignerSurfaceSlotMapping?.(
+          surface,
+          payload.slotId,
+          payload.description
+        );
+      } else {
+        dock?.upsertDesignerSlotRegistry?.(payload.slotId, payload.description);
+      }
+    },
+    [
+      busy,
+      dock,
+      onPatchUseCase,
+      primaryNaturalText,
+      semanticLayerText,
+      useCase.id,
+    ]
+  );
 
   return (
     <div
@@ -244,7 +307,12 @@ export function UseCaseResponseEditor({
             busy={busy}
             wizardCompact
             searchSeed={searchSeed}
-            tokenizedDisplayText={tokenized.trim() ? tokenized : undefined}
+            semanticDisplayText={semanticLayerText || undefined}
+            onSemanticTextChange={
+              semanticLayerText ? onSemanticTextChange : undefined
+            }
+            projectSlotLexicon={dock?.projectSlotLexicon}
+            onSemanticSlotCommit={semanticLayerText ? onSemanticSlotCommit : undefined}
             assistantVote={useCase.designer_agent_message_vote}
             onAssistantVote={onAgentMessageVote}
             parametricEnabled={parametricEnabled}

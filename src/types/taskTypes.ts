@@ -490,6 +490,11 @@ export interface Task {
   /** JSON string: full {@link IAAgentConfig} (`types/iaAgentRuntimeSetup`) override for runtime motors (per task). */
   agentIaRuntimeOverrideJson?: string;
   /**
+   * Collegamento persistito task ↔ agente ConvAI ElevenLabs + mapping documenti KB remoti.
+   * @see `AgentElevenLabsConvaiLink` in `@domain/convai/agentElevenLabsConvaiLink`.
+   */
+  agentElevenLabsConvaiLinkJson?: string;
+  /**
    * Binding backend RECEIVE → slot semantico use case (`apiPath` → `slotId` → `fillFrom` in JSON deploy).
    * @see `AgentBackendOutputSlotBindings` in `@domain/backendOutputSlotBinding/types`.
    */

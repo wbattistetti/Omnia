@@ -195,10 +195,10 @@ export function compileUseCaseConversationalText(
     (typeof variant.naturalText === 'string' && variant.naturalText.trim()) ||
     phrase.naturalText.trim();
   if (!naturalText) return null;
-  const snap =
-    variant.compiled?.status === 'fresh'
-      ? variant.compiled
-      : compilePhraseVariant(phrase, variant, lexicon);
+  const designerCompiled = variant.compiled?.tokenizedText?.trim()
+    ? variant.compiled
+    : null;
+  const snap = designerCompiled ?? compilePhraseVariant(phrase, variant, lexicon);
   const tokenizedText = snap.tokenizedText.trim();
   if (!tokenizedText) return null;
   const warnings = buildCompilationWarnings(naturalText, []);

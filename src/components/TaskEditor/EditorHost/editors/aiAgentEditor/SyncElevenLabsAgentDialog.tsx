@@ -6,12 +6,18 @@ import React from 'react';
 import { Bot, Loader2, RefreshCw } from 'lucide-react';
 import Modal from '@components/Modal';
 import type { ConvaiAgentSyncParams, ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
+import { persistConvaiAgentSyncLinkOnTask } from '@domain/convai/persistConvaiAgentSyncLinkOnTask';
+import {
+  parseAgentElevenLabsConvaiLinkJson,
+  resolveLinkedConvaiAgentId,
+} from '@domain/convai/agentElevenLabsConvaiLink';
 import { syncConvaiAgentFromOmnia } from '@services/syncConvaiAgentFromOmnia';
 import { collectConvaiWebhookTunnelReadinessForSync } from '@utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
 import { devTunnelMapHasAnyBase } from '@domain/devTunnel/devTunnelCompileBridge';
 import { deleteConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import { listConvaiAgentsForWorkspace } from '@workspaces/elevenlabs/api/convaiAgentApi';
 import { taskRepository } from '@services/TaskRepository';
+import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 import type { Task } from '@types/taskTypes';
 import type { IAAgentConfig, IAAgentPlatform } from 'types/iaAgentRuntimeSetup';
 import { applyIaPlatformToTaskConfig } from '@utils/iaAgentRuntime/applyIaPlatformToTaskConfig';
@@ -105,6 +111,16 @@ export function SyncElevenLabsAgentDialog({
 
   const syncButtonLabel = buildSyncActionLabel(selection, useNewAgent, newAgentName);
 
+  const linkedAgentHint = React.useMemo(() => {
+    const task = syncParams?.agentTask;
+    if (!task) return null;
+    const link = parseAgentElevenLabsConvaiLinkJson(task.agentElevenLabsConvaiLinkJson);
+    const name = link?.agentName?.trim();
+    const id = link?.agentId?.trim();
+    if (!id) return null;
+    return name ? `${name} (${id})` : id;
+  }, [syncParams?.agentTask]);
+
   const loadWorkflowForAgent = React.useCallback(async (agentId: string, name: string) => {
     setTreeEntries((prev) => ({
       ...prev,
@@ -153,7 +169,26 @@ export function SyncElevenLabsAgentDialog({
       const page = await listConvaiAgentsForWorkspace({ pageSize: 100 });
       setAgents(page.agents);
       setTreeEntries({});
-      if (page.agents.length === 1) {
+
+      const task = syncParams?.agentTask;
+      const taskId = String(task?.id ?? '').trim();
+      const link = task
+        ? parseAgentElevenLabsConvaiLinkJson(task.agentElevenLabsConvaiLinkJson)
+        : null;
+      const session = taskId ? getConvaiSessionBinding(taskId) : undefined;
+      const preferredId = resolveLinkedConvaiAgentId(link, session?.agentId);
+      const preferredAgent = preferredId
+        ? page.agents.find((a) => a.agentId === preferredId)
+        : undefined;
+
+      if (preferredAgent) {
+        const label =
+          link?.agentName?.trim() ||
+          preferredAgent.name?.trim() ||
+          preferredAgent.agentId;
+        setSelection({ scope: 'root', agentId: preferredAgent.agentId, displayName: label });
+        void loadWorkflowForAgent(preferredAgent.agentId, preferredAgent.name);
+      } else if (page.agents.length === 1) {
         const a = page.agents[0];
         const label = a.name?.trim() || a.agentId;
         setSelection({ scope: 'root', agentId: a.agentId, displayName: label });
@@ -168,7 +203,7 @@ export function SyncElevenLabsAgentDialog({
     } finally {
       setLoadingAgents(false);
     }
-  }, [loadWorkflowForAgent]);
+  }, [loadWorkflowForAgent, syncParams?.agentTask]);
 
   const wasOpenRef = React.useRef(false);
   React.useEffect(() => {
@@ -257,9 +292,12 @@ export function SyncElevenLabsAgentDialog({
     try {
       const trimmedNew = newAgentName.trim();
       const agentId = selection?.agentId ?? '';
+      const agentDisplayName =
+        trimmedNew || selection?.displayName?.trim() || selection?.agentId || '';
       const out = await syncConvaiAgentFromOmnia({
         ...syncParamsForRun,
         useDevTunnelForWebhook,
+        agentDisplayName,
         ...(trimmedNew ? { newAgentName: trimmedNew } : { agentId }),
         ...(selection?.scope === 'workflow'
           ? {
@@ -274,6 +312,16 @@ export function SyncElevenLabsAgentDialog({
           setCompileErrors(out.failure.compileErrors);
         }
         return;
+      }
+      const tid = String(syncParamsForRun.agentTask.id ?? '').trim();
+      const pid = String(syncParamsForRun.projectId ?? '').trim();
+      if (tid) {
+        const persisted = await persistConvaiAgentSyncLinkOnTask(tid, out.result, pid || undefined);
+        if (!persisted.dbOk && persisted.dbError) {
+          setError(
+            `Sync completata ma collegamento non salvato su DB: ${persisted.dbError}. Salva il progetto manualmente.`
+          );
+        }
       }
       onSynced?.(out.result);
       onClose();
@@ -353,6 +401,12 @@ export function SyncElevenLabsAgentDialog({
           <p className="text-[11px] text-slate-500">
             Runtime IA:{' '}
             <span className="text-violet-200">{AGENT_PLATFORM_DISPLAY_LABEL.elevenlabs}</span>
+            {linkedAgentHint ? (
+              <>
+                {' '}
+                · Collegato: <span className="text-emerald-300/90">{linkedAgentHint}</span>
+              </>
+            ) : null}
           </p>
         ) : null}
 

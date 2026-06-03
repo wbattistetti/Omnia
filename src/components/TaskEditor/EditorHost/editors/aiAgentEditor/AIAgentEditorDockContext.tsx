@@ -403,6 +403,8 @@ export interface AIAgentEditorDockContextValue {
   agentConversationalRulesJson: string;
   /** Compila catalogo; `true` se slot mapping e binding backend (se collegati) sono validi. */
   compileUseCasePhrasesForCatalog: () => Promise<boolean>;
+  /** Reset completo mapping + dizionario slot, poi ricompila da zero. */
+  rebuildSlotMappingFromScratch: () => Promise<boolean>;
   compilePhrasesBusy: boolean;
   compileMappingBanner: string | null;
   registerOpenSlotMappingOnCompileFail: (open: () => void) => void;
@@ -415,6 +417,14 @@ export interface AIAgentEditorDockContextValue {
   approveLexiconSurface: (surface: string) => void;
   revokeLexiconSurface: (surface: string) => void;
   updateLexiconSlotId: (surface: string, slotId: string) => void;
+  /** Aggiorna descrizione slot nel registro (prompt runtime / glossario). */
+  upsertDesignerSlotRegistry: (slotId: string, description: string) => void;
+  /** Approva mapping surface leggibile → slot_id (layer semantico messaggio UC). */
+  assignDesignerSurfaceSlotMapping: (
+    surface: string,
+    slotId: string,
+    description: string
+  ) => void;
   /** Aggiorna hint SEND (path OpenAPI leaf) per una surface. */
   updateSurfaceSendHint: (
     surface: string,

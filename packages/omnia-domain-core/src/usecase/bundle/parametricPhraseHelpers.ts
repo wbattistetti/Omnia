@@ -11,15 +11,28 @@ import type {
   AIAgentPhraseParametricRow,
 } from './schema';
 import { ensureUseCasePhrases } from './migrateUseCase';
-import { CORE_SLOT_IDS } from './projectSlotLexicon';
+import {
+  listRegisteredSlotIds,
+  type ProjectSlotLexicon,
+} from './projectSlotLexicon';
 import { variantNaturalText } from './semanticCompile';
 
-/** Opzioni UI / dropdown: parametri catalogo slot core. */
-export const PARAMETRIC_CATALOG_DIMENSIONS: ReadonlyArray<{ key: string; label: string }> =
-  CORE_SLOT_IDS.map((k) => ({
-    key: k,
-    label: k.charAt(0).toUpperCase() + k.slice(1).replace(/([A-Z])/g, ' $1'),
-  }));
+/** Opzioni UI parametriche dal dizionario slot dinamico del progetto. */
+export function parametricCatalogDimensionsFromLexicon(
+  lexicon: ProjectSlotLexicon
+): ReadonlyArray<{ key: string; label: string }> {
+  return listRegisteredSlotIds(lexicon).map((k) => {
+    const reg = lexicon.slotRegistry?.[k];
+    const label = reg?.label?.trim() || k.replace(/_/g, ' ');
+    return {
+      key: k,
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+    };
+  });
+}
+
+/** @deprecated Usare {@link parametricCatalogDimensionsFromLexicon}. */
+export const PARAMETRIC_CATALOG_DIMENSIONS: ReadonlyArray<{ key: string; label: string }> = [];
 
 function newId(prefix: string): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -145,8 +158,7 @@ export function addParametricCatalogDimension(uc: AIAgentUseCase, catalogKey: st
     return uc;
   }
 
-  const label =
-    PARAMETRIC_CATALOG_DIMENSIONS.find((x) => x.key === catalogKey)?.label ?? catalogKey;
+  const label = catalogKey.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   const dim: AIAgentPhraseParametricDimension = {
     dimensionId: newId('dim'),
     kind: 'catalog',
