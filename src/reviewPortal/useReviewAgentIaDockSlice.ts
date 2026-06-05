@@ -42,6 +42,8 @@ export type ReviewAgentIaDockSlice = Pick<
   | 'dismissTaskTextReviewOffer'
   | 'clearTaskTextReviewOfferDismissed'
   | 'isTaskTextReviewOfferDismissed'
+  | 'notifyTaskTextManualEdit'
+  | 'hasTaskTextManualEdit'
   | 'buildCallMeta'
   | 'onTaskTextReviewError'
   | 'useCaseComposerBusy'
@@ -181,6 +183,12 @@ export function useReviewAgentIaDockSlice(
     (fieldId: AgentTaskTextFieldId) => Boolean(taskTextReviewDismissed[fieldId]),
     [taskTextReviewDismissed]
   );
+
+  const notifyTaskTextManualEdit = React.useCallback((_fieldId: AgentTaskTextFieldId) => {
+    /* review portal: observation review non attivo */
+  }, []);
+
+  const hasTaskTextManualEdit = React.useCallback((_fieldId: AgentTaskTextFieldId) => false, []);
 
   const onTaskTextReviewError = React.useCallback(
     (message: string | null) => {
@@ -482,6 +490,8 @@ export function useReviewAgentIaDockSlice(
     dismissTaskTextReviewOffer,
     clearTaskTextReviewOfferDismissed,
     isTaskTextReviewOfferDismissed,
+    notifyTaskTextManualEdit,
+    hasTaskTextManualEdit,
     buildCallMeta,
     onTaskTextReviewError,
     useCaseComposerBusy,

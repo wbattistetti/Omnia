@@ -306,6 +306,26 @@ function mountConvaiAgentsProxyRoutes(app) {
     }
   });
 
+  app.delete('/elevenlabs/tools/:toolId', async (req, res) => {
+    const id = String(req.params.toolId || '').trim();
+    if (!id) return sendJson(res, 400, { error: 'toolId required' });
+    try {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        return sendJson(res, 503, { error: 'ELEVENLABS_API_KEY is not configured.' });
+      }
+      const force = req.query.force === 'true' || req.query.force === '1';
+      const q = force ? '?force=true' : '';
+      const { status, body } = await proxyToElevenLabs(
+        'DELETE',
+        `/convai/tools/${encodeURIComponent(id)}${q}`
+      );
+      res.status(status).type('application/json; charset=utf-8').send(body);
+    } catch (err) {
+      sendFatal(res, 'deleteTool', err);
+    }
+  });
+
   app.get('/elevenlabs/knowledge-base', async (req, res) => {
     try {
       const apiKey = getApiKey();

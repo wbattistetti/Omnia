@@ -147,12 +147,16 @@ export function useCaseHeaderShellClass(active: boolean): string {
  * Solo voto verde (`up`): «spento» operativo. Rosso e da rivedere restano leggibili
  * (il rosso già segnala scarto; l'arancione richiede ancora review).
  */
+/**
+ * Attenuazione titolo quando il use case è escluso (checkbox off): mantiene la famiglia
+ * colore del voto validazione (ambra/arancione/verde/rosso) ma smorzata.
+ */
 export function useCaseHeaderExcludedDimClass(
-  labelVote: 'up' | 'down' | 'review' | undefined,
+  _labelVote: 'up' | 'down' | 'review' | undefined,
   included: boolean
 ): string {
-  if (included || labelVote !== 'up') return '';
-  return ' opacity-[0.32] saturate-[0.45]';
+  if (included) return '';
+  return ' opacity-[0.42] saturate-[0.55]';
 }
 
 /**

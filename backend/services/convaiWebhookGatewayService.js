@@ -16,7 +16,11 @@ function isRecord(x) {
 function readBackendEndpoint(task) {
   const ep = task?.endpoint;
   const url = ep && typeof ep.url === 'string' ? ep.url.trim() : '';
-  const method = String(ep?.method ?? 'POST').toUpperCase();
+  let method = String(ep?.method ?? 'POST').toUpperCase();
+  const urlLower = url.toLowerCase();
+  if (urlLower.includes('bookfromagenda') || urlLower.includes('next-window')) {
+    method = 'POST';
+  }
   const headers = {};
   if (ep?.headers && typeof ep.headers === 'object') {
     for (const [k, v] of Object.entries(ep.headers)) {

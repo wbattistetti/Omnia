@@ -45,6 +45,7 @@ export type ConvaiAgentSyncParams = ConvaiAgentSyncPromptOptions & {
 
 export type ConvaiAgentSyncToolResult = {
   backendTaskId: string;
+  /** Con tool inline: coincide con `backendTaskId` (nessun id workspace). */
   toolId: string;
   toolName: string;
 };
@@ -73,7 +74,6 @@ export type ConvaiAgentSyncFailurePhase =
   | 'create_agent'
   | 'build_prompt'
   | 'build_tool'
-  | 'create_tool'
   | 'upload_kb'
   | 'patch_agent';
 

@@ -53,10 +53,12 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     const api = tools[0].api_schema as Record<string, unknown>;
     expect(api.url).toBe('https://api.example.com/v1/slots');
     expect(api.method).toBe('POST');
+    expect(api).not.toHaveProperty('http_method');
     expect(api.request_headers).toEqual({ 'X-Test': '1' });
     expect(api.request_body_schema).toEqual(
       expect.objectContaining({
         type: 'object',
+        description: 'Lista slot.',
         properties: {
           n: expect.objectContaining({
             description: 'N',
@@ -95,6 +97,47 @@ describe('buildElevenLabsConvaiPromptTools', () => {
     expect(api.request_body_schema).toBeUndefined();
   });
 
+  it('coerces GET object query params to string for ElevenLabs 422 guard', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bk_get_obj'],
+      tools: [],
+    } as IAAgentConfig;
+
+    const tools = buildElevenLabsConvaiPromptTools(cfg, (id) =>
+      id === 'bk_get_obj'
+        ? backendTask({
+            id: 'bk_get_obj',
+            label: 'get_constraints',
+            backendToolDescription: 'Get with object query.',
+            endpoint: { url: 'https://api.example.com/x', method: 'GET', headers: {} },
+            inputs: [
+              { internalName: 'c', apiParam: 'constraints' },
+              { internalName: 'w', apiParam: 'windowDays' },
+            ],
+            backendCallSpecMeta: {
+              importState: 'ok',
+              openapiInputJsonSchemaByApiName: {
+                windowDays: { type: 'integer', minimum: 1 },
+                constraints: {
+                  type: 'object',
+                  properties: { weekdays: { type: 'array', items: { type: 'integer' } } },
+                },
+              },
+            },
+          })
+        : null
+    );
+
+    const qps = (tools[0].api_schema as Record<string, unknown>).query_params_schema as Record<
+      string,
+      unknown
+    >;
+    const props = qps.properties as Record<string, Record<string, unknown>>;
+    expect(props.constraints.type).toBe('string');
+    expect(props.windowDays.type).toBe('integer');
+  });
+
   it('maps GET query param properties to description + type (ElevenLabs query_params_schema)', () => {
     const cfg = {
       platform: 'elevenlabs',
@@ -125,6 +168,36 @@ describe('buildElevenLabsConvaiPromptTools', () => {
       })
     );
     expect(api.request_body_schema).toBeUndefined();
+  });
+
+  it('uses POST for bookfromagenda when endpoint.method is GET', () => {
+    const cfg = {
+      platform: 'elevenlabs',
+      convaiBackendToolTaskIds: ['bfa'],
+      tools: [],
+    } as IAAgentConfig;
+
+    const tools = buildElevenLabsConvaiPromptTools(cfg, (id) =>
+      id === 'bfa'
+        ? backendTask({
+            id: 'bfa',
+            label: 'book_agenda',
+            backendToolDescription: 'Slot da agenda.',
+            endpoint: {
+              url: 'http://localhost:3100/api/runtime/bookfromagenda',
+              method: 'GET',
+              headers: {},
+            },
+            inputs: [{ internalName: 'qc', apiParam: 'queryConstraints' }],
+          })
+        : null
+    );
+
+    expect(tools).toHaveLength(1);
+    const api = tools[0].api_schema as Record<string, unknown>;
+    expect(api.method).toBe('POST');
+    expect(api.request_body_schema).toBeDefined();
+    expect(api.query_params_schema).toBeUndefined();
   });
 
   it('merges BookFromAgenda v4.5 scope fields into request_body_schema for bookfromagenda URL', () => {

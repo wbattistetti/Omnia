@@ -19,6 +19,10 @@ function stubPersisted(overrides: Partial<PersistedKbDocument> = {}): PersistedK
     markdownSnippet: '',
     documentAnalysisMarkdown: '',
     agentAnalysisBaselineMarkdown: '',
+    documentRestructuredMarkdown: '',
+    agentRestructuredBaselineMarkdown: '',
+    documentRestructureNotesMarkdown: '',
+    agentRestructureNotesBaselineMarkdown: '',
     repositoryDocumentId: 'legacy-uuid',
     ...overrides,
   };

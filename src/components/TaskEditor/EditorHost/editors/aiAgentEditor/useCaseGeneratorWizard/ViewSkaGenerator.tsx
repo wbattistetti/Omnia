@@ -343,7 +343,7 @@ export function ViewSkaGenerator({
   const operationalOverlayMode: PromptsOperationalOverlayMode | null = showJsonRightPanel
     ? 'json'
     : showSlotMappingRightPanel
-      ? 'slotMapping'
+      ? 'dialogControl'
       : showActionsRightPanel
         ? 'actions'
         : null;

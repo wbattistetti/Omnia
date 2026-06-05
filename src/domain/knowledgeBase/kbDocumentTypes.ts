@@ -3,6 +3,7 @@
  */
 
 import type { KbExtractedVariable } from '@workspaces/elevenlabs/parseKbDocument';
+import type { KbRestructureClarificationQuestion } from './kbDocumentRestructureWorkflow';
 
 export { KB_DOCUMENT_ACCEPT } from './kbFileKinds';
 export {
@@ -46,6 +47,26 @@ export type StagedKbDocument = KbStagedFileBase & {
   /** Distillazione estrema LLM per runtime (cache; hash su input euristico). */
   documentAnalysisRuntimeDistillMarkdown?: string;
   documentAnalysisRuntimeDistillSourceHash?: string;
+  /** Vista canonica meno ambigua (tab Documento riformattato). */
+  documentRestructuredMarkdown: string;
+  /** Baseline IA per diff designer sul documento riformattato. */
+  agentRestructuredBaselineMarkdown: string;
+  /** Se true, runtime agente usa documentRestructuredMarkdown al posto del sorgente grezzo. */
+  documentRestructuredApprovedForRuntime?: boolean;
+  /** Note meta riformattazione (origine, ambiguità, …) — tab Analisi accordion. */
+  documentRestructureNotesMarkdown: string;
+  /** Baseline IA note riformattazione. */
+  agentRestructureNotesBaselineMarkdown: string;
+  /** Note designer per riga tabella riformattata (chiave = restructureRowKey). */
+  documentRestructureRowNotes?: Record<string, string>;
+  /** Domande IA su ambiguità strutturali + risposte designer. */
+  documentRestructureQuestions?: readonly KbRestructureClarificationQuestion[];
+  /** Osservazioni libere designer prima del refine con feedback. */
+  documentRestructureDesignerFeedback?: string;
+  /** Snapshot feedback applicato con l'ultimo «Aggiorna formattazione». */
+  documentRestructureFeedbackAppliedSnapshot?: string;
+  /** Istruzioni designer per colonne (inviate al refine IA). */
+  documentRestructureColumnInstructions?: Record<string, string>;
   /** Default `upload` per documenti caricati; note invalidazione scenario = `invalidated_use_case_note`. */
   kbDocumentKind?: KbDocumentKind;
   /** Use case collegato (note invalidazione scenario). */
@@ -90,6 +111,10 @@ export function emptyKbDocument(
     markdownSnippet: '',
     documentAnalysisMarkdown: '',
     agentAnalysisBaselineMarkdown: '',
+    documentRestructuredMarkdown: '',
+    agentRestructuredBaselineMarkdown: '',
+    documentRestructureNotesMarkdown: '',
+    agentRestructureNotesBaselineMarkdown: '',
   };
 }
 
@@ -97,6 +122,16 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
   const raw = p as PersistedKbDocument & {
     documentAnalysisMarkdown?: unknown;
     agentAnalysisBaselineMarkdown?: unknown;
+    documentRestructuredMarkdown?: unknown;
+    agentRestructuredBaselineMarkdown?: unknown;
+    documentRestructuredApprovedForRuntime?: unknown;
+    documentRestructureNotesMarkdown?: unknown;
+    agentRestructureNotesBaselineMarkdown?: unknown;
+    documentRestructureRowNotes?: unknown;
+    documentRestructureQuestions?: unknown;
+    documentRestructureDesignerFeedback?: unknown;
+    documentRestructureFeedbackAppliedSnapshot?: unknown;
+    documentRestructureColumnInstructions?: unknown;
   };
   return {
     ...p,
@@ -131,6 +166,64 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
       typeof raw.documentAnalysisRuntimeDistillSourceHash === 'string'
         ? raw.documentAnalysisRuntimeDistillSourceHash
         : undefined,
+    documentRestructuredMarkdown:
+      typeof raw.documentRestructuredMarkdown === 'string' ? raw.documentRestructuredMarkdown : '',
+    agentRestructuredBaselineMarkdown:
+      typeof raw.agentRestructuredBaselineMarkdown === 'string'
+        ? raw.agentRestructuredBaselineMarkdown
+        : '',
+    documentRestructuredApprovedForRuntime:
+      raw.documentRestructuredApprovedForRuntime === true ? true : undefined,
+    documentRestructureNotesMarkdown:
+      typeof raw.documentRestructureNotesMarkdown === 'string'
+        ? raw.documentRestructureNotesMarkdown
+        : '',
+    agentRestructureNotesBaselineMarkdown:
+      typeof raw.agentRestructureNotesBaselineMarkdown === 'string'
+        ? raw.agentRestructureNotesBaselineMarkdown
+        : '',
+    ...(raw.documentRestructureRowNotes &&
+    typeof raw.documentRestructureRowNotes === 'object' &&
+    !Array.isArray(raw.documentRestructureRowNotes)
+      ? {
+          documentRestructureRowNotes: Object.fromEntries(
+            Object.entries(raw.documentRestructureRowNotes).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[0] === 'string' &&
+                typeof entry[1] === 'string' &&
+                entry[1].trim().length > 0
+            )
+          ),
+        }
+      : {}),
+    ...(Array.isArray(raw.documentRestructureQuestions)
+      ? { documentRestructureQuestions: raw.documentRestructureQuestions }
+      : {}),
+    ...(typeof raw.documentRestructureDesignerFeedback === 'string' &&
+    raw.documentRestructureDesignerFeedback.trim()
+      ? { documentRestructureDesignerFeedback: raw.documentRestructureDesignerFeedback.trim() }
+      : {}),
+    ...(typeof raw.documentRestructureFeedbackAppliedSnapshot === 'string' &&
+    raw.documentRestructureFeedbackAppliedSnapshot.trim()
+      ? {
+          documentRestructureFeedbackAppliedSnapshot:
+            raw.documentRestructureFeedbackAppliedSnapshot.trim(),
+        }
+      : {}),
+    ...(raw.documentRestructureColumnInstructions &&
+    typeof raw.documentRestructureColumnInstructions === 'object' &&
+    !Array.isArray(raw.documentRestructureColumnInstructions)
+      ? {
+          documentRestructureColumnInstructions: Object.fromEntries(
+            Object.entries(raw.documentRestructureColumnInstructions).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[0] === 'string' &&
+                typeof entry[1] === 'string' &&
+                entry[1].trim().length > 0
+            )
+          ),
+        }
+      : {}),
     ...(raw.kbDocumentKind === 'invalidated_use_case_note'
       ? { kbDocumentKind: 'invalidated_use_case_note' as const }
       : {}),
@@ -159,6 +252,16 @@ export type KbDocumentPatch = Partial<
     | 'documentAnalysisSectionBaselines'
     | 'documentAnalysisRuntimeDistillMarkdown'
     | 'documentAnalysisRuntimeDistillSourceHash'
+    | 'documentRestructuredMarkdown'
+    | 'agentRestructuredBaselineMarkdown'
+    | 'documentRestructuredApprovedForRuntime'
+    | 'documentRestructureNotesMarkdown'
+    | 'agentRestructureNotesBaselineMarkdown'
+    | 'documentRestructureRowNotes'
+    | 'documentRestructureQuestions'
+    | 'documentRestructureDesignerFeedback'
+    | 'documentRestructureFeedbackAppliedSnapshot'
+    | 'documentRestructureColumnInstructions'
     | 'repositoryDocumentId'
     | 'parseStatus'
     | 'parseError'

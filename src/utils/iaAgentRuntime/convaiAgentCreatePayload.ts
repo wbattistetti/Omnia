@@ -12,10 +12,17 @@
 import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import type { Task } from '@types/taskTypes';
 import { rewriteCompilePayloadWithDevTunnel } from '@domain/devTunnel/devTunnelCompileBridge';
+import { sanitizeConvaiConversationConfigForApi } from '@domain/openApi/sanitizeConvaiWebhookToolForApi';
 import { resolveConvaiAgentLanguageForSync } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentOutputLanguage';
 import { resolveElevenLabsAgentPromptFromTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/resolveAiAgentPlatformRulesString';
 import { taskRepository } from '@services/TaskRepository';
+import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
+import {
+  buildElevenLabsStartPhaseAppend,
+  resolveStartUseCasePromptMeta,
+} from '@domain/useCaseGeneratorWizard/startUseCase';
 import { buildElevenLabsConvaiPromptTools } from './elevenLabsConvaiToolsPayload';
+import { resolveConvaiAgentFirstMessage } from './resolveConvaiAgentFirstMessage';
 
 /** Istruzioni aggiuntive ConvAI quando è presente un tool webhook BookFromAgenda (API v4.6). */
 const BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND = `BOOKFROMAGENDA (webhook POST …/bookfromagenda, contratto API v4.6):
@@ -214,6 +221,19 @@ export function conversationConfigFragmentFromIaAgentConfig(
     manualCatalogBackendTaskIds,
     options?.backendCatalog
   );
+  const task = options?.task;
+  const useCases = task ? parseAgentUseCasesJson(String(task.agentUseCasesJson ?? '')) : [];
+  const startMeta = resolveStartUseCasePromptMeta(
+    useCases,
+    String(task?.agentStartUseCaseId ?? '').trim() || undefined
+  );
+  const startPhaseAppend = buildElevenLabsStartPhaseAppend(startMeta, {
+    agentImmediateStart: task?.agentImmediateStart === true,
+  });
+  if (startPhaseAppend) {
+    promptText = `${promptText.trim()}\n\n${startPhaseAppend}`;
+  }
+
   if (elevenTools.length > 0 && fragmentUsesBookFromAgendaWebhook(elevenTools)) {
     promptText = `${promptText.trim()}\n\n${BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND}`;
   }
@@ -233,10 +253,13 @@ export function conversationConfigFragmentFromIaAgentConfig(
     (prompt as Record<string, unknown>).tools = elevenTools;
   }
 
-  const immediateStart = options?.task?.agentImmediateStart === true;
   const agent: Record<string, unknown> = {
-    /** Empty when «Avvio immediato»: orchestrator injects a synthetic user turn instead. */
-    first_message: immediateStart ? '' : CONVAI_DEFAULT_FIRST_MESSAGE,
+    first_message: resolveConvaiAgentFirstMessage({
+      agentImmediateStart: task?.agentImmediateStart === true,
+      startUseCaseId: task?.agentStartUseCaseId,
+      agentStartPromptJson: task?.agentStartPromptJson,
+      useCases,
+    }),
     language: lang,
     prompt,
   };
@@ -260,9 +283,10 @@ export function conversationConfigForConvaiApi(
   fragment: Record<string, unknown> | null
 ): Record<string, unknown> | null {
   if (!fragment) return null;
-  return rewriteCompilePayloadWithDevTunnel(
+  const tunneled = rewriteCompilePayloadWithDevTunnel(
     JSON.parse(JSON.stringify(fragment)) as Record<string, unknown>
   ) as Record<string, unknown>;
+  return sanitizeConvaiConversationConfigForApi(tunneled);
 }
 
 /**

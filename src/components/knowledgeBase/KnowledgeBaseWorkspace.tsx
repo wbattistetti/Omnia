@@ -1,5 +1,5 @@
 /**
- * KB workspace: lista documenti | tab host (Analisi del documento / Documento).
+ * KB workspace: lista documenti | tab host (Documento / Analisi / Documento riformattato).
  */
 
 import React from 'react';

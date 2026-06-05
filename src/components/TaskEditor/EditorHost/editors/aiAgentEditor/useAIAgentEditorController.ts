@@ -71,6 +71,7 @@ import {
   normalizeSlotId,
   normalizeSurface,
   pruneLexiconOrphans,
+  resolveSlotIdFromDraft,
 } from '@domain/useCaseBundle/projectSlotLexicon';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
 import { upsertDesignerSlotRegistryEntry } from '@domain/useCaseBundle/dynamicSlotRegistry';
@@ -111,6 +112,10 @@ import {
   stripAssistantTurnsFromUseCase,
   stripAssistantTurnsFromUseCases,
 } from '@domain/aiAgentUseCase/stripAssistantTurnsFromUseCases';
+import {
+  applySystemProposedUseCaseDefaults,
+  applySystemProposedUseCaseDefaultsBatch,
+} from '@domain/aiAgentUseCase/useCaseSystemProposedDefaults';
 import { remapExtendUseCaseIds } from '@domain/aiAgentUseCase/remapExtendUseCaseIds';
 import {
   USE_CASE_BUNDLE_MAX_TOTAL,
@@ -393,6 +398,10 @@ export function useAIAgentEditorController({
     return m;
   });
   const [taskTextReviewDismissed, setTaskTextReviewDismissed] = React.useState<
+    Partial<Record<AgentTaskTextFieldId, boolean>>
+  >({});
+  /** True dopo edit manuale utente su un campo (reset a sync baseline / finalize IA). */
+  const [taskTextManualEditByField, setTaskTextManualEditByField] = React.useState<
     Partial<Record<AgentTaskTextFieldId, boolean>>
   >({});
   const [logicalSteps, setLogicalSteps] = React.useState<AIAgentLogicalStep[]>([]);
@@ -698,13 +707,23 @@ export function useAIAgentEditorController({
     setDesignDescription(v);
   }, [markPromptFinalMisaligned]);
 
+  const notifyTaskTextManualEdit = React.useCallback((fieldId: AgentTaskTextFieldId) => {
+    setTaskTextManualEditByField((prev) => ({ ...prev, [fieldId]: true }));
+  }, []);
+
+  const hasTaskTextManualEdit = React.useCallback(
+    (fieldId: AgentTaskTextFieldId) => Boolean(taskTextManualEditByField[fieldId]),
+    [taskTextManualEditByField]
+  );
+
   const applyRevisionOps = React.useCallback(
     (sectionId: AgentStructuredSectionId, ops: readonly RevisionBatchOp[]) => {
       setDirty(true);
       markPromptFinalMisaligned('structuredSectionRevision');
       structuredRev.applyRevisionOps(sectionId, ops);
+      notifyTaskTextManualEdit(sectionId);
     },
-    [structuredRev, markPromptFinalMisaligned]
+    [structuredRev, markPromptFinalMisaligned, notifyTaskTextManualEdit]
   );
 
   const applyOtCommit = React.useCallback(
@@ -712,19 +731,24 @@ export function useAIAgentEditorController({
       setDirty(true);
       markPromptFinalMisaligned('structuredSectionOtCommit');
       structuredRev.applyOtCommit(sectionId, newOps);
+      notifyTaskTextManualEdit(sectionId);
     },
-    [structuredRev, markPromptFinalMisaligned]
+    [structuredRev, markPromptFinalMisaligned, notifyTaskTextManualEdit]
   );
 
   /** Reset observation-review baselines to current agent output (Create/Refine), not designer deltas. */
-  const syncTaskTextBaselinesFromAgentOutput = React.useCallback(() => {
-    const next: Record<string, string> = { designDescription: designDescription.trim() };
-    for (const id of AGENT_STRUCTURED_SECTION_IDS) {
-      next[id] = (structuredRev.effectiveBySection[id] ?? '').trim();
-    }
-    setTaskTextBaselines(next);
-    setTaskTextReviewDismissed({});
-  }, [designDescription, structuredRev.effectiveBySection]);
+  const syncTaskTextBaselinesFromAgentOutput = React.useCallback(
+    (sectionBases?: Partial<Record<AgentStructuredSectionId, string>>) => {
+      const next: Record<string, string> = { designDescription: designDescription.trim() };
+      for (const id of AGENT_STRUCTURED_SECTION_IDS) {
+        next[id] = (sectionBases?.[id] ?? structuredRev.effectiveBySection[id] ?? '').trim();
+      }
+      setTaskTextBaselines(next);
+      setTaskTextReviewDismissed({});
+      setTaskTextManualEditByField({});
+    },
+    [designDescription, structuredRev.effectiveBySection]
+  );
 
   const getTaskTextBaseline = React.useCallback(
     (fieldId: AgentTaskTextFieldId) => taskTextBaselines[fieldId] ?? '',
@@ -771,6 +795,12 @@ export function useAIAgentEditorController({
       }
       setTaskTextBaseline(fieldId, text);
       clearTaskTextReviewOfferDismissed(fieldId);
+      setTaskTextManualEditByField((prev) => {
+        if (!prev[fieldId]) return prev;
+        const next = { ...prev };
+        delete next[fieldId];
+        return next;
+      });
       setDirty(true);
     },
     [
@@ -792,8 +822,9 @@ export function useAIAgentEditorController({
       setDirty(true);
       markPromptFinalMisaligned('structuredSectionUndo');
       structuredRev.undoSection(sectionId);
+      notifyTaskTextManualEdit(sectionId);
     },
-    [structuredRev, markPromptFinalMisaligned]
+    [structuredRev, markPromptFinalMisaligned, notifyTaskTextManualEdit]
   );
 
   const redoSection = React.useCallback(
@@ -801,8 +832,9 @@ export function useAIAgentEditorController({
       setDirty(true);
       markPromptFinalMisaligned('structuredSectionRedo');
       structuredRev.redoSection(sectionId);
+      notifyTaskTextManualEdit(sectionId);
     },
-    [structuredRev, markPromptFinalMisaligned]
+    [structuredRev, markPromptFinalMisaligned, notifyTaskTextManualEdit]
   );
 
   const setUseCaseSiblingSortMode = React.useCallback((mode: UseCaseSiblingSortMode) => {
@@ -1460,7 +1492,8 @@ export function useAIAgentEditorController({
   const updateLexiconSlotId = React.useCallback(
     (surface: string, slotId: string) => {
       const key = surface.trim().toLowerCase();
-      const nextSlot = normalizeSlotId(slotId);
+      const nextSlot = resolveSlotIdFromDraft(slotId) ?? normalizeSlotId(slotId);
+      if (!isValidSlotId(nextSlot) || isUnclassifiedSlotId(nextSlot)) return;
       const classified = !isUnclassifiedSlotId(nextSlot);
       patchLexiconEntries((entries) =>
         entries.map((e) =>
@@ -1595,7 +1628,8 @@ export function useAIAgentEditorController({
       return p.slice(0, s) + token + p.slice(e);
     });
     setBackendPlaceholders((prev) => [...prev, { id, definitionId: trimmed }]);
-  }, [markPromptFinalMisaligned]);
+    notifyTaskTextManualEdit('designDescription');
+  }, [markPromptFinalMisaligned, notifyTaskTextManualEdit]);
 
   const loadFromRepository = React.useCallback(() => {
     if (!instanceId) return;
@@ -1620,6 +1654,7 @@ export function useAIAgentEditorController({
     }
     setTaskTextBaselines(baselines);
     setTaskTextReviewDismissed({});
+    setTaskTextManualEditByField({});
     setOutputVariableMappings(b.outputVariableMappings);
     setProposedFields(
       b.agentProposedFields.map((f) => ({
@@ -2188,7 +2223,7 @@ export function useAIAgentEditorController({
       setOutputVariableMappings((prev) => applied.mergeOutputMappings(prev));
       setHasAgentGeneration(true);
       setCommittedDesignDescription(designDescription);
-      syncTaskTextBaselinesFromAgentOutput();
+      syncTaskTextBaselinesFromAgentOutput(applied.sectionBases);
       if (refining) {
         const diff: Partial<Record<AgentStructuredSectionId, IaSectionDiffPair>> = {};
         for (const id of AGENT_STRUCTURED_SECTION_IDS) {
@@ -2346,11 +2381,15 @@ export function useAIAgentEditorController({
           extendFrom: { logicalSteps, useCases },
           callMeta: buildCallMeta(AI_CALL_PURPOSE.USE_CASE_GENERATE_MORE),
         });
-        let newOnes = normalizeUseCaseSiblingOrder(ucsNew, useCaseSiblingSortModeRef.current);
+        let newOnes = applySystemProposedUseCaseDefaultsBatch(
+          normalizeUseCaseSiblingOrder(ucsNew, useCaseSiblingSortModeRef.current)
+        );
         if (getDeferAgentMessages?.()) {
-          newOnes = normalizeUseCaseSiblingOrder(
-            stripAssistantTurnsFromUseCases(newOnes),
-            useCaseSiblingSortModeRef.current
+          newOnes = applySystemProposedUseCaseDefaultsBatch(
+            normalizeUseCaseSiblingOrder(
+              stripAssistantTurnsFromUseCases(newOnes),
+              useCaseSiblingSortModeRef.current
+            )
           );
         }
         newOnes = remapExtendUseCaseIds(newOnes);
@@ -2406,7 +2445,9 @@ export function useAIAgentEditorController({
       });
       const ls = initial.logicalSteps;
       setLogicalSteps(ls);
-      let accumulated = normalizeGeneratedUseCases(initial.useCases);
+      let accumulated = applySystemProposedUseCaseDefaultsBatch(
+        normalizeGeneratedUseCases(initial.useCases)
+      );
       setUseCases(accumulated);
       setUseCaseBundleGenerationCount(accumulated.length);
       setDirty(true);
@@ -2429,7 +2470,9 @@ export function useAIAgentEditorController({
           });
           coverageComplete = ext.coverageComplete === true;
           if (ext.useCases.length === 0) break;
-          const newOnes = normalizeGeneratedUseCases(remapExtendUseCaseIds(ext.useCases));
+          const newOnes = applySystemProposedUseCaseDefaultsBatch(
+            normalizeGeneratedUseCases(remapExtendUseCaseIds(ext.useCases))
+          );
           accumulated = normalizeUseCaseSiblingOrder(
             [...accumulated, ...newOnes],
             useCaseSiblingSortModeRef.current
@@ -3161,9 +3204,11 @@ export function useAIAgentEditorController({
           id: newUseCaseId,
           parent_id: parentId,
         };
-        const mergedForList = getDeferAgentMessages?.()
-          ? stripAssistantTurnsFromUseCase(mergedCreated)
-          : mergedCreated;
+        const mergedForList = applySystemProposedUseCaseDefaults(
+          getDeferAgentMessages?.()
+            ? stripAssistantTurnsFromUseCase(mergedCreated)
+            : mergedCreated
+        );
         setUseCases((prev) => {
           const mapped = prev.map((item) => (item.id === newUseCaseId ? mergedForList : item));
           return deferReorder
@@ -3402,6 +3447,8 @@ export function useAIAgentEditorController({
     dismissTaskTextReviewOffer,
     clearTaskTextReviewOfferDismissed,
     isTaskTextReviewOfferDismissed,
+    notifyTaskTextManualEdit,
+    hasTaskTextManualEdit,
     onTaskTextReviewError,
     agentPrompt,
     agentStructuredSectionsJson,

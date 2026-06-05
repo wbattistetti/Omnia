@@ -18,6 +18,7 @@ import {
   saveDevTunnelPortMapToStorage,
   setCompileUseDevTunnel,
 } from '@domain/devTunnel/devTunnelCompileBridge';
+import { mergeNgrokStatusIntoPortMap } from '@domain/devTunnel/ngrokTunnelMapSync';
 
 const LS_TOKEN = 'omnia.devTunnel.ngrokAuthtoken';
 const LS_ROWS = 'omnia.devTunnel.rows.v2';
@@ -96,16 +97,7 @@ function mergeRowsWithDiscoveredPorts(prev: TunnelRow[], discoveredPorts: number
 function mergeStatusIntoMap(
   tunnels: Record<string, { running?: boolean; publicUrl?: string | null }> | undefined
 ): Record<number, string> {
-  const map: Record<number, string> = {};
-  if (!tunnels) return map;
-  for (const [k, v] of Object.entries(tunnels)) {
-    const port = parseInt(k, 10);
-    const u = v?.publicUrl;
-    if (Number.isFinite(port) && typeof u === 'string' && u.trim()) {
-      map[port] = u.trim().replace(/\/$/, '');
-    }
-  }
-  return map;
+  return mergeNgrokStatusIntoPortMap(tunnels);
 }
 
 export function DevTunnelNgrokPanel(props: DevTunnelNgrokPanelProps = {}) {

@@ -111,7 +111,10 @@ function pickCreatedToolId(data: Record<string, unknown>): string {
   return '';
 }
 
-/** POST /elevenlabs/tools — crea tool ConvAI (webhook) con `tool_config` già nel formato ElevenLabs. */
+/**
+ * POST /elevenlabs/tools — crea tool nel workspace ConvAI.
+ * @deprecated Non usare dai flussi Omnia: i webhook vanno inline su `prompt.tools` dell’agente.
+ */
 export async function createConvaiTool(
   toolConfig: Record<string, unknown>
 ): Promise<string> {

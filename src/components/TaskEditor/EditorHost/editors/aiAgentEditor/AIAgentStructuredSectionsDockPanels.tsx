@@ -128,6 +128,8 @@ export function AgentSectionDockPanel(
               editorCtx.clearTaskTextReviewOfferDismissed(sectionId)
             }
             generating={editorCtx.generating}
+            hasAgentGeneration={editorCtx.hasAgentGeneration}
+            hasManualEdit={editorCtx.hasTaskTextManualEdit(sectionId)}
             onError={editorCtx.onTaskTextReviewError}
           >
             {({ reviewBlocksEdit }) => (

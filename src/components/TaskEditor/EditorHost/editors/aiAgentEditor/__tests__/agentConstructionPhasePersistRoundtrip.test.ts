@@ -70,6 +70,7 @@ describe('phase machine persist roundtrip', () => {
       ...baseState,
       agentConstructionPhase: 'edit',
       agentWizardCurrentStep: 4,
+      agentWizardStepOrderVersion: 4,
     });
     expect(patch.agentConstructionPhase).toBe('edit');
     const snapshot = buildTaskSnapshotFromRaw(patch);

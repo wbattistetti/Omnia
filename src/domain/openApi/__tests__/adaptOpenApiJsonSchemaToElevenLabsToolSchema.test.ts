@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   adaptOpenApiPropertiesToElevenLabs,
+  toElevenLabsQueryParamsSchema,
   toElevenLabsRequestBodySchema,
 } from '../adaptOpenApiJsonSchemaToElevenLabsToolSchema';
 
@@ -57,6 +58,24 @@ describe('adaptOpenApiJsonSchemaToElevenLabsToolSchema', () => {
     expect(body.required).toEqual(['windowDays']);
   });
 
+  it('imposta description radice su request_body_schema', () => {
+    const body = toElevenLabsRequestBodySchema(
+      { type: 'object', properties: { id: { type: 'string' } } },
+      { description: 'Crea prenotazione agenda.' }
+    );
+    expect(body.description).toBe('Crea prenotazione agenda.');
+    expect(body.type).toBe('object');
+  });
+
+  it('query_params_schema non include description radice (extra_forbidden API)', () => {
+    const qps = toElevenLabsQueryParamsSchema(
+      { type: 'object', properties: { id: { type: 'string' } } },
+      { description: 'Lista slot disponibili.' }
+    );
+    expect(qps).not.toHaveProperty('description');
+    expect(qps).toHaveProperty('properties');
+  });
+
   it('rimuove additionalProperties e adatta enum boolean', () => {
     const props = adaptOpenApiPropertiesToElevenLabs({
       forceRefresh: { type: 'boolean', enum: [true, false], description: 'Refresh' },
@@ -77,6 +96,32 @@ describe('adaptOpenApiJsonSchemaToElevenLabsToolSchema', () => {
     expect((qc.properties as Record<string, unknown>).label).toEqual(
       expect.objectContaining({ type: 'string', format: 'date' })
     );
+  });
+
+  it('query_params_schema coerces object/array properties to string (ConvAI EU)', () => {
+    const qps = toElevenLabsQueryParamsSchema({
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Id richiesta' },
+        windowDays: { type: 'integer', minimum: 1, maximum: 30 },
+        constraints: {
+          type: 'object',
+          description: 'Vincoli opzionali.',
+          properties: {
+            weekdays: { type: 'array', items: { type: 'integer' } },
+          },
+        },
+      },
+      required: ['id'],
+    });
+    const props = qps.properties as Record<string, Record<string, unknown>>;
+    expect(props.id).toEqual(expect.objectContaining({ type: 'string' }));
+    expect(props.windowDays).toEqual(expect.objectContaining({ type: 'integer' }));
+    expect(props.constraints).toEqual({
+      type: 'string',
+      description: 'Vincoli opzionali. (passa come stringa JSON)',
+    });
+    expect(qps).not.toHaveProperty('type');
   });
 
   it('merge allOf in property schema', () => {

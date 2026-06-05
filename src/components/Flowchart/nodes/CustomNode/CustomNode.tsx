@@ -986,8 +986,9 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
   return (
     <>
       {/* Toolbar sopra il nodo - Usa NodeToolbar nativo di React Flow */}
+      {!normalizedData.hidden ? (
       <NodeToolbar
-        isVisible={(isHoveredNode || selected || isDragging || isToolbarDrag) && !isEditingNode && !normalizedData.hidden}
+        isVisible={(isHoveredNode || selected || isDragging || isToolbarDrag) && !isEditingNode}
         position={Position.Top}
         offset={0}
         align="start"
@@ -995,7 +996,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           width: nodeContainerRef.current
             ? `${nodeContainerRef.current.offsetWidth}px`
             : '100%',
-          zIndex: 1000,
+          zIndex: 15,
           pointerEvents: 'auto',
           minHeight: '32px'
         }}
@@ -1083,6 +1084,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
           />
         </div>
       </NodeToolbar>
+      ) : null}
       <div
         ref={wrapperRef}
         style={{

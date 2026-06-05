@@ -15,6 +15,7 @@ import VariableTokenContextMenu, {
   type VariableMenuRowItem,
 } from '@components/common/VariableTokenContextMenu';
 import { formatFlowchartRowTextForViewer } from '@utils/flowchartRowTextDisplay';
+import { FLOW_PORTAL_OVERLAY_Z_INDEX_CSS } from '../../flowOverlayZIndex';
 
 // Component to render checkbox with dynamic size based on font
 const CheckboxButton: React.FC<{
@@ -211,7 +212,7 @@ const EmptySpaceOverlay: React.FC<{
         overlayRef.current.style.width = `${emptyWidth}px`;
         overlayRef.current.style.height = `${labelRect.height}px`;
         overlayRef.current.style.pointerEvents = 'auto';
-        overlayRef.current.style.zIndex = '998';
+        overlayRef.current.style.zIndex = FLOW_PORTAL_OVERLAY_Z_INDEX_CSS;
         overlayRef.current.style.display = 'block';
       } else {
         overlayRef.current.style.display = 'none';
@@ -238,7 +239,7 @@ const EmptySpaceOverlay: React.FC<{
         border: 'none', // Transparent - no visible border
         borderRadius: '4px',
         pointerEvents: 'auto',
-        zIndex: 998,
+        zIndex: Number(FLOW_PORTAL_OVERLAY_Z_INDEX_CSS),
       }}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}

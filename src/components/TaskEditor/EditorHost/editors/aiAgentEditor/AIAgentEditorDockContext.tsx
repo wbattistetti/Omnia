@@ -51,6 +51,9 @@ export interface AIAgentEditorDockContextValue {
   dismissTaskTextReviewOffer: (fieldId: AgentTaskTextFieldId) => void;
   clearTaskTextReviewOfferDismissed: (fieldId: AgentTaskTextFieldId) => void;
   isTaskTextReviewOfferDismissed: (fieldId: AgentTaskTextFieldId) => boolean;
+  /** Segnala edit manuale utente su un campo testo (per toaster revisione osservazioni). */
+  notifyTaskTextManualEdit: (fieldId: AgentTaskTextFieldId) => void;
+  hasTaskTextManualEdit: (fieldId: AgentTaskTextFieldId) => boolean;
   buildCallMeta: (purpose: string) => AiCallMeta;
   /** Errori della revisione testo (mostrati anche nel banner composer / alert locale). */
   onTaskTextReviewError: (message: string | null) => void;
@@ -81,6 +84,8 @@ export interface AIAgentEditorDockContextValue {
   appendProposedFields: (fields: AIAgentProposedVariable[]) => void;
   onProposedLabelBlur: (slotId: string, labelTrimmed: string) => void;
   logicalSteps: readonly AIAgentLogicalStep[];
+  /** Catalogo backend progetto (analisi backend). */
+  projectBackendCatalog?: import('@domain/backendCatalog/catalogTypes').ProjectBackendCatalogBlob;
   useCases: readonly AIAgentUseCase[];
   setUseCases: React.Dispatch<React.SetStateAction<AIAgentUseCase[]>>;
   useCaseCategories: readonly AIAgentUseCaseCategory[];

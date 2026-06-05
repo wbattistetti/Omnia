@@ -14,11 +14,14 @@ import {
 } from '@domain/aiAgent/agentTaskTextAnalysisApi';
 import type { AgentTaskTextFieldId } from '@domain/aiAgent/agentTaskTextFieldIds';
 import {
+  shouldAgentTaskTextOfferReview,
+  taskTextDraftDiffersFromAgentBaseline,
+} from '@domain/aiAgent/agentTaskTextBaselinePolicy';
+import {
   allReviewItemsConfirmed,
   countConfirmedReviewItems,
   createReviewSessionItems,
   observationsForFinalize,
-  shouldRunObservationReview,
   type KbAnalysisReviewSessionItem,
 } from '@domain/knowledgeBase/kbDocumentAnalysisWorkflow';
 
@@ -34,6 +37,8 @@ export type UseAgentTaskTextObservationReviewParams = {
   onDismissOffer: () => void;
   onClearOfferDismissed: () => void;
   generating: boolean;
+  hasAgentGeneration: boolean;
+  hasManualEdit: boolean;
   onError?: (message: string | null) => void;
 };
 
@@ -68,13 +73,19 @@ export function useAgentTaskTextObservationReview(
   const inReviewSession = reviewItems !== null && reviewItems.length > 0;
   const allConfirmed = reviewItems ? allReviewItemsConfirmed(reviewItems) : false;
   const confirmedCount = reviewItems ? countConfirmedReviewItems(reviewItems) : 0;
-  const draftDiffers = shouldRunObservationReview(params.baseline, params.currentText);
+  const draftDiffers = taskTextDraftDiffersFromAgentBaseline(params.currentText, params.baseline);
+  const offerEligible = shouldAgentTaskTextOfferReview({
+    baseline: params.baseline,
+    draft: params.currentText,
+    hasAgentGeneration: params.hasAgentGeneration,
+    hasManualEdit: params.hasManualEdit,
+  });
 
   const showOffer =
     !params.generating &&
     !params.offerDismissed &&
     !inReviewSession &&
-    (busy || draftDiffers);
+    (busy || offerEligible);
 
   React.useEffect(() => {
     if (!draftDiffers) {
@@ -133,9 +144,9 @@ export function useAgentTaskTextObservationReview(
         setError(DESIGNER_LLM_MISSING_MODEL_MESSAGE);
         return;
       }
-      if (!draftDiffers) {
+      if (!offerEligible) {
         setError(
-          'Non c\'è differenza tra la tua versione e quella dell\'agente: modifica il testo e riprova.'
+          'Non c\'è differenza significativa tra la tua versione e quella dell\'agente: modifica il testo e riprova.'
         );
         return;
       }
@@ -164,7 +175,7 @@ export function useAgentTaskTextObservationReview(
     params,
     provider,
     model,
-    draftDiffers,
+    offerEligible,
     setError,
   ]);
 

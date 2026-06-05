@@ -134,15 +134,10 @@ export function ConversationalPromptDialog({
       const catalog = projectData.backendCatalog;
       const prev = catalog?.manualEntries ?? [];
       if (prev.length === 0) return;
-      const toolByBackend = new Map(result.tools.map((t) => [t.backendTaskId, t.toolId]));
-      const next = prev.map((e) => {
-        const toolId = toolByBackend.get(e.id);
-        return {
-          ...e,
-          elevenLabsConvaiAgentId: result.agentId,
-          ...(toolId ? { elevenLabsConvaiToolId: toolId } : {}),
-        };
-      });
+      const next = prev.map((e) => ({
+        ...e,
+        elevenLabsConvaiAgentId: result.agentId,
+      }));
       pdUpdate.updateDataDirectly({
         ...projectData,
         backendCatalog: {

@@ -31,6 +31,24 @@ export function DesignDescriptionTextarea({
 
   const fieldId = 'designDescription' as const;
 
+  const descriptionEditor = (
+    readOnly: boolean,
+    highlightBaseline: string
+  ) => (
+    <AgentDescriptionMarkdownEditor
+      value={editorCtx.designDescription}
+      designerHighlightBaseline={highlightBaseline}
+      onChange={(value) => {
+        editorCtx.setDesignDescription(value);
+        editorCtx.notifyTaskTextManualEdit(fieldId);
+        tutorNotifyUserEdit(0);
+      }}
+      readOnly={readOnly}
+      insertBackendPathInDesign={editorCtx.insertBackendPathInDesign}
+      tutorHostId={UI_IDS.taskDescriptionInput}
+    />
+  );
+
   return (
     <div className={containerClassName}>
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -47,41 +65,34 @@ export function DesignDescriptionTextarea({
             {editorCtx.useCaseComposerError}
           </div>
         ) : null}
-        <AgentTaskTextObservationReviewShell
-          fieldId={fieldId}
-          currentText={editorCtx.designDescription}
-          baseline={editorCtx.getTaskTextBaseline(fieldId)}
-          onCommitAgentStabilizedText={(text) =>
-            editorCtx.commitAgentStabilizedTaskText(fieldId, text)
-          }
-          projectId={editorCtx.projectId}
-          buildCallMeta={editorCtx.buildCallMeta}
-          offerDismissed={editorCtx.isTaskTextReviewOfferDismissed(fieldId)}
-          onDismissOffer={() => editorCtx.dismissTaskTextReviewOffer(fieldId)}
-          onClearOfferDismissed={() => editorCtx.clearTaskTextReviewOfferDismissed(fieldId)}
-          generating={editorCtx.generating}
-          onError={editorCtx.onTaskTextReviewError}
-        >
-          {({ reviewBlocksEdit }) => (
-            <AgentDescriptionMarkdownEditor
-              value={editorCtx.designDescription}
-              designerHighlightBaseline={
-                editorCtx.hasAgentGeneration
-                  ? editorCtx.getTaskTextBaseline(fieldId)
-                  : ''
-              }
-              onChange={(value) => {
-                editorCtx.setDesignDescription(value);
-                tutorNotifyUserEdit(0);
-              }}
-              readOnly={
-                (editorCtx.generating ?? false) || reviewBlocksEdit
-              }
-              insertBackendPathInDesign={editorCtx.insertBackendPathInDesign}
-              tutorHostId={UI_IDS.taskDescriptionInput}
-            />
-          )}
-        </AgentTaskTextObservationReviewShell>
+        {editorCtx.hasAgentGeneration ? (
+          <AgentTaskTextObservationReviewShell
+            fieldId={fieldId}
+            currentText={editorCtx.designDescription}
+            baseline={editorCtx.getTaskTextBaseline(fieldId)}
+            onCommitAgentStabilizedText={(text) =>
+              editorCtx.commitAgentStabilizedTaskText(fieldId, text)
+            }
+            projectId={editorCtx.projectId}
+            buildCallMeta={editorCtx.buildCallMeta}
+            offerDismissed={editorCtx.isTaskTextReviewOfferDismissed(fieldId)}
+            onDismissOffer={() => editorCtx.dismissTaskTextReviewOffer(fieldId)}
+            onClearOfferDismissed={() => editorCtx.clearTaskTextReviewOfferDismissed(fieldId)}
+            generating={editorCtx.generating}
+            hasAgentGeneration={editorCtx.hasAgentGeneration}
+            hasManualEdit={editorCtx.hasTaskTextManualEdit(fieldId)}
+            onError={editorCtx.onTaskTextReviewError}
+          >
+            {({ reviewBlocksEdit }) =>
+              descriptionEditor(
+                (editorCtx.generating ?? false) || reviewBlocksEdit,
+                editorCtx.getTaskTextBaseline(fieldId)
+              )
+            }
+          </AgentTaskTextObservationReviewShell>
+        ) : (
+          descriptionEditor(editorCtx.generating ?? false, '')
+        )}
       </div>
     </div>
   );

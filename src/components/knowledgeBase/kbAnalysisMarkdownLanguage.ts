@@ -12,6 +12,8 @@ let registered = false;
 const SECTION_HEADINGS: Array<[RegExp, string]> = [
   [/^###\s+Entities\s*$/i, 'kb.section.entities'],
   [/^###\s+Output del flow/i, 'kb.section.outputFlow'],
+  [/^###\s+Regole operative per l'agente\s*$/i, 'kb.section.operationalRules'],
+  [/^###\s+Domande di chiarimento\s*$/i, 'kb.section.clarificationQuestions'],
   [/^###\s+Sinonimi\s*$/i, 'kb.section.synonyms'],
   [/^###\s+Regole di dialogo\s*$/i, 'kb.section.dialog'],
   [/^###\s+Regole di disambiguazione\s*$/i, 'kb.section.disambig'],

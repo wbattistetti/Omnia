@@ -21,16 +21,21 @@ import { TaskContext } from '../../../../types/taskContext';
 import { filterTasksByContext } from '../../../../utils/taskContextHelpers';
 import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
 import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
-import { getFlowchartTaskTypeLabelColor } from '../../utils/flowchartTaskTypeColors';
+import { FLOW_PORTAL_OVERLAY_Z_INDEX } from '../../flowOverlayZIndex';
+import { getFlowchartTaskTypeLabelColor } from '@components/Flowchart/utils/flowchartTaskTypeColors';
 
-// ✅ Cache globale per i task "Other" - evita reload ogni volta
-let cachedOtherTasks: any[] | null = null;
-let isLoadingCache = false;
+type MainTypeOption = {
+  value: TaskType;
+  label: string;
+  Icon: React.ComponentType<{ size?: number; color?: string }>;
+  color: string;
+};
 
-// Keyboard navigable type picker toolbar
-// ✅ Restituisce direttamente TaskType enum invece di stringhe semantiche
-// I 7 task principali
-const MAIN_TYPE_OPTIONS = [
+let mainTypeOptionsCache: MainTypeOption[] | null = null;
+
+function getMainTypeOptions(): MainTypeOption[] {
+  if (mainTypeOptionsCache) return mainTypeOptionsCache;
+  mainTypeOptionsCache = [
     { value: TaskType.SayMessage, label: 'Message', Icon: Megaphone, color: getFlowchartTaskTypeLabelColor(TaskType.SayMessage) },
     { value: TaskType.UtteranceInterpretation, label: 'Data', Icon: Ear, color: getFlowchartTaskTypeLabelColor(TaskType.UtteranceInterpretation) },
     { value: TaskType.BackendCall, label: 'BackendCall', Icon: Server, color: getFlowchartTaskTypeLabelColor(TaskType.BackendCall) },
@@ -39,8 +44,14 @@ const MAIN_TYPE_OPTIONS = [
     { value: TaskType.Summarizer, label: 'Summarizer', Icon: FileText, color: getFlowchartTaskTypeLabelColor(TaskType.Summarizer) },
     { value: TaskType.Negotiation, label: 'Negotiation', Icon: CheckCircle2, color: getFlowchartTaskTypeLabelColor(TaskType.Negotiation) },
     { value: TaskType.FaqAnswering, label: 'Faq Answering', Icon: MessageCircleQuestion, color: getFlowchartTaskTypeLabelColor(TaskType.FaqAnswering) },
-    { value: TaskType.Subflow, label: 'Subflow', Icon: Workflow, color: getFlowchartTaskTypeLabelColor(TaskType.Subflow) }
-];
+    { value: TaskType.Subflow, label: 'Subflow', Icon: Workflow, color: getFlowchartTaskTypeLabelColor(TaskType.Subflow) },
+  ];
+  return mainTypeOptionsCache;
+}
+
+// ✅ Cache globale per i task "Other" - evita reload ogni volta
+let cachedOtherTasks: any[] | null = null;
+let isLoadingCache = false;
 
 interface RowTypePickerToolbarProps {
     left: number;
@@ -168,23 +179,23 @@ export function RowTypePickerToolbar({
         }
 
         // Calculate total items (main options + separator + Other button + expanded tasks if expanded)
-        const totalItems = MAIN_TYPE_OPTIONS.length + 1 + (isOtherExpanded ? 1 + otherTasks.length : 1);
+        const totalItems = getMainTypeOptions().length + 1 + (isOtherExpanded ? 1 + otherTasks.length : 1);
 
         if (key === 'ArrowDown') setFocusIdx(i => Math.min(totalItems - 1, i + 1));
         else if (key === 'ArrowUp') setFocusIdx(i => Math.max(0, i - 1));
         else if (key === 'Enter') {
             // Handle selection based on focus index
-            if (focusIdx < MAIN_TYPE_OPTIONS.length) {
-                const opt = MAIN_TYPE_OPTIONS[focusIdx];
+            if (focusIdx < getMainTypeOptions().length) {
+                const opt = getMainTypeOptions()[focusIdx];
                 if (opt && opt.value !== currentType) onPick(opt.value);
-            } else if (focusIdx === MAIN_TYPE_OPTIONS.length) {
+            } else if (focusIdx === getMainTypeOptions().length) {
                 // Separator - do nothing
-            } else if (focusIdx === MAIN_TYPE_OPTIONS.length + 1) {
+            } else if (focusIdx === getMainTypeOptions().length + 1) {
                 // Other button - toggle expansion
                 setIsOtherExpanded(!isOtherExpanded);
-            } else if (isOtherExpanded && focusIdx > MAIN_TYPE_OPTIONS.length + 1) {
+            } else if (isOtherExpanded && focusIdx > getMainTypeOptions().length + 1) {
                 // Other task selection
-                const taskIdx = focusIdx - MAIN_TYPE_OPTIONS.length - 2;
+                const taskIdx = focusIdx - getMainTypeOptions().length - 2;
                 const task = otherTasks[taskIdx];
                 if (task) {
                     // Pass the task object instead of TaskType enum
@@ -230,10 +241,12 @@ export function RowTypePickerToolbar({
 
     return (
         <div
+            data-node-row-toolbar="true"
             style={{
                 position: 'fixed',
                 left,
                 top,
+                zIndex: FLOW_PORTAL_OVERLAY_Z_INDEX,
                 padding: 6,
                 background: 'rgba(17,24,39,0.92)',
                 border: '1px solid rgba(234,179,8,0.35)',
@@ -260,7 +273,7 @@ export function RowTypePickerToolbar({
                 style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
             >
                 {/* Main task types */}
-                {MAIN_TYPE_OPTIONS.map((opt, i) => {
+                {getMainTypeOptions().map((opt, i) => {
                     const isCurrent = currentType === opt.value;
                     return (
                         <button
@@ -302,7 +315,7 @@ export function RowTypePickerToolbar({
 
                 {/* Separator */}
                 <div
-                    ref={el => (btnRefs.current[MAIN_TYPE_OPTIONS.length] = el)}
+                    ref={el => (btnRefs.current[getMainTypeOptions().length] = el)}
                     style={{
                         height: 1,
                         background: 'rgba(148,163,184,0.2)',
@@ -313,7 +326,7 @@ export function RowTypePickerToolbar({
 
                 {/* Other button */}
                 <button
-                    ref={el => (btnRefs.current[MAIN_TYPE_OPTIONS.length + 1] = el)}
+                    ref={el => (btnRefs.current[getMainTypeOptions().length + 1] = el)}
                     style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -323,15 +336,15 @@ export function RowTypePickerToolbar({
                         padding: '6px 8px',
                         border: 'none',
                         borderRadius: 8,
-                        background: MAIN_TYPE_OPTIONS.length + 1 === focusIdx ? 'rgba(234,179,8,0.15)' : 'rgba(0,0,0,0.75)',
+                        background: getMainTypeOptions().length + 1 === focusIdx ? 'rgba(234,179,8,0.15)' : 'rgba(0,0,0,0.75)',
                         color: '#e5e7eb',
                         cursor: 'pointer',
-                        outline: MAIN_TYPE_OPTIONS.length + 1 === focusIdx ? '1px solid rgba(234,179,8,0.45)' : 'none',
+                        outline: getMainTypeOptions().length + 1 === focusIdx ? '1px solid rgba(234,179,8,0.45)' : 'none',
                     }}
                     className={combinedClass}
-                    tabIndex={MAIN_TYPE_OPTIONS.length + 1 === focusIdx ? 0 : -1}
-                    onMouseEnter={() => setFocusIdx(MAIN_TYPE_OPTIONS.length + 1)}
-                    onFocus={() => setFocusIdx(MAIN_TYPE_OPTIONS.length + 1)}
+                    tabIndex={getMainTypeOptions().length + 1 === focusIdx ? 0 : -1}
+                    onMouseEnter={() => setFocusIdx(getMainTypeOptions().length + 1)}
+                    onFocus={() => setFocusIdx(getMainTypeOptions().length + 1)}
                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setIsOtherExpanded(!isOtherExpanded); }}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 >
@@ -355,7 +368,7 @@ export function RowTypePickerToolbar({
                             <div style={{ padding: '8px', color: '#94a3b8', fontSize: '0.875rem' }}>No other tasks available</div>
                         ) : (
                             otherTasks.map((task, taskIdx) => {
-                                const idx = MAIN_TYPE_OPTIONS.length + 2 + taskIdx;
+                                const idx = getMainTypeOptions().length + 2 + taskIdx;
                                 const iconName = task.icon || 'Tag';
                                 const taskColor = task.color ? ensureHexColor(task.color) : '#94a3b8';
                                 const iconNode = getIconComponent(iconName, taskColor);

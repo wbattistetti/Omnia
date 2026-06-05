@@ -4,9 +4,9 @@
 
 import React from 'react';
 import {
-  isUnclassifiedSlotId,
-  isValidSlotId,
   normalizeSlotId,
+  resolveSlotIdFromDraft,
+  slugifySlotIdDraft,
 } from '@domain/useCaseBundle/projectSlotLexicon';
 import { getSlotDefinition } from '@domain/useCaseBundle/dynamicSlotRegistry';
 import type { ProjectSlotLexicon } from '@domain/useCaseBundle/projectSlotLexicon';
@@ -156,8 +156,8 @@ export function SlotIdPickerPopover({
 
   const commit = React.useCallback(
     (slotId: string) => {
-      const next = normalizeSlotId(slotId);
-      if (!isValidSlotId(next) || isUnclassifiedSlotId(next)) return;
+      const next = resolveSlotIdFromDraft(slotId);
+      if (!next) return;
       onCommit({ slotId: next, description: description.trim() });
       onClose();
     },
@@ -165,8 +165,11 @@ export function SlotIdPickerPopover({
   );
 
   const tryCommitDraft = React.useCallback(() => {
-    commit(f || slotDraft);
-  }, [commit, f, slotDraft]);
+    commit(slotDraft);
+  }, [commit, slotDraft]);
+
+  const draftSlotId = resolveSlotIdFromDraft(slotDraft);
+  const draftHintSlotId = draftSlotId ?? slugifySlotIdDraft(slotDraft);
 
   if (disabled) return null;
 
@@ -229,8 +232,8 @@ export function SlotIdPickerPopover({
         ))}
         {!hasOptions ? (
           <li className="px-2 py-1 text-[10px] text-slate-500">
-            {f && isValidSlotId(f) && !isUnclassifiedSlotId(f)
-              ? 'Invio per usare questo slot_id'
+            {draftSlotId
+              ? `Invio per usare «${draftSlotId}»`
               : 'Nessun risultato'}
           </li>
         ) : null}
@@ -245,7 +248,8 @@ export function SlotIdPickerPopover({
         </button>
         <button
           type="button"
-          disabled={!isValidSlotId(normalizeSlotId(slotDraft)) || isUnclassifiedSlotId(normalizeSlotId(slotDraft))}
+          disabled={!draftSlotId}
+          title={draftSlotId ? `Salva come ${draftSlotId}` : `Usa snake_case — es. ${draftHintSlotId || 'esame_obbligatorio'}`}
           className="rounded border border-violet-500/50 bg-violet-950/60 px-2 py-0.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-900/40 disabled:opacity-40"
           onClick={tryCommitDraft}
         >

@@ -551,7 +551,6 @@ export function AIAgentUseCaseComposer({
    */
   const wizardSearchSeed =
     listToolbarCtx?.searchSeed ?? '';
-
   /**
    * Lista filtrata dal seed di ricerca: mostra solo gli use case il cui messaggio
    * agente contiene il seed (case-insensitive, substring). Quando `wizardSearchSeed`
@@ -663,7 +662,8 @@ export function AIAgentUseCaseComposer({
     ordered.length === 0 && !isConversationalRulesCatalog;
 
   const bundleGenerateBusy =
-    (Boolean(bundleGenerateBusyLabel) && busy && !rootChipBusy) || bundleGenerationCategorizing;
+    (Boolean(bundleGenerateBusyLabel) && busy && !rootChipBusy) ||
+    bundleGenerationCategorizing;
 
   type UseCaseListRow =
     | { kind: 'category'; category: AIAgentUseCaseCategory; count: number }
@@ -3106,8 +3106,8 @@ export function AIAgentUseCaseComposer({
                   const showWizardBody =
                     cardExpanded && (wizardShowScenario || wizardShowMessage);
                   /**
-                   * Esclusione conversazioni: attenuazione titolo solo su voto verde + checkbox off
-                   * (vedi useCaseHeaderExcludedDimClass). Rosso/arancione restano in vista normale.
+                   * Esclusione conversazioni: titolo smorzato ma con colore validazione
+                   * (vedi useCaseHeaderExcludedDimClass).
                    */
                   const searchHighlight = highlightIdSet.has(u.id);
                   const reviewHighlight = useCaseHasDesignerReviewVote(u);
@@ -3179,11 +3179,8 @@ export function AIAgentUseCaseComposer({
                           />
                         </div>
                         {/*
-                          Checkbox "incluso nelle conversazioni" (sempre presente, default
-                          checked). Posizionato per primo a sinistra perch\u00e9 governa il
-                          *destino* del use case (se partecipa o meno alla generazione delle
-                          conversazioni e al JSON finale del system prompt). Lo stop-propagation
-                          evita che il click sulla checkbox selezioni anche la riga.
+                          Checkbox "incluso nelle conversazioni". Default off per use case
+                          proposti dal sistema: il designer abilita quelli da tenere.
                         */}
                         <div className="mt-[2px] flex shrink-0 items-center gap-0.5">
                           <input

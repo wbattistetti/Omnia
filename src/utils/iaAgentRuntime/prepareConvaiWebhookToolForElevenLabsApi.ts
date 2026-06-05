@@ -17,6 +17,7 @@ import {
   buildConvaiWebhookToolFromBackendTask,
   type BuildConvaiWebhookFromBackendTaskResult,
 } from './elevenLabsConvaiToolsPayload';
+import { sanitizeConvaiWebhookToolForApi } from '@domain/openApi/sanitizeConvaiWebhookToolForApi';
 
 export type PrepareConvaiWebhookToolParams = {
   backendTask: Task;
@@ -96,9 +97,12 @@ function buildConvaiWebhookToolPayloadForElevenLabs(
   if (!built.ok) return built;
 
   const useDevTunnel = params.useDevTunnel !== false;
-  const tool = (
-    useDevTunnel ? rewriteCompilePayloadWithDevTunnel(built.tool) : built.tool
-  ) as Record<string, unknown>;
+  const tool = sanitizeConvaiWebhookToolForApi(
+    (useDevTunnel ? rewriteCompilePayloadWithDevTunnel(built.tool) : built.tool) as Record<
+      string,
+      unknown
+    >
+  );
   const publicUrl = extractWebhookUrlFromTool(tool);
   const dr = deriveBackendToolDefinition(params.backendTask);
   const toolName = dr.ok ? dr.tool.name : String(built.tool.name ?? '').trim() || 'webhook';

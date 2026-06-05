@@ -45,7 +45,7 @@ export interface UseCaseWizardListToolbarContextValue {
   showMessage: boolean;
   /** Right aside: actions palette for use case response (replaces tutorial when on). */
   showActionsPanel: boolean;
-  /** Right aside: Slot Mapping (sostituisce tutorial). */
+  /** Right aside: Dialog control (slot mapping). */
   showSlotMappingPanel: boolean;
   toggleScenario: () => void;
   toggleMessage: () => void;

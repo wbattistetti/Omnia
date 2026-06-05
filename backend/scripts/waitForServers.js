@@ -6,19 +6,23 @@ const servers = [
   {
     name: 'Express',
     url: 'http://127.0.0.1:3100',
-    healthCheck: 'http://127.0.0.1:3100/api/health/redis', // Usa endpoint specifico
-    port: 3100
+    // /api/ping risponde subito; /api/health/redis può bloccarsi su getRedisClient() all'avvio
+    healthCheck: 'http://127.0.0.1:3100/api/ping',
+    port: 3100,
+    expectJsonOk: true,
   },
   {
     name: 'FastAPI',
-    url: 'http://localhost:8000',
-    healthCheck: 'http://localhost:8000/api/ping', // Usa /api/ping come startPythonService.js
+    url: 'http://127.0.0.1:8000',
+    healthCheck: 'http://127.0.0.1:8000/api/ping',
     port: 8000,
-    expectJsonOk: true
+    expectJsonOk: true,
+    // uvicorn --reload su Windows: import app + reloader spesso > 60s
+    maxAttempts: 120,
   },
 ];
 
-const maxAttempts = 60; // 60 seconds total
+const defaultMaxAttempts = 90;
 const delayMs = 1000;
 
 function checkServer(server) {
@@ -58,14 +62,18 @@ async function waitForAllServers() {
 
   const ready = new Set();
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  const attemptBudget = Math.max(defaultMaxAttempts, ...servers.map((s) => s.maxAttempts ?? defaultMaxAttempts));
+
+  for (let attempt = 1; attempt <= attemptBudget; attempt++) {
     for (const server of servers) {
-      if (!ready.has(server.name)) {
-        const isReady = await checkServer(server);
-        if (isReady) {
-          ready.add(server.name);
-          console.log(`[STARTUP] ✅ ${server.name} is ready (http://localhost:${server.port})`);
-        }
+      if (ready.has(server.name)) continue;
+      const serverMax = server.maxAttempts ?? defaultMaxAttempts;
+      if (attempt > serverMax) continue;
+
+      const isReady = await checkServer(server);
+      if (isReady) {
+        ready.add(server.name);
+        console.log(`[STARTUP] ✅ ${server.name} is ready (http://localhost:${server.port})`);
       }
     }
 
@@ -96,9 +104,14 @@ async function waitForAllServers() {
       return;
     }
 
-    if (attempt < maxAttempts) {
-      const remaining = servers.filter(s => !ready.has(s.name)).map(s => s.name).join(', ');
-      console.log(`[STARTUP] ⏳ Waiting for: ${remaining}... (${attempt}/${maxAttempts})`);
+    if (attempt < attemptBudget) {
+      const remaining = servers
+        .filter((s) => !ready.has(s.name) && attempt <= (s.maxAttempts ?? defaultMaxAttempts))
+        .map((s) => s.name)
+        .join(', ');
+      if (remaining) {
+        console.log(`[STARTUP] ⏳ Waiting for: ${remaining}... (${attempt}/${attemptBudget})`);
+      }
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }

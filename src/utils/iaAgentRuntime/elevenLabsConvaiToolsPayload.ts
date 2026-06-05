@@ -61,6 +61,36 @@ export type BuildElevenLabsConvaiToolsOptions = MergeEffectiveIaAgentToolsOption
   };
 };
 
+function normalizeConvaiHttpMethod(method: string): string {
+  const u = String(method || 'POST').trim().toUpperCase();
+  return ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(u) ? u : 'POST';
+}
+
+/** `api_schema` webhook ConvAI (solo `method` — campo accettato dall’API). */
+function buildWebhookApiSchema(params: {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  inputSchema: Record<string, unknown>;
+  toolDescription: string;
+}): Record<string, unknown> {
+  const method = normalizeConvaiHttpMethod(params.method);
+  const apiSchema: Record<string, unknown> = {
+    url: params.url,
+    method,
+  };
+  if (Object.keys(params.headers).length > 0) {
+    apiSchema.request_headers = params.headers;
+  }
+  const schemaOpts = { description: params.toolDescription.trim() };
+  if (usesQueryParamsForMethod(method)) {
+    apiSchema.query_params_schema = toElevenLabsQueryParamsSchema(params.inputSchema, schemaOpts);
+  } else {
+    apiSchema.request_body_schema = toElevenLabsRequestBodySchema(params.inputSchema, schemaOpts);
+  }
+  return apiSchema;
+}
+
 function resolveWebhookToolUrl(
   targetUrl: string,
   method: string,
@@ -118,21 +148,17 @@ export function buildElevenLabsConvaiPromptTools(
     if (!targetUrl) continue;
     const url = resolveWebhookToolUrl(targetUrl, method, id, options?.convaiGateway);
 
-    const apiSchema: Record<string, unknown> = {
+    const schema =
+      dr.tool.inputSchema && typeof dr.tool.inputSchema === 'object'
+        ? dr.tool.inputSchema
+        : defaultObjectSchema();
+    const apiSchema = buildWebhookApiSchema({
       url,
       method,
-    };
-    if (Object.keys(headers).length > 0) {
-      apiSchema.request_headers = headers;
-    }
-    const schema = dr.tool.inputSchema && typeof dr.tool.inputSchema === 'object'
-      ? dr.tool.inputSchema
-      : defaultObjectSchema();
-    if (usesQueryParamsForMethod(method)) {
-      apiSchema.query_params_schema = toElevenLabsQueryParamsSchema(schema);
-    } else {
-      apiSchema.request_body_schema = toElevenLabsRequestBodySchema(schema);
-    }
+      headers,
+      inputSchema: schema,
+      toolDescription: dr.tool.description,
+    });
 
     out.push({
       type: 'webhook',
@@ -202,19 +228,17 @@ export function buildConvaiWebhookToolFromBackendTask(
     options?.convaiGateway
   );
 
-  const apiSchema: Record<string, unknown> = { url, method };
-  if (Object.keys(headers).length > 0) {
-    apiSchema.request_headers = headers;
-  }
   const schema =
     dr.tool.inputSchema && typeof dr.tool.inputSchema === 'object'
       ? dr.tool.inputSchema
       : defaultObjectSchema();
-  if (usesQueryParamsForMethod(method)) {
-    apiSchema.query_params_schema = toElevenLabsQueryParamsSchema(schema);
-  } else {
-    apiSchema.request_body_schema = toElevenLabsRequestBodySchema(schema);
-  }
+  const apiSchema = buildWebhookApiSchema({
+    url,
+    method,
+    headers,
+    inputSchema: schema,
+    toolDescription: dr.tool.description,
+  });
 
   const tool: Record<string, unknown> = {
     type: 'webhook',

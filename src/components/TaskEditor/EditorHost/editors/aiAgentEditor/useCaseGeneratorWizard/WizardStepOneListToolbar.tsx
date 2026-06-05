@@ -45,7 +45,7 @@ import type { AIAgentUseCase } from '@types/aiAgentUseCases';
 import {
   WizardAgentBehaviorSelect,
   WizardCompileMappingBanner,
-  WizardSlotMappingToggle,
+  WizardDialogControlToggle,
 } from './WizardToolbarSlotMappingControls';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { UseCaseTestQuestionsToolbar } from '../useCaseTestQuestions/UseCaseTestQuestionsToolbar';
@@ -541,7 +541,7 @@ export function WizardStepOneListToolbarControls({
       <UseCaseTestQuestionsToolbar />
       <UseCaseOverlapCheckToolbar />
       {dock && projectSlotLexicon ? (
-        <WizardSlotMappingToggle
+        <WizardDialogControlToggle
           lexicon={projectSlotLexicon}
           useCases={catalogUseCases}
           backendOutputSlotBindings={dock.backendOutputSlotBindings}

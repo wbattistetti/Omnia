@@ -81,6 +81,25 @@ export function isValidSlotId(slotId: string): boolean {
   return /^[a-z][a-z0-9_]*$/.test(s) && !s.includes('__');
 }
 
+/** Converte testo designer (label, spazi, accenti) in candidato `slot_id` snake_case. */
+export function slugifySlotIdDraft(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/** Normalizza input designer a `slot_id` persistibile, o null se non valido. */
+export function resolveSlotIdFromDraft(raw: string): string | null {
+  const next = slugifySlotIdDraft(raw);
+  if (!next || !isValidSlotId(next) || isUnclassifiedSlotId(next)) return null;
+  return next;
+}
+
 export function parseProjectSlotLexiconJson(raw: string | undefined | null): ProjectSlotLexicon {
   if (!raw || typeof raw !== 'string' || !raw.trim()) return emptyProjectSlotLexicon();
   try {

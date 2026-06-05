@@ -48,6 +48,10 @@ export const AI_CALL_PURPOSE = {
   TEXT_TRANSLATE: 'TEXT_TRANSLATE',
   /** Raffinamento analisi markdown documento KB (tab Analisi del documento). */
   KB_REFINE_DOCUMENT_ANALYSIS: 'KB_REFINE_DOCUMENT_ANALYSIS',
+  /** Prima proposta riformattazione documento KB (tab Documento riformattato). */
+  KB_PROPOSE_DOCUMENT_RESTRUCTURE: 'KB_PROPOSE_DOCUMENT_RESTRUCTURE',
+  /** Raffinamento documento KB riformattato. */
+  KB_REFINE_DOCUMENT_RESTRUCTURE: 'KB_REFINE_DOCUMENT_RESTRUCTURE',
   /** Prima proposta analisi documento KB (Guardi tu). */
   KB_PROPOSE_DOCUMENT_ANALYSIS: 'KB_PROPOSE_DOCUMENT_ANALYSIS',
   /** Estrazione osservazioni dal diff utente/agente. */
@@ -115,6 +119,10 @@ const LABELS: Readonly<Record<AiCallPurposeId, string>> = Object.freeze({
   [AI_CALL_PURPOSE.TRAINING_PHRASES_GENERATE]: 'Generazione training phrases intent',
   [AI_CALL_PURPOSE.TEXT_TRANSLATE]: 'Traduzione testo',
   [AI_CALL_PURPOSE.KB_REFINE_DOCUMENT_ANALYSIS]: 'Raffinamento analisi documento KB',
+  [AI_CALL_PURPOSE.KB_PROPOSE_DOCUMENT_RESTRUCTURE]:
+    'Prima proposta documento KB riformattato',
+  [AI_CALL_PURPOSE.KB_REFINE_DOCUMENT_RESTRUCTURE]:
+    'Raffinamento documento KB riformattato',
   [AI_CALL_PURPOSE.KB_PROPOSE_DOCUMENT_ANALYSIS]: 'Prima proposta analisi documento KB',
   [AI_CALL_PURPOSE.KB_REVIEW_DOCUMENT_ANALYSIS_OBSERVATIONS]:
     'Revisione osservazioni analisi documento KB',

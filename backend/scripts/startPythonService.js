@@ -4,10 +4,13 @@ const path = require('path');
 const fs = require('fs');
 
 const PYTHON_PORT = 8000;
-const PYTHON_SERVICE_URL = `http://localhost:${PYTHON_PORT}`;
+// uvicorn --host 127.0.0.1: su Windows localhost può risolvere su ::1 → ECONNREFUSED
+const PYTHON_SERVICE_URL = `http://127.0.0.1:${PYTHON_PORT}`;
 const HEALTH_CHECK_ENDPOINT = '/api/ping';
-const MAX_RETRIES = 30;
+// --reload su Windows: reloader + import app pesanti possono richiedere 40–60s
+const MAX_RETRIES = 90;
 const RETRY_DELAY = 1000;
+const RELOADER_WARMUP_MS = process.platform === 'win32' ? 15000 : 10000;
 
 /**
  * Verifica se il servizio Python è disponibile
@@ -297,11 +300,9 @@ async function startPythonService() {
   // Uvicorn con --reload: reloader process → main process (può richiedere 8-12 secondi)
   console.log('[Python Service] ⏳ Waiting for uvicorn reloader to start main process...');
   console.log('[Python Service] ℹ️  Note: With --reload, uvicorn starts a reloader process first, then the main process');
-  console.log('[Python Service] ℹ️  This can take 8-12 seconds. Please wait...');
+  console.log(`[Python Service] ℹ️  This can take 15–60 seconds on Windows. Please wait...`);
 
-  // Attendi 10 secondi per permettere al reloader di avviare completamente il processo principale
-  // Aumentato da 6 a 10 secondi per gestire meglio i casi con dipendenze pesanti
-  await new Promise((resolve) => setTimeout(resolve, 10000));
+  await new Promise((resolve) => setTimeout(resolve, RELOADER_WARMUP_MS));
 
   // Verifica che il processo sia ancora in esecuzione
   if (pythonProcess.killed) {
@@ -313,12 +314,10 @@ async function startPythonService() {
   const isAvailable = await waitForService();
 
   if (!isAvailable) {
-    console.error('[Python Service] ❌ Service failed to become available');
-    pythonProcess.kill();
-    process.exit(1);
+    console.warn('[Python Service] ⚠️ Health check timed out — uvicorn may still be loading (keeping process alive)');
+  } else {
+    console.log('[Python Service] ✅ Python FastAPI service is running and healthy');
   }
-
-  console.log('[Python Service] ✅ Python FastAPI service is running and healthy');
   console.log(`[Python Service] 🌐 Service URL: ${PYTHON_SERVICE_URL}`);
   console.log(`[Python Service] 📊 Health check: ${PYTHON_SERVICE_URL}${HEALTH_CHECK_ENDPOINT}`);
 

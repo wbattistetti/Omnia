@@ -123,6 +123,8 @@ export default defineConfig(({ mode }) => {
     exclude: ['lucide-react'],
   },
   server: {
+    // Windows: default "localhost" può bindare solo [::1]; il browser su 127.0.0.1 va in ERR_CONNECTION_REFUSED
+    host: '127.0.0.1',
     proxy: {
       '/ai': { target: 'http://localhost:8000', changeOrigin: true },
       // FastAPI endpoints

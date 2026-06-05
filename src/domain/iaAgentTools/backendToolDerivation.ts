@@ -167,7 +167,9 @@ export function buildToolInputSchemaFromBackendInputs(
   const metaEnums = meta?.openapiInputEnumByApiName;
   const metaJsonSchemas = meta?.openapiInputJsonSchemaByApiName;
 
-  const rows = Array.isArray(inputRows) ? inputRows.filter((r) => r?.internalName?.trim()) : [];
+  const rows = Array.isArray(inputRows)
+    ? inputRows.filter((r) => r?.internalName?.trim() || r?.apiParam?.trim())
+    : [];
   const properties: Record<string, unknown> = {};
   for (const row of rows) {
     const key = propertyKeyFromRow(row);

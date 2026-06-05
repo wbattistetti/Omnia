@@ -27,6 +27,10 @@ function stubDoc(overrides: Partial<StagedKbDocument> = {}): StagedKbDocument {
     markdownSnippet: '',
     documentAnalysisMarkdown: '',
     agentAnalysisBaselineMarkdown: '',
+    documentRestructuredMarkdown: '',
+    agentRestructuredBaselineMarkdown: '',
+    documentRestructureNotesMarkdown: '',
+    agentRestructureNotesBaselineMarkdown: '',
     ...overrides,
   };
 }

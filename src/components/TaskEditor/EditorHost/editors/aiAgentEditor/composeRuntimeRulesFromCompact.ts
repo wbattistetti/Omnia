@@ -14,12 +14,8 @@ import {
   iaConvaiTraceElevenLabsFieldResolution,
 } from '@utils/debug/iaConvaiFlowTrace';
 import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
-import {
-  parseAgentStartPromptJson,
-  resolveAgentStartPromptSpeechText,
-} from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
-import { resolveStartUseCaseSpeechText } from '@domain/useCaseGeneratorWizard/startUseCase';
+import { resolveConvaiAgentFirstMessage } from '@utils/iaAgentRuntime/resolveConvaiAgentFirstMessage';
 
 /**
  * ElevenLabs ConvAI agent.language expects ISO 639-1; Omnia may persist BCP-47 (e.g. it-IT).
@@ -285,17 +281,7 @@ export function buildMinimalAiAgentCompileTask(
     }
   );
   const immediateStart = task.agentImmediateStart === true;
-  /** Keep in sync with `CONVAI_DEFAULT_FIRST_MESSAGE` in convaiAgentCreatePayload.ts (avoid import cycle). */
-  const defaultConvaiFirst = 'Hello! How can I help you today?';
-  const startUseCaseId = String(task.agentStartUseCaseId ?? '').trim();
-  const startSpeech = startUseCaseId
-    ? resolveStartUseCaseSpeechText(
-        parseAgentUseCasesJson(String(task.agentUseCasesJson ?? '')),
-        startUseCaseId
-      )
-    : resolveAgentStartPromptSpeechText(
-        parseAgentStartPromptJson(task.agentStartPromptJson ?? '')
-      );
+  const useCases = parseAgentUseCasesJson(String(task.agentUseCasesJson ?? ''));
   const base: MinimalAiAgentCompilePayload = {
     id: task.id,
     type: task.type,
@@ -303,7 +289,12 @@ export function buildMinimalAiAgentCompileTask(
     rules,
     llmEndpoint: resolveAiAgentLlmEndpointForCompile(task),
     immediateStart,
-    firstMessage: immediateStart ? '' : startSpeech || defaultConvaiFirst,
+    firstMessage: resolveConvaiAgentFirstMessage({
+      agentImmediateStart: immediateStart,
+      startUseCaseId: task.agentStartUseCaseId,
+      agentStartPromptJson: task.agentStartPromptJson,
+      useCases,
+    }),
   };
 
   const globalIa = loadGlobalIaAgentConfig();

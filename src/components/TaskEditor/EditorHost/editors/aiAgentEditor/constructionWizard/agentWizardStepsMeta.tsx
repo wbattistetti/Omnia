@@ -1,7 +1,7 @@
 /**
  * AI Agent — Metadati statici dei 7 step del wizard di costruzione.
  *
- * Ordine vincolante: Task → Knowledge Base → Backend → Prompts → Error Handling → Dati → Voce
+ * Ordine vincolante: Task → KB → Backend → Prompts → Error Handling → Dati → Voce
  */
 
 import {
@@ -56,7 +56,8 @@ export const AGENT_WIZARD_STEPS_META: readonly AgentWizardStepMeta[] = [
     displayNumber: 4,
     label: 'Prompts',
     title: 'Definisci lo stile conversazionale',
-    tutorial: '',
+    tutorial:
+      'Use case, regole di attivazione (chip) e pannello Dialog control per slot mapping e variabili di snodo.',
     icon: MessagesSquare,
   },
   {

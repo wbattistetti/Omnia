@@ -9,21 +9,24 @@ import {
   buildExternalAgentPromptSections,
 } from '@domain/agentDesign/buildMergedExternalAgentPrompt';
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
+import { parseAgentStartPromptJson } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
 import {
-  parseAgentStartPromptJson,
-  resolveAgentStartPromptSpeechText,
-} from '@domain/useCaseGeneratorWizard/agentStartPrompt';
-import { resolveStartUseCaseSpeechText } from '@domain/useCaseGeneratorWizard/startUseCase';
+  buildElevenLabsStartPhaseAppend,
+  resolveStartUseCasePromptMeta,
+} from '@domain/useCaseGeneratorWizard/startUseCase';
+import { resolveConvaiAgentFirstMessage } from '@utils/iaAgentRuntime/resolveConvaiAgentFirstMessage';
 import { openApiCompileErrorsFromTask } from '@domain/openApi/openApiCompileErrorsFromTask';
 import { buildConvaiWebhookToolFromBackendTask } from '@utils/iaAgentRuntime/elevenLabsConvaiToolsPayload';
 import {
   collectConvaiWebhookTunnelReadinessForSync,
-  prepareConvaiWebhookToolForElevenLabsApi,
   resolveConvaiSyncBackendTaskIds,
 } from '@utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
 import {
+  CONVAI_WEBHOOK_GATEWAY_PORT,
+  ensureConvaiDeployTunnelReady,
+} from '@domain/devTunnel/ensureConvaiDeployTunnelReady';
+import {
   conversationConfigForConvaiApi,
-  CONVAI_DEFAULT_FIRST_MESSAGE,
   buildConvaiTtsBlockForApi,
   mapConvaiLlmForAgentLanguage,
 } from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
@@ -31,7 +34,8 @@ import { resolveConvaiAgentLanguageForSync } from '@components/TaskEditor/Editor
 import { resolveTaskIaConfig } from '@utils/iaAgentRuntime/resolveTaskIaConfig';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
 import { getConvaiAgentDetail, patchConvaiAgent } from '@workspaces/elevenlabs/api/convaiAgentApi';
-import { createConvaiTool } from '@workspaces/elevenlabs/api/convaiToolApi';
+import { buildConvaiInlineWebhookToolsFromSyncParams } from '@utils/iaAgentRuntime/convaiInlineAgentTools';
+import { ensureManualCatalogBackendTask } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/ensureManualCatalogBackendTask';
 import { taskRepository } from '@services/TaskRepository';
 import {
   parseAgentElevenLabsConvaiLinkJson,
@@ -95,10 +99,6 @@ function buildSyncPromptText(params: ConvaiAgentSyncParams): string {
     knowledgeBaseDocuments: [],
   });
   return mergeExternalAgentPromptSections(sections).trim();
-}
-
-function resolveBackendTaskIds(params: ConvaiAgentSyncParams): string[] {
-  return resolveConvaiSyncBackendTaskIds(params);
 }
 
 function usesBookFromAgenda(tools: ConvaiAgentSyncToolResult[], backendIds: string[]): boolean {
@@ -167,8 +167,26 @@ export async function syncConvaiAgentFromOmnia(
     };
   }
 
-  const backendIds = resolveBackendTaskIds(params);
+  const backendIds = resolveConvaiSyncBackendTaskIds(params);
+  const manualEntries = params.backendCatalog?.manualEntries ?? [];
+  const manualById = new Map(manualEntries.map((e) => [e.id, e]));
+  for (const bid of backendIds) {
+    const entry = manualById.get(bid);
+    if (entry) ensureManualCatalogBackendTask(entry, params.projectId);
+  }
   const useDevTunnelForWebhook = params.useDevTunnelForWebhook !== false;
+  if (useDevTunnelForWebhook && backendIds.length > 0) {
+    const ensured = await ensureConvaiDeployTunnelReady([CONVAI_WEBHOOK_GATEWAY_PORT]);
+    if (!ensured.ok) {
+      return {
+        ok: false,
+        failure: {
+          phase: 'validate',
+          message: ensured.error,
+        },
+      };
+    }
+  }
   const tunnelReadiness = collectConvaiWebhookTunnelReadinessForSync({
     ...params,
     useDevTunnelForWebhook,
@@ -252,40 +270,32 @@ export async function syncConvaiAgentFromOmnia(
     };
   }
 
-  const tools: ConvaiAgentSyncToolResult[] = [];
-  const projectId = String(params.projectId ?? '').trim();
-  const agentTaskId = String(agentTask.id ?? '').trim();
-  for (const bid of backendIds) {
-    const bt = taskRepository.getTask(bid)!;
-    const built = prepareConvaiWebhookToolForElevenLabsApi({
-      backendTask: bt,
-      projectId,
-      agentTaskId,
-      useDevTunnel: useDevTunnelForWebhook,
-    });
-    if (!built.ok) {
-      return {
-        ok: false,
-        failure: { phase: 'build_tool', message: built.error, backendTaskId: bid },
-      };
-    }
-    try {
-      const toolId = await createConvaiTool(built.tool);
-      tools.push({
-        backendTaskId: bid,
-        toolId,
-        toolName: String(built.tool.name ?? '').trim() || toolId,
-      });
-    } catch (e) {
-      return {
-        ok: false,
-        failure: {
-          phase: 'create_tool',
-          message: e instanceof Error ? e.message : String(e),
-          backendTaskId: bid,
-        },
-      };
-    }
+  const inlineBuilt = await buildConvaiInlineWebhookToolsFromSyncParams({
+    ...params,
+    useDevTunnel: useDevTunnelForWebhook,
+  });
+  if (!inlineBuilt.ok) {
+    return {
+      ok: false,
+      failure: {
+        phase: 'build_tool',
+        message: inlineBuilt.message,
+        backendTaskId: inlineBuilt.backendTaskId,
+      },
+    };
+  }
+  const tools = inlineBuilt.tools;
+  const inlineToolPayloads = inlineBuilt.inlinePayloads;
+
+  const startMeta = resolveStartUseCasePromptMeta(
+    params.useCases,
+    String(agentTask.agentStartUseCaseId ?? '').trim() || undefined
+  );
+  const startPhaseAppend = buildElevenLabsStartPhaseAppend(startMeta, {
+    agentImmediateStart: agentTask.agentImmediateStart === true,
+  });
+  if (startPhaseAppend) {
+    promptText = `${promptText.trim()}\n\n${startPhaseAppend}`;
   }
 
   if (usesBookFromAgenda(tools, backendIds)) {
@@ -352,7 +362,8 @@ export async function syncConvaiAgentFromOmnia(
   const prompt: Record<string, unknown> = {
     prompt: promptText,
     llm: llmModel,
-    tool_ids: tools.map((t) => t.toolId),
+    tools: inlineToolPayloads,
+    tool_ids: [],
     knowledge_base: kbRefs,
   };
   if (typeof llm.temperature === 'number' && !Number.isNaN(llm.temperature)) {
@@ -362,18 +373,14 @@ export async function syncConvaiAgentFromOmnia(
     prompt.max_tokens = Math.floor(llm.max_tokens);
   }
 
-  const immediateStart = agentTask.agentImmediateStart === true;
-  const startUseCaseId = String(agentTask.agentStartUseCaseId ?? '').trim();
-  const startSpeech = startUseCaseId
-    ? resolveStartUseCaseSpeechText(params.useCases, startUseCaseId)
-    : resolveAgentStartPromptSpeechText(
-        parseAgentStartPromptJson(String(agentTask.agentStartPromptJson ?? ''))
-      );
   const conversationConfig: Record<string, unknown> = {
     agent: {
-      first_message: immediateStart
-        ? ''
-        : startSpeech || CONVAI_DEFAULT_FIRST_MESSAGE,
+      first_message: resolveConvaiAgentFirstMessage({
+        agentImmediateStart: agentTask.agentImmediateStart === true,
+        startUseCaseId: agentTask.agentStartUseCaseId,
+        agentStartPromptJson: agentTask.agentStartPromptJson,
+        useCases: params.useCases,
+      }),
       language: lang,
       prompt,
     },

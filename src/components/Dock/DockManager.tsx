@@ -19,6 +19,28 @@ function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
   return res;
 }
 
+/** True if this dock subtree contains the focused tabset (split z-order). */
+function dockNodeContainsTabSet(node: DockNode, tabSetId: string): boolean {
+  if (node.kind === 'tabset') return node.id === tabSetId;
+  return node.children.some((child) => dockNodeContainsTabSet(child, tabSetId));
+}
+
+/**
+ * Split verticale (flow sopra, editor sotto): il pannello inferiore resta sempre sopra.
+ * Split orizzontale: solo il tabset attivo sale (toolbar flow non invade pannello laterale).
+ */
+function splitChildStackZIndex(
+  orientation: 'row' | 'col',
+  childIndex: number,
+  childCount: number,
+  isElevated: boolean
+): number {
+  if (orientation === 'col') {
+    return childIndex === childCount - 1 ? 30 : 1;
+  }
+  return isElevated ? 50 : 1;
+}
+
 type Props = {
   root: DockNode;
   setRoot: (n: DockNode) => void;
@@ -81,6 +103,7 @@ export const DockManager: React.FC<Props> = ({ root, setRoot, renderTabContent, 
         renderTabContent={renderTabContent}
         setRoot={setRoot}
         setActiveTabSetId={setActiveTabSetId}
+        activeTabSetId={activeTabSetId}
         onTabClosed={(tab) => {
           // Tab closed - no shelf, just remove it
         }}
@@ -104,6 +127,7 @@ function SplitRenderer(props: {
   renderTabContent: (tab: DockTab) => React.ReactNode;
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
+  activeTabSetId: string;
   onTabClosed: (tab: DockTab | null) => void;
   onActiveTabChanged?: (tab: DockTab) => void;
   editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
@@ -184,6 +208,13 @@ function SplitRenderer(props: {
       {node.children.map((c, idx) => {
         const size = sizes[idx];
         const isLast = idx === node.children.length - 1;
+        const isElevated = dockNodeContainsTabSet(c, props.activeTabSetId);
+        const childZIndex = splitChildStackZIndex(
+          node.orientation,
+          idx,
+          node.children.length,
+          isElevated
+        );
         return (
           <React.Fragment key={c.id}>
             <div
@@ -193,6 +224,9 @@ function SplitRenderer(props: {
                 display: 'flex',
                 flexDirection: 'column',
                 width: node.orientation === 'row' ? `${size * 100}%` : undefined,
+                position: 'relative',
+                zIndex: childZIndex,
+                isolation: childZIndex > 1 ? 'isolate' : undefined,
                 // ✅ FIX: Removed height: ${size * 100}% - flex: 0 0 ${size * 100}% already handles height in column layout
                 // The flex-basis percentage works correctly when parent has flex-determined height
               }}
@@ -209,7 +243,7 @@ function SplitRenderer(props: {
                   backgroundColor: isResizing ? '#38bdf8' : 'transparent',
                   flexShrink: 0,
                   position: 'relative',
-                  zIndex: 10,
+                  zIndex: 40,
                   transition: isResizing ? 'none' : 'background-color 0.2s'
                 }}
                 onMouseEnter={(e) => {
@@ -242,6 +276,7 @@ function DockRenderer(props: {
   renderTabContent: (tab: DockTab) => React.ReactNode;
   setRoot: (n: DockNode) => void;
   setActiveTabSetId: (id: string) => void;
+  activeTabSetId: string;
   onTabClosed: (tab: DockTab | null) => void;
   onActiveTabChanged?: (tab: DockTab) => void;
   editorCloseRefsMap?: React.MutableRefObject<Map<string, () => Promise<boolean>>>;
@@ -256,6 +291,7 @@ function DockRenderer(props: {
       tabs={node.tabs}
       active={node.active}
       onActiveTabChanged={props.onActiveTabChanged}
+      setActiveTabSetId={props.setActiveTabSetId}
       setActive={(idx) => {
         props.setActiveTabSetId(node.id);
         const nextTab = node.tabs[idx];
@@ -580,6 +616,7 @@ function TabSet(props: {
   nodeId: string;
   tabs: DockTab[];
   active: number;
+  setActiveTabSetId: (id: string) => void;
   onActiveTabChanged?: (tab: DockTab) => void;
   setActive: (idx: number) => void;
   onClose: (tabId: string) => void | Promise<void>;
@@ -643,7 +680,15 @@ function TabSet(props: {
     <div
       ref={hostRef}
       className="relative w-full rounded min-h-0 flex flex-col"
-      style={{ flex: 1, border: '1px solid #38bdf8', backgroundColor: '#e0f2fe', display: 'flex', flexDirection: 'column' }}
+      style={{
+        flex: 1,
+        border: '1px solid #38bdf8',
+        backgroundColor: '#e0f2fe',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      }}
+      onPointerDownCapture={() => props.setActiveTabSetId(props.nodeId)}
       onDragOver={(e) => {
         e.preventDefault();
         // Only show overlay when dragging dock tabs, not other elements like tasks

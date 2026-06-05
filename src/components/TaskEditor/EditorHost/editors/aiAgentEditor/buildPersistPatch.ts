@@ -85,6 +85,7 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentDesignFrozen: false,
     agentDesignHasGeneration: state.hasAgentGeneration,
     agentLogicalStepsJson: state.agentLogicalStepsJson,
+    agentWizardStepOrderVersion: 4,
     agentUseCasesJson: state.agentUseCasesJson,
     agentStartPromptJson: state.agentStartPromptJson,
     agentStartUseCaseId: state.agentStartUseCaseId,

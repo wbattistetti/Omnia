@@ -42,9 +42,12 @@ export function ensureManualCatalogBackendTask(entry: ManualCatalogEntry, projec
     const { url: taskUrl, method: taskMethod, headers } = readEndpoint(existing);
 
     const updates: Record<string, unknown> = {};
-    if (catalogUrl && (taskUrl !== catalogUrl || taskMethod !== catalogMethod)) {
+    const endpointChanged =
+      Boolean(catalogUrl) && (taskUrl !== catalogUrl || taskMethod !== catalogMethod);
+    const methodOnlyChanged = catalogMethod !== taskMethod && Boolean(catalogUrl || taskUrl);
+    if (endpointChanged || methodOnlyChanged) {
       updates.endpoint = {
-        url: catalogUrl,
+        url: catalogUrl || taskUrl,
         method: catalogMethod,
         headers,
       };

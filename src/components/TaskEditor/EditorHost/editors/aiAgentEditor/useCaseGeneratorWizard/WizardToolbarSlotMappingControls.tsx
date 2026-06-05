@@ -1,5 +1,5 @@
 /**
- * Controlli toolbar wizard: Agent Behavior e toggle Slot Mapping con stato validazione.
+ * Controlli toolbar wizard: Agent Behavior e Dialog control.
  */
 
 import React from 'react';
@@ -80,7 +80,7 @@ export function WizardCompileMappingBanner(): React.ReactElement | null {
   );
 }
 
-export function WizardSlotMappingToggle({
+export function WizardDialogControlToggle({
   lexicon,
   useCases,
   backendOutputSlotBindings,
@@ -124,8 +124,8 @@ export function WizardSlotMappingToggle({
       aria-pressed={active}
       title={
         validation.status === 'valid'
-          ? 'Slot Mapping e binding backend validati'
-          : `Mapping — ${[...validation.slotReasons, ...validation.backendReasons].join('; ') || 'da completare'}`
+          ? 'Dialog control: slot mapping'
+          : `Dialog control — ${[...validation.slotReasons, ...validation.backendReasons].join('; ') || 'da completare'}`
       }
       onClick={() => {
         if (!active) {
@@ -141,7 +141,7 @@ export function WizardSlotMappingToggle({
       ].join(' ')}
     >
       <Layers size={14} aria-hidden />
-      <span>Slot mapping</span>
+      <span>Dialog control</span>
       {validation.status === 'valid' && validation.backendReasons.length === 0 ? (
         <Check size={14} className="text-emerald-400" aria-hidden />
       ) : (
@@ -150,3 +150,6 @@ export function WizardSlotMappingToggle({
     </button>
   );
 }
+
+/** @deprecated Usare {@link WizardDialogControlToggle}. */
+export const WizardSlotMappingToggle = WizardDialogControlToggle;

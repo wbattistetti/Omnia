@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useTaskTreeManager } from '@context/DDTManagerContext';
 import { useTaskTreeContext } from '@context/DDTContext';
 import { EntityCreationService } from '@services/EntityCreationService';
 import { useTaskEditor } from '@taskEditor/EditorHost/TaskEditorContext';
 import { emitSidebarRefresh } from '@ui/events';
-import { createPortal } from 'react-dom';
+import { FLOW_PORTAL_OVERLAY_Z_INDEX } from '../../flowOverlayZIndex';
 import { useReactFlow } from 'reactflow';
 import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent, SIDEBAR_ICON_COMPONENTS } from '@components/Sidebar/sidebarTheme';
 import { IntellisenseItem } from '@components/Intellisense/IntellisenseTypes';
@@ -1021,7 +1022,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               position: 'fixed',
               top: semanticPopoverPos.top,
               left: semanticPopoverPos.left,
-              zIndex: 10050,
+              zIndex: FLOW_PORTAL_OVERLAY_Z_INDEX,
               width: 400,
               maxWidth: 'min(400px, calc(100vw - 16px))',
               boxShadow: '0 10px 40px rgba(0,0,0,0.45)',

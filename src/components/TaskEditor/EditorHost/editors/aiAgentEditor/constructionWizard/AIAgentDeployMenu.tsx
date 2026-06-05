@@ -20,7 +20,7 @@
  *       • OpenAI        Manca la voce  [Fix]
  *   ─────────────────────────────────────
  *   ▸ Compila e Copy system prompt
- *   ▸ Copy system prompt (solo dialog copia, senza ricompilare)
+ *   ▸ Deploy (espande inline sync ConvAI: crea/aggiorna agente ElevenLabs)
  *
  * **Selezione voce per platform**: la `voicesByPlatform` ricevuta dal parent è già il
  * risultato del resolver (`resolveVoicesByPlatform`), che applica priorità
@@ -30,8 +30,8 @@
  * **Fix**: se la voce è `null`, il bottone Fix è ATTIVO. L'Upload richiede solo che la
  * voce sia configurata; lo stile è opzionale (se selezionato viene propagato).
  *
- * **Copy system prompt**: apre il dialog copia senza ricompilare il catalogo.
- * **Compila e Copy**: compile + mapping IA, poi dialog o Slot Mapping se invalido.
+ * **Deploy**: espande inline il pannello sync ConvAI (create/update agente ElevenLabs).
+ * **Compila e Copy**: compile + mapping IA, poi dialog copia o Slot Mapping se invalido.
  *
  * Il componente è puramente presentazionale: niente fetch, niente `localStorage` diretto.
  */
@@ -39,15 +39,17 @@
 import React from 'react';
 import {
   ChevronDown,
-  FileText,
   ClipboardList,
   Loader2,
   PlayCircle,
   Rocket,
   ScrollText,
   Sparkles,
+  Upload,
   Wrench,
 } from 'lucide-react';
+import type { ConvaiAgentSyncParams, ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
+import { ConvaiAgentSyncPanel } from '../ConvaiAgentSyncPanel';
 import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
 import {
   AGENT_PLATFORM_DISPLAY_LABEL,
@@ -74,13 +76,15 @@ export interface DeployHandlers {
    * il pannello Settings > IA Runtime con `platform` settata su `platform` e focus al picker voce.
    */
   onFixVoice: (platform: IAAgentPlatform) => void;
-  /** Apre il dialog copia senza ricompilare il catalogo. */
-  onCopySystemPrompt: () => void;
   /** Compila catalogo + mapping IA, poi dialog copia o Slot Mapping se fallisce. */
   onCompileAndCopySystemPrompt: () => void;
-  /** True se «Copy system prompt» (solo copia) non è disponibile. */
-  copySystemPromptDisabled?: boolean;
-  copySystemPromptDisabledReason?: string;
+  /** Parametri sync ConvAI per pannello Deploy inline. */
+  convaiSyncParams?: ConvaiAgentSyncParams | null;
+  /** Callback dopo sync ConvAI riuscita (persist link, catalogo, …). */
+  onConvaiSynced?: (result: ConvaiAgentSyncResult) => void;
+  /** True se «Deploy» inline non è disponibile. */
+  deployInlineDisabled?: boolean;
+  deployInlineDisabledReason?: string;
   /** True se «Compila e Copy» non è disponibile (es. catalogo vuoto). */
   compileAndCopyDisabled?: boolean;
   compileAndCopyDisabledReason?: string;
@@ -132,10 +136,11 @@ export function AIAgentDeployMenu({
   voicesByPlatform,
   onUploadToPlatform,
   onFixVoice,
-  onCopySystemPrompt,
   onCompileAndCopySystemPrompt,
-  copySystemPromptDisabled = false,
-  copySystemPromptDisabledReason,
+  convaiSyncParams = null,
+  onConvaiSynced,
+  deployInlineDisabled = false,
+  deployInlineDisabledReason,
   compileAndCopyDisabled = false,
   compileAndCopyDisabledReason,
   compilePhrasesBusy = false,
@@ -154,7 +159,12 @@ export function AIAgentDeployMenu({
   catalogUploadBlockedReason,
 }: AIAgentDeployMenuProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
+  const [inlineDeployOpen, setInlineDeployOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!open) setInlineDeployOpen(false);
+  }, [open]);
 
   /**
    * Chiusura del dropdown su click esterno e su tasto Esc. Coerente con i pattern UI già usati
@@ -170,7 +180,13 @@ export function AIAgentDeployMenu({
       }
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        if (inlineDeployOpen) {
+          setInlineDeployOpen(false);
+        } else {
+          setOpen(false);
+        }
+      }
     };
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
@@ -178,7 +194,11 @@ export function AIAgentDeployMenu({
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, inlineDeployOpen]);
+
+  const panelWidthClass = inlineDeployOpen
+    ? 'w-[min(32rem,calc(100vw-1.5rem))] max-h-[min(85vh,44rem)] overflow-y-auto'
+    : 'w-96 overflow-hidden';
 
   return (
     <div ref={containerRef} className="relative">
@@ -190,7 +210,7 @@ export function AIAgentDeployMenu({
         }}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Deploy: pubblica l'agente su una piattaforma o copia il system prompt"
+        title="Deploy: pubblica l'agente su ElevenLabs o compila il system prompt"
         className={[
           'inline-flex items-center gap-1.5 rounded-md border border-amber-500/70 bg-amber-700/85 px-2.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70',
           compilePhrasesBusy ? 'cursor-wait opacity-90' : '',
@@ -212,7 +232,7 @@ export function AIAgentDeployMenu({
         <div
           role="menu"
           aria-label="Azioni di deploy"
-          className="absolute right-0 z-50 mt-1 w-96 overflow-hidden rounded-md border border-slate-700 bg-slate-950 shadow-xl"
+          className={`absolute right-0 z-50 mt-1 rounded-md border border-slate-700 bg-slate-950 shadow-xl ${panelWidthClass}`}
         >
           {/* Title bar non cliccabile, semantica analoga al titolo «UPLOAD TO PLATFORM» nella spec. */}
           <div className="bg-slate-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
@@ -407,24 +427,39 @@ export function AIAgentDeployMenu({
             <button
               type="button"
               role="menuitem"
-              disabled={copySystemPromptDisabled || compilePhrasesBusy}
+              disabled={deployInlineDisabled || compilePhrasesBusy}
+              aria-expanded={inlineDeployOpen}
               onClick={() => {
-                if (compilePhrasesBusy || copySystemPromptDisabled) return;
-                onCopySystemPrompt();
+                if (compilePhrasesBusy || deployInlineDisabled) return;
+                setInlineDeployOpen((v) => !v);
               }}
               title={
                 compilePhrasesBusy
                   ? 'Attendi la fine della compilazione in corso'
-                  : copySystemPromptDisabled
-                    ? copySystemPromptDisabledReason ||
+                  : deployInlineDisabled
+                    ? deployInlineDisabledReason ||
                       'Disponibile quando tutti gli use case inclusi sono compilabili nel catalogo'
-                    : 'Apre il dialog per copiare il system prompt (senza ricompilare)'
+                    : 'Crea o aggiorna l’agente ElevenLabs (prompt, tool webhook, KB)'
               }
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
+              className={[
+                'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45',
+                inlineDeployOpen ? 'bg-slate-900/80' : '',
+              ].join(' ')}
             >
-              <FileText size={12} aria-hidden className="text-violet-300" />
-              Copy system prompt
+              <Upload size={12} aria-hidden className="text-violet-300" />
+              Deploy
             </button>
+            {inlineDeployOpen ? (
+              <div className="border-t border-violet-800/40 bg-slate-950">
+                <ConvaiAgentSyncPanel
+                  syncParams={convaiSyncParams}
+                  active={inlineDeployOpen}
+                  compact
+                  onCancel={() => setInlineDeployOpen(false)}
+                  onSynced={onConvaiSynced}
+                />
+              </div>
+            ) : null}
             {onOpenWebhookReadinessReport ? (
               <button
                 type="button"

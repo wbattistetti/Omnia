@@ -5,25 +5,31 @@ import {
 } from '../useCaseComposerPresentation';
 
 describe('useCaseHeaderExcludedDimClass', () => {
-  it('dims only when excluded and header vote is green (up)', () => {
+  it('dims any validation color when excluded from conversations', () => {
     expect(useCaseHeaderExcludedDimClass('up', false)).toContain('opacity');
+    expect(useCaseHeaderExcludedDimClass('down', false)).toContain('opacity');
+    expect(useCaseHeaderExcludedDimClass('review', false)).toContain('opacity');
+    expect(useCaseHeaderExcludedDimClass(undefined, false)).toContain('opacity');
     expect(useCaseHeaderExcludedDimClass('up', true)).toBe('');
-    expect(useCaseHeaderExcludedDimClass('down', false)).toBe('');
-    expect(useCaseHeaderExcludedDimClass('review', false)).toBe('');
-    expect(useCaseHeaderExcludedDimClass(undefined, false)).toBe('');
   });
 });
 
 describe('useCaseHeaderTitleTextClass', () => {
-  it('keeps full opacity for red when excluded', () => {
+  it('keeps validation hue and dims when excluded', () => {
     const cls = useCaseHeaderTitleTextClass('down', false, false);
     expect(cls).toContain('text-rose');
-    expect(cls).not.toContain('opacity-[0.32]');
+    expect(cls).toContain('opacity-[0.42]');
   });
 
-  it('dims green when excluded', () => {
-    const cls = useCaseHeaderTitleTextClass('up', false, false);
+  it('dims amber default when excluded', () => {
+    const cls = useCaseHeaderTitleTextClass(undefined, false, false);
+    expect(cls).toContain('text-amber');
+    expect(cls).toContain('opacity-[0.42]');
+  });
+
+  it('full opacity when included', () => {
+    const cls = useCaseHeaderTitleTextClass('up', false, true);
     expect(cls).toContain('text-emerald');
-    expect(cls).toContain('opacity-[0.32]');
+    expect(cls).not.toContain('opacity-[0.42]');
   });
 });

@@ -4,9 +4,9 @@
 
 import React from 'react';
 import {
-  isUnclassifiedSlotId,
-  isValidSlotId,
   normalizeSlotId,
+  resolveSlotIdFromDraft,
+  slugifySlotIdDraft,
 } from '@domain/useCaseBundle/projectSlotLexicon';
 
 export interface SlotCategoryComboboxProps {
@@ -76,13 +76,15 @@ export function SlotCategoryCombobox({
   const otherFiltered = React.useMemo(() => filterOptions(otherOptions, f), [otherOptions, f]);
   const hasOptions = mappedFiltered.length > 0 || otherFiltered.length > 0;
 
+  const draftSlotId = resolveSlotIdFromDraft(filter);
+
   const tryCommitDraft = React.useCallback(() => {
-    const next = normalizeSlotId(f || filter);
-    if (!isValidSlotId(next) || isUnclassifiedSlotId(next)) return;
+    const next = resolveSlotIdFromDraft(filter);
+    if (!next) return;
     onCommit(next);
     setOpen(false);
     setFilter('');
-  }, [f, filter, onCommit]);
+  }, [filter, onCommit]);
 
   const pick = React.useCallback(
     (slotId: string) => {
@@ -141,9 +143,11 @@ export function SlotCategoryCombobox({
             ))}
             {!hasOptions ? (
               <li className="px-2 py-1 text-[10px] text-slate-500">
-                {f && isValidSlotId(f) && !isUnclassifiedSlotId(f)
-                  ? 'Invio per usare questa categoria'
-                  : 'Nessun risultato'}
+                {draftSlotId
+                  ? `Invio per usare «${draftSlotId}»`
+                  : filter.trim()
+                    ? `Formato non valido — prova ${slugifySlotIdDraft(filter) || 'esame_obbligatorio'}`
+                    : 'Nessun risultato'}
               </li>
             ) : null}
           </ul>

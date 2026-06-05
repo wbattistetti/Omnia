@@ -213,4 +213,30 @@ export function useNodeRowEffects(props: UseNodeRowEffectsProps): void {
     window.addEventListener('flow:canvas:click', handleCanvasClick as any, { capture: false } as any);
     return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
   }, [isEditing, showIntellisense, setIsEditing, setShowIntellisense, setIntellisenseQuery]);
+
+  /** Chiude toolbar riga portata su body quando il click è fuori dal canvas flow. */
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (!showIcons && !showCreatePicker) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.flow-canvas-shell')) return;
+      if (target.closest('[data-node-row-toolbar]')) return;
+      if (typeToolbarRef.current?.contains(target as Node)) return;
+      setShowIcons(false);
+      setShowCreatePicker(false);
+      setAllowCreatePicker(false);
+      setIconPos(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [
+    showIcons,
+    showCreatePicker,
+    setShowIcons,
+    setShowCreatePicker,
+    setAllowCreatePicker,
+    setIconPos,
+    typeToolbarRef,
+  ]);
 }

@@ -44,6 +44,9 @@ import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalo
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
+import { buildConvaiAgentSyncParams } from '@domain/convai/buildConvaiAgentSyncParams';
+import type { ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
+import { persistConvaiAgentSyncLinkOnTask } from '@domain/convai/persistConvaiAgentSyncLinkOnTask';
 import { WebhookReadinessReportDialog } from './aiAgentEditor/webhookReadiness/WebhookReadinessReportDialog';
 import type { AgentWebhookReadinessReport } from '@domain/openApi/webhookOpenApiReadiness';
 import {
@@ -877,7 +880,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
   const globalHeaderAction = isWizardTaskStep ? null : headerAction;
   const isWizardBackendStep = c.agentWizardCurrentStep === 2;
   const isWizardKbStep = c.agentWizardCurrentStep === 1;
-
   const agentInterfaceOpenStorageKey = c.instanceId
     ? `omnia:agent-interface-open:${c.instanceId}`
     : null;
@@ -1096,6 +1098,67 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     openSlotMappingForMappingWork,
   ]);
 
+  const convaiSyncParams = React.useMemo(
+    () =>
+      instanceId
+        ? buildConvaiAgentSyncParams({
+            agentTaskId: instanceId,
+            projectId: pdUpdate?.getCurrentProjectId() ?? projectData?.projectId ?? undefined,
+            useCases: c.useCases,
+            conversationalRules: c.conversationalRules,
+            includeLog: c.agentLogUseCase,
+            includeBackendLog: c.agentLogBackendCalls,
+            agentBehavior: c.agentBehavior,
+            catalogFormat: conversationalCatalogFormat,
+            backendCatalog: projectData?.backendCatalog,
+            manualCatalogBackendTaskIds,
+            knowledgeBaseDocuments: c.knowledgeBaseDocuments,
+          })
+        : null,
+    [
+      instanceId,
+      c.useCases,
+      c.conversationalRules,
+      c.agentLogUseCase,
+      c.agentLogBackendCalls,
+      c.agentBehavior,
+      c.knowledgeBaseDocuments,
+      conversationalCatalogFormat,
+      manualCatalogBackendTaskIds,
+      pdUpdate,
+      projectData?.projectId,
+      projectData?.backendCatalog,
+    ]
+  );
+
+  const onConvaiSyncedFromDeploy = React.useCallback(
+    async (result: ConvaiAgentSyncResult) => {
+      const tid = String(instanceId ?? '').trim();
+      const pid = String(pdUpdate?.getCurrentProjectId() ?? projectData?.projectId ?? '').trim();
+      if (tid && result.link) {
+        await persistConvaiAgentSyncLinkOnTask(tid, result, pid || undefined);
+      }
+      if (!projectData || !pdUpdate?.updateDataDirectly) return;
+      const catalog = projectData.backendCatalog;
+      const prev = catalog?.manualEntries ?? [];
+      if (prev.length === 0) return;
+      const next = prev.map((e) => ({
+        ...e,
+        elevenLabsConvaiAgentId: result.agentId,
+      }));
+      pdUpdate.updateDataDirectly({
+        ...projectData,
+        backendCatalog: {
+          schemaVersion: 1,
+          manualEntries: next,
+          auditLog: catalog?.auditLog ?? [],
+          catalogVersion: (catalog?.catalogVersion ?? 0) + 1,
+        },
+      });
+    },
+    [instanceId, pdUpdate, projectData]
+  );
+
   const onSelectCostsView = React.useCallback(() => {
     setCostsViewActive(true);
     setWebhookLogViewActive(false);
@@ -1240,7 +1303,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         c.setIaRuntimeConfig(merged);
         c.persistIaRuntimeOverrideSnapshot({ platform });
       }
-      onSelectWizardStep(4 as AgentWizardStepIndex);
+      onSelectWizardStep(7 as AgentWizardStepIndex);
       window.setTimeout(() => {
         document.dispatchEvent(
           new CustomEvent('omnia:ia-runtime-focus', {
@@ -1354,12 +1417,13 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
         void onUploadToPlatform(platform, voice);
       }}
       onFixVoice={onFixVoiceForPlatform}
-      onCopySystemPrompt={onOpenConversationalPromptDialog}
       onCompileAndCopySystemPrompt={onCompileAndCopySystemPrompt}
       onOpenWebhookReadinessReport={onOpenWebhookReadinessReport}
       compilePhrasesBusy={c.compilePhrasesBusy}
-      copySystemPromptDisabled={!canCreateConversationalPrompt}
-      copySystemPromptDisabledReason={
+      convaiSyncParams={convaiSyncParams}
+      onConvaiSynced={(result) => void onConvaiSyncedFromDeploy(result)}
+      deployInlineDisabled={!canCreateConversationalPrompt}
+      deployInlineDisabledReason={
         canCreateConversationalPrompt
           ? undefined
           : 'Use case non ancora proiettabili: usa «Compila e Copy» o completa Slot mapping.'
@@ -1397,6 +1461,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     dismissTaskTextReviewOffer: c.dismissTaskTextReviewOffer,
     clearTaskTextReviewOfferDismissed: c.clearTaskTextReviewOfferDismissed,
     isTaskTextReviewOfferDismissed: c.isTaskTextReviewOfferDismissed,
+    notifyTaskTextManualEdit: c.notifyTaskTextManualEdit,
+    hasTaskTextManualEdit: c.hasTaskTextManualEdit,
     buildCallMeta: c.buildCallMeta,
     onTaskTextReviewError: c.onTaskTextReviewError,
     composedRuntimeMarkdown: c.composedRuntimeMarkdown,
@@ -1420,6 +1486,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     appendProposedFields: c.appendProposedFields,
     onProposedLabelBlur: c.syncFlowVariableFromLabel,
     logicalSteps: c.logicalSteps,
+    projectBackendCatalog: projectData?.backendCatalog,
     useCases: c.useCases,
     setUseCases: c.setUseCases,
     conversationalRules: c.conversationalRules,

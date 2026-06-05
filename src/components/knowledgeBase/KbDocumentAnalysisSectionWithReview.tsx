@@ -26,6 +26,7 @@ import {
 import type { KbAnalysisSectionId } from '@domain/knowledgeBase/kbDocumentAnalysisSections';
 import { KbAnalysisEditableMonaco } from './KbAnalysisEditableMonaco';
 import { useKbDocumentAnalysisEdit } from './KbDocumentAnalysisEditContext';
+import { KbAnalysisSectionAccordion } from './KbAnalysisSectionAccordion';
 
 const REVIEW_COPY = {
   panelTitle: KB_ANALYSIS_REVIEW_PANEL_TITLE,
@@ -52,6 +53,11 @@ export type KbDocumentAnalysisSectionWithReviewProps = {
   value: string;
   onValueChange: (next: string) => void;
   readOnly?: boolean;
+  defaultOpen?: boolean;
+  badge?: string;
+  headingToneClass?: string;
+  /** Se false, niente revisione osservazioni (es. note riformattazione). */
+  enableReview?: boolean;
 };
 
 export function KbDocumentAnalysisSectionWithReview({
@@ -60,10 +66,14 @@ export function KbDocumentAnalysisSectionWithReview({
   value,
   onValueChange,
   readOnly = false,
+  defaultOpen = false,
+  badge,
+  headingToneClass,
+  enableReview = true,
 }: KbDocumentAnalysisSectionWithReviewProps): React.ReactElement {
   const edit = useKbDocumentAnalysisEdit();
-  const baseline = edit.getSectionBaseline(sectionId);
-  const reviewItems = edit.getSectionReview(sectionId);
+  const baseline = enableReview ? edit.getSectionBaseline(sectionId) : '';
+  const reviewItems = enableReview ? edit.getSectionReview(sectionId) : null;
   const hasReview = reviewItems !== null && reviewItems.length > 0;
   const allConfirmed = reviewItems ? allReviewItemsConfirmed(reviewItems) : false;
   const confirmedCount = reviewItems ? countConfirmedReviewItems(reviewItems) : 0;
@@ -71,28 +81,30 @@ export function KbDocumentAnalysisSectionWithReview({
   const handleChange = React.useCallback(
     (next: string) => {
       onValueChange(next);
-      if (!readOnly) edit.notifySectionDraftChange(sectionId, next, heading);
+      if (!readOnly && enableReview) edit.notifySectionDraftChange(sectionId, next, heading);
     },
-    [edit, onValueChange, readOnly, sectionId, heading]
+    [edit, enableReview, onValueChange, readOnly, sectionId, heading]
   );
 
   return (
-    <div className="space-y-2 border-b border-slate-800/60 pb-3 last:border-0">
-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300/90">
-        {heading}
-      </h4>
-      <div className="relative min-h-[100px]">
+    <KbAnalysisSectionAccordion
+      heading={heading}
+      defaultOpen={defaultOpen}
+      badge={badge}
+      headingToneClass={headingToneClass ?? 'text-cyan-300/90'}
+    >
+      <div className="relative min-h-[80px]">
         <KbAnalysisEditableMonaco
           value={value}
           agentBaseline={baseline}
           onChange={handleChange}
           readOnly={readOnly}
-          minHeightPx={100}
+          minHeightPx={80}
           ariaLabel={`Analisi: ${heading}`}
         />
       </div>
 
-      {hasReview ? (
+      {enableReview && hasReview ? (
         <div className="rounded border border-violet-800/50 bg-violet-950/20">
           <KbAnalysisObservationReviewPanel
             copy={REVIEW_COPY}
@@ -120,6 +132,6 @@ export function KbDocumentAnalysisSectionWithReview({
           ) : null}
         </div>
       ) : null}
-    </div>
+    </KbAnalysisSectionAccordion>
   );
 }

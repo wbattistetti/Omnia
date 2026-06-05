@@ -13,6 +13,38 @@ function getAssistantFinishReason(response) {
   return typeof reason === 'string' ? reason : null;
 }
 
+/** Rimuove virgole finali illegali prima di `}` o `]` (errore frequente nei JSON del modello). */
+function stripIllegalTrailingCommas(jsonStr) {
+  if (typeof jsonStr !== 'string') return '';
+  let prev = '';
+  let out = jsonStr;
+  while (out !== prev) {
+    prev = out;
+    out = out.replace(/,(\s*[}\]])/g, '$1');
+  }
+  return out;
+}
+
+/**
+ * @param {string} jsonStr
+ * @returns {unknown}
+ */
+function parseJsonLenient(jsonStr) {
+  try {
+    return JSON.parse(jsonStr);
+  } catch (firstErr) {
+    const repaired = stripIllegalTrailingCommas(jsonStr);
+    if (repaired !== jsonStr) {
+      try {
+        return JSON.parse(repaired);
+      } catch {
+        /* continue */
+      }
+    }
+    throw firstErr;
+  }
+}
+
 /**
  * Heuristic: incomplete JSON (unclosed string/brackets) — typical of max_tokens truncation.
  * @param {string} jsonStr
@@ -86,7 +118,7 @@ function extractAndParseModelJson(response, opts = {}) {
   }
   const truncatedHint = finishReason === 'length' || isLikelyTruncatedJson(jsonStr);
   try {
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseJsonLenient(jsonStr);
     return { ok: true, parsed, jsonStr, finishReason };
   } catch (e) {
     const parseErr = e instanceof Error ? e : new Error(String(e));
@@ -146,6 +178,8 @@ function throwModelJsonParseFailure(lastFail) {
 module.exports = {
   getAssistantFinishReason,
   isLikelyTruncatedJson,
+  stripIllegalTrailingCommas,
+  parseJsonLenient,
   extractAndParseModelJson,
   buildCompactJsonRetryDirective,
   buildStrictJsonRetryDirective,

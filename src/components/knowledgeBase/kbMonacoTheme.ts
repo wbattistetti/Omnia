@@ -33,6 +33,8 @@ export function ensureKbReaderMonacoTheme(monaco: typeof Monaco): void {
         { token: 'kb.typeLine', foreground: 'a5f3fc', fontStyle: 'bold' },
         { token: 'kb.section.entities', foreground: '67e8f9', fontStyle: 'bold' },
         { token: 'kb.section.outputFlow', foreground: '38bdf8', fontStyle: 'bold' },
+        { token: 'kb.section.operationalRules', foreground: 'c4b5fd', fontStyle: 'bold' },
+        { token: 'kb.section.clarificationQuestions', foreground: '86efac', fontStyle: 'bold' },
         { token: 'kb.section.synonyms', foreground: 'fcd34d', fontStyle: 'bold' },
         { token: 'kb.section.dialog', foreground: 'c4b5fd', fontStyle: 'bold' },
         { token: 'kb.section.disambig', foreground: 'f472b6', fontStyle: 'bold' },

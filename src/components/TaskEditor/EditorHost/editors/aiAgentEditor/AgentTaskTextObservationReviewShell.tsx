@@ -64,6 +64,8 @@ export type AgentTaskTextObservationReviewShellProps = {
   onDismissOffer: () => void;
   onClearOfferDismissed: () => void;
   generating: boolean;
+  hasAgentGeneration: boolean;
+  hasManualEdit: boolean;
   onError?: (message: string | null) => void;
   children: (ctx: { reviewBlocksEdit: boolean }) => React.ReactNode;
 };

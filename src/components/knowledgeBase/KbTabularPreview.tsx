@@ -4,6 +4,7 @@
 
 import React from 'react';
 import type { KbTabularGrid } from '@domain/knowledgeBase/parseKbTabularText';
+import { kbTabularColumnWidthCh } from '@domain/knowledgeBase/kbTabularColumnSizing';
 
 export type KbTabularPreviewProps = {
   grid: KbTabularGrid;
@@ -12,14 +13,6 @@ export type KbTabularPreviewProps = {
   className?: string;
 };
 
-function columnMinWidthCh(header: string, columnCells: readonly string[]): number {
-  let maxLen = header.length;
-  for (const cell of columnCells) {
-    maxLen = Math.max(maxLen, cell.length);
-  }
-  return Math.min(48, Math.max(8, maxLen + 2));
-}
-
 export function KbTabularPreview({
   grid,
   preamble = [],
@@ -27,14 +20,14 @@ export function KbTabularPreview({
   className = '',
 }: KbTabularPreviewProps): React.ReactElement {
   const colWidths = React.useMemo(
-    () => grid.headers.map((h, i) => columnMinWidthCh(h, grid.rows.map((r) => r[i] ?? ''))),
+    () => grid.headers.map((h, i) => kbTabularColumnWidthCh(h, grid.rows.map((r) => r[i] ?? ''))),
     [grid.headers, grid.rows]
   );
 
   return (
     <div
       className={
-        'flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-slate-800 bg-slate-950/40 ' +
+        'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded border border-slate-800 bg-slate-950/40 ' +
         className
       }
     >
@@ -47,11 +40,11 @@ export function KbTabularPreview({
           ))}
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-max min-w-full border-collapse text-left text-slate-200">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto overscroll-x-contain">
+        <table className="w-max border-collapse text-left text-xs text-slate-200">
           <colgroup>
             {colWidths.map((w, i) => (
-              <col key={`col-${i}`} style={{ minWidth: `${w}ch` }} />
+              <col key={`col-${i}`} style={{ width: `${w}ch` }} />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-10 bg-slate-900 shadow-[0_1px_0_0_rgb(30_41_59)]">
@@ -59,10 +52,11 @@ export function KbTabularPreview({
               {grid.headers.map((h, i) => (
                 <th
                   key={`h-${i}-${h}`}
-                  className="whitespace-nowrap border-b border-slate-700 px-2 py-1.5 font-semibold text-amber-200/90"
+                  className="border-b border-slate-700 px-2 py-1.5 font-semibold text-amber-200/90"
+                  style={{ width: `${colWidths[i]}ch`, maxWidth: '42ch' }}
                   title={h}
                 >
-                  {h || '—'}
+                  <span className="block max-w-[42ch] truncate">{h || '—'}</span>
                 </th>
               ))}
             </tr>
@@ -73,10 +67,11 @@ export function KbTabularPreview({
                 {row.map((cell, ci) => (
                   <td
                     key={`c-${ri}-${ci}`}
-                    className="whitespace-nowrap border-b border-slate-800/80 px-2 py-1 text-slate-300"
+                    className="border-b border-slate-800/80 px-2 py-1 text-slate-300"
+                    style={{ width: `${colWidths[ci]}ch`, maxWidth: '42ch' }}
                     title={cell}
                   >
-                    {cell || '—'}
+                    <span className="block max-w-[42ch] truncate">{cell || '—'}</span>
                   </td>
                 ))}
               </tr>

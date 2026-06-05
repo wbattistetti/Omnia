@@ -11,6 +11,7 @@
 import { resolveKbRuntimeDistillTextSync } from '@domain/analysisRuntime/analysisRuntimeDistill';
 
 import { kbDocumentHasUsableAnalysis } from '@domain/knowledgeBase/kbAnalysisRuntimeSynthesis';
+import { resolveKbRestructuredRuntimeText } from '@domain/knowledgeBase/kbDocumentRestructureHelpers';
 
 import type { StagedKbDocument } from '@domain/knowledgeBase/kbDocumentTypes';
 
@@ -78,6 +79,12 @@ function stagedFieldsTextForConvaiUpload(doc: StagedKbDocument): string | null {
 /** Testo non vuoto da campi staged (sync, senza rete). */
 
 export function resolveKbTextForConvaiUpload(doc: StagedKbDocument): string | null {
+
+  const restructured = resolveKbRestructuredRuntimeText(doc);
+
+  if (restructured) return clipKbText(restructured);
+
+
 
   const raw = String(doc.documentAnalysisMarkdown ?? '').trim();
 

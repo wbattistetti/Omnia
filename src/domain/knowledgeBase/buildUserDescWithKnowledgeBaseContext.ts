@@ -21,6 +21,7 @@ import { fetchKbDocumentContent } from '@services/kbDocumentRepositoryApi';
 import type { StagedKbDocument } from './kbDocumentTypes';
 import { kbRepositoryKeyForDoc } from './kbRepositoryContract';
 import { kbDocumentHasUsableAnalysis } from './kbAnalysisRuntimeSynthesis';
+import { resolveKbRestructuredRuntimeText } from './kbDocumentRestructureHelpers';
 
 import {
 
@@ -87,6 +88,24 @@ async function resolveUploadDocText(
   callbacks: RuntimeDistillCallbacks | undefined
 
 ): Promise<{ text: string; usedAnalysis: boolean; usedLlmDistill: boolean }> {
+
+  const restructured = resolveKbRestructuredRuntimeText(doc);
+
+  if (restructured) {
+
+    const clipped =
+
+      restructured.length > perDocBudget
+
+        ? `${restructured.slice(0, perDocBudget - 1)}…`
+
+        : restructured;
+
+    return { text: clipped, usedAnalysis: true, usedLlmDistill: false };
+
+  }
+
+
 
   if (kbDocumentHasUsableAnalysis(doc)) {
 

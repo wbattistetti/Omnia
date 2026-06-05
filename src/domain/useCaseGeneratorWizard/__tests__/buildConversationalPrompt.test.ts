@@ -198,8 +198,10 @@ describe('buildConversationalPrompt', () => {
       { startUseCaseId: 'uc-saluto' }
     );
     expect(prompt).toContain('Regola di Start');
-    expect(prompt).toContain("Use Case 1 ('Saluto')");
-    expect(prompt).toContain('Non deve usare saluti generici');
+    expect(prompt).toContain('FASE START');
+    expect(prompt).toContain('**Use Case 1** («Saluto»)');
+    expect(prompt).toContain('Turno 0');
+    expect(prompt).toContain('Vietato: «Ciao»');
     expect(prompt).not.toContain('Start sessione (startAgent)');
   });
 

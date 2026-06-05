@@ -40,6 +40,24 @@ describe('extractAndParseModelJson', () => {
     if (result.ok) expect(result.parsed).toEqual({ ok: true });
   });
 
+  it('parses JSON with illegal trailing commas', () => {
+    const response = {
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: {
+            content: '{"links":[{"useCaseId":"a","expansionRowId":"row_1",},]}',
+          },
+        },
+      ],
+    };
+    const result = extractAndParseModelJson(response);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.parsed).toEqual({ links: [{ useCaseId: 'a', expansionRowId: 'row_1' }] });
+    }
+  });
+
   it('flags truncation on finish_reason length', () => {
     const response = {
       choices: [

@@ -1,6 +1,42 @@
 {
   "records": [
     {
+      "id": "0f62b18a-c921-442e-ae51-5630124751c0",
+      "ts": "2026-06-05T05:40:32.107Z",
+      "projectId": "proj_69c403214f",
+      "agentTaskId": "g_9736a4abfbeef2c5190e40b3940c8a3d-hs1joq8l8",
+      "backendTaskId": "g_47ce4b472dfca99f27e6f52d654afbcc",
+      "backendLabel": "next-window",
+      "gatewayPath": "/api/runtime/convai-webhook/proj_69c403214f/g_9736a4abfbeef2c5190e40b3940c8a3d-hs1joq8l8/g_47ce4b472dfca99f27e6f52d654afbcc",
+      "upstreamUrl": "https://gbqdapomdtxbhmftkbir.supabase.co/functions/v1/agenda-solver/next-window",
+      "forwardMethod": "GET",
+      "requestBodyFromClient": "{\"windowDays\":10,\"constraints\":{\"horizon\":{\"start\":\"\",\"end\":\"\"},\"forbiddenWeekdays\":[],\"allowedWeekdays\":[],\"forbiddenMonths\":[],\"allowedMonths\":[],\"forbiddenDaysOfMonth\":[],\"forbiddenDateRanges\":[],\"allowedTimeIntervals\":[],\"forbiddenTimeIntervals\":[],\"preferredTimeIntervals\":[],\"slotDurationMinutes\":null,\"minSlotDurationMinutes\":null,\"maxSlotDurationMinutes\":null}}",
+      "requestBodyAfterSendHints": "{\"windowDays\":10}",
+      "upstreamStatus": 404,
+      "upstreamResponsePreview": "{\"message\":\"Not found\"}",
+      "durationMs": 14840,
+      "sendHintsApplied": 0,
+      "error": "upstream_http_404"
+    },
+    {
+      "id": "7787ab1a-c379-48d8-91ab-12d85fbfe58b",
+      "ts": "2026-06-05T05:08:28.784Z",
+      "projectId": "proj_69c403214f",
+      "agentTaskId": "g_9736a4abfbeef2c5190e40b3940c8a3d-hs1joq8l8",
+      "backendTaskId": "g_47ce4b472dfca99f27e6f52d654afbcc",
+      "backendLabel": "next-window",
+      "gatewayPath": "/api/runtime/convai-webhook/proj_69c403214f/g_9736a4abfbeef2c5190e40b3940c8a3d-hs1joq8l8/g_47ce4b472dfca99f27e6f52d654afbcc",
+      "upstreamUrl": "https://gbqdapomdtxbhmftkbir.supabase.co/functions/v1/agenda-solver/next-window",
+      "forwardMethod": "GET",
+      "requestBodyFromClient": "{\"windowDays\":null,\"constraints\":{\"horizon\":{\"start\":\"\",\"end\":\"\"},\"forbiddenWeekdays\":[],\"allowedWeekdays\":[],\"forbiddenMonths\":[],\"allowedMonths\":[],\"forbiddenDaysOfMonth\":[],\"forbiddenDateRanges\":[],\"allowedTimeIntervals\":[],\"forbiddenTimeIntervals\":[],\"preferredTimeIntervals\":[],\"slotDurationMinutes\":null,\"minSlotDurationMinutes\":null,\"maxSlotDurationMinutes\":null}}",
+      "requestBodyAfterSendHints": "{}",
+      "upstreamStatus": 404,
+      "upstreamResponsePreview": "{\"message\":\"Not found\"}",
+      "durationMs": 16581,
+      "sendHintsApplied": 0,
+      "error": "upstream_http_404"
+    },
+    {
       "id": "ffe60dd7-b2af-4c73-a949-9e0af78a16c5",
       "ts": "2026-06-01T01:41:39.454Z",
       "projectId": "proj_69c403214f",
@@ -38,6 +74,6 @@
     }
   ],
   "meta": {
-    "updatedAt": "2026-06-01T01:41:39.455Z"
+    "updatedAt": "2026-06-05T05:40:32.107Z"
   }
 }

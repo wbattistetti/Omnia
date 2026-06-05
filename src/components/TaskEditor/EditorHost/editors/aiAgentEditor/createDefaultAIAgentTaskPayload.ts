@@ -30,6 +30,7 @@ export function createDefaultAIAgentTaskPayload(): Record<string, unknown> {
     agentDesignFrozen: false,
     agentDesignHasGeneration: false,
     agentLogicalStepsJson: '[]',
+    agentWizardStepOrderVersion: 4,
     agentUseCasesJson: '[]',
     agentStartPromptJson: '',
     agentStartUseCaseId: '',

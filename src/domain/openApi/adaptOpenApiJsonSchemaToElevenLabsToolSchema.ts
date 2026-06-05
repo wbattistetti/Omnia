@@ -189,14 +189,33 @@ export function adaptOpenApiPropertiesToElevenLabs(
   return out;
 }
 
+export type ElevenLabsToolSchemaOptions = {
+  /** Descrizione radice richiesta dalla UI ConvAI (`request_body_schema` / query). */
+  description?: string;
+};
+
+function resolveRootSchemaDescription(
+  inputSchema: Record<string, unknown>,
+  options?: ElevenLabsToolSchemaOptions
+): string {
+  const fromOpt = String(options?.description ?? '').trim();
+  if (fromOpt) return fromOpt;
+  const fromSchema =
+    typeof inputSchema.description === 'string' ? inputSchema.description.trim() : '';
+  if (fromSchema) return fromSchema;
+  return 'Parametri del body JSON inviati al webhook.';
+}
+
 /**
  * `request_body_schema` per tool webhook POST/PUT: radice `type: object` + properties annidate.
  */
 export function toElevenLabsRequestBodySchema(
-  inputSchema: Record<string, unknown>
+  inputSchema: Record<string, unknown>,
+  options?: ElevenLabsToolSchemaOptions
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {
     type: 'object',
+    description: resolveRootSchemaDescription(inputSchema, options),
     properties: adaptOpenApiPropertiesToElevenLabs(
       inputSchema.properties as Record<string, unknown> | undefined
     ),
@@ -209,13 +228,72 @@ export function toElevenLabsRequestBodySchema(
 }
 
 /**
- * `query_params_schema`: solo `properties` + `required` (no `type` in radice — extra_forbidden EU).
+ * Proprietà query string ConvAI EU: solo boolean | string | integer | number (no object/array).
+ */
+function adaptSchemaPropertyForQueryParam(
+  raw: unknown,
+  pathPrefix: string
+): Record<string, unknown> {
+  const src = normalizeSourceNode(raw);
+  const nameLeaf = pathPrefix.split('.').pop() || pathPrefix || 'param';
+  const desc =
+    typeof src.description === 'string' && src.description.trim()
+      ? src.description.trim()
+      : `Parametro ${nameLeaf}`;
+
+  const type = effectiveOpenApiType(src);
+  if (type === 'object' || type === 'array') {
+    return {
+      type: 'string',
+      description: `${desc} (passa come stringa JSON)`,
+    };
+  }
+
+  const row: Record<string, unknown> = { description: desc, type };
+
+  if (typeof src.format === 'string' && src.format.trim()) {
+    row.format = src.format.trim();
+  }
+  for (const bound of ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum'] as const) {
+    const v = src[bound];
+    if (typeof v === 'number' && !Number.isNaN(v)) row[bound] = v;
+  }
+
+  if (Array.isArray(src.enum) && src.enum.length > 0) {
+    row.enum = [...src.enum];
+  }
+  if (Object.prototype.hasOwnProperty.call(src, 'const')) {
+    row.const = src.const;
+  }
+  adaptEnumsAndConstsForElevenLabsConvai(row);
+
+  return row;
+}
+
+/** Converte `properties` OpenAPI in query params ElevenLabs (solo tipi primitivi). */
+export function adaptOpenApiPropertiesToElevenLabsQueryParams(
+  props: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  if (!props || !isRecord(props)) return {};
+  const out: Record<string, unknown> = {};
+  let count = 0;
+  for (const [name, raw] of Object.entries(props)) {
+    if (count >= MAX_PROPERTIES_PER_OBJECT) break;
+    out[name] = adaptSchemaPropertyForQueryParam(raw, name);
+    count += 1;
+  }
+  return out;
+}
+
+/**
+ * `query_params_schema`: solo `properties` + `required` (no `type`/`description` in radice — extra_forbidden EU).
  */
 export function toElevenLabsQueryParamsSchema(
-  inputSchema: Record<string, unknown>
+  inputSchema: Record<string, unknown>,
+  _options?: ElevenLabsToolSchemaOptions
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {
-    properties: adaptOpenApiPropertiesToElevenLabs(
+    properties: adaptOpenApiPropertiesToElevenLabsQueryParams(
       inputSchema.properties as Record<string, unknown> | undefined
     ),
   };

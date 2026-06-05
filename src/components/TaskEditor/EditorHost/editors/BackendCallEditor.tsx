@@ -57,6 +57,7 @@ import type { PortalConnectionMeta } from '@domain/portalAuth/portalConnectionTy
 import { logBackendCallTest } from '../../../../debug/backendCallTestDebug';
 import { analyzeLocalhostEndpointReachability } from '@domain/devTunnel/devTunnelCompileBridge';
 import { resolveConvaiWebhookGatewayTestUrl } from '../../../../utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
+import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
 import type {
   BackendInputAdvancementEntry,
   BackendRecalculationEntry,
@@ -461,7 +462,17 @@ export default function BackendCallEditor({
   // Config state must be declared before hooks that read `config` (Swagger / missing fields).
   // ─────────────────────────────────────────────────────────
   const buildConfigFromTask = React.useCallback((rawTask: any): BackendCallConfig => {
-    const endpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
+    const rawEndpoint = rawTask?.endpoint ?? DEFAULT_CONFIG.endpoint;
+    const resolved = readBackendCallEndpoint(rawTask as Task);
+    const endpoint = {
+      ...rawEndpoint,
+      url: resolved.url || String(rawEndpoint.url ?? '').trim(),
+      method: resolved.method as BackendCallConfig['endpoint']['method'],
+      headers: {
+        ...(typeof rawEndpoint.headers === 'object' && rawEndpoint.headers ? rawEndpoint.headers : {}),
+        ...resolved.headers,
+      },
+    };
     const rawIn = Array.isArray(rawTask?.inputs) ? rawTask.inputs : [];
     const rawOut = Array.isArray(rawTask?.outputs) ? rawTask.outputs : [];
     let inputs: BackendCallConfig['inputs'] = rawIn.filter((i: { internalName?: string }) => Boolean(i?.internalName?.trim()));
@@ -603,12 +614,31 @@ export default function BackendCallEditor({
     });
   }, [projectData, config.endpoint.url, config.portalConnectionId]);
 
+  /** URL/metodo dal task (catalogo header o risoluzione OpenAPI), non da config stale quando l’endpoint è esterno. */
+  const effectiveHttpEndpoint = React.useMemo(() => {
+    if (!instanceId) return config.endpoint;
+    const stored = taskRepository.getTask(instanceId);
+    if (!stored) return config.endpoint;
+    const resolved = readBackendCallEndpoint(stored);
+    return {
+      url: (resolved.url || config.endpoint.url).trim(),
+      method: resolved.method as BackendCallConfig['endpoint']['method'],
+      headers: { ...(config.endpoint.headers ?? {}), ...resolved.headers },
+    };
+  }, [
+    instanceId,
+    config.endpoint.url,
+    config.endpoint.method,
+    config.endpoint.headers,
+    endpointExternalRevision,
+  ]);
+
   React.useEffect(() => {
     if (instanceId && config) {
       taskRepository.updateTask(
         instanceId,
         {
-          endpoint: config.endpoint,
+          ...(!hideEndpointRow ? { endpoint: config.endpoint } : {}),
           openapiSpecUrl: config.openapiSpecUrl ?? '',
           ...(config.portalConnectionId ? { portalConnectionId: config.portalConnectionId } : {}),
           inputs: config.inputs,
@@ -629,7 +659,7 @@ export default function BackendCallEditor({
         projectId
       );
     }
-  }, [config, backendToolDescription, instanceId, projectId]);
+  }, [config, backendToolDescription, hideEndpointRow, instanceId, projectId]);
 
   /** Datalist for "Campo API": filled after Read API from Swagger. */
   const availableApiParams = React.useMemo(() => {
@@ -2048,7 +2078,7 @@ export default function BackendCallEditor({
               }}
               onColumnsChange={(columns) => setConfig((prev) => ({ ...prev, mockTableColumns: columns }))}
               mappingSend={mappingSend}
-              endpoint={config.endpoint}
+              endpoint={effectiveHttpEndpoint}
               portalConnectionId={config.portalConnectionId || resolvePortalConnectionId()}
               defaultExecutionMode={
                 config.mockTableDefaultExecutionMode ?? BackendExecutionMode.MOCK

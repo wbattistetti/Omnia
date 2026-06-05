@@ -42,7 +42,12 @@ import {
   buildStartAgentPromptSection,
   type AgentStartPromptConfig,
 } from './agentStartPrompt';
-import { buildStartUseCaseRuleSection } from './startUseCase';
+import {
+  buildStartTurnRuleOneOverrideIt,
+  buildStartUseCaseRuleSection,
+  resolveStartUseCasePromptMeta,
+  type StartUseCasePromptMeta,
+} from './startUseCase';
 import { buildBackendCallDebugPromptSection } from './backendCallDebugPrompt';
 import { buildSlotLexiconGlossaryPromptSection } from '@domain/useCaseBundle/dynamicSlotRegistry';
 
@@ -151,7 +156,10 @@ Comportamento C: tieni traccia internamente dei turni UKS consecutivi; dopo due 
   }
 }
 
-function buildPromptHeaderIt(catalogFormat: ConversationalCatalogFormat): string {
+function buildPromptHeaderIt(
+  catalogFormat: ConversationalCatalogFormat,
+  startMeta?: StartUseCasePromptMeta | null
+): string {
   const catalogHeading = catalogFormatCatalogHeading(catalogFormat);
   const isDsl = catalogFormat === 'dsl-standard' || catalogFormat === 'dsl-ultra';
   const templateHint = isDsl
@@ -161,14 +169,12 @@ function buildPromptHeaderIt(catalogFormat: ConversationalCatalogFormat): string
     ? 'rispetta \`WHEN:\` per scegliere la variante corretta'
     : 'rispetta \`when\` per scegliere la variante corretta';
 
-  return `Ruolo
-Sei l'agente virtuale di un servizio fissato dal progettista. Devi parlare e rispondere ESCLUSIVAMENTE come definito dal catalogo use case più sotto.
+  const rule1 = startMeta
+    ? buildStartTurnRuleOneOverrideIt(startMeta)
+    : `1. Per ogni interazione, scegli un solo use case tra quelli applicabili (il più adatto al turno); usa una sola variante — ${templateHint}; ${variantHint}.`;
 
-${PROMPT_TEMPLATE_ONLY_UKS_IT}
-
-Regole obbligatorie
-1. Per ogni interazione, scegli un solo use case tra quelli applicabili (il più adatto al turno); usa una sola variante — ${templateHint}; ${variantHint}.
-2. Nel catalogo NON inventare frasi: sostituisci SOLO i token tra \`[…]\`. Fuori catalogo: solo UKS come in «Template-Only + UKS» sopra.
+  const rulesTail = startMeta
+    ? `2. Nel catalogo NON inventare frasi: sostituisci SOLO i token tra \`[…]\`. Fuori catalogo: solo UKS come in «Template-Only + UKS» sopra.
 3. I token tra parentesi quadre vanno sostituiti con valori coerenti col contesto; per token di stile \`«…»\` usa \`tokens_stile\` / blocco STYLE se presente.
 4. NON lasciare parentesi quadre visibili nella risposta finale.
 5. Non cambiare le stringhe fuori dai token: copia letterale il testo fisso del template.
@@ -176,7 +182,25 @@ Regole obbligatorie
 7. Il \`label\` interno e gli id tecnici non vanno citati all'utente.
 8. Se la variante ha \`tokenBindings\`: per ogni token usa \`fillFrom\` (campo RECEIVE) per popolare il valore; \`toolName\` e \`sendParams\` indicano quale tool backend invocare e con quali parametri SEND.
 9. Se l'use case ha \`slotBackendContract\`: è la mappa canonica slot_id → { tool, receive, send? }; allinea \`tokenBindings\` a questa mappa. I campi RECEIVE per \`fillFrom\` sono nel blocco BACKEND RECEIVE; non duplicare per UC.
-10. Se \`tokenBindings\` include \`sendPath\`, \`valueKind\` e \`role\`: usa lo schema del tool webhook indicato da \`toolName\`; non inventare path. Per date relative usa \`valueKind\` (es. end_of_month, tomorrow, specific_date) quando presente.
+10. Se \`tokenBindings\` include \`sendPath\`, \`valueKind\` e \`role\`: usa lo schema del tool webhook indicato da \`toolName\`; non inventare path. Per date relative usa \`valueKind\` (es. end_of_month, tomorrow, specific_date) quando presente.`
+    : `2. Nel catalogo NON inventare frasi: sostituisci SOLO i token tra \`[…]\`. Fuori catalogo: solo UKS come in «Template-Only + UKS» sopra.
+3. I token tra parentesi quadre vanno sostituiti con valori coerenti col contesto; per token di stile \`«…»\` usa \`tokens_stile\` / blocco STYLE se presente.
+4. NON lasciare parentesi quadre visibili nella risposta finale.
+5. Non cambiare le stringhe fuori dai token: copia letterale il testo fisso del template.
+6. Usa lo \`scenario\` LLM (intestazione UC o campo \`s\` / \`scenario\`) per decidere QUANDO applicare l'use case.
+7. Il \`label\` interno e gli id tecnici non vanno citati all'utente.
+8. Se la variante ha \`tokenBindings\`: per ogni token usa \`fillFrom\` (campo RECEIVE) per popolare il valore; \`toolName\` e \`sendParams\` indicano quale tool backend invocare e con quali parametri SEND.
+9. Se l'use case ha \`slotBackendContract\`: è la mappa canonica slot_id → { tool, receive, send? }; allinea \`tokenBindings\` a questa mappa. I campi RECEIVE per \`fillFrom\` sono nel blocco BACKEND RECEIVE; non duplicare per UC.
+10. Se \`tokenBindings\` include \`sendPath\`, \`valueKind\` e \`role\`: usa lo schema del tool webhook indicato da \`toolName\`; non inventare path. Per date relative usa \`valueKind\` (es. end_of_month, tomorrow, specific_date) quando presente.`;
+
+  return `Ruolo
+Sei l'agente virtuale di un servizio fissato dal progettista. Devi parlare e rispondere ESCLUSIVAMENTE come definito dal catalogo use case più sotto.
+
+${PROMPT_TEMPLATE_ONLY_UKS_IT}
+
+Regole obbligatorie
+${rule1}
+${rulesTail}
 
 ${catalogHeading}
 Ogni voce elenca lo scenario LLM e il template da compilare (almeno una variante per UC).`;
@@ -208,6 +232,8 @@ export function buildConversationalPrompt(
       `buildConversationalPrompt: ${formatNonProjectableUseCasesErrorDetail(nonProjectable)}`
     );
   }
+
+  const startMeta = resolveStartUseCasePromptMeta(useCases, options.startUseCaseId);
 
   const includeLog = options.includeLog === true;
   const agentBehavior = options.agentBehavior ?? 'B';
@@ -256,5 +282,5 @@ export function buildConversationalPrompt(
     rulesSection.trim(),
   ].filter(Boolean);
   const body = bodyParts.join('\n\n');
-  return `${buildPromptHeaderIt(catalogFormat)}\n\n${body}\n`;
+  return `${buildPromptHeaderIt(catalogFormat, startMeta)}\n\n${body}\n`;
 }

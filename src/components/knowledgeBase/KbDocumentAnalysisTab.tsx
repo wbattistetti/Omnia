@@ -111,6 +111,9 @@ export function KbDocumentAnalysisTab({
   const [busyObservationId, setBusyObservationId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState(doc.documentAnalysisMarkdown);
+  const [restructureNotesDraft, setRestructureNotesDraft] = React.useState(
+    doc.documentRestructureNotesMarkdown ?? ''
+  );
   const [reviewItems, setReviewItems] = React.useState<KbAnalysisReviewSessionItem[] | null>(null);
   const [analysisStarted, setAnalysisStarted] = React.useState(
     () => Boolean(doc.agentAnalysisBaselineMarkdown?.trim())
@@ -126,13 +129,14 @@ export function KbDocumentAnalysisTab({
 
   React.useEffect(() => {
     setDraft(doc.documentAnalysisMarkdown);
+    setRestructureNotesDraft(doc.documentRestructureNotesMarkdown ?? '');
     setError(null);
     setReviewItems(null);
     setBusyObservationId(null);
     setAnalysisStarted(Boolean(doc.agentAnalysisBaselineMarkdown?.trim()));
     setHasManualEdit(false);
     setReviewPanelOpenInternal(true);
-  }, [doc.id, doc.documentAnalysisMarkdown]);
+  }, [doc.id, doc.documentAnalysisMarkdown, doc.documentRestructureNotesMarkdown]);
 
   const repoId = doc.id?.trim() || doc.repositoryDocumentId?.trim() || undefined;
   const content = useKbDocumentContent(projectId, repoId, {
@@ -152,7 +156,11 @@ export function KbDocumentAnalysisTab({
     canEdit && hasModel && Boolean(projectId?.trim()) && hasRepo && !busy;
 
   const canPropose = canRunAgent && !inReviewSession;
-  const showGuide = !analysisStarted;
+  const showAnalysisContent =
+    analysisStarted ||
+    Boolean(draft.trim()) ||
+    Boolean(restructureNotesDraft.trim());
+  const showGuide = !showAnalysisContent;
 
   React.useEffect(() => {
     if (inReviewSession && allConfirmed) {
@@ -169,6 +177,16 @@ export function KbDocumentAnalysisTab({
       }
     },
     [doc.documentAnalysisMarkdown, onUpdateDoc]
+  );
+
+  const persistRestructureNotes = React.useCallback(
+    (next: string) => {
+      setRestructureNotesDraft(next);
+      if (next !== (doc.documentRestructureNotesMarkdown ?? '')) {
+        onUpdateDoc({ documentRestructureNotesMarkdown: next });
+      }
+    },
+    [doc.documentRestructureNotesMarkdown, onUpdateDoc]
   );
 
   const applyAgentResult = React.useCallback(
@@ -650,19 +668,17 @@ export function KbDocumentAnalysisTab({
           </div>
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-700/80 bg-slate-950/50">
-            {analysisStarted ? (
+            {showAnalysisContent ? (
               <p className="shrink-0 border-b border-slate-800/80 px-2 py-1 text-[10px] leading-snug text-slate-500">
-                Sezioni colorate:{' '}
+                Analisi snella — solo sezioni con contenuto.{' '}
+                <span className="text-violet-300">Regole operative</span> ·{' '}
                 <span className="text-cyan-300">Entities</span> ·{' '}
-                <span className="text-amber-200">Sinonimi</span> ·{' '}
-                <span className="text-violet-300">Dialogo</span> ·{' '}
-                <span className="text-pink-300">Disambiguazione</span> ·{' '}
-                <span className="text-orange-300">Dati mancanti</span> ·{' '}
-                <span className="text-emerald-300">Mapping</span> ·{' '}
-                <span className="text-stone-400 italic">Fonte:</span>
+                <span className="text-teal-300">Riformattazione</span>
+                {' · '}
+                <span className="text-amber-300/80">Legacy</span> = sezioni vecchie da consolidare con Aggiorna
               </p>
             ) : null}
-            {analysisStarted && repoId ? (
+            {showAnalysisContent && repoId ? (
               <KbDocumentAnalysisEditProvider
                 doc={doc}
                 onUpdateDoc={onUpdateDoc}
@@ -682,6 +698,10 @@ export function KbDocumentAnalysisTab({
                   agentBaseline={baseline}
                   onDraftChange={canEdit && !busy ? persistDraft : () => {}}
                   readOnly={!canEdit || busy}
+                  restructureNotesMarkdown={restructureNotesDraft}
+                  onRestructureNotesChange={
+                    canEdit && !busy ? persistRestructureNotes : undefined
+                  }
                 />
               </KbDocumentAnalysisEditProvider>
             ) : (
@@ -690,6 +710,10 @@ export function KbDocumentAnalysisTab({
                 agentBaseline={baseline}
                 onDraftChange={canEdit && !busy ? persistDraft : () => {}}
                 readOnly={!canEdit || busy}
+                restructureNotesMarkdown={restructureNotesDraft}
+                onRestructureNotesChange={
+                  canEdit && !busy ? persistRestructureNotes : undefined
+                }
               />
             )}
           </div>

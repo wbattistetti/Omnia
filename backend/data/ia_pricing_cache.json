@@ -778,19 +778,19 @@
     },
     {
       "providerId": "openai",
-      "modelId": "gpt-3.5-turbo-0613",
-      "inputUsdPer1M": 1,
-      "outputUsdPer1M": 2,
-      "contextLength": 4095,
-      "rawId": "openai/gpt-3.5-turbo-0613"
-    },
-    {
-      "providerId": "openai",
       "modelId": "gpt-4-turbo-preview",
       "inputUsdPer1M": 10,
       "outputUsdPer1M": 30,
       "contextLength": 128000,
       "rawId": "openai/gpt-4-turbo-preview"
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-0613",
+      "inputUsdPer1M": 1,
+      "outputUsdPer1M": 2,
+      "contextLength": 4095,
+      "rawId": "openai/gpt-3.5-turbo-0613"
     },
     {
       "providerId": "openai",
@@ -815,14 +815,6 @@
       "outputUsdPer1M": 4,
       "contextLength": 16385,
       "rawId": "openai/gpt-3.5-turbo-16k"
-    },
-    {
-      "providerId": "openai",
-      "modelId": "gpt-4-0314",
-      "inputUsdPer1M": 30,
-      "outputUsdPer1M": 60,
-      "contextLength": 8191,
-      "rawId": "openai/gpt-4-0314"
     },
     {
       "providerId": "openai",
@@ -1618,14 +1610,6 @@
       "contextLength": 200000,
       "rawId": "anthropic/claude-3-haiku"
     },
-    "openai::gpt-3.5-turbo-0613": {
-      "providerId": "openai",
-      "modelId": "gpt-3.5-turbo-0613",
-      "inputUsdPer1M": 1,
-      "outputUsdPer1M": 2,
-      "contextLength": 4095,
-      "rawId": "openai/gpt-3.5-turbo-0613"
-    },
     "openai::gpt-4-turbo-preview": {
       "providerId": "openai",
       "modelId": "gpt-4-turbo-preview",
@@ -1633,6 +1617,14 @@
       "outputUsdPer1M": 30,
       "contextLength": 128000,
       "rawId": "openai/gpt-4-turbo-preview"
+    },
+    "openai::gpt-3.5-turbo-0613": {
+      "providerId": "openai",
+      "modelId": "gpt-3.5-turbo-0613",
+      "inputUsdPer1M": 1,
+      "outputUsdPer1M": 2,
+      "contextLength": 4095,
+      "rawId": "openai/gpt-3.5-turbo-0613"
     },
     "openai::gpt-4-1106-preview": {
       "providerId": "openai",
@@ -1658,14 +1650,6 @@
       "contextLength": 16385,
       "rawId": "openai/gpt-3.5-turbo-16k"
     },
-    "openai::gpt-4-0314": {
-      "providerId": "openai",
-      "modelId": "gpt-4-0314",
-      "inputUsdPer1M": 30,
-      "outputUsdPer1M": 60,
-      "contextLength": 8191,
-      "rawId": "openai/gpt-4-0314"
-    },
     "openai::gpt-4": {
       "providerId": "openai",
       "modelId": "gpt-4",
@@ -1685,7 +1669,7 @@
   },
   "meta": {
     "source": "openrouter",
-    "count": 105,
-    "updatedAt": "2026-06-02T19:55:19.213Z"
+    "count": 104,
+    "updatedAt": "2026-06-05T07:33:36.176Z"
   }
 }

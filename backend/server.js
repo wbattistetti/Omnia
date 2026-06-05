@@ -61,6 +61,11 @@ const {
   distillDocumentAnalysisRuntime,
 } = require('./services/kbDocumentAnalysisService');
 const {
+  proposeDocumentRestructure,
+  refineDocumentRestructure,
+  refineDocumentRestructureWithFeedback,
+} = require('./services/kbDocumentRestructureService');
+const {
   reviewTaskTextObservations,
   clarifyTaskTextObservation,
   finalizeTaskText,
@@ -6886,6 +6891,111 @@ app.post('/design/ai-agent-generate', async (req, res) => {
         repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
         documentName: typeof documentName === 'string' ? documentName : 'document',
         documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_propose_document_restructure') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        documentSampleText,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_PROPOSE_DOCUMENT_RESTRUCTURE' });
+      const result = await proposeDocumentRestructure({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_refine_document_restructure') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        documentSampleText,
+        draftMarkdown,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, { purpose: 'KB_REFINE_DOCUMENT_RESTRUCTURE' });
+      const result = await refineDocumentRestructure({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        draftMarkdown: typeof draftMarkdown === 'string' ? draftMarkdown : '',
+        agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
+        taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
+        existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)
+          ? existingUseCaseSummaries
+          : [],
+        provider,
+        model,
+        aiProviderService,
+        purpose: callMeta.purpose,
+        taskId: callMeta.taskId,
+        taskLabel: callMeta.taskLabel,
+      });
+      return res.json({ success: true, ...result });
+    }
+
+    if (action === 'kb_refine_document_restructure_with_feedback') {
+      const {
+        projectId,
+        repositoryDocumentId,
+        documentName,
+        documentSampleText,
+        draftMarkdown,
+        rowNotes,
+        questionAnswers,
+        designerFeedback,
+        agentTaskSummary,
+        taskVariables,
+        existingUseCaseSummaries,
+      } = body;
+      const callMeta = readCallMetaFromBody(body, {
+        purpose: 'KB_REFINE_DOCUMENT_RESTRUCTURE_WITH_FEEDBACK',
+      });
+      const result = await refineDocumentRestructureWithFeedback({
+        projectId: typeof projectId === 'string' ? projectId : '',
+        repositoryDocumentId: typeof repositoryDocumentId === 'string' ? repositoryDocumentId : '',
+        documentName: typeof documentName === 'string' ? documentName : 'document',
+        documentSampleText: typeof documentSampleText === 'string' ? documentSampleText : '',
+        draftMarkdown: typeof draftMarkdown === 'string' ? draftMarkdown : '',
+        rowNotes: rowNotes && typeof rowNotes === 'object' ? rowNotes : {},
+        questionAnswers: Array.isArray(questionAnswers) ? questionAnswers : [],
+        designerFeedback: typeof designerFeedback === 'string' ? designerFeedback : '',
         agentTaskSummary: typeof agentTaskSummary === 'string' ? agentTaskSummary : '',
         taskVariables: Array.isArray(taskVariables) ? taskVariables : [],
         existingUseCaseSummaries: Array.isArray(existingUseCaseSummaries)

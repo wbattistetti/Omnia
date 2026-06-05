@@ -11,6 +11,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import SmartTooltip from '../../../SmartTooltip';
+import { FLOW_PORTAL_OVERLAY_Z_INDEX } from '../../flowOverlayZIndex';
 
 interface NodeRowActionsOverlayProps {
   iconPos: { top: number; left: number };
@@ -97,13 +98,14 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   return (
     <div
       ref={outerRef}
+      data-node-row-toolbar="true"
       style={{
         position: 'fixed',
         top: iconPos.top + 3,
         left: iconPos.left,
         display: 'flex',
         gap: 4,
-        zIndex: 1000,
+        zIndex: FLOW_PORTAL_OVERLAY_Z_INDEX,
         background: 'transparent',
         borderRadius: 0,
         boxShadow: 'none',

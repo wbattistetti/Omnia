@@ -1,40 +1,34 @@
 /**
- * Pubblica un Backend Call come tool webhook ConvAI su ElevenLabs e lo aggancia all’agente (tool_ids).
+ * Pubblica un Backend Call come tool webhook inline sull’agente ConvAI (nessun POST workspace).
  */
 
 import type { Task } from '@types/taskTypes';
 import { openApiCompileErrorsFromTask } from '@domain/openApi/openApiCompileErrorsFromTask';
 import { prepareConvaiWebhookToolForElevenLabsApi } from '@utils/iaAgentRuntime/prepareConvaiWebhookToolForElevenLabsApi';
+import { upsertInlineWebhookToolOnAgent } from '@utils/iaAgentRuntime/convaiInlineAgentTools';
 import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
-import {
-  appendConvaiToolToAgent,
-  createConvaiTool,
-} from '@workspaces/elevenlabs/api/convaiToolApi';
 
 export type PublishConvaiWebhookResult = {
+  /** Id backend Omnia (tool inline, non workspace tool_id). */
   toolId: string;
   agentId: string;
   toolName: string;
 };
 
 export type PublishConvaiWebhookFailure = {
-  phase: 'validate' | 'create_agent' | 'build' | 'create' | 'attach';
+  phase: 'validate' | 'create_agent' | 'build' | 'attach';
   message: string;
   compileErrors?: string[];
 };
 
 /**
- * Crea il tool remoto e lo collega all’agente. Schema da OpenAPI materializzato sul task (nessun input manuale parametri).
+ * Aggiorna `prompt.tools` sull’agente con il webhook del Backend Call.
  */
 export async function publishConvaiWebhookToAgent(params: {
   backendTask: Task;
-  /** Progetto Omnia — obbligatorio per URL gateway webhook in dev. */
   projectId?: string;
-  /** Task AI Agent — obbligatorio per URL gateway webhook in dev. */
   agentTaskId?: string;
-  /** Agente esistente (se `newAgentName` è vuoto). */
   agentId?: string;
-  /** Se valorizzato, crea prima un nuovo agente ConvAI con questo nome. */
   newAgentName?: string;
 }): Promise<
   | { ok: true; result: PublishConvaiWebhookResult }
@@ -91,36 +85,23 @@ export async function publishConvaiWebhookToAgent(params: {
   }
 
   const toolName = String(built.tool.name ?? '').trim() || 'webhook';
-
-  let toolId: string;
-  try {
-    toolId = await createConvaiTool(built.tool);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return {
-      ok: false,
-      failure: {
-        phase: 'create',
-        message: msg || 'Creazione tool ConvAI fallita.',
-      },
-    };
-  }
+  const backendTaskId = String(params.backendTask.id ?? '').trim();
 
   try {
-    await appendConvaiToolToAgent(agentId, toolId);
+    await upsertInlineWebhookToolOnAgent(agentId, built.tool);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
       failure: {
         phase: 'attach',
-        message: `Tool creato (${toolId}) ma aggancio all’agente fallito: ${msg}`,
+        message: msg || 'Aggiornamento tool inline sull’agente fallito.',
       },
     };
   }
 
   return {
     ok: true,
-    result: { toolId, agentId, toolName },
+    result: { toolId: backendTaskId || toolName, agentId, toolName },
   };
 }

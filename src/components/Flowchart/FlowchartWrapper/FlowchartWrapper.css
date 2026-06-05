@@ -3,6 +3,7 @@
   position: relative;
   isolation: isolate;
   contain: layout style paint;
+  overflow: hidden;
 }
 
 .flow-canvas-shell .react-flow {
@@ -10,4 +11,10 @@
   height: 100% !important;
   min-height: 0;
   min-width: 0;
+}
+
+/* Toolbar nodi: resta nel canvas flow, sotto i pannelli dock elevati (z-index 50). */
+.flow-canvas-shell .react-flow__node-toolbar {
+  z-index: 15 !important;
+  pointer-events: auto;
 }

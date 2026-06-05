@@ -2,11 +2,24 @@
  * Sezioni canoniche dell'analisi documento KB (allineate a prompt backend e tokenizer Monaco).
  */
 
-/** Intestazioni ### obbligatorie nel markdown analisi (subset per tipo documento). */
+import { KB_ANALYSIS_LITE_SECTION_HEADINGS } from './kbDocumentAnalysisLite';
+
+/** Intestazioni ### del template snello (prompt backend). */
+export const KB_ANALYSIS_LITE_HEADINGS = {
+  type: '## Type:',
+  entities: `### ${KB_ANALYSIS_LITE_SECTION_HEADINGS.entities}`,
+  outputFlow: `### ${KB_ANALYSIS_LITE_SECTION_HEADINGS.outputFlow}`,
+  operationalRules: `### ${KB_ANALYSIS_LITE_SECTION_HEADINGS.operationalRules}`,
+  clarificationQuestions: `### ${KB_ANALYSIS_LITE_SECTION_HEADINGS.clarificationQuestions}`,
+} as const;
+
+/** Intestazioni ### legacy (retrocompatibilità documenti già analizzati). */
 export const KB_ANALYSIS_SECTION_HEADINGS = {
   type: '## Type:',
-  entities: '### Entities',
-  outputFlow: '### Output del flow (variabili task)',
+  entities: KB_ANALYSIS_LITE_HEADINGS.entities,
+  outputFlow: KB_ANALYSIS_LITE_HEADINGS.outputFlow,
+  operationalRules: KB_ANALYSIS_LITE_HEADINGS.operationalRules,
+  clarificationQuestions: KB_ANALYSIS_LITE_HEADINGS.clarificationQuestions,
   synonyms: '### Sinonimi',
   dialogRules: '### Regole di dialogo',
   disambigRules: '### Regole di disambiguazione',
