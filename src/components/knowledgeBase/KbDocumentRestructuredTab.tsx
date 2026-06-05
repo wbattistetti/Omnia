@@ -26,13 +26,24 @@ import {
   KB_RESTRUCTURE_TAB_LABEL,
   KB_RESTRUCTURE_TAB_ANSWER_QUESTIONS_LABEL,
 } from '@domain/knowledgeBase/kbDocumentRestructureGuide';
-import { kbDocumentHasUsableRestructure } from '@domain/knowledgeBase/kbDocumentRestructureHelpers';
+import {
+  canApproveKbDocumentRestructureForRuntime,
+  kbDocumentRestructureApprovalIssues,
+} from '@domain/knowledgeBase/kbDocumentRestructureHelpers';
+import type { KbDocumentSelectorSpec } from '@domain/knowledgeBase/kbSelectorSpec';
+import {
+  formatSelectorSpecForRefine,
+  inferSelectorSpecFromGrid,
+  mergeSelectorSpecFromAiAndGrid,
+  mergeSelectorSpecWithGrid,
+} from '@domain/knowledgeBase/kbSelectorSpec';
 import { serializeParsedKbTabular } from '@domain/knowledgeBase/kbRestructuredGridMarkdown';
 import {
   isLegacyCombinedRestructureMarkdown,
   splitLegacyRestructuredMarkdown,
   extractRestructuredDataForRuntime,
 } from '@domain/knowledgeBase/kbDocumentRestructureSplit';
+import { canonicalizeRestructuredTableMarkdown } from '@domain/knowledgeBase/kbRestructureTableCanonical';
 import { parseMarkdownPipeTable } from '@domain/knowledgeBase/parseKbTabularText';
 import {
   answeredRestructureQuestions,
@@ -51,6 +62,7 @@ import {
 } from './KbRestructuredDocumentPreview';
 import { KbAutoGrowTextarea } from './KbAutoGrowTextarea';
 import { KbRestructureQuestionsPanel, type KbRestructureQuestionsPanelHandle } from './KbRestructureQuestionsPanel';
+import { KbSelectorSpecPanel } from './KbSelectorSpecPanel';
 import { useKbDocumentContent } from './useKbDocumentContent';
 import type { KbRestructureToolbarState } from '@domain/knowledgeBase/kbRestructureToolbarState';
 
@@ -70,6 +82,7 @@ type AgentRestructureResult = {
   documentRestructuredMarkdown: string;
   documentRestructureNotesMarkdown: string;
   clarificationQuestions: KbRestructureClarificationQuestion[];
+  selectorSpec?: KbDocumentSelectorSpec;
 };
 
 type GridSnapshot = {
@@ -124,6 +137,9 @@ export function KbDocumentRestructuredTab({
   const [started, setStarted] = React.useState(
     () => Boolean(doc.agentRestructuredBaselineMarkdown?.trim())
   );
+  const [selectorSpec, setSelectorSpec] = React.useState<KbDocumentSelectorSpec | null>(
+    () => doc.documentSelectorSpec ?? null
+  );
 
   const gridSnapshotRef = React.useRef<GridSnapshot | null>(parseDraftGridSnapshot(doc.documentRestructuredMarkdown));
   const questionsPanelRef = React.useRef<KbRestructureQuestionsPanelHandle>(null);
@@ -140,12 +156,32 @@ export function KbDocumentRestructuredTab({
     setQuestions([...(doc.documentRestructureQuestions ?? [])]);
     setDesignerFeedback(doc.documentRestructureDesignerFeedback ?? '');
     setColumnInstructions({ ...(doc.documentRestructureColumnInstructions ?? {}) });
+    setSelectorSpec(doc.documentSelectorSpec ?? null);
   }, [doc.id]);
 
   React.useEffect(() => {
     const snap = parseDraftGridSnapshot(draft);
     if (snap) gridSnapshotRef.current = snap;
   }, [draft]);
+
+  React.useEffect(() => {
+    const stored = doc.documentRestructuredMarkdown?.trim() ?? '';
+    if (!stored) return;
+    const canonical = canonicalizeRestructuredTableMarkdown(stored);
+    if (canonical === stored) return;
+    setDraft(canonical);
+    gridSnapshotRef.current = parseDraftGridSnapshot(canonical);
+    onUpdateDoc({ documentRestructuredMarkdown: canonical });
+  }, [doc.id, doc.documentRestructuredMarkdown, onUpdateDoc]);
+
+  React.useEffect(() => {
+    if (!started || doc.documentSelectorSpec || !draft.trim()) return;
+    const snap = parseDraftGridSnapshot(draft);
+    if (!snap) return;
+    const inferred = inferSelectorSpecFromGrid(snap);
+    setSelectorSpec(inferred);
+    onUpdateDoc({ documentSelectorSpec: inferred });
+  }, [started, doc.documentSelectorSpec, doc.id, draft, onUpdateDoc]);
 
   React.useEffect(() => {
     const stored = doc.documentRestructuredMarkdown?.trim() ?? '';
@@ -233,16 +269,29 @@ export function KbDocumentRestructuredTab({
     [onUpdateDoc]
   );
 
+  const resolveSelectorSpecForGrid = React.useCallback(
+    (dataMarkdown: string, aiSpec?: KbDocumentSelectorSpec | null): KbDocumentSelectorSpec | null => {
+      const snap = parseDraftGridSnapshot(dataMarkdown);
+      if (!snap) return aiSpec ?? null;
+      return mergeSelectorSpecFromAiAndGrid(aiSpec, snap);
+    },
+    []
+  );
+
   const applyAgentResult = React.useCallback(
     (result: AgentRestructureResult, clearFeedback: boolean) => {
-      const data = result.documentRestructuredMarkdown.trim();
+      const data = canonicalizeRestructuredTableMarkdown(
+        result.documentRestructuredMarkdown.trim()
+      );
       const notes = result.documentRestructureNotesMarkdown.trim();
       const nextQuestions = mergeQuestionsWithAnswers(result.clarificationQuestions, []);
+      const nextSelectorSpec = resolveSelectorSpecForGrid(data, result.selectorSpec);
 
       setDraft(data);
       setStarted(true);
       setViewMode('preview');
       gridSnapshotRef.current = parseDraftGridSnapshot(data);
+      setSelectorSpec(nextSelectorSpec);
 
       if (clearFeedback) {
         setRowNotes({});
@@ -256,6 +305,7 @@ export function KbDocumentRestructuredTab({
           documentRestructureQuestions: nextQuestions,
           documentRestructureDesignerFeedback: '',
           documentRestructureColumnInstructions: {},
+          documentSelectorSpec: nextSelectorSpec ?? undefined,
           documentRestructureFeedbackAppliedSnapshot: buildRestructureFeedbackSnapshot({
             rowNotes: {},
             questions: nextQuestions,
@@ -276,6 +326,7 @@ export function KbDocumentRestructuredTab({
         documentRestructuredMarkdown: data,
         agentRestructuredBaselineMarkdown: data,
         documentRestructureQuestions: nextQuestions,
+        documentSelectorSpec: nextSelectorSpec ?? undefined,
         ...(notes
           ? {
               documentRestructureNotesMarkdown: notes,
@@ -284,7 +335,7 @@ export function KbDocumentRestructuredTab({
           : {}),
       });
     },
-    [onUpdateDoc]
+    [onUpdateDoc, resolveSelectorSpecForGrid]
   );
 
   const persistDraft = React.useCallback(
@@ -320,8 +371,13 @@ export function KbDocumentRestructuredTab({
         rows: payload.grid.rows,
       };
 
+      const nextSelectorSpec = selectorSpec
+        ? mergeSelectorSpecWithGrid(selectorSpec, payload.grid)
+        : inferSelectorSpecFromGrid(payload.grid);
+
       setDraft(md);
       setRowNotes(remappedNotes);
+      setSelectorSpec(nextSelectorSpec);
       if (payload.columnInstructions) {
         setColumnInstructions(payload.columnInstructions);
       }
@@ -329,12 +385,13 @@ export function KbDocumentRestructuredTab({
       onUpdateDoc({
         documentRestructuredMarkdown: md,
         documentRestructureRowNotes: remappedNotes,
+        documentSelectorSpec: nextSelectorSpec,
         ...(payload.columnInstructions
           ? { documentRestructureColumnInstructions: payload.columnInstructions }
           : {}),
       });
     },
-    [onUpdateDoc]
+    [onUpdateDoc, selectorSpec]
   );
 
   const onColumnInstructionsChange = React.useCallback((next: Record<string, string>) => {
@@ -439,7 +496,12 @@ export function KbDocumentRestructuredTab({
     try {
       const answered = answeredRestructureQuestions(questions);
       const columnInstructionsText = formatColumnInstructionsForRefine(columnInstructions);
-      const combinedDesignerFeedback = [feedbackPayload.designerFeedback, columnInstructionsText]
+      const selectorSpecText = formatSelectorSpecForRefine(selectorSpec);
+      const combinedDesignerFeedback = [
+        feedbackPayload.designerFeedback,
+        columnInstructionsText,
+        selectorSpecText,
+      ]
         .filter(Boolean)
         .join('\n\n');
 
@@ -476,6 +538,7 @@ export function KbDocumentRestructuredTab({
     designerFeedback,
     persistFeedback,
     focusFirstUnansweredQuestion,
+    selectorSpec,
   ]);
 
   const executeLabel = started ? KB_RESTRUCTURE_UPDATE_BUTTON : KB_RESTRUCTURE_PROPOSE_BUTTON;
@@ -510,8 +573,39 @@ export function KbDocumentRestructuredTab({
     onToolbarStateChange,
   ]);
 
+  const draftGrid = React.useMemo(() => {
+    const snap = parseDraftGridSnapshot(draft);
+    return snap ? { headers: snap.headers, rows: snap.rows } : null;
+  }, [draft]);
+
+  const approvalIssues = React.useMemo(
+    () =>
+      kbDocumentRestructureApprovalIssues(
+        { ...doc, documentSelectorSpec: selectorSpec ?? doc.documentSelectorSpec },
+        draftGrid
+      ),
+    [doc, draftGrid, selectorSpec]
+  );
+
   const approved = doc.documentRestructuredApprovedForRuntime === true;
-  const canApprove = kbDocumentHasUsableRestructure(doc);
+  const canApprove = canApproveKbDocumentRestructureForRuntime(
+    { ...doc, documentSelectorSpec: selectorSpec ?? doc.documentSelectorSpec },
+    draftGrid
+  );
+
+  const onSelectorSpecChange = React.useCallback(
+    (next: KbDocumentSelectorSpec) => {
+      setSelectorSpec(next);
+      onUpdateDoc({ documentSelectorSpec: next });
+    },
+    [onUpdateDoc]
+  );
+
+  const onRecalculateSelectorSpec = React.useCallback(() => {
+    if (!draftGrid) return;
+    const next = inferSelectorSpecFromGrid(draftGrid);
+    onSelectorSpecChange(next);
+  }, [draftGrid, onSelectorSpecChange]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden px-3 py-2">
@@ -539,6 +633,13 @@ export function KbDocumentRestructuredTab({
           />
           <span>{KB_RESTRUCTURE_APPROVE_RUNTIME_LABEL}</span>
         </label>
+        {!canApprove && approvalIssues.length > 0 ? (
+          <ul className="text-[10px] text-amber-300/90">
+            {approvalIssues.map((issue) => (
+              <li key={`${issue.code}-${issue.message}`}>{issue.message}</li>
+            ))}
+          </ul>
+        ) : null}
         {hasDraft ? (
           <div className="ml-auto flex rounded border border-slate-700/70 p-0.5 text-[10px]">
             <button
@@ -585,6 +686,17 @@ export function KbDocumentRestructuredTab({
             disabled={!canEdit || busy}
             onAnswerChange={onQuestionAnswerChange}
             onAnswerBlur={onQuestionAnswerBlur}
+          />
+        ) : null}
+
+        {started ? (
+          <KbSelectorSpecPanel
+            spec={selectorSpec}
+            grid={draftGrid}
+            issues={approvalIssues}
+            disabled={!canEdit || busy}
+            onChange={onSelectorSpecChange}
+            onRecalculateFromGrid={onRecalculateSelectorSpec}
           />
         ) : null}
 

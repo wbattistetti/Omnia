@@ -4,6 +4,11 @@
 
 import type { StagedKbDocument } from './kbDocumentTypes';
 import { extractRestructuredDataForRuntime } from './kbDocumentRestructureSplit';
+import type { KbTabularGrid } from './parseKbTabularText';
+import {
+  validateSelectorSpecForApproval,
+  type SelectorSpecValidationIssue,
+} from './kbSelectorSpec';
 
 const MIN_USABLE_RESTRUCTURE_CHARS = 80;
 
@@ -37,4 +42,29 @@ export function resolveKbRestructuredRuntimeText(doc: StagedKbDocument): string 
   if (!kbDocumentRestructureApprovedForRuntime(doc)) return null;
   if (!kbDocumentHasUsableRestructure(doc)) return null;
   return extractRestructuredDataForRuntime(String(doc.documentRestructuredMarkdown ?? ''));
+}
+
+/** Issue bloccanti per approvazione runtime (tabella + selectorSpec). */
+export function kbDocumentRestructureApprovalIssues(
+  doc: {
+    documentRestructuredMarkdown?: string;
+    documentSelectorSpec?: StagedKbDocument['documentSelectorSpec'];
+  },
+  grid?: KbTabularGrid | null
+): SelectorSpecValidationIssue[] {
+  if (!kbDocumentHasUsableRestructure(doc)) {
+    return [{ code: 'unusable_table', message: 'Tabella riformattata non utilizzabile.' }];
+  }
+  return validateSelectorSpecForApproval(doc.documentSelectorSpec, grid ?? null);
+}
+
+/** True se tabella e selectorSpec sono pronti per approvazione runtime. */
+export function canApproveKbDocumentRestructureForRuntime(
+  doc: {
+    documentRestructuredMarkdown?: string;
+    documentSelectorSpec?: StagedKbDocument['documentSelectorSpec'];
+  },
+  grid?: KbTabularGrid | null
+): boolean {
+  return kbDocumentRestructureApprovalIssues(doc, grid).length === 0;
 }

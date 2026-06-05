@@ -70,7 +70,7 @@ export const KbAutoGrowTextarea = React.forwardRef<
       rows={1}
       value={value}
       onInput={resize}
-      className={`min-h-[1.5rem] resize-none ${className}`}
+      className={`box-border min-h-[1.5rem] w-full max-w-full resize-none ${className}`}
       {...rest}
     />
   );

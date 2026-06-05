@@ -11,8 +11,12 @@ import {
   parseKbRestructureClarificationQuestions,
   type KbRestructureClarificationQuestion,
 } from './kbDocumentRestructureWorkflow';
+import {
+  parseKbDocumentSelectorSpec,
+  type KbDocumentSelectorSpec,
+} from './kbSelectorSpec';
 
-export type { KbRestructureClarificationQuestion };
+export type { KbRestructureClarificationQuestion, KbDocumentSelectorSpec };
 
 type KbRestructureApiBase = {
   projectId: string;
@@ -79,6 +83,7 @@ function parseRestructureResult(body: Record<string, unknown>): {
   documentRestructuredMarkdown: string;
   documentRestructureNotesMarkdown: string;
   clarificationQuestions: KbRestructureClarificationQuestion[];
+  selectorSpec?: KbDocumentSelectorSpec;
 } {
   const data =
     typeof body.documentRestructuredMarkdown === 'string'
@@ -92,7 +97,13 @@ function parseRestructureResult(body: Record<string, unknown>): {
   const clarificationQuestions = parseKbRestructureClarificationQuestions(
     body.clarificationQuestions
   );
-  return { documentRestructuredMarkdown: data, documentRestructureNotesMarkdown: notes, clarificationQuestions };
+  const selectorSpec = parseKbDocumentSelectorSpec(body.selectorSpec) ?? undefined;
+  return {
+    documentRestructuredMarkdown: data,
+    documentRestructureNotesMarkdown: notes,
+    clarificationQuestions,
+    ...(selectorSpec ? { selectorSpec } : {}),
+  };
 }
 
 /** Prima proposta: documento sorgente → dati puliti + note meta (tab Analisi). */
@@ -102,6 +113,7 @@ export async function proposeKbDocumentRestructure(
   documentRestructuredMarkdown: string;
   documentRestructureNotesMarkdown: string;
   clarificationQuestions: KbRestructureClarificationQuestion[];
+  selectorSpec?: KbDocumentSelectorSpec;
 }> {
   return postKbRestructureAction(
     'kb_propose_document_restructure',
@@ -129,6 +141,7 @@ export async function refineKbDocumentRestructure(
   documentRestructuredMarkdown: string;
   documentRestructureNotesMarkdown: string;
   clarificationQuestions: KbRestructureClarificationQuestion[];
+  selectorSpec?: KbDocumentSelectorSpec;
 }> {
   return postKbRestructureAction(
     'kb_refine_document_restructure',
@@ -166,6 +179,7 @@ export async function refineKbDocumentRestructureWithFeedback(
   documentRestructuredMarkdown: string;
   documentRestructureNotesMarkdown: string;
   clarificationQuestions: KbRestructureClarificationQuestion[];
+  selectorSpec?: KbDocumentSelectorSpec;
 }> {
   return postKbRestructureAction(
     'kb_refine_document_restructure_with_feedback',

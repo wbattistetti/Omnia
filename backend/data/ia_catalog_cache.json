@@ -3797,11 +3797,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned"
+            "eleven_turbo_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3809,11 +3809,11 @@
           "language": "it",
           "progress": {},
           "message": {
-            "eleven_turbo_v2_5": "",
+            "eleven_multilingual_v2": "",
+            "eleven_v2_5_flash": "",
             "eleven_flash_v2_5": "",
             "eleven_multilingual_sts_v2": "",
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": ""
+            "eleven_turbo_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3823,12 +3823,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "age": "middle_aged",
           "accent": "standard",
-          "gender": "male",
-          "use_case": "narrative_story",
           "language": "it",
-          "descriptive": "gentle"
+          "descriptive": "gentle",
+          "age": "middle_aged",
+          "use_case": "narrative_story",
+          "gender": "male"
         },
         "description": "Antonio",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/ce9b70089f524a4d8a519bbfcd0bd217/voices/JfznbVXrGXYh0gZo9Lcp/d0693720-4116-47d5-a76c-769441c5a55f.mp3",
@@ -3860,11 +3860,11 @@
           "description": "Antonio",
           "labels": {
             "age": "middle_aged",
-            "accent": "standard",
-            "gender": "male",
-            "use_case": "narrative_story",
             "language": "it",
             "descriptive": "gentle",
+            "accent": "standard",
+            "use_case": "narrative_story",
+            "gender": "male",
             "locale": "it-IT"
           },
           "review_status": "not_requested",
@@ -3934,10 +3934,10 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2_5": "fine_tuned",
-            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
             "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned"
+            "eleven_flash_v2_5": "fine_tuned",
+            "eleven_turbo_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -3945,10 +3945,10 @@
           "language": "pt",
           "progress": {},
           "message": {
-            "eleven_turbo_v2_5": "",
-            "eleven_flash_v2_5": "",
+            "eleven_multilingual_v2": "",
             "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": ""
+            "eleven_flash_v2_5": "",
+            "eleven_turbo_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -3958,12 +3958,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "age": "middle_aged",
           "accent": "european",
-          "gender": "female",
-          "use_case": "narrative_story",
           "language": "pt",
-          "descriptive": "calm"
+          "descriptive": "calm",
+          "age": "middle_aged",
+          "use_case": "narrative_story",
+          "gender": "female"
         },
         "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/3e623f1750ec4b458e13011b31d76fe5/voices/iLelOQ6m5mpSeNH8fRob/3JXeSVIUFCgUKK8B8TI9.mp3",
@@ -3995,11 +3995,11 @@
           "description": "Maria - European Portuguese - A friendly, calm, and clear voice, perfect for storytelling, audiobooks and podcasts.",
           "labels": {
             "age": "middle_aged",
-            "accent": "european",
-            "gender": "female",
-            "use_case": "narrative_story",
             "language": "pt",
             "descriptive": "calm",
+            "accent": "european",
+            "use_case": "narrative_story",
+            "gender": "female",
             "locale": "pt-PT"
           },
           "review_status": "not_requested",
@@ -4068,11 +4068,11 @@
         "fine_tuning": {
           "is_allowed_to_fine_tune": true,
           "state": {
-            "eleven_turbo_v2_5": "fine_tuned",
+            "eleven_multilingual_v2": "fine_tuned",
+            "eleven_v2_5_flash": "fine_tuned",
             "eleven_flash_v2_5": "fine_tuned",
             "eleven_multilingual_sts_v2": "fine_tuned",
-            "eleven_v2_5_flash": "fine_tuned",
-            "eleven_multilingual_v2": "fine_tuned"
+            "eleven_turbo_v2_5": "fine_tuned"
           },
           "verification_failures": [],
           "verification_attempts_count": 0,
@@ -4080,11 +4080,11 @@
           "language": "it",
           "progress": {},
           "message": {
-            "eleven_turbo_v2_5": "",
+            "eleven_multilingual_v2": "",
+            "eleven_v2_5_flash": "",
             "eleven_flash_v2_5": "",
             "eleven_multilingual_sts_v2": "",
-            "eleven_v2_5_flash": "",
-            "eleven_multilingual_v2": ""
+            "eleven_turbo_v2_5": ""
           },
           "dataset_duration_seconds": null,
           "verification_attempts": null,
@@ -4094,12 +4094,12 @@
           "next_max_verification_attempts_reset_unix_ms": 0
         },
         "labels": {
-          "age": "middle_aged",
           "accent": "standard",
-          "gender": "female",
-          "use_case": "narrative_story",
           "language": "it",
-          "descriptive": "professional"
+          "descriptive": "professional",
+          "age": "middle_aged",
+          "use_case": "narrative_story",
+          "gender": "female"
         },
         "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
         "preview_url": "https://storage.googleapis.com/eleven-public-prod/database/workspace/b3290375d9f7402daf26d0139c290f2d/voices/gfKKsLN1k0oYYN9n2dXX/Z2oJ1Jb0O555Pu7XDZv4.mp3",
@@ -4131,11 +4131,11 @@
           "description": "Violetta - A warm, clear, and engaging middle-aged Italien female voice. With a smooth, natural tone, this voice is perfect for narrations, audiobooks, or informative audio content. Its expressive quality makes it ideal for storytelling, while remaining professional and easy to follow.",
           "labels": {
             "age": "middle_aged",
-            "accent": "standard",
-            "gender": "female",
-            "use_case": "narrative_story",
             "language": "it",
             "descriptive": "professional",
+            "accent": "standard",
+            "use_case": "narrative_story",
+            "gender": "female",
             "locale": "it-IT"
           },
           "review_status": "not_requested",
@@ -7160,12 +7160,12 @@
     "elevenlabs": []
   },
   "meta": {
-    "updatedAt": "2026-06-05T07:33:38.078Z",
-    "lastLanguagesSync": "2026-06-05T07:33:38.078Z",
+    "updatedAt": "2026-06-05T09:13:34.244Z",
+    "lastLanguagesSync": "2026-06-05T09:13:34.244Z",
     "lastModelsSync": "2026-05-30T20:55:51.074Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-06-05T07:33:38.024Z",
+      "at": "2026-06-05T09:13:34.203Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

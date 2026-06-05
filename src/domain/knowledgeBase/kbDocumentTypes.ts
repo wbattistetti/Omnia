@@ -4,6 +4,10 @@
 
 import type { KbExtractedVariable } from '@workspaces/elevenlabs/parseKbDocument';
 import type { KbRestructureClarificationQuestion } from './kbDocumentRestructureWorkflow';
+import {
+  parseKbDocumentSelectorSpec,
+  type KbDocumentSelectorSpec,
+} from './kbSelectorSpec';
 
 export { KB_DOCUMENT_ACCEPT } from './kbFileKinds';
 export {
@@ -67,6 +71,8 @@ export type StagedKbDocument = KbStagedFileBase & {
   documentRestructureFeedbackAppliedSnapshot?: string;
   /** Istruzioni designer per colonne (inviate al refine IA). */
   documentRestructureColumnInstructions?: Record<string, string>;
+  /** Metadati selettori dialogo per tabella riformattata (sidecar design time). */
+  documentSelectorSpec?: KbDocumentSelectorSpec;
   /** Default `upload` per documenti caricati; note invalidazione scenario = `invalidated_use_case_note`. */
   kbDocumentKind?: KbDocumentKind;
   /** Use case collegato (note invalidazione scenario). */
@@ -132,6 +138,7 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
     documentRestructureDesignerFeedback?: unknown;
     documentRestructureFeedbackAppliedSnapshot?: unknown;
     documentRestructureColumnInstructions?: unknown;
+    documentSelectorSpec?: unknown;
   };
   return {
     ...p,
@@ -224,6 +231,10 @@ export function persistedKbToStaged(p: PersistedKbDocument): StagedKbDocument {
           ),
         }
       : {}),
+    ...((): { documentSelectorSpec?: KbDocumentSelectorSpec } => {
+      const parsed = parseKbDocumentSelectorSpec(raw.documentSelectorSpec);
+      return parsed ? { documentSelectorSpec: parsed } : {};
+    })(),
     ...(raw.kbDocumentKind === 'invalidated_use_case_note'
       ? { kbDocumentKind: 'invalidated_use_case_note' as const }
       : {}),
@@ -262,6 +273,7 @@ export type KbDocumentPatch = Partial<
     | 'documentRestructureDesignerFeedback'
     | 'documentRestructureFeedbackAppliedSnapshot'
     | 'documentRestructureColumnInstructions'
+    | 'documentSelectorSpec'
     | 'repositoryDocumentId'
     | 'parseStatus'
     | 'parseError'

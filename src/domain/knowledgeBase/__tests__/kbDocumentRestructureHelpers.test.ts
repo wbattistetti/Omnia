@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canApproveKbDocumentRestructureForRuntime,
   kbDocumentHasUsableRestructure,
   kbDocumentRestructureApprovedForRuntime,
   kbDocumentRestructureStarted,
   resolveKbRestructuredRuntimeText,
 } from '../kbDocumentRestructureHelpers';
+import { inferSelectorSpecFromGrid } from '../kbSelectorSpec';
 import type { StagedKbDocument } from '../kbDocumentTypes';
 
 function minimalDoc(overrides: Partial<StagedKbDocument> = {}): StagedKbDocument {
@@ -61,5 +63,26 @@ describe('kbDocumentRestructureHelpers', () => {
     expect(kbDocumentRestructureStarted({ agentRestructuredBaselineMarkdown: '## Dati\n| a |' })).toBe(
       true
     );
+  });
+
+  it('blocks approval without selector spec', () => {
+    const md = '## Dati normalizzati\n' + 'a'.repeat(100);
+    expect(canApproveKbDocumentRestructureForRuntime({ documentRestructuredMarkdown: md })).toBe(
+      false
+    );
+    const grid = {
+      headers: ['visit_type', 'specialty'],
+      rows: [
+        ['prima_visita', 'cardio'],
+        ['controllo', 'radio'],
+      ],
+    };
+    const spec = inferSelectorSpecFromGrid(grid);
+    expect(
+      canApproveKbDocumentRestructureForRuntime(
+        { documentRestructuredMarkdown: md, documentSelectorSpec: spec },
+        grid
+      )
+    ).toBe(true);
   });
 });

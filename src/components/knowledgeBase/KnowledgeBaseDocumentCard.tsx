@@ -25,7 +25,7 @@ export function KnowledgeBaseDocumentCard({
   return (
     <div
       className={
-        'group flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1.5 transition-colors ' +
+        'group flex min-w-0 items-start gap-1.5 rounded-md border px-2 py-1.5 transition-colors ' +
         (selected
           ? 'border-violet-500/50 bg-violet-950/50 text-slate-200'
           : 'border-slate-700/60 bg-slate-900/50 text-slate-300 hover:border-slate-600')
@@ -35,14 +35,22 @@ export function KnowledgeBaseDocumentCard({
         type="button"
         disabled={disabled}
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded py-0.5 text-left"
+        className="flex min-w-0 flex-1 items-start gap-2 rounded py-0.5 text-left"
       >
         {doc.parseStatus === 'parsing' ? (
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-violet-400" aria-hidden />
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-violet-400" aria-hidden />
         ) : (
-          <KbFormatIcon format={doc.format} fileName={doc.name} mimeType={doc.mimeType} />
+          <KbFormatIcon
+            format={doc.format}
+            fileName={doc.name}
+            mimeType={doc.mimeType}
+            className="mt-0.5 shrink-0"
+          />
         )}
-        <span className="min-w-0 whitespace-nowrap font-medium text-slate-100" title={doc.name}>
+        <span
+          className="min-w-0 flex-1 break-words font-medium leading-snug text-slate-100"
+          title={doc.name}
+        >
           {doc.name}
         </span>
       </button>

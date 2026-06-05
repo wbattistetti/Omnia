@@ -99,6 +99,81 @@ function parseClarificationQuestions(raw) {
   return out;
 }
 
+function slugifySelectorColumnId(header) {
+  const slug = String(header ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+  return slug || 'column';
+}
+
+function parseSelectorColumn(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const columnId =
+    typeof raw.columnId === 'string' && raw.columnId.trim()
+      ? slugifySelectorColumnId(raw.columnId)
+      : '';
+  const headerLabel = typeof raw.headerLabel === 'string' ? raw.headerLabel.trim() : '';
+  if (!columnId || !headerLabel) return null;
+  const role = raw.role === 'data' ? 'data' : 'selector';
+  const promptType = raw.promptType === 'open_question' ? 'open_question' : 'closed_list';
+  const sortOrder =
+    typeof raw.sortOrder === 'number' && Number.isFinite(raw.sortOrder) ? raw.sortOrder : 0;
+  const promptTemplate =
+    typeof raw.promptTemplate === 'string' ? raw.promptTemplate.trim() : '';
+  if (role === 'selector' && !promptTemplate) return null;
+  const askPolicy =
+    raw.askPolicy === 'required' || raw.askPolicy === 'optional' ? raw.askPolicy : undefined;
+  return {
+    columnId,
+    headerLabel,
+    role,
+    promptType,
+    sortOrder,
+    promptTemplate,
+    ...(askPolicy ? { askPolicy } : {}),
+    ...(raw.autoFillSingleValue === true ? { autoFillSingleValue: true } : {}),
+  };
+}
+
+function parseInvalidationTemplate(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+  const template = typeof raw.template === 'string' ? raw.template.trim() : '';
+  if (!id || !template) return null;
+  return {
+    id,
+    template,
+    approved: raw.approved === true,
+  };
+}
+
+function parseSelectorSpec(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const columns = [];
+  for (const c of Array.isArray(raw.columns) ? raw.columns : []) {
+    const parsed = parseSelectorColumn(c);
+    if (parsed) columns.push(parsed);
+  }
+  if (columns.length === 0) return null;
+  const invalidationTemplates = [];
+  for (const t of Array.isArray(raw.invalidationTemplates) ? raw.invalidationTemplates : []) {
+    const parsed = parseInvalidationTemplate(t);
+    if (parsed) invalidationTemplates.push(parsed);
+  }
+  return {
+    schemaVersion: 1,
+    columns: columns.sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.headerLabel.localeCompare(b.headerLabel, 'it')
+    ),
+    invalidationTemplates,
+  };
+}
+
 function validateRestructureResponse(parsed) {
   const data =
     typeof parsed.documentRestructuredMarkdown === 'string'
@@ -116,10 +191,12 @@ function validateRestructureResponse(parsed) {
     throw new Error('Invalid response: documentRestructureNotesMarkdown exceeds maximum length');
   }
   const clarificationQuestions = parseClarificationQuestions(parsed.clarificationQuestions);
+  const selectorSpec = parseSelectorSpec(parsed.selectorSpec);
   return {
     documentRestructuredMarkdown: data,
     documentRestructureNotesMarkdown: notes,
     clarificationQuestions,
+    ...(selectorSpec ? { selectorSpec } : {}),
   };
 }
 
@@ -185,6 +262,7 @@ async function refineDocumentRestructure(params) {
     documentRestructuredMarkdown: result.documentRestructuredMarkdown,
     documentRestructureNotesMarkdown: result.documentRestructureNotesMarkdown || '',
     clarificationQuestions: result.clarificationQuestions || [],
+    ...(result.selectorSpec ? { selectorSpec: result.selectorSpec } : {}),
   };
 }
 
@@ -274,6 +352,7 @@ async function refineDocumentRestructureWithFeedback(params) {
     documentRestructuredMarkdown: result.documentRestructuredMarkdown,
     documentRestructureNotesMarkdown: result.documentRestructureNotesMarkdown || '',
     clarificationQuestions: result.clarificationQuestions || [],
+    ...(result.selectorSpec ? { selectorSpec: result.selectorSpec } : {}),
   };
 }
 
