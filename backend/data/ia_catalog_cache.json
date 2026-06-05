@@ -7160,12 +7160,12 @@
     "elevenlabs": []
   },
   "meta": {
-    "updatedAt": "2026-06-05T09:13:34.244Z",
-    "lastLanguagesSync": "2026-06-05T09:13:34.244Z",
+    "updatedAt": "2026-06-05T10:14:23.019Z",
+    "lastLanguagesSync": "2026-06-05T10:14:23.019Z",
     "lastModelsSync": "2026-05-30T20:55:51.074Z",
     "voicesSyncState": {
       "ok": true,
-      "at": "2026-06-05T09:13:34.203Z",
+      "at": "2026-06-05T10:14:22.974Z",
       "apiVoiceCount": 26,
       "mappedCount": 26,
       "emptyApiList": false

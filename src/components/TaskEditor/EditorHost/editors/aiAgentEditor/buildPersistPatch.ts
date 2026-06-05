@@ -60,6 +60,8 @@ export interface AIAgentPersistState {
   agentKnowledgeBaseDocumentsJson: string;
   /** JSON: tabella binding backend output → slot (`AgentBackendOutputSlotBindings`). */
   agentBackendOutputSlotBindingsJson: string;
+  /** Modalità deploy ConvAI: legacy vs dialogo KB deterministico. */
+  agentConvaiDeployMode: import('@domain/convai/agentConvaiDeployMode').AgentConvaiDeployMode;
 }
 
 /**
@@ -106,5 +108,6 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentInterfaceJson: state.agentInterfaceJson,
     agentKnowledgeBaseDocumentsJson: state.agentKnowledgeBaseDocumentsJson,
     agentBackendOutputSlotBindingsJson: state.agentBackendOutputSlotBindingsJson,
+    agentConvaiDeployMode: state.agentConvaiDeployMode,
   };
 }

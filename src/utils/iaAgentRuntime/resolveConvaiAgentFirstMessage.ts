@@ -3,6 +3,11 @@
  */
 
 import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+  type AgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import {
   parseAgentStartPromptJson,
   resolveAgentStartPromptSpeechText,
 } from '@domain/useCaseGeneratorWizard/agentStartPrompt';
@@ -15,7 +20,12 @@ export function resolveConvaiAgentFirstMessage(params: {
   startUseCaseId?: string | null;
   agentStartPromptJson?: string | null;
   useCases?: readonly AIAgentUseCase[];
+  /** Deploy deterministico: first_message vuoto — prima frase da omnia_dialog_step. */
+  agentConvaiDeployMode?: AgentConvaiDeployMode | string | null;
 }): string {
+  if (isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(params.agentConvaiDeployMode))) {
+    return '';
+  }
   if (params.agentImmediateStart === true) {
     return '';
   }

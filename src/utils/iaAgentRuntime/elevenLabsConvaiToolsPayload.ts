@@ -21,6 +21,7 @@ import type { MergeEffectiveIaAgentToolsOptions } from '@domain/iaAgentTools/bac
 import {
   buildConvaiWebhookGatewayUrl,
   isConvaiWebhookGatewayUrl,
+  isOmniaDialogStepUrl,
   resolveOmniaRuntimeOrigin,
 } from '@domain/convaiRuntime/convaiWebhookGatewayUrl';
 
@@ -100,6 +101,7 @@ function resolveWebhookToolUrl(
   if (!convaiGateway?.projectId?.trim() || !convaiGateway?.agentTaskId?.trim()) return targetUrl;
   if (usesQueryParamsForMethod(method)) return targetUrl;
   if (isConvaiWebhookGatewayUrl(targetUrl)) return targetUrl;
+  if (isOmniaDialogStepUrl(targetUrl)) return targetUrl;
   const origin = resolveOmniaRuntimeOrigin(convaiGateway.gatewayOrigin);
   return buildConvaiWebhookGatewayUrl({
     origin,

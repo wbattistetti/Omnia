@@ -25,6 +25,11 @@ import {
   buildVirtualAgentRuntimeCatalogFromUseCases,
 } from '@domain/aiAgentUseCase/virtualAgentRuntimeCatalog';
 import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import { compileKbDeterministicAgentPrompt } from '@domain/convai/compileKbDeterministicAgentPrompt';
 
 export type TaskLikeForPlatformRules = Pick<
   Task,
@@ -122,6 +127,16 @@ export function resolveElevenLabsAgentPromptFromTask(
   task: TaskLikeForElevenLabsPrompt,
   options?: ResolveElevenLabsAgentPromptOptions
 ): string {
+  const deployMode = normalizeAgentConvaiDeployMode(
+    (task as Task & { agentConvaiDeployMode?: unknown }).agentConvaiDeployMode
+  );
+  if (isKbDeterministicDeployMode(deployMode)) {
+    return compileKbDeterministicAgentPrompt(task as Task, {
+      manualCatalogBackendTaskIds: options?.manualCatalogBackendTaskIds,
+      backendCatalog: options?.backendCatalog,
+    });
+  }
+
   const ir = structuredSectionsToIr(task);
   const parsedUseCases = parseAgentUseCasesJson(task.agentUseCasesJson);
   const motorCatalog = buildVirtualAgentRuntimeCatalogFromUseCases(parsedUseCases);

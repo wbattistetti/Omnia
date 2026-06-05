@@ -17,6 +17,10 @@ import { taskRepository } from '@services/TaskRepository';
 import { TaskType, type Task } from '@types/taskTypes';
 import type { ConversationStyleSelections } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import {
+  type AgentConvaiDeployMode,
+  DEFAULT_AGENT_CONVAI_DEPLOY_MODE,
+} from '@domain/convai/agentConvaiDeployMode';
+import {
   extractStructuredDesign,
   createAIAgentUseCaseApi,
   splitRootUseCaseDraftApi,
@@ -490,6 +494,8 @@ export function useAIAgentEditorController({
   const [agentConversationDeployStyleId, setAgentConversationDeployStyleIdState] = React.useState<
     string | null
   >(null);
+  const [agentConvaiDeployMode, setAgentConvaiDeployModeState] =
+    React.useState<AgentConvaiDeployMode>(DEFAULT_AGENT_CONVAI_DEPLOY_MODE);
 
   /**
    * Toggle "Logga Use Case" del deploy menu. Quando true, il compilatore di prompt:
@@ -1017,6 +1023,14 @@ export function useAIAgentEditorController({
 
   const setAgentConversationDeployStyleId = React.useCallback((next: string | null) => {
     setAgentConversationDeployStyleIdState((prev) => {
+      if (prev === next) return prev;
+      setDirty(true);
+      return next;
+    });
+  }, []);
+
+  const setAgentConvaiDeployMode = React.useCallback((next: AgentConvaiDeployMode) => {
+    setAgentConvaiDeployModeState((prev) => {
       if (prev === next) return prev;
       setDirty(true);
       return next;
@@ -1683,6 +1697,7 @@ export function useAIAgentEditorController({
     setAgentConversationStyleAutoState(b.agentConversationStyleAuto);
     setAgentConversationStyleSelectionsState(b.agentConversationStyleSelections);
     setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
+    setAgentConvaiDeployModeState(b.agentConvaiDeployMode);
     setAgentLogUseCaseState(b.agentLogUseCase);
     setAgentLogBackendCallsState(b.agentLogBackendCalls);
     setAgentBehaviorState(b.agentBehavior);
@@ -1817,6 +1832,7 @@ export function useAIAgentEditorController({
       agentConversationStyleAuto,
       agentConversationStyleSelections,
       agentConversationDeployStyleId,
+      agentConvaiDeployMode,
       agentLogUseCase,
       agentLogBackendCalls,
       agentBehavior,
@@ -1873,6 +1889,7 @@ export function useAIAgentEditorController({
     agentConversationStyleAuto,
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
+    agentConvaiDeployMode,
     agentLogUseCase,
     agentBehavior,
     agentInterfaceJson,
@@ -3336,6 +3353,7 @@ export function useAIAgentEditorController({
     agentConversationStyleAuto,
     agentConversationStyleSelections,
     agentConversationDeployStyleId,
+    agentConvaiDeployMode,
     agentLogUseCase,
     agentLogBackendCalls,
     agentBehavior,
@@ -3555,6 +3573,8 @@ export function useAIAgentEditorController({
     setAgentConversationStyleSelections,
     agentConversationDeployStyleId,
     setAgentConversationDeployStyleId,
+    agentConvaiDeployMode,
+    setAgentConvaiDeployMode,
     agentLogUseCase,
     setAgentLogUseCase,
     agentLogBackendCalls,

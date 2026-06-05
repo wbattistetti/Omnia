@@ -12,6 +12,16 @@ import {
   resolveConvaiSyncBackendTaskIds,
 } from './prepareConvaiWebhookToolForElevenLabsApi';
 import { sanitizeConvaiWebhookToolForApi } from '@domain/openApi/sanitizeConvaiWebhookToolForApi';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import { rewriteCompilePayloadWithDevTunnel } from '@domain/devTunnel/devTunnelCompileBridge';
+import {
+  buildOmniaDialogStepConvaiTool,
+  isOmniaDialogStepConvaiTool,
+  OMNIA_DIALOG_STEP_TOOL_NAME,
+} from './omniaDialogStepConvaiTool';
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -90,12 +100,39 @@ export async function buildConvaiInlineWebhookToolsFromSyncParams(
   | { ok: false; message: string; backendTaskId?: string }
 > {
   const backendIds = resolveConvaiSyncBackendTaskIds(params);
-  return buildConvaiInlineWebhookToolsForSync({
+  const built = await buildConvaiInlineWebhookToolsForSync({
     backendIds,
     projectId: String(params.projectId ?? '').trim(),
     agentTaskId: String(params.agentTask.id ?? '').trim(),
     useDevTunnel: params.useDevTunnel,
   });
+  if (!built.ok) return built;
+
+  const deployMode = normalizeAgentConvaiDeployMode(params.agentTask.agentConvaiDeployMode);
+  if (!isKbDeterministicDeployMode(deployMode)) return built;
+
+  const projectId = String(params.projectId ?? '').trim();
+  const agentTaskId = String(params.agentTask.id ?? '').trim();
+  if (!projectId || !agentTaskId) return built;
+
+  let dialogTool = buildOmniaDialogStepConvaiTool({ projectId, agentTaskId });
+  if (params.useDevTunnel) {
+    dialogTool = rewriteCompilePayloadWithDevTunnel(dialogTool) as Record<string, unknown>;
+  }
+  dialogTool = sanitizeConvaiWebhookToolForApi(dialogTool);
+  const inlinePayloads = [
+    ...built.inlinePayloads.filter((t) => !isOmniaDialogStepConvaiTool(t)),
+    dialogTool,
+  ];
+  const tools: ConvaiAgentSyncToolResult[] = [
+    ...built.tools.filter((t) => t.toolName !== OMNIA_DIALOG_STEP_TOOL_NAME),
+    {
+      backendTaskId: 'omnia_dialog_step',
+      toolId: 'omnia_dialog_step',
+      toolName: OMNIA_DIALOG_STEP_TOOL_NAME,
+    },
+  ];
+  return { ok: true, tools, inlinePayloads };
 }
 
 /**

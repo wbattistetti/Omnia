@@ -41,6 +41,13 @@ import {
   areCatalogUseCasesDeployReady,
 } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import {
+  isKbDeterministicDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import {
+  collectKbDialogDeployIssues,
+  isKbDialogDeployReady,
+} from '@domain/convai/kbDialogDeployReadiness';
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
@@ -962,17 +969,43 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     [c.iaRuntimeConfig?.convaiBackendToolTaskIds, manualCatalogBackendTaskIds]
   );
   const hasCatalogUseCases = Array.isArray(c.useCases) && c.useCases.length > 0;
-  const catalogDeployReady = React.useMemo(
-    () =>
+  const catalogDeployReady = React.useMemo(() => {
+    if (isKbDeterministicDeployMode(c.agentConvaiDeployMode)) {
+      return isKbDialogDeployReady(c.agentKnowledgeBaseDocumentsJson);
+    }
+    return (
       hasCatalogUseCases &&
       areCatalogUseCasesDeployReady(
         c.useCases,
         c.projectSlotLexicon,
         c.backendOutputSlotBindings,
         backendToolTaskIds.length > 0
-      ),
-    [hasCatalogUseCases, c.useCases, c.projectSlotLexicon, c.backendOutputSlotBindings, backendToolTaskIds.length]
-  );
+      )
+    );
+  }, [
+    c.agentConvaiDeployMode,
+    c.agentKnowledgeBaseDocumentsJson,
+    hasCatalogUseCases,
+    c.useCases,
+    c.projectSlotLexicon,
+    c.backendOutputSlotBindings,
+    backendToolTaskIds.length,
+  ]);
+  const catalogDeployBlockedReason = React.useMemo(() => {
+    if (isKbDeterministicDeployMode(c.agentConvaiDeployMode)) {
+      const issues = collectKbDialogDeployIssues(c.agentKnowledgeBaseDocumentsJson);
+      return issues[0]?.message;
+    }
+    if (!catalogDeployReady) {
+      return formatMappingBlockedReasonShort(c.compileMappingBanner);
+    }
+    return undefined;
+  }, [
+    c.agentConvaiDeployMode,
+    c.agentKnowledgeBaseDocumentsJson,
+    catalogDeployReady,
+    c.compileMappingBanner,
+  ]);
   /** Dialog prompt: tutti gli UC inclusi proiettabili (compile può ancora fallire su slot/backend). */
   const canCreateConversationalPrompt = React.useMemo(
     () =>
@@ -1113,6 +1146,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
             backendCatalog: projectData?.backendCatalog,
             manualCatalogBackendTaskIds,
             knowledgeBaseDocuments: c.knowledgeBaseDocuments,
+            agentConvaiDeployMode: c.agentConvaiDeployMode,
           })
         : null,
     [
@@ -1123,6 +1157,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       c.agentLogBackendCalls,
       c.agentBehavior,
       c.knowledgeBaseDocuments,
+      c.agentConvaiDeployMode,
       conversationalCatalogFormat,
       manualCatalogBackendTaskIds,
       pdUpdate,
@@ -1431,11 +1466,9 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       compileAndCopyDisabled={!hasCatalogUseCases}
       compileAndCopyDisabledReason="Aggiungi almeno uno use case al catalogo."
       catalogUploadReady={catalogDeployReady}
-      catalogUploadBlockedReason={
-        catalogDeployReady
-          ? undefined
-          : formatMappingBlockedReasonShort(c.compileMappingBanner)
-      }
+      catalogUploadBlockedReason={catalogDeployBlockedReason}
+      convaiDeployMode={c.agentConvaiDeployMode}
+      onConvaiDeployModeChange={c.setAgentConvaiDeployMode}
       availableStyleIds={deployAvailableStyleIds}
       countByStyleId={deployCountByStyleId}
       deployStyleId={c.agentConversationDeployStyleId}

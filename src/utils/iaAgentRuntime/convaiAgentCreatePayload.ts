@@ -23,6 +23,17 @@ import {
 } from '@domain/useCaseGeneratorWizard/startUseCase';
 import { buildElevenLabsConvaiPromptTools } from './elevenLabsConvaiToolsPayload';
 import { resolveConvaiAgentFirstMessage } from './resolveConvaiAgentFirstMessage';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import {
+  OMNIA_DIALOG_STEP_PROMPT_APPEND,
+} from '@domain/convai/compileKbDeterministicAgentPrompt';
+import {
+  buildOmniaDialogStepConvaiTool,
+  isOmniaDialogStepConvaiTool,
+} from './omniaDialogStepConvaiTool';
 
 /** Istruzioni aggiuntive ConvAI quando è presente un tool webhook BookFromAgenda (API v4.6). */
 const BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND = `BOOKFROMAGENDA (webhook POST …/bookfromagenda, contratto API v4.6):
@@ -210,10 +221,26 @@ export function conversationConfigFragmentFromIaAgentConfig(
   const convaiGateway =
     projectId && agentTaskId ? { projectId, agentTaskId } : undefined;
 
-  const elevenTools = buildElevenLabsConvaiPromptTools(cfg, (id) => taskRepository.getTask(id), {
+  const task = options?.task ?? null;
+  const deployMode = normalizeAgentConvaiDeployMode(task?.agentConvaiDeployMode);
+  const kbDeterministic = isKbDeterministicDeployMode(deployMode);
+
+  let elevenTools = buildElevenLabsConvaiPromptTools(cfg, (id) => taskRepository.getTask(id), {
     manualCatalogBackendTaskIds,
     convaiGateway,
   });
+
+  if (kbDeterministic && projectId && agentTaskId) {
+    const dialogTool = buildOmniaDialogStepConvaiTool({
+      projectId,
+      agentTaskId,
+      gatewayOrigin: convaiGateway?.gatewayOrigin,
+    });
+    elevenTools = [
+      ...elevenTools.filter((t) => !isOmniaDialogStepConvaiTool(t)),
+      dialogTool,
+    ];
+  }
 
   let promptText = resolveConvaiAgentPromptText(
     cfg,
@@ -221,17 +248,18 @@ export function conversationConfigFragmentFromIaAgentConfig(
     manualCatalogBackendTaskIds,
     options?.backendCatalog
   );
-  const task = options?.task;
   const useCases = task ? parseAgentUseCasesJson(String(task.agentUseCasesJson ?? '')) : [];
-  const startMeta = resolveStartUseCasePromptMeta(
-    useCases,
-    String(task?.agentStartUseCaseId ?? '').trim() || undefined
-  );
-  const startPhaseAppend = buildElevenLabsStartPhaseAppend(startMeta, {
-    agentImmediateStart: task?.agentImmediateStart === true,
-  });
-  if (startPhaseAppend) {
-    promptText = `${promptText.trim()}\n\n${startPhaseAppend}`;
+  if (!kbDeterministic) {
+    const startMeta = resolveStartUseCasePromptMeta(
+      useCases,
+      String(task?.agentStartUseCaseId ?? '').trim() || undefined
+    );
+    const startPhaseAppend = buildElevenLabsStartPhaseAppend(startMeta, {
+      agentImmediateStart: task?.agentImmediateStart === true,
+    });
+    if (startPhaseAppend) {
+      promptText = `${promptText.trim()}\n\n${startPhaseAppend}`;
+    }
   }
 
   if (elevenTools.length > 0 && fragmentUsesBookFromAgendaWebhook(elevenTools)) {
@@ -259,6 +287,7 @@ export function conversationConfigFragmentFromIaAgentConfig(
       startUseCaseId: task?.agentStartUseCaseId,
       agentStartPromptJson: task?.agentStartPromptJson,
       useCases,
+      agentConvaiDeployMode: task?.agentConvaiDeployMode,
     }),
     language: lang,
     prompt,

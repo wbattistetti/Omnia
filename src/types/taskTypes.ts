@@ -505,6 +505,11 @@ export interface Task {
    */
   agentKnowledgeBaseDocumentsJson?: string;
   /**
+   * Modalità deploy ConvAI: `legacy` = catalogo UC nel system prompt; `kb_deterministic` = omnia_dialog_step.
+   * @see `AgentConvaiDeployMode` in `@domain/convai/agentConvaiDeployMode`.
+   */
+  agentConvaiDeployMode?: 'legacy' | 'kb_deterministic';
+  /**
    * When true, runtime starts the agent turn without waiting for real user input (orchestrator injects synthetic utterance).
    */
   agentImmediateStart?: boolean;

@@ -21,6 +21,10 @@ import {
   migrateLegacyStyleExample,
 } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { EMPTY_OUTPUT_MAPPINGS } from './constants';
+import {
+  normalizeAgentConvaiDeployMode,
+  type AgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
 
 export interface AIAgentTaskSnapshot {
   agentDesignDescription: string;
@@ -97,6 +101,7 @@ export interface AIAgentTaskSnapshot {
   /** Knowledge-base documents (design-time), JSON array. */
   agentKnowledgeBaseDocumentsJson: string;
   agentBackendOutputSlotBindingsJson: string;
+  agentConvaiDeployMode: AgentConvaiDeployMode;
 }
 
 /**
@@ -181,6 +186,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
     agentInterfaceJson: String(r?.agentInterfaceJson ?? ''),
     agentKnowledgeBaseDocumentsJson: String(r?.agentKnowledgeBaseDocumentsJson ?? ''),
     agentBackendOutputSlotBindingsJson: String(r?.agentBackendOutputSlotBindingsJson ?? ''),
+    agentConvaiDeployMode: normalizeAgentConvaiDeployMode(r?.agentConvaiDeployMode),
   };
 }
 

@@ -29,6 +29,11 @@ import {
 import type { DeriveBackendToolFailureCode } from '@domain/iaAgentTools/backendToolDerivation';
 import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import { collectKbDialogDeployIssues } from '@domain/convai/kbDialogDeployReadiness';
 import { listIncompleteBackendSendWireKeys } from './collectBackendCallIncompleteSendMessages';
 
 export type AiAgentTaskLocation = {
@@ -243,7 +248,20 @@ export function collectIaAgentRuntimeCompileErrors(
           task.id,
           (id) => taskRepository.getTask(id)
         );
-        if (reachableBackendIds.length > 0 && effectiveBackendIds.length === 0) {
+        const deployMode = normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode);
+        const kbDeterministicDeploy = isKbDeterministicDeployMode(deployMode);
+        if (kbDeterministicDeploy) {
+          const kbIssues = collectKbDialogDeployIssues(task.agentKnowledgeBaseDocumentsJson);
+          for (const issue of kbIssues) {
+            push('IaKbDialogDeployNotReady', `Deploy deterministico: ${issue.message}`, 'tools');
+          }
+        }
+
+        if (
+          !kbDeterministicDeploy &&
+          reachableBackendIds.length > 0 &&
+          effectiveBackendIds.length === 0
+        ) {
           push(
             'IaConvaiBackendToolIdsEmpty',
             'Nessun tool ConvAI selezionato: sul canvas ci sono Backend Call raggiungibili dall’agente, ma `convaiBackendToolTaskIds` è vuoto. In Agent setup → backend aggiungi gli id o usa «Aggiungi da canvas».',

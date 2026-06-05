@@ -41,6 +41,17 @@ import type { ProjectBackendCatalogBlob } from '@domain/backendCatalog/catalogTy
 import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { collectReachableBackendCallTaskIdsFromFlow } from '@domain/iaAgentTools/collectReachableBackendCallTaskIdsFromFlow';
 import { readBackendCallEndpoint } from '@domain/iaAgentTools/backendCallEndpoint';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import { collectKbDialogDeployIssues } from '@domain/convai/kbDialogDeployReadiness';
+import { enforceOmniaDialogStepRuntimeToolPolicy } from '@utils/iaAgentRuntime/omniaDialogStepConvaiTool';
+import {
+  CONVAI_WEBHOOK_GATEWAY_PORT,
+  ensureConvaiDeployTunnelReady,
+} from '@domain/devTunnel/ensureConvaiDeployTunnelReady';
+import { flushAiAgentEditorsBeforeProjectSave } from '../TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentProjectSaveFlush';
 
 /** Contesto per il nome leggibile ElevenLabs (OMNIA… + GUID) e validazione tool. */
 export type ConvaiProvisionContext = {
@@ -261,6 +272,9 @@ export async function ensureConvaiAgentsProvisioned(
   /** Stesso id del tool webhook BookFromAgenda (`omnia_conv_…`); va inviato a startAgent come sessionAlias. */
   sessionConversationId: string;
 }> {
+  // Flush editor KB / deploy mode into TaskRepository before validation (no project save required).
+  flushAiAgentEditorsBeforeProjectSave();
+
   const enriched = nodes.map((node) => ({
     ...node,
     data: { ...node.data, rows: enrichRowsWithTaskId(node.data?.rows || []) },
@@ -276,6 +290,33 @@ export async function ensureConvaiAgentsProvisioned(
   const payloadPreviewItems: ConvaiProvisionPayloadPreviewItem[] = [];
   const sessionConversationId = newSessionConversationId();
 
+  let needsKbDialogTunnel = false;
+  for (const node of enriched) {
+    for (const row of node.data?.rows || []) {
+      const taskId = String(row.id || row.taskId || '').trim();
+      if (!taskId) continue;
+      const t = taskRepository.getTask(taskId);
+      if (!t || t.type !== TaskType.AIAgent) continue;
+      const cfg = resolveTaskIaConfig(t);
+      if (cfg.platform !== 'elevenlabs') continue;
+      if (isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(t.agentConvaiDeployMode))) {
+        needsKbDialogTunnel = true;
+        break;
+      }
+    }
+    if (needsKbDialogTunnel) break;
+  }
+  let kbDialogTunnelOk = true;
+  let kbDialogTunnelError = '';
+  if (needsKbDialogTunnel) {
+    const ensured = await ensureConvaiDeployTunnelReady([CONVAI_WEBHOOK_GATEWAY_PORT]);
+    if (!ensured.ok) {
+      kbDialogTunnelOk = false;
+      kbDialogTunnelError = ensured.error;
+      console.warn('[IA·ConvAI] kb_deterministic deploy: tunnel ngrok non pronto', ensured.error);
+    }
+  }
+
   for (const node of enriched) {
     const rows = node.data?.rows || [];
     for (const row of rows) {
@@ -290,6 +331,32 @@ export async function ensureConvaiAgentsProvisioned(
       const live = peekConvaiLiveIaConfig(taskId);
       const cfg = mergeResolvedAndLiveIaConfig(resolved, live);
       if (cfg.platform !== 'elevenlabs') continue;
+
+      const deployMode = normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode);
+      const kbDeterministicDeploy = isKbDeterministicDeployMode(deployMode);
+      if (kbDeterministicDeploy) {
+        if (!kbDialogTunnelOk) {
+          failed.push(taskId);
+          setIaProvisioningError(taskId, {
+            provider: 'elevenlabs',
+            code: 'convaiTunnelNotReady',
+            message: kbDialogTunnelError,
+            raw: { needsKbDialogTunnel: true },
+          });
+          continue;
+        }
+        const kbIssues = collectKbDialogDeployIssues(task.agentKnowledgeBaseDocumentsJson);
+        if (kbIssues.length > 0) {
+          failed.push(taskId);
+          setIaProvisioningError(taskId, {
+            provider: 'elevenlabs',
+            code: 'kbDialogDeployNotReady',
+            message: `Deploy deterministico: ${kbIssues[0]!.message}`,
+            raw: { issues: kbIssues },
+          });
+          continue;
+        }
+      }
 
       const manualCatalogBackendTaskIds = context.manualCatalogBackendTaskIds ?? [];
       const cfgForCreate = iaAgentConfigWithEditorSystemPrompt(cfg, task, {
@@ -351,7 +418,11 @@ export async function ensureConvaiAgentsProvisioned(
         context.flowSlice ?? null,
         taskId
       );
-      if (reachableBackendIds.length > 0 && effectiveBackendIds.length === 0) {
+      if (
+        !kbDeterministicDeploy &&
+        reachableBackendIds.length > 0 &&
+        effectiveBackendIds.length === 0
+      ) {
         failed.push(taskId);
         setIaProvisioningError(taskId, {
           provider: 'elevenlabs',
@@ -437,6 +508,12 @@ export async function ensureConvaiAgentsProvisioned(
             projectId: fixedProjectId,
             forceRefresh: fixedForceRefresh,
           },
+          sessionConversationId
+        );
+      }
+      if (kbDeterministicDeploy) {
+        enforceOmniaDialogStepRuntimeToolPolicy(
+          conversationConfigOutbound as Record<string, unknown>,
           sessionConversationId
         );
       }

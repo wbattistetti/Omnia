@@ -58,6 +58,11 @@ import {
   type GlobalVoiceByPlatformMap,
 } from '@utils/iaAgentRuntime/globalVoiceByPlatform';
 import { ConversationStyleSelector } from '../useCaseGeneratorWizard/ConversationStyleSelector';
+import {
+  AGENT_CONVAI_DEPLOY_MODE_LABELS,
+  AGENT_CONVAI_DEPLOY_MODES,
+  type AgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
 
 /** Piattaforme effettivamente esposte nel dropdown (ordine alfabetico per UX). */
 const DROPDOWN_PLATFORMS: readonly IAAgentPlatform[] = SUPPORTED_AGENT_PLATFORMS.filter(
@@ -130,6 +135,9 @@ export interface AIAgentDeployMenuProps extends DeployHandlers {
   /** Se false, Upload platform è disabilitato (Copy resta attivo). */
   catalogUploadReady?: boolean;
   catalogUploadBlockedReason?: string;
+  /** Modalità deploy ConvAI: classico (UC nel prompt) vs deterministico (omnia_dialog_step). */
+  convaiDeployMode: AgentConvaiDeployMode;
+  onConvaiDeployModeChange: (next: AgentConvaiDeployMode) => void;
 }
 
 export function AIAgentDeployMenu({
@@ -157,6 +165,8 @@ export function AIAgentDeployMenu({
   onToggleImmediateStart,
   catalogUploadReady = true,
   catalogUploadBlockedReason,
+  convaiDeployMode,
+  onConvaiDeployModeChange,
 }: AIAgentDeployMenuProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const [inlineDeployOpen, setInlineDeployOpen] = React.useState(false);
@@ -245,6 +255,40 @@ export function AIAgentDeployMenu({
             </p>
           ) : null}
 
+          <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Modalità deploy
+            </div>
+            <div className="mt-1.5 space-y-1 pl-1">
+              {AGENT_CONVAI_DEPLOY_MODES.map((mode) => (
+                <label
+                  key={mode}
+                  className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs text-slate-100 hover:bg-slate-800"
+                >
+                  <input
+                    type="radio"
+                    name="convai-deploy-mode"
+                    checked={convaiDeployMode === mode}
+                    onChange={() => onConvaiDeployModeChange(mode)}
+                    className="mt-0.5 accent-amber-500"
+                  />
+                  <span>
+                    <span className="font-medium">{AGENT_CONVAI_DEPLOY_MODE_LABELS[mode]}</span>
+                    {mode === 'kb_deterministic' ? (
+                      <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">
+                        Dialogo KB via Omnia (tool omnia_dialog_step). Richiede tabella approvata e selettori.
+                      </span>
+                    ) : (
+                      <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">
+                        Catalogo use case nel system prompt (comportamento attuale).
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/*
             ── Toggle 1: «Avvio immediato» ─────────────────────────────────────────────
 
@@ -280,14 +324,25 @@ export function AIAgentDeployMenu({
             <label
               role="menuitemcheckbox"
               aria-checked={logUseCaseEnabled}
-              title={'Quando attivo, ogni risposta dell\'agente include in coda «USECASE: "<NOME>"» (MAIUSCOLO). Per input non classificabili, l\'agente assegna un nome nuovo e logga «USECASE: "NUOVO_<TITOLO>"».'}
-              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800"
+              aria-disabled={convaiDeployMode === 'kb_deterministic'}
+              title={
+                convaiDeployMode === 'kb_deterministic'
+                  ? 'Ignorato in deploy deterministico: le domande strutturate le gestisce Omnia.'
+                  : 'Quando attivo, ogni risposta dell\'agente include in coda «USECASE: "<NOME>"» (MAIUSCOLO). Per input non classificabili, l\'agente assegna un nome nuovo e logga «USECASE: "NUOVO_<TITOLO>"».'
+              }
+              className={[
+                'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100',
+                convaiDeployMode === 'kb_deterministic'
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'cursor-pointer hover:bg-slate-800',
+              ].join(' ')}
             >
               <input
                 type="checkbox"
                 checked={logUseCaseEnabled}
+                disabled={convaiDeployMode === 'kb_deterministic'}
                 onChange={(e) => onToggleLogUseCase(e.target.checked)}
-                className="h-3.5 w-3.5 cursor-pointer accent-amber-500"
+                className="h-3.5 w-3.5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed"
               />
               <ScrollText size={12} aria-hidden className="shrink-0 text-amber-300" />
               <span className="flex-1">Mostra Usecases</span>

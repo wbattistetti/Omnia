@@ -1,0 +1,195 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Omnia - omnia_dialog_step API",
+    "version": "1.0.0",
+    "description": "Dialogo strutturato KB per Convai (ElevenLabs). Omnia filtra la tabella approvata, gestisce binding e sessione; Convai legge solo `say` dalla risposta.\n\n**POST** `/api/runtime/omnia-dialog-step/{projectId}/{agentTaskId}`\n\n**Regola ConvAI:** su parametri opzionali, stringa vuota `\"\"` = assente. ID regola: `omnia.convai.optional-empty-string/v1`.\n\n**Runtime:** `conversationId` obbligatorio (body o header `x-conversation-id`). `updates` mappa slot→valore NLU. `reset: true` azzera la sessione.\n\n**Stati risposta:** `ask` (prossima domanda), `invalid` (combinazione rifiutata + template), `complete` (riga trovata), `error`.",
+    "x-omnia": {
+      "convaiOptionalSemantics": {
+        "ruleId": "omnia.convai.optional-empty-string/v1",
+        "summary": "Campi opzionali: stringa vuota \"\" = assente (omit)."
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3100",
+      "description": "Sviluppo locale Express"
+    }
+  ],
+  "tags": [
+    {
+      "name": "OmniaDialogStep",
+      "description": "Dialogo KB deterministico"
+    }
+  ],
+  "paths": {
+    "/api/runtime/omnia-dialog-step/{projectId}/{agentTaskId}": {
+      "post": {
+        "tags": ["OmniaDialogStep"],
+        "operationId": "omniaDialogStep",
+        "summary": "omnia_dialog_step — prossimo passo dialogo KB",
+        "description": "Carica tabella KB approvata + selectorSpec dal task agente. Applica `updates`, mantiene sessione per `conversationId`, restituisce testo `say` per TTS.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "agentTaskId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OmniaDialogStepRequest"
+              },
+              "examples": {
+                "first_step": {
+                  "summary": "Prima chiamata — nessun update",
+                  "value": {
+                    "conversationId": "conv-example",
+                    "updates": {}
+                  }
+                },
+                "with_update": {
+                  "summary": "Aggiornamento slot NLU",
+                  "value": {
+                    "conversationId": "conv-example",
+                    "updates": {
+                      "specialita": "Cardiologia"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Passo dialogo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OmniaDialogStepResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Input non valido",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "422": {
+            "description": "KB non configurata per runtime",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "Errore interno",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OmniaDialogStepRequest": {
+        "type": "object",
+        "required": ["conversationId"],
+        "properties": {
+          "conversationId": {
+            "type": "string",
+            "description": "ID conversazione Convai (obbligatorio runtime)."
+          },
+          "kbDocumentId": {
+            "type": "string",
+            "description": "Documento KB specifico; se omesso usa il primo approvato."
+          },
+          "reset": {
+            "type": "boolean",
+            "description": "Se true, azzera binding sessione prima del passo."
+          },
+          "updates": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Slot NLU → valore scelto dall'utente (chiavi = header colonna o columnId)."
+          },
+          "slots": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Alias di `updates` per compatibilità Convai."
+          }
+        }
+      },
+      "OmniaDialogStepResponse": {
+        "type": "object",
+        "required": ["status", "say"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ask", "complete", "invalid", "error"]
+          },
+          "say": {
+            "type": "string",
+            "description": "Testo da leggere all'utente (TTS Convai)."
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Binding corrente columnId → valore."
+          },
+          "kbDocumentId": { "type": "string" },
+          "kbDocumentName": { "type": "string" },
+          "nextColumnId": { "type": "string" },
+          "nextHeaderLabel": { "type": "string" },
+          "allowedValues": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "remainingRowCount": { "type": "integer" },
+          "matchedRow": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "rejected": {
+            "type": "object",
+            "properties": {
+              "columnId": { "type": "string" },
+              "value": { "type": "string" },
+              "alternative": { "type": "string" }
+            }
+          },
+          "error": { "type": "string" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "error": { "type": "string" },
+          "say": { "type": "string" }
+        }
+      }
+    }
+  }
+}

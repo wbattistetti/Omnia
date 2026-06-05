@@ -236,19 +236,29 @@ mountConvaiWebhookInvocationRoutes(app);
 const { mountBackendCallTestProxy } = require('./designer/backendCallTestProxyRoute');
 mountBackendCallTestProxy(app);
 
+async function loadProjectTaskFromMongo(projectId, taskId) {
+  const client = await getMongoClient();
+  try {
+    const projDb = await getProjectDb(client, projectId);
+    return await projDb.collection('tasks').findOne({ projectId, id: taskId });
+  } finally {
+    await client.close();
+  }
+}
+
 const { createConvaiWebhookGatewayHandler } = require('./services/convaiWebhookGatewayService');
 app.post(
   '/api/runtime/convai-webhook/:projectId/:agentTaskId/:backendTaskId',
   createConvaiWebhookGatewayHandler({
-    loadProjectTask: async (projectId, taskId) => {
-      const client = await getMongoClient();
-      try {
-        const projDb = await getProjectDb(client, projectId);
-        return await projDb.collection('tasks').findOne({ projectId, id: taskId });
-      } finally {
-        await client.close();
-      }
-    },
+    loadProjectTask: loadProjectTaskFromMongo,
+  })
+);
+
+const { createOmniaDialogStepHandler } = require('./services/omniaDialogStepService');
+app.post(
+  '/api/runtime/omnia-dialog-step/:projectId/:agentTaskId',
+  createOmniaDialogStepHandler({
+    loadProjectTask: loadProjectTaskFromMongo,
   })
 );
 
@@ -8949,6 +8959,26 @@ function serveBookFromAgendaOpenApiSpec(req, res) {
 
 app.get('/api/runtime/bookfromagenda/openapi.json', serveBookFromAgendaOpenApiSpec);
 app.get('/api/runtime/bookfromagenda/swagger.json', serveBookFromAgendaOpenApiSpec);
+
+/**
+ * OpenAPI 3 — omnia_dialog_step: dialogo KB deterministico per Convai.
+ * Read API: `…/api/runtime/omnia-dialog-step/openapi.json`
+ */
+function serveOmniaDialogStepOpenApiSpec(req, res) {
+  try {
+    const specPath = path.join(__dirname, 'services', 'omniaDialogStep.openapi.json');
+    const buf = fs.readFileSync(specPath, 'utf8');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(buf);
+  } catch (err) {
+    console.error('[omnia-dialog-step OpenAPI]', err);
+    res.status(500).json({ error: 'OpenAPI spec read failed' });
+  }
+}
+
+app.get('/api/runtime/omnia-dialog-step/openapi.json', serveOmniaDialogStepOpenApiSpec);
+app.get('/api/runtime/omnia-dialog-step/swagger.json', serveOmniaDialogStepOpenApiSpec);
 
 async function handleBookFromAgendaPost(req, res) {
   try {

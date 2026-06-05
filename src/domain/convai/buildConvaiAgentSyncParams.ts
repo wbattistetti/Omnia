@@ -16,6 +16,11 @@ import {
   resolveLinkedConvaiAgentId,
 } from '@domain/convai/agentElevenLabsConvaiLink';
 import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
+import {
+  normalizeAgentConvaiDeployMode,
+  type AgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import { resolveAgentKnowledgeBaseDocumentsJson } from '@domain/knowledgeBase/serializeKbDocuments';
 
 export type BuildConvaiAgentSyncParamsInput = {
   agentTaskId: string;
@@ -31,6 +36,8 @@ export type BuildConvaiAgentSyncParamsInput = {
   catalogFormat?: ConversationalCatalogFormat;
   newAgentName?: string;
   agentId?: string;
+  /** Override modalità deploy (stato live editor prima del flush Mongo). */
+  agentConvaiDeployMode?: AgentConvaiDeployMode;
 };
 
 /** Risolve task AI Agent e parametri sync; null se task mancante o tipo errato. */
@@ -54,8 +61,19 @@ export function buildConvaiAgentSyncParams(
   const linkedAgentId = resolveLinkedConvaiAgentId(link, session?.agentId);
   const agentId = String(input.agentId ?? linkedAgentId ?? '').trim() || undefined;
 
+  const agentTaskForSync: Task = {
+    ...agentTask,
+    agentConvaiDeployMode: normalizeAgentConvaiDeployMode(
+      input.agentConvaiDeployMode ?? agentTask.agentConvaiDeployMode
+    ),
+    agentKnowledgeBaseDocumentsJson: resolveAgentKnowledgeBaseDocumentsJson(
+      agentTask.agentKnowledgeBaseDocumentsJson,
+      input.knowledgeBaseDocuments
+    ),
+  };
+
   return {
-    agentTask,
+    agentTask: agentTaskForSync,
     projectId: String(input.projectId ?? '').trim() || undefined,
     useCases,
     conversationalRules: input.conversationalRules,

@@ -53,6 +53,12 @@ import type {
   ConvaiAgentSyncResult,
   ConvaiAgentSyncToolResult,
 } from '@domain/convai/convaiAgentSyncTypes';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import { compileKbDeterministicAgentPrompt } from '@domain/convai/compileKbDeterministicAgentPrompt';
+import { collectKbDialogDeployIssues } from '@domain/convai/kbDialogDeployReadiness';
 
 const BOOK_FROM_AGENDA_PROMPT_APPEND = `BOOKFROMAGENDA (webhook POST …/bookfromagenda, contratto API v4.6):
 - **projectId** nel JSON deve coincidere con il valore cablato in Omnia a design-time.
@@ -81,6 +87,14 @@ async function resolveKbTextsForConvaiSync(
 }
 
 function buildSyncPromptText(params: ConvaiAgentSyncParams): string {
+  const deployMode = normalizeAgentConvaiDeployMode(params.agentTask.agentConvaiDeployMode);
+  if (isKbDeterministicDeployMode(deployMode)) {
+    return compileKbDeterministicAgentPrompt(params.agentTask, {
+      manualCatalogBackendTaskIds: params.manualCatalogBackendTaskIds,
+      backendCatalog: params.backendCatalog,
+    });
+  }
+
   const startPrompt = parseAgentStartPromptJson(
     String(params.agentTask.agentStartPromptJson ?? '')
   );
@@ -167,6 +181,24 @@ export async function syncConvaiAgentFromOmnia(
     };
   }
 
+  const deployMode = normalizeAgentConvaiDeployMode(agentTask.agentConvaiDeployMode);
+  if (isKbDeterministicDeployMode(deployMode)) {
+    const kbIssues = collectKbDialogDeployIssues(
+      agentTask.agentKnowledgeBaseDocumentsJson,
+      params.knowledgeBaseDocuments
+    );
+    if (kbIssues.length > 0) {
+      return {
+        ok: false,
+        failure: {
+          phase: 'validate',
+          message: `Deploy deterministico: ${kbIssues[0]!.message}`,
+          compileErrors: kbIssues.map((i) => i.message),
+        },
+      };
+    }
+  }
+
   const backendIds = resolveConvaiSyncBackendTaskIds(params);
   const manualEntries = params.backendCatalog?.manualEntries ?? [];
   const manualById = new Map(manualEntries.map((e) => [e.id, e]));
@@ -175,7 +207,10 @@ export async function syncConvaiAgentFromOmnia(
     if (entry) ensureManualCatalogBackendTask(entry, params.projectId);
   }
   const useDevTunnelForWebhook = params.useDevTunnelForWebhook !== false;
-  if (useDevTunnelForWebhook && backendIds.length > 0) {
+  const needsTunnel =
+    useDevTunnelForWebhook &&
+    (backendIds.length > 0 || isKbDeterministicDeployMode(deployMode));
+  if (needsTunnel) {
     const ensured = await ensureConvaiDeployTunnelReady([CONVAI_WEBHOOK_GATEWAY_PORT]);
     if (!ensured.ok) {
       return {
@@ -291,11 +326,13 @@ export async function syncConvaiAgentFromOmnia(
     params.useCases,
     String(agentTask.agentStartUseCaseId ?? '').trim() || undefined
   );
-  const startPhaseAppend = buildElevenLabsStartPhaseAppend(startMeta, {
-    agentImmediateStart: agentTask.agentImmediateStart === true,
-  });
-  if (startPhaseAppend) {
-    promptText = `${promptText.trim()}\n\n${startPhaseAppend}`;
+  if (!isKbDeterministicDeployMode(deployMode)) {
+    const startPhaseAppend = buildElevenLabsStartPhaseAppend(startMeta, {
+      agentImmediateStart: agentTask.agentImmediateStart === true,
+    });
+    if (startPhaseAppend) {
+      promptText = `${promptText.trim()}\n\n${startPhaseAppend}`;
+    }
   }
 
   if (usesBookFromAgenda(tools, backendIds)) {
@@ -380,6 +417,7 @@ export async function syncConvaiAgentFromOmnia(
         startUseCaseId: agentTask.agentStartUseCaseId,
         agentStartPromptJson: agentTask.agentStartPromptJson,
         useCases: params.useCases,
+        agentConvaiDeployMode: agentTask.agentConvaiDeployMode,
       }),
       language: lang,
       prompt,

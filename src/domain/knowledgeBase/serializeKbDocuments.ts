@@ -2,7 +2,7 @@
  * Parse / serialize KB document lists stored on AI Agent tasks (`agentKnowledgeBaseDocumentsJson`).
  */
 
-import type { PersistedKbDocument } from './kbDocumentTypes';
+import type { PersistedKbDocument, StagedKbDocument } from './kbDocumentTypes';
 import { persistedKbToStaged, stagedKbToPersisted } from './kbDocumentTypes';
 import { normalizePersistedKbRepositoryLink } from './kbRepositoryContract';
 
@@ -31,4 +31,17 @@ export function serializeAgentKnowledgeBaseDocuments(docs: readonly PersistedKbD
   if (docs.length === 0) return '';
   const normalized = docs.map((d) => normalizePersistedKbRepositoryLink(stagedKbToPersisted(persistedKbToStaged(d))));
   return JSON.stringify(normalized);
+}
+
+/** Task JSON KB merged with live editor documents (live wins when non-empty). */
+export function resolveAgentKnowledgeBaseDocumentsJson(
+  taskJson: string | undefined | null,
+  liveDocuments?: readonly StagedKbDocument[] | null
+): string {
+  const live = liveDocuments ?? [];
+  if (live.length > 0) {
+    const persisted = live.map((d) => normalizePersistedKbRepositoryLink(stagedKbToPersisted(d)));
+    return serializeAgentKnowledgeBaseDocuments(persisted);
+  }
+  return String(taskJson ?? '').trim();
 }

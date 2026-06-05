@@ -49,3 +49,24 @@ export function buildConvaiWebhookGatewayUrl(params: ConvaiWebhookGatewayParams)
 export function isConvaiWebhookGatewayUrl(url: string): boolean {
   return /\/api\/runtime\/convai-webhook\//i.test(String(url ?? ''));
 }
+
+/** Path relativo omnia_dialog_step (dialogo KB deterministico). */
+export function omniaDialogStepPath(projectId: string, agentTaskId: string): string {
+  const pid = encodeURIComponent(projectId.trim());
+  const aid = encodeURIComponent(agentTaskId.trim());
+  return `/api/runtime/omnia-dialog-step/${pid}/${aid}`;
+}
+
+export function buildOmniaDialogStepUrl(params: {
+  origin: string;
+  projectId: string;
+  agentTaskId: string;
+}): string {
+  const origin = params.origin.trim().replace(/\/$/, '');
+  return `${origin}${omniaDialogStepPath(params.projectId, params.agentTaskId)}`;
+}
+
+/** True se l'URL punta all'endpoint omnia_dialog_step. */
+export function isOmniaDialogStepUrl(url: string): boolean {
+  return /\/api\/runtime\/omnia-dialog-step\//i.test(String(url ?? ''));
+}
