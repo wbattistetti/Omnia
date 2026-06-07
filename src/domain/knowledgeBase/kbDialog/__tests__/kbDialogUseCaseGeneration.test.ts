@@ -18,7 +18,7 @@ describe('generateKbDialogUseCases', () => {
     const selectorSpec = inferSelectorSpecFromGrid(grid);
     const out = generateKbDialogUseCases({ grid, selectorSpec, kbDocumentId: 'doc1' });
 
-    expect(out.categories.length).toBe(3);
+    expect(out.categories.length).toBe(4);
     expect(out.useCases.some((uc) => uc.category_id === KB_DIALOG_CATEGORY_ACQUISITION)).toBe(true);
     expect(out.useCases.some((uc) => uc.category_id === KB_DIALOG_CATEGORY_COMPLETE)).toBe(true);
     expect(out.useCases.filter((uc) => uc.kb_dialog_meta?.kind === 'correction').length).toBeGreaterThan(0);

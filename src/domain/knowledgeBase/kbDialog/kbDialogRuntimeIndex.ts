@@ -8,6 +8,8 @@ import type {
   KbDialogAcquisitionIndexEntry,
   KbDialogAcquisitionRow,
   KbDialogCorrectionIndexEntry,
+  KbDialogInformIndexEntry,
+  KbDialogInformRow,
   KbDialogRuntimeIndex,
 } from './kbDialogTypes';
 import type { SelectorValueLabels } from '../kbSelectorSpec';
@@ -18,12 +20,14 @@ export type CompileKbDialogRuntimeIndexParams = {
   completeTemplate: string;
   kbDocumentId?: string;
   acquisitionRowsBySelector: ReadonlyMap<string, readonly KbDialogAcquisitionRow[]>;
+  informRowsBySelector?: ReadonlyMap<string, readonly KbDialogInformRow[]>;
 };
 
 export function compileKbDialogRuntimeIndex(
   params: CompileKbDialogRuntimeIndexParams
 ): KbDialogRuntimeIndex {
   const acquisition: Record<string, KbDialogAcquisitionIndexEntry> = {};
+  const inform: Record<string, KbDialogInformIndexEntry> = {};
 
   for (const uc of params.useCases) {
     const meta = uc.kb_dialog_meta;
@@ -38,6 +42,22 @@ export function compileKbDialogRuntimeIndex(
           bindingWhen: { ...r.bindingWhen },
           say: r.say,
           allowedValues: [...r.allowedValues],
+        })),
+      };
+    }
+
+    if (meta.kind === 'inform' && meta.selectorColumnId) {
+      const rows = params.informRowsBySelector?.get(meta.selectorColumnId) ?? [];
+      inform[meta.selectorColumnId] = {
+        useCaseId: uc.id,
+        selectorColumnId: meta.selectorColumnId,
+        rows: rows.map((r) => ({
+          bindingWhen: { ...r.bindingWhen },
+          say: r.say,
+          deDisclosureSay: r.deDisclosureSay,
+          transitionSay: r.transitionSay,
+          informedValue: r.informedValue,
+          ...(r.requiresAcceptance ? { requiresAcceptance: true } : {}),
         })),
       };
     }
@@ -68,6 +88,7 @@ export function compileKbDialogRuntimeIndex(
     completeTemplate: params.completeTemplate,
     valueLabels: params.valueLabels,
     acquisition,
+    inform,
     correction,
     complete: {
       useCaseId: completeUc?.id ?? 'uc_complete',

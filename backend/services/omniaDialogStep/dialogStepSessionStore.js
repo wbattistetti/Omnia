@@ -1,15 +1,16 @@
 /**
- * Sessione binding dialogo KB keyed by project + agent + conversation + documento.
+ * Sessione binding + stato inform dialogo KB keyed by project + agent + conversation + documento.
  */
 
 'use strict';
 
 const crypto = require('crypto');
+const { emptyInformState, cloneInformState } = require('./kbDialogSelectorSemantics');
 
 const KEY_PREFIX = 'omnia:dialog:v1:';
 const DEFAULT_TTL_SEC = Number(process.env.OMNIA_DIALOG_STEP_TTL_SEC || 86400);
 
-/** @type {Map<string, { binding: Record<string, string>, expiresAt: number }>} */
+/** @type {Map<string, { binding: Record<string, string>, informState: object, expiresAt: number }>} */
 const memoryStore = new Map();
 
 /** @type {import('redis').RedisClientType | null} */
@@ -66,18 +67,26 @@ function pruneMemory() {
   }
 }
 
+function normalizeSessionPayload(parsed) {
+  const binding =
+    parsed && typeof parsed.binding === 'object' && !Array.isArray(parsed.binding)
+      ? parsed.binding
+      : {};
+  const informState = cloneInformState(parsed?.informState ?? emptyInformState());
+  return { binding, informState };
+}
+
 /**
  * @param {{ projectId: string, agentTaskId: string, conversationId: string, kbDocumentId: string }} scope
  */
-async function loadDialogBinding(scope) {
+async function loadDialogSession(scope) {
   const key = sessionKey(scope);
   const redis = await getRedisOptional();
   if (redis) {
     try {
       const hit = await redis.get(key);
       if (hit) {
-        const parsed = JSON.parse(hit);
-        if (parsed && typeof parsed.binding === 'object') return parsed.binding;
+        return normalizeSessionPayload(JSON.parse(hit));
       }
     } catch {
       /* fallback memory */
@@ -85,17 +94,32 @@ async function loadDialogBinding(scope) {
   }
   pruneMemory();
   const mem = memoryStore.get(key);
-  if (!mem || mem.expiresAt <= Date.now()) return {};
-  return { ...mem.binding };
+  if (!mem || mem.expiresAt <= Date.now()) {
+    return { binding: {}, informState: emptyInformState() };
+  }
+  return {
+    binding: { ...mem.binding },
+    informState: cloneInformState(mem.informState),
+  };
+}
+
+/** @deprecated use loadDialogSession */
+async function loadDialogBinding(scope) {
+  const session = await loadDialogSession(scope);
+  return session.binding;
 }
 
 /**
  * @param {{ projectId: string, agentTaskId: string, conversationId: string, kbDocumentId: string }} scope
  * @param {Record<string, string>} binding
+ * @param {object} [informState]
  */
-async function saveDialogBinding(scope, binding) {
+async function saveDialogSession(scope, binding, informState) {
   const key = sessionKey(scope);
-  const payload = JSON.stringify({ binding });
+  const payload = JSON.stringify({
+    binding,
+    informState: cloneInformState(informState ?? emptyInformState()),
+  });
   const redis = await getRedisOptional();
   if (redis) {
     try {
@@ -107,8 +131,15 @@ async function saveDialogBinding(scope, binding) {
   }
   memoryStore.set(key, {
     binding: { ...binding },
+    informState: cloneInformState(informState ?? emptyInformState()),
     expiresAt: Date.now() + DEFAULT_TTL_SEC * 1000,
   });
+}
+
+/** @deprecated use saveDialogSession */
+async function saveDialogBinding(scope, binding) {
+  const session = await loadDialogSession(scope);
+  await saveDialogSession(scope, binding, session.informState);
 }
 
 /**
@@ -128,6 +159,8 @@ async function clearDialogBinding(scope) {
 }
 
 module.exports = {
+  loadDialogSession,
+  saveDialogSession,
   loadDialogBinding,
   saveDialogBinding,
   clearDialogBinding,

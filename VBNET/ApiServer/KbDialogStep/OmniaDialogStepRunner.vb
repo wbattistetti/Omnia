@@ -69,20 +69,22 @@ Namespace OmniaDialogStepInfra
                 Await DialogStepSessionStore.ClearDialogBindingAsync(scope).ConfigureAwait(False)
             End If
 
-            Dim binding = Await DialogStepSessionStore.LoadDialogBindingAsync(scope).ConfigureAwait(False)
+            Dim session = Await DialogStepSessionStore.LoadDialogSessionAsync(scope).ConfigureAwait(False)
+            Dim binding = session.Binding
+            Dim informState = session.InformState
             Dim dialogIndex = KbDialogIndexLoader.ParseIndex(agentTask.Value(Of String)("agentKbDialogIndexJson"))
             Dim slotUpdates = If(updates, New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase))
 
             Dim result As DialogStepResult = Nothing
             Try
-                result = DialogStepEngine.ExecuteDialogStep(runtime.Grid, runtime.SelectorSpec, binding, slotUpdates, dialogIndex)
+                result = DialogStepEngine.ExecuteDialogStep(runtime.Grid, runtime.SelectorSpec, binding, slotUpdates, dialogIndex, informState)
             Catch ex As Exception
                 Console.WriteLine("[omnia-dialog-step VB] engine error: " & ex.Message)
                 Return Fail(500, "dialog_engine_failed", "Il motore dialogo non è disponibile.")
             End Try
 
             Dim canonicalBinding = DialogStepEngine.BindingKeysCanonical(If(result.Binding, binding), runtime.Grid.Headers)
-            Await DialogStepSessionStore.SaveDialogBindingAsync(scope, canonicalBinding).ConfigureAwait(False)
+            Await DialogStepSessionStore.SaveDialogSessionAsync(scope, canonicalBinding, If(result.InformState, informState)).ConfigureAwait(False)
 
             Dim response As New JObject From {
                 {"status", result.Status},
@@ -111,6 +113,11 @@ Namespace OmniaDialogStepInfra
                     {"alternative", result.Rejected.Alternative}
                 }
             End If
+            If result.RequiresAcceptance.HasValue AndAlso result.RequiresAcceptance.Value Then
+                response("requiresAcceptance") = True
+            End If
+            If Not String.IsNullOrEmpty(result.InformColumnId) Then response("informColumnId") = result.InformColumnId
+            If Not String.IsNullOrEmpty(result.ConversationAction) Then response("conversationAction") = result.ConversationAction
 
             Return New OmniaDialogStepRunResult With {
                 .HttpStatus = 200,

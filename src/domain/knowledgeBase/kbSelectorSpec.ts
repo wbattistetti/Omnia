@@ -11,6 +11,11 @@ export type SelectorPromptType = 'closed_list' | 'open_question';
 export type SelectorColumnRole = 'selector' | 'data';
 export type SelectorAskPolicy = 'required' | 'optional';
 
+export type SelectorAcceptanceWhen = {
+  metadataColumnId: string;
+  metadataValue: string;
+};
+
 export type SelectorColumnSpec = {
   columnId: string;
   headerLabel: string;
@@ -23,6 +28,10 @@ export type SelectorColumnSpec = {
   askPolicy?: SelectorAskPolicy;
   /** Se nella tabella resta un solo valore distinto dopo filtro, Omnia lo imposta senza chiedere. */
   autoFillSingleValue?: boolean;
+  /** Disclosure quando il valore implicito è univoco e significativo. */
+  informOnAutofill?: boolean;
+  /** Metadati riga che richiedono conferma esplicita (es. esame_obbligatorio = si). */
+  acceptanceWhen?: SelectorAcceptanceWhen[];
 };
 
 export type SelectorInvalidationTemplate = {
@@ -261,6 +270,20 @@ function parseSelectorColumn(raw: unknown): SelectorColumnSpec | null {
     o.askPolicy === 'required' || o.askPolicy === 'optional'
       ? o.askPolicy
       : defaultAskPolicy(sortOrder);
+  const acceptanceWhen: SelectorAcceptanceWhen[] = [];
+  if (Array.isArray(o.acceptanceWhen)) {
+    for (const item of o.acceptanceWhen) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      const metadataColumnId =
+        typeof row.metadataColumnId === 'string' ? row.metadataColumnId.trim() : '';
+      const metadataValue =
+        typeof row.metadataValue === 'string' ? row.metadataValue.trim() : '';
+      if (metadataColumnId && metadataValue) {
+        acceptanceWhen.push({ metadataColumnId, metadataValue });
+      }
+    }
+  }
   return {
     columnId,
     headerLabel,
@@ -270,6 +293,8 @@ function parseSelectorColumn(raw: unknown): SelectorColumnSpec | null {
     promptTemplate: promptTemplate || defaultPromptTemplate(headerLabel, promptType),
     askPolicy,
     ...(o.autoFillSingleValue === true ? { autoFillSingleValue: true } : {}),
+    ...(o.informOnAutofill === true ? { informOnAutofill: true } : {}),
+    ...(acceptanceWhen.length > 0 ? { acceptanceWhen } : {}),
   };
 }
 

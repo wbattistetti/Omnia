@@ -60,5 +60,23 @@ export function KbDialogUseCaseRoleChips({
     );
   }
 
+  if (meta.kind === 'inform') {
+    return (
+      <span
+        className="inline-flex flex-wrap items-center gap-0.5"
+        title="Disclosure valore implicito (informOnAutofill)"
+      >
+        <span className="inline-flex rounded border border-violet-600/45 bg-violet-950/40 px-1 py-0.5 text-[9px] font-medium text-violet-100">
+          Informazione implicita
+        </span>
+        {meta.requiresAcceptance ? (
+          <span className="inline-flex rounded border border-rose-600/45 bg-rose-950/40 px-1 py-0.5 text-[9px] text-rose-100">
+            richiede conferma
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+
   return null;
 }

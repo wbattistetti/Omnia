@@ -5,6 +5,7 @@
 export const KB_DIALOG_CATEGORY_ACQUISITION = 'cat_kb_acquisizione' as const;
 export const KB_DIALOG_CATEGORY_CORRECTION = 'cat_kb_correzione' as const;
 export const KB_DIALOG_CATEGORY_COMPLETE = 'cat_kb_complete' as const;
+export const KB_DIALOG_CATEGORY_INFORM = 'cat_kb_inform' as const;
 
 export const KB_DIALOG_RUNTIME_INDEX_SCHEMA_VERSION = 1 as const;
 
@@ -26,16 +27,23 @@ export const KB_DIALOG_CATEGORIES = [
       'Use case legati ai selettori KB: ogni UC chiede un dato mancante nel binding parziale.',
   },
   {
+    id: KB_DIALOG_CATEGORY_INFORM,
+    label: 'Informazione implicita',
+    sort_order: 1,
+    description:
+      'Disclosure quando un selettore ha un solo valore significativo (informOnAutofill attivo).',
+  },
+  {
     id: KB_DIALOG_CATEGORY_CORRECTION,
     label: 'Correzione dati',
-    sort_order: 1,
+    sort_order: 2,
     description:
       'Use case di transizione quando la correzione di uno slot rende incompatibili i dipendenti.',
   },
   {
     id: KB_DIALOG_CATEGORY_COMPLETE,
     label: 'Complete / conferma',
-    sort_order: 2,
+    sort_order: 3,
     description: 'Template parametrico unico per la conferma a binding completo.',
   },
 ] as const;

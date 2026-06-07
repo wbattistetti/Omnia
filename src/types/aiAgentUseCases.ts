@@ -506,7 +506,9 @@ function parseKbDialogUseCaseMetaField(raw: unknown): KbDialogUseCaseMeta | unde
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
   const kind = o.kind;
-  if (kind !== 'acquisition' && kind !== 'correction' && kind !== 'complete') return undefined;
+  if (kind !== 'acquisition' && kind !== 'correction' && kind !== 'complete' && kind !== 'inform') {
+    return undefined;
+  }
   const bindingWhen =
     o.bindingWhen && typeof o.bindingWhen === 'object' && !Array.isArray(o.bindingWhen)
       ? Object.fromEntries(
@@ -532,6 +534,21 @@ function parseKbDialogUseCaseMetaField(raw: unknown): KbDialogUseCaseMeta | unde
       : {}),
     ...(o.skipAsk === true ? { skipAsk: true } : {}),
     ...(typeof o.allowedValueCount === 'number' ? { allowedValueCount: o.allowedValueCount } : {}),
+    ...(typeof o.informedValue === 'string' && o.informedValue.trim()
+      ? { informedValue: o.informedValue.trim() }
+      : {}),
+    ...(o.informTransition === 'disclosure' ||
+    o.informTransition === 'de_disclosure' ||
+    o.informTransition === 'transition'
+      ? { informTransition: o.informTransition }
+      : {}),
+    ...(o.requiresAcceptance === true ? { requiresAcceptance: true } : {}),
+    ...(typeof o.deDisclosureSay === 'string' && o.deDisclosureSay.trim()
+      ? { deDisclosureSay: o.deDisclosureSay.trim() }
+      : {}),
+    ...(typeof o.transitionSay === 'string' && o.transitionSay.trim()
+      ? { transitionSay: o.transitionSay.trim() }
+      : {}),
   };
 }
 

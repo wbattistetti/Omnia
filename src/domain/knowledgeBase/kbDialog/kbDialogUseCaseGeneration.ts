@@ -16,6 +16,7 @@ import {
   KB_DIALOG_CATEGORY_ACQUISITION,
   KB_DIALOG_CATEGORY_COMPLETE,
   KB_DIALOG_CATEGORY_CORRECTION,
+  KB_DIALOG_CATEGORY_INFORM,
   KB_DIALOG_CATEGORIES,
   KB_DIALOG_EXPLICIT_LIST_MAX,
 } from './kbDialogConstants';
@@ -25,9 +26,11 @@ import {
   inferValueLabelsFromGrid,
   mergeValueLabels,
 } from './kbDialogValueLabels';
+import { isEmptySelectorValue, resolveRequiresAcceptance } from './kbDialogSelectorSemantics';
 import type {
   GenerateKbDialogUseCasesResult,
   KbDialogAcquisitionRow,
+  KbDialogInformRow,
   KbDialogUseCaseMeta,
 } from './kbDialogTypes';
 import { compileKbDialogRuntimeIndex } from './kbDialogRuntimeIndex';
@@ -120,6 +123,38 @@ export function buildAcquisitionSay(params: {
   return `${capped}?`;
 }
 
+/** Template disclosure / de-disclosure / transition per UC inform. */
+export function buildInformSays(params: {
+  col: SelectorColumnSpec;
+  informedValue: string;
+  bindingWhen: Readonly<Record<string, string>>;
+  valueLabels: import('../kbSelectorSpec').SelectorValueLabels;
+}): { say: string; deDisclosureSay: string; transitionSay: string } {
+  const { col, informedValue, bindingWhen, valueLabels } = params;
+  const colNat = getNaturalLabel(col.columnId, informedValue, valueLabels);
+  const context = Object.entries(bindingWhen)
+    .map(([k, v]) => getNaturalLabel(k, v, valueLabels))
+    .filter(Boolean)
+    .join(' ');
+  const say = context.trim()
+    ? `Per ${context} è previsto ${colNat}.`
+    : `È previsto ${colNat}.`;
+  const deDisclosureSay = `{prev_${col.columnId}_nat} non è più previsto.`;
+  const transitionSay = `Invece di {prev_${col.columnId}_nat} è previsto {${col.columnId}_nat}.`;
+  return { say, deDisclosureSay, transitionSay };
+}
+
+function matchedRowForPrefix(
+  grid: KbTabularGrid,
+  prefix: Readonly<Record<string, string>>,
+  col: SelectorColumnSpec,
+  value: string
+): readonly string[] | null {
+  const binding = { ...prefix, [col.columnId]: value };
+  const rows = filterRowsByBinding(grid, binding);
+  return rows[0] ?? null;
+}
+
 function collectBindingPrefixes(
   grid: KbTabularGrid,
   askable: readonly SelectorColumnSpec[],
@@ -187,6 +222,7 @@ export function generateKbDialogUseCases(
   let sortOrder = 0;
 
   const acquisitionRowsBySelector = new Map<string, KbDialogAcquisitionRow[]>();
+  const informRowsBySelector = new Map<string, KbDialogInformRow[]>();
 
   for (const col of askable) {
     const prefixes = collectBindingPrefixes(grid, askable, col.columnId);
@@ -226,6 +262,71 @@ export function generateKbDialogUseCases(
           kind: 'acquisition',
           selectorColumnId: col.columnId,
           allowedValueCount: rows[0]?.allowedValues.length,
+        },
+      })
+    );
+  }
+
+  for (const col of askable) {
+    if (!col.informOnAutofill) continue;
+
+    const prefixes = collectBindingPrefixes(grid, askable, col.columnId);
+    const rowMap = new Map<string, KbDialogInformRow>();
+
+    for (const prefix of prefixes.length > 0 ? prefixes : [{}]) {
+      const allowed = distinctColumnValuesForKey(grid, prefix, col.columnId);
+      if (allowed.length !== 1) continue;
+      const value = allowed[0]!;
+      if (isEmptySelectorValue(col.columnId, value)) continue;
+
+      const templates = buildInformSays({
+        col,
+        informedValue: value,
+        bindingWhen: prefix,
+        valueLabels,
+      });
+      const matched = matchedRowForPrefix(grid, prefix, col, value);
+      const requiresAcceptance = resolveRequiresAcceptance({
+        col,
+        matchedRow: matched,
+        headers: grid.headers,
+      });
+
+      const key = `${bindingPrefixKey(prefix)}::${value}`;
+      if (!rowMap.has(key)) {
+        rowMap.set(key, {
+          bindingWhen: { ...prefix },
+          say: templates.say,
+          deDisclosureSay: templates.deDisclosureSay,
+          transitionSay: templates.transitionSay,
+          informedValue: value,
+          ...(requiresAcceptance ? { requiresAcceptance: true } : {}),
+        });
+      }
+    }
+
+    const rows = [...rowMap.values()];
+    if (rows.length === 0) continue;
+
+    informRowsBySelector.set(col.columnId, rows);
+    const first = rows[0]!;
+    const ucId = newUseCaseId(`uc_inform_${col.columnId}`);
+    useCases.push(
+      makeUseCase({
+        id: ucId,
+        label: `Informa ${col.promptTemplate || col.headerLabel}`,
+        categoryId: KB_DIALOG_CATEGORY_INFORM,
+        say: first.say,
+        scenario: `Disclosure implicita: ${col.headerLabel} (${col.columnId}) determinato dal binding.`,
+        sortOrder: sortOrder++,
+        meta: {
+          kind: 'inform',
+          selectorColumnId: col.columnId,
+          informedValue: first.informedValue,
+          informTransition: 'disclosure',
+          deDisclosureSay: first.deDisclosureSay,
+          transitionSay: first.transitionSay,
+          ...(first.requiresAcceptance ? { requiresAcceptance: true } : {}),
         },
       })
     );
@@ -276,6 +377,7 @@ export function generateKbDialogUseCases(
     completeTemplate,
     kbDocumentId,
     acquisitionRowsBySelector,
+    informRowsBySelector,
   });
 
   const gapIssues = runKbDialogGapAnalysis({
@@ -305,6 +407,7 @@ export function parseKbDialogRuntimeIndex(raw: string | undefined | null): impor
   try {
     const parsed = JSON.parse(trimmed) as import('./kbDialogTypes').KbDialogRuntimeIndex;
     if (parsed?.schemaVersion !== 1 || !parsed.complete) return null;
+    if (!parsed.inform) parsed.inform = {};
     return parsed;
   } catch {
     return null;

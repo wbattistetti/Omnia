@@ -63,8 +63,23 @@ Namespace KbDialogStep
                     .SortOrder = If(col.Value(Of Integer?)("sortOrder"), 0),
                     .PromptTemplate = col.Value(Of String)("promptTemplate"),
                     .AskPolicy = col.Value(Of String)("askPolicy"),
-                    .AutoFillSingleValue = col.Value(Of Boolean?)("autoFillSingleValue").GetValueOrDefault(False)
+                    .AutoFillSingleValue = col.Value(Of Boolean?)("autoFillSingleValue").GetValueOrDefault(False),
+                    .InformOnAutofill = col.Value(Of Boolean?)("informOnAutofill").GetValueOrDefault(False)
                 })
+                Dim lastCol = columns(columns.Count - 1)
+                Dim acceptance As New List(Of SelectorAcceptanceWhenSpec)
+                Dim accTok = col("acceptanceWhen")
+                If accTok IsNot Nothing AndAlso accTok.Type = JTokenType.Array Then
+                    For Each aTok In accTok
+                        Dim a = TryCast(aTok, JObject)
+                        If a Is Nothing Then Continue For
+                        acceptance.Add(New SelectorAcceptanceWhenSpec With {
+                            .MetadataColumnId = a.Value(Of String)("metadataColumnId"),
+                            .MetadataValue = a.Value(Of String)("metadataValue")
+                        })
+                    Next
+                End If
+                lastCol.AcceptanceWhen = acceptance
             Next
             If columns.Count = 0 Then Return Nothing
 

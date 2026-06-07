@@ -97,7 +97,8 @@ Namespace KbDialogStep
             Return copy
         End Function
 
-        Public Shared Function ExecuteDialogStep(grid As KbDialogGrid, selectorSpec As KbSelectorSpec, binding As Dictionary(Of String, String), Optional updates As Dictionary(Of String, String) = Nothing, Optional dialogIndex As JObject = Nothing) As DialogStepResult
+        Public Shared Function ExecuteDialogStep(grid As KbDialogGrid, selectorSpec As KbSelectorSpec, binding As Dictionary(Of String, String), Optional updates As Dictionary(Of String, String) = Nothing, Optional dialogIndex As JObject = Nothing, Optional informState As DialogInformState = Nothing) As DialogStepResult
+            If informState Is Nothing Then informState = KbDialogSelectorSemantics.EmptyInformState()
             Dim headers = grid.Headers
             Dim rows = grid.Rows
             Dim askable = KbDialogBindings.ListAskableColumns(selectorSpec)
@@ -243,7 +244,7 @@ Namespace KbDialogStep
 
             If allowedValues.Count = 1 Then
                 merged(nextColId) = allowedValues(0)
-                Return ExecuteDialogStep(grid, selectorSpec, merged, New Dictionary(Of String, String), dialogIndex)
+                Return ExecuteDialogStep(grid, selectorSpec, merged, New Dictionary(Of String, String), dialogIndex, informState)
             End If
 
             Dim acquired As KbDialogSayResolver.AcquisitionResolveResult = Nothing
@@ -260,6 +261,7 @@ Namespace KbDialogStep
                 .UseCaseId = If(acquired?.UseCaseId, Nothing),
                 .UseCaseKind = If(acquired?.UseCaseKind, "acquisition"),
                 .Binding = merged,
+                .InformState = informState,
                 .NextColumnId = nextColId,
                 .NextHeaderLabel = nextCol.HeaderLabel,
                 .PromptType = nextCol.PromptType,

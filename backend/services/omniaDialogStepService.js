@@ -14,8 +14,8 @@ const { loadKbDialogRuntime } = require('./omniaDialogStep/kbDialogRuntimeLoader
 const { executeDialogStep, bindingKeysCanonical } = require('./omniaDialogStep/dialogStepEngine');
 const { parseKbDialogRuntimeIndex } = require('./omniaDialogStep/kbDialogIndexLoader');
 const {
-  loadDialogBinding,
-  saveDialogBinding,
+  loadDialogSession,
+  saveDialogSession,
   clearDialogBinding,
 } = require('./omniaDialogStep/dialogStepSessionStore');
 
@@ -124,7 +124,8 @@ function createOmniaDialogStepHandler(deps) {
       await clearDialogBinding(scope);
     }
 
-    let binding = await loadDialogBinding(scope);
+    const session = await loadDialogSession(scope);
+    let binding = session.binding;
     const dialogIndex =
       parseKbDialogRuntimeIndex(agentTask.agentKbDialogIndexJson) ||
       (runtime.completeTemplate || Object.keys(runtime.valueLabels || {}).length
@@ -133,6 +134,7 @@ function createOmniaDialogStepHandler(deps) {
             completeTemplate: runtime.completeTemplate || '',
             valueLabels: runtime.valueLabels || {},
             acquisition: {},
+            inform: {},
             correction: [],
             complete: {
               useCaseId: 'uc_complete',
@@ -147,10 +149,11 @@ function createOmniaDialogStepHandler(deps) {
       binding,
       updates,
       dialogIndex,
+      informState: session.informState,
     });
 
     const canonicalBinding = bindingKeysCanonical(result.binding ?? binding, runtime.grid.headers);
-    await saveDialogBinding(scope, canonicalBinding);
+    await saveDialogSession(scope, canonicalBinding, result.informState);
 
     const response = {
       status: result.status,
@@ -168,6 +171,9 @@ function createOmniaDialogStepHandler(deps) {
       ...(result.matchedRow ? { matchedRow: result.matchedRow } : {}),
       ...(result.matchedRows ? { matchedRows: result.matchedRows } : {}),
       ...(result.rejected ? { rejected: result.rejected } : {}),
+      ...(result.requiresAcceptance === true ? { requiresAcceptance: true } : {}),
+      ...(result.informColumnId ? { informColumnId: result.informColumnId } : {}),
+      ...(result.conversationAction ? { conversationAction: result.conversationAction } : {}),
     };
 
     return respond(

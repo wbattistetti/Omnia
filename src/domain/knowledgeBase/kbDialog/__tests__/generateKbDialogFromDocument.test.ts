@@ -40,7 +40,7 @@ describe('generateKbDialogUseCasesFromDocument', () => {
     expect(gen.ok).toBe(true);
     if (!gen.ok) return;
     expect(gen.result.useCases.length).toBeGreaterThan(0);
-    expect(gen.result.categories.length).toBe(3);
+    expect(gen.result.categories.length).toBe(4);
   });
 
   it('returns kb_restructure_missing when restructured content is too short', () => {

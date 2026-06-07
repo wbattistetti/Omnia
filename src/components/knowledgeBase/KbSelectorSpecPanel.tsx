@@ -115,12 +115,14 @@ type AskRowProps = {
   columnId: string;
   label: string;
   askPolicy: SelectorAskPolicy | undefined;
+  informOnAutofill: boolean | undefined;
   valuesPreview: string;
   canMoveUp: boolean;
   canMoveDown: boolean;
   disabled: boolean;
   onLabelChange: (value: string) => void;
   onTogglePolicy: () => void;
+  onToggleInform: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onRemove: () => void;
@@ -129,12 +131,14 @@ type AskRowProps = {
 function AskRow({
   label,
   askPolicy,
+  informOnAutofill,
   valuesPreview,
   canMoveUp,
   canMoveDown,
   disabled,
   onLabelChange,
   onTogglePolicy,
+  onToggleInform,
   onMoveUp,
   onMoveDown,
   onRemove,
@@ -161,11 +165,24 @@ function AskRow({
         >
           ({policyLabel})
         </button>
+        <label
+          className="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] text-violet-300/90"
+          title="Informa su scelta implicita (valore univoco significativo)"
+        >
+          <input
+            type="checkbox"
+            className="accent-violet-400"
+            checked={informOnAutofill === true}
+            disabled={disabled}
+            onChange={onToggleInform}
+          />
+          Informa implicito
+        </label>
         <span className="shrink-0 text-slate-600" aria-hidden>
           :
         </span>
         <span
-          className="min-w-0 max-w-[45%] shrink truncate text-[11px] text-slate-400"
+          className="min-w-0 max-w-[30%] shrink truncate text-[11px] text-slate-400"
           title={valuesPreview}
         >
           {valuesPreview}
@@ -252,6 +269,7 @@ export function KbSelectorSpecPanel({
                 columnId={col.columnId}
                 label={col.promptTemplate}
                 askPolicy={col.askPolicy}
+                informOnAutofill={col.informOnAutofill}
                 valuesPreview={valuesPreview}
                 canMoveUp={index > 0}
                 canMoveDown={index < askable.length - 1}
@@ -263,6 +281,22 @@ export function KbSelectorSpecPanel({
                   onChange(
                     updateColumn(spec, col.columnId, {
                       askPolicy: col.askPolicy === 'required' ? 'optional' : 'required',
+                    })
+                  )
+                }
+                onToggleInform={() =>
+                  onChange(
+                    updateColumn(spec, col.columnId, {
+                      informOnAutofill: !col.informOnAutofill,
+                      ...(col.columnId.includes('esame') &&
+                      !col.columnId.includes('obbligatorio') &&
+                      col.informOnAutofill !== true
+                        ? {
+                            acceptanceWhen: [
+                              { metadataColumnId: 'esame_obbligatorio', metadataValue: 'si' },
+                            ],
+                          }
+                        : {}),
                     })
                   )
                 }

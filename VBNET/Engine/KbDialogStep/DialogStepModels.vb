@@ -20,6 +20,8 @@ Namespace KbDialogStep
         Public Property PromptTemplate As String
         Public Property AskPolicy As String
         Public Property AutoFillSingleValue As Boolean
+        Public Property InformOnAutofill As Boolean
+        Public Property AcceptanceWhen As List(Of SelectorAcceptanceWhenSpec)
     End Class
 
     Public Class InvalidationTemplateSpec
@@ -71,5 +73,9 @@ Namespace KbDialogStep
         Public Property MatchedRow As Dictionary(Of String, String)
         Public Property MatchedRows As List(Of Dictionary(Of String, String))
         Public Property Rejected As DialogStepRejectedInfo
+        Public Property RequiresAcceptance As Boolean?
+        Public Property InformColumnId As String
+        Public Property ConversationAction As String
+        Public Property InformState As DialogInformState
     End Class
 End Namespace

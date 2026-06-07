@@ -5,14 +5,16 @@
 import type { AIAgentUseCaseCategory } from '@types/aiAgentUseCases';
 import type { SelectorValueLabels } from '../kbSelectorSpec';
 
-export type KbDialogUseCaseKind = 'acquisition' | 'correction' | 'complete';
+export type KbDialogUseCaseKind = 'acquisition' | 'correction' | 'complete' | 'inform';
+
+export type KbDialogInformTransitionKind = 'disclosure' | 'de_disclosure' | 'transition';
 
 /** Metadati machine-readable su uno use case generato da KB. */
 export type KbDialogUseCaseMeta = {
   kind: KbDialogUseCaseKind;
-  /** Acquisition: selettore il cui valore manca nel binding. */
+  /** Acquisition / inform: selettore il cui valore manca nel binding. */
   selectorColumnId?: string;
-  /** Binding prefix per varianti parametriche acquisition. */
+  /** Binding prefix per varianti parametriche acquisition / inform. */
   bindingWhen?: Record<string, string>;
   /** Correction: slot modificato dall'utente. */
   triggerColumnId?: string;
@@ -21,6 +23,31 @@ export type KbDialogUseCaseMeta = {
   /** Acquisition: autofill — nessuna domanda al paziente. */
   skipAsk?: boolean;
   allowedValueCount?: number;
+  /** Inform: valore implicito comunicato. */
+  informedValue?: string;
+  /** Inform: disclosure | de-disclosure | transition. */
+  informTransition?: KbDialogInformTransitionKind;
+  /** Inform: attende conferma esplicita. */
+  requiresAcceptance?: boolean;
+  /** Template de-disclosure (design-time). */
+  deDisclosureSay?: string;
+  /** Template transition de+re (design-time). */
+  transitionSay?: string;
+};
+
+export type KbDialogInformRow = {
+  bindingWhen: Record<string, string>;
+  say: string;
+  deDisclosureSay?: string;
+  transitionSay?: string;
+  informedValue: string;
+  requiresAcceptance?: boolean;
+};
+
+export type KbDialogInformIndexEntry = {
+  useCaseId: string;
+  selectorColumnId: string;
+  rows: readonly KbDialogInformRow[];
 };
 
 export type KbDialogAcquisitionRow = {
@@ -48,6 +75,7 @@ export type KbDialogRuntimeIndex = {
   completeTemplate: string;
   valueLabels: SelectorValueLabels;
   acquisition: Record<string, KbDialogAcquisitionIndexEntry>;
+  inform: Record<string, KbDialogInformIndexEntry>;
   correction: readonly KbDialogCorrectionIndexEntry[];
   complete: {
     useCaseId: string;

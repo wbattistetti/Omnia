@@ -88,6 +88,7 @@
     <Compile Include="KbDialogStep\KbDialogRuntimeLoader.vb" />
     <Compile Include="KbDialogStep\KbDialogIndexLoader.vb" />
     <Compile Include="KbDialogStep\KbDialogSayResolver.vb" />
+    <Compile Include="KbDialogStep\KbDialogSelectorSemantics.vb" />
     <Compile Include="KbDialogStep\DialogStepEngine.vb" />
     <Compile Include="KbDialogStep\Tests\DialogStepEngineTests.vb" />
   </ItemGroup>

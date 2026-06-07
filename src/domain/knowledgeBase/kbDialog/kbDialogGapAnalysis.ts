@@ -10,6 +10,7 @@ import {
   looksUnnaturalCompleteSay,
 } from './kbDialogCompleteTemplate';
 import { distinctColumnValuesForKey, filterRowsByBinding } from './kbDialogGrid';
+import { isEmptySelectorValue } from './kbDialogSelectorSemantics';
 import { getNaturalLabel } from './kbDialogValueLabels';
 import type { KbDialogGapIssue, KbDialogRuntimeIndex } from './kbDialogTypes';
 
@@ -56,6 +57,7 @@ export function runKbDialogGapAnalysis(params: RunKbDialogGapAnalysisParams): Kb
   for (const col of askable) {
     const entry = runtimeIndex.acquisition[col.columnId];
     let needsAcquisition = false;
+    let needsInform = false;
 
     for (const row of grid.rows) {
       const prefix: Record<string, string> = {};
@@ -71,7 +73,14 @@ export function runKbDialogGapAnalysis(params: RunKbDialogGapAnalysisParams): Kb
       const allowed = distinctColumnValuesForKey(grid, prefix, col.columnId);
       if (allowed.length >= 2) {
         needsAcquisition = true;
-        break;
+      }
+      if (
+        col.informOnAutofill &&
+        allowed.length === 1 &&
+        allowed[0] &&
+        !isEmptySelectorValue(col.columnId, allowed[0])
+      ) {
+        needsInform = true;
       }
     }
 
@@ -79,6 +88,15 @@ export function runKbDialogGapAnalysis(params: RunKbDialogGapAnalysisParams): Kb
       issues.push({
         code: 'acquisition_missing',
         message: `Manca UC acquisizione per selettore «${col.headerLabel}».`,
+        blocking: true,
+      });
+    }
+
+    const informEntry = runtimeIndex.inform?.[col.columnId];
+    if (needsInform && (!informEntry || informEntry.rows.length === 0)) {
+      issues.push({
+        code: 'inform_missing',
+        message: `Manca UC inform per selettore «${col.headerLabel}» (informOnAutofill attivo).`,
         blocking: true,
       });
     }
