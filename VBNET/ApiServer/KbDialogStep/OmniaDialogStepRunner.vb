@@ -18,8 +18,9 @@ Namespace OmniaDialogStepInfra
         Public Property Response As JObject
     End Class
 
-    ''' <summary>Motore omnia_dialog_step riusabile da handler HTTP e bootstrap Test agente.</summary>
+    ''' <summary>Motore omnia_dialog_step — unica fonte orchestrazione KB (host VB + webhook EL slot-filler).</summary>
     Public NotInheritable Class OmniaDialogStepRunner
+        ''' <summary>Esegue un passo dialogo KB. Se <paramref name="userUtterance"/> è valorizzato e updates vuoto, risolve slot lato VB.</summary>
         Public Shared Async Function ExecuteAsync(
             projectId As String,
             agentTaskId As String,
@@ -27,12 +28,14 @@ Namespace OmniaDialogStepInfra
             updates As Dictionary(Of String, String),
             Optional kbDocumentId As String = Nothing,
             Optional reset As Boolean = False,
-            Optional cancellationToken As CancellationToken = Nothing
+            Optional cancellationToken As CancellationToken = Nothing,
+            Optional userUtterance As String = Nothing
         ) As Task(Of OmniaDialogStepRunResult)
             Dim pid = If(projectId, "").Trim()
             Dim aid = If(agentTaskId, "").Trim()
             Dim cid = If(conversationId, "").Trim()
             Dim docId = If(kbDocumentId, "").Trim()
+            Dim utterance = If(userUtterance, "").Trim()
 
             If pid.Length = 0 OrElse aid.Length = 0 Then
                 Return Fail(400, "missing_project_or_agent_task", "Parametri progetto o task agente mancanti.")
@@ -75,6 +78,43 @@ Namespace OmniaDialogStepInfra
             Dim dialogIndex = KbDialogIndexLoader.ParseIndex(agentTask.Value(Of String)("agentKbDialogIndexJson"))
             Dim slotUpdates = If(updates, New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase))
 
+            ' Host VB: utterance → updates quando EL non ha già inviato slot (Test agente / FlowOrchestrator kb_deterministic).
+            If utterance.Length > 0 AndAlso slotUpdates.Count = 0 Then
+                Dim peek As DialogStepResult = Nothing
+                Try
+                    peek = DialogStepEngine.ExecuteDialogStep(
+                        runtime.Grid,
+                        runtime.SelectorSpec,
+                        binding,
+                        New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase),
+                        dialogIndex,
+                        informState)
+                Catch ex As Exception
+                    Console.WriteLine("[omnia-dialog-step VB] peek error: " & ex.Message)
+                    Return Fail(500, "dialog_engine_failed", "Il motore dialogo non è disponibile.")
+                End Try
+
+                slotUpdates = KbDialogUtteranceResolver.ResolveUpdates(utterance, peek)
+                If slotUpdates.Count = 0 Then
+                    Dim repeatSay = If(peek.Say, "").Trim()
+                    If repeatSay.Length = 0 Then repeatSay = "Può ripetere?"
+                    Dim clarify = "Non ho capito. " & repeatSay
+                    Return BuildResultFromEngine(
+                        New DialogStepResult With {
+                            .Status = "invalid",
+                            .Say = clarify,
+                            .Binding = binding,
+                            .NextColumnId = peek.NextColumnId,
+                            .NextHeaderLabel = peek.NextHeaderLabel,
+                            .AllowedValues = peek.AllowedValues,
+                            .RemainingRowCount = peek.RemainingRowCount,
+                            .InformState = informState
+                        },
+                        binding,
+                        runtime)
+                End If
+            End If
+
             Dim result As DialogStepResult = Nothing
             Try
                 result = DialogStepEngine.ExecuteDialogStep(runtime.Grid, runtime.SelectorSpec, binding, slotUpdates, dialogIndex, informState)
@@ -86,6 +126,14 @@ Namespace OmniaDialogStepInfra
             Dim canonicalBinding = DialogStepEngine.BindingKeysCanonical(If(result.Binding, binding), runtime.Grid.Headers)
             Await DialogStepSessionStore.SaveDialogSessionAsync(scope, canonicalBinding, If(result.InformState, informState)).ConfigureAwait(False)
 
+            Return BuildResultFromEngine(result, canonicalBinding, runtime)
+        End Function
+
+        Private Shared Function BuildResultFromEngine(
+            result As DialogStepResult,
+            canonicalBinding As Dictionary(Of String, String),
+            runtime As KbDialogRuntimeLoadResult
+        ) As OmniaDialogStepRunResult
             Dim response As New JObject From {
                 {"status", result.Status},
                 {"say", result.Say},
@@ -140,6 +188,18 @@ Namespace OmniaDialogStepInfra
                     {"say", say}
                 }
             }
+        End Function
+
+        ''' <summary>True se il dialogo KB è terminato (complete/rejected/error terminale).</summary>
+        Public Shared Function IsTerminalDialogStatus(status As String) As Boolean
+            Dim s = If(status, "").Trim().ToLowerInvariant()
+            Return s = "complete" OrElse s = "rejected" OrElse s = "error"
+        End Function
+
+        ''' <summary>True se il motore attende input utente.</summary>
+        Public Shared Function IsWaitingDialogStatus(status As String) As Boolean
+            Dim s = If(status, "").Trim().ToLowerInvariant()
+            Return s = "ask" OrElse s = "invalid" OrElse s = "inform" OrElse s = "inform_pending" OrElse s = "correction"
         End Function
     End Class
 End Namespace

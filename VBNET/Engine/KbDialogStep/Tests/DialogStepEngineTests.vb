@@ -29,6 +29,7 @@ Namespace KbDialogStep.Tests
             ok = ok AndAlso TestAcquisitionSayFromIndex()
             ok = ok AndAlso TestCompleteWithDialogIndex()
             ok = ok AndAlso TestCorrectionWalk()
+            ok = ok AndAlso TestUtteranceResolverMatch()
             If ok Then
                 Console.WriteLine("[DialogStepEngineTests] All passed.")
             Else
@@ -227,6 +228,26 @@ Namespace KbDialogStep.Tests
             Dim rows = KbDialogBindings.FilterRowsByBinding(grid.Rows, grid.Headers, New Dictionary(Of String, String) From {{"specialita", "cardiologia"}})
             If rows.Count <> 2 Then
                 Console.WriteLine("FAIL TestFilterCaseInsensitive")
+                Return False
+            End If
+            Return True
+        End Function
+
+        Private Shared Function TestUtteranceResolverMatch() As Boolean
+            Dim allowed = New List(Of String) From {"Cardiologia", "Ortopedia"}
+            Dim m1 = KbDialogUtteranceResolver.MatchAllowedValue("cardiologia", allowed)
+            If Not String.Equals(m1, "Cardiologia", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("FAIL TestUtteranceResolverMatch exact")
+                Return False
+            End If
+            Dim m2 = KbDialogUtteranceResolver.MatchAllowedValue("pneumologia", New List(Of String) From {"Pneumologia"})
+            If Not String.Equals(m2, "Pneumologia", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("FAIL TestUtteranceResolverMatch contains")
+                Return False
+            End If
+            Dim binary = KbDialogUtteranceResolver.MatchAllowedValue("si", New List(Of String) From {"nessuno", "Spirometria"})
+            If Not String.Equals(binary, "Spirometria", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("FAIL TestUtteranceResolverMatch binary yes")
                 Return False
             End If
             Return True

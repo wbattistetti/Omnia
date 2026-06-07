@@ -47,6 +47,9 @@ Public Class AIAgentTaskExecutor
     ''' <summary>Utterance sintetica quando «Avvio immediato» e nessun input utente (allineato al compile TS).</summary>
     Public Const ImmediateStartSyntheticUserMessage As String = "start"
 
+    ''' <summary>Chiave VariableStore / dynamicVariables per projectId nel ramo kb_deterministic.</summary>
+    Public Const KbDialogProjectIdStateKey As String = "__omnia_project_id"
+
     Public Sub New()
         MyBase.New()
     End Sub
@@ -308,6 +311,128 @@ Public Class AIAgentTaskExecutor
             Next
         End If
         Return (agentTurn, status, list)
+    End Function
+
+    Private Shared Function ResolveKbDialogProjectId(ai As CompiledAIAgentTask, state As ExecutionState) As String
+        If state?.VariableStore IsNot Nothing Then
+            Dim fromStore = state.VariableStore.ContainsKey(KbDialogProjectIdStateKey)
+            If fromStore Then
+                Dim v = Convert.ToString(state.VariableStore(KbDialogProjectIdStateKey))
+                If Not String.IsNullOrWhiteSpace(v) Then Return v.Trim()
+            End If
+        End If
+        If ai?.DynamicVariables IsNot Nothing Then
+            For Each key In New String() {"projectId", "omnia_project_id", "omniaProjectId"}
+                If ai.DynamicVariables.ContainsKey(key) Then
+                    Dim v = Convert.ToString(ai.DynamicVariables(key))
+                    If Not String.IsNullOrWhiteSpace(v) Then Return v.Trim()
+                End If
+            Next
+        End If
+        Dim env = Environment.GetEnvironmentVariable("OMNIA_PROJECT_ID")
+        If Not String.IsNullOrWhiteSpace(env) Then Return env.Trim()
+        Return ""
+    End Function
+
+    Private Shared Function ResolveKbDialogConversationId(ai As CompiledAIAgentTask, taskId As String, state As ExecutionState) As String
+        Dim fromCompile = If(ai?.ConvaiSessionConversationId, "").Trim()
+        If fromCompile.Length > 0 Then Return fromCompile
+        If state?.DialogueContexts IsNot Nothing AndAlso state.DialogueContexts.ContainsKey(taskId) Then
+            Dim cid = TryGetElevenLabsConversationId(state.DialogueContexts(taskId))
+            If cid IsNot Nothing Then Return cid
+        End If
+        Return ""
+    End Function
+
+    Private Shared Function IsKbDialogTerminalStatus(status As String) As Boolean
+        Dim s = If(status, "").Trim().ToLowerInvariant()
+        Return s = "complete" OrElse s = "rejected" OrElse s = "error"
+    End Function
+
+    Private Shared Function IsKbDialogWaitingStatus(status As String) As Boolean
+        Dim s = If(status, "").Trim().ToLowerInvariant()
+        Return s = "ask" OrElse s = "invalid" OrElse s = "inform" OrElse s = "inform_pending" OrElse s = "correction"
+    End Function
+
+    ''' <summary>
+    ''' kb_deterministic: orchestrazione VB via POST omnia_dialog_step (no sendUserTurn/readPrompt EL).
+    ''' </summary>
+    Private Async Function ExecuteKbDeterministicBranch(
+        ai As CompiledAIAgentTask,
+        task As CompiledTask,
+        state As ExecutionState,
+        userInput As String
+    ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+        Dim projectId = ResolveKbDialogProjectId(ai, state)
+        If projectId.Length = 0 Then
+            Return New TaskExecutionResult With {
+                .Success = False,
+                .Err = "KB dialog: projectId missing (VariableStore __omnia_project_id, dynamicVariables.projectId, or OMNIA_PROJECT_ID).",
+                .IsCompleted = False
+            }
+        End If
+
+        Dim conversationId = ResolveKbDialogConversationId(ai, task.Id, state)
+        If conversationId.Length = 0 Then
+            Return New TaskExecutionResult With {
+                .Success = False,
+                .Err = "KB dialog: convaiSessionConversationId missing — deploy ConvAI / Test agente before run.",
+                .IsCompleted = False
+            }
+        End If
+
+        Dim baseUrl = ResolveBackendBaseUrl(ai.BackendBaseUrl)
+        Dim url = CombineUrl(
+            baseUrl,
+            $"/api/runtime/omnia-dialog-step/{Uri.EscapeDataString(projectId)}/{Uri.EscapeDataString(task.Id)}")
+        Dim utterance = If(userInput, "").Trim()
+        Dim payload As New JObject From {
+            {"conversationId", conversationId}
+        }
+        If utterance.Length > 0 Then payload("userUtterance") = utterance
+
+        Console.WriteLine(
+            $"[KB·Dialog] POST omnia_dialog_step task={task.Id} conv={If(conversationId.Length > 12, conversationId.Substring(0, 12) & "…", conversationId)} utteranceChars={utterance.Length}")
+
+        Dim content As New StringContent(payload.ToString(Formatting.None), Encoding.UTF8, "application/json")
+        Dim resp = Await Http.PostAsync(url, content, System.Threading.CancellationToken.None).ConfigureAwait(False)
+        Dim body = Await resp.Content.ReadAsStringAsync().ConfigureAwait(False)
+        If Not resp.IsSuccessStatusCode Then
+            Return New TaskExecutionResult With {
+                .Success = False,
+                .Err = $"omnia_dialog_step HTTP {CInt(resp.StatusCode)}: {body}",
+                .IsCompleted = False
+            }
+        End If
+
+        Dim jo As JObject = Nothing
+        Try
+            jo = JObject.Parse(body)
+        Catch ex As Exception
+            Return New TaskExecutionResult With {
+                .Success = False,
+                .Err = "omnia_dialog_step invalid JSON: " & ex.Message,
+                .IsCompleted = False
+            }
+        End Try
+
+        Dim dialogStatus = If(jo("status")?.ToString(), "error")
+        Dim say = If(jo("say")?.ToString(), "").Trim()
+        Dim completed = IsKbDialogTerminalStatus(dialogStatus)
+        Dim requiresInput = IsKbDialogWaitingStatus(dialogStatus)
+
+        Console.WriteLine($"[KB·Dialog] dialogStatus={dialogStatus} sayChars={say.Length} completed={completed}")
+
+        If _messageCallback IsNot Nothing AndAlso say.Length > 0 Then
+            _messageCallback(say, "AIAgent", 0)
+        End If
+
+        Return New TaskExecutionResult With {
+            .Success = True,
+            .RequiresInput = requiresInput,
+            .WaitingTaskId = If(requiresInput, task.Id, Nothing),
+            .IsCompleted = completed
+        }
     End Function
 
     Private Shared Sub ClearElevenLabsDialogueContext(state As ExecutionState, taskId As String)
@@ -819,6 +944,9 @@ Public Class AIAgentTaskExecutor
 
         Select Case ai.Platform
             Case IAPlatform.ElevenLabs
+                If ai.KbDeterministic Then
+                    Return Await ExecuteKbDeterministicBranch(ai, task, state, userInput).ConfigureAwait(False)
+                End If
                 Return Await ExecuteElevenLabsBranch(ai, task, state, userInput).ConfigureAwait(False)
             Case IAPlatform.Google
                 Return New TaskExecutionResult With {

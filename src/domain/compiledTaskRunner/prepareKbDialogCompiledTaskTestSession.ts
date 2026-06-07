@@ -63,6 +63,14 @@ export async function prepareKbDialogCompiledTaskTestSession(params: {
     compiledTask: {
       ...params.compiledTask,
       convaiSessionConversationId: sessionConversationId,
+      dynamicVariables: {
+        ...(typeof params.compiledTask.dynamicVariables === 'object' &&
+        params.compiledTask.dynamicVariables !== null &&
+        !Array.isArray(params.compiledTask.dynamicVariables)
+          ? (params.compiledTask.dynamicVariables as Record<string, unknown>)
+          : {}),
+        projectId,
+      },
     },
     sessionConversationId,
   };

@@ -61,7 +61,8 @@ describe('compileKbDeterministicAgentPrompt', () => {
     });
     expect(prompt).toContain('OMNIA_DIALOG_STEP');
     expect(prompt).toContain('Dopo OGNI utterance');
-    expect(prompt).toContain('Turno 0');
+    expect(prompt).toContain('slot-filler');
+    expect(prompt).toContain('motore Omnia');
     expect(prompt).toContain('Slot NLU');
     expect(prompt).toContain('`specialita`');
     expect(prompt).not.toContain('Operational sequence');

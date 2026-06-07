@@ -43,6 +43,7 @@ Namespace ApiServer.Handlers
             kbDocumentId = If(kbDocumentId, "").Trim()
             Dim reset As Boolean = If(bodyObj.Value(Of Boolean?)("reset"), False)
             Dim updates = ExtractUpdates(bodyObj)
+            Dim userUtterance = If(bodyObj.Value(Of String)("userUtterance"), "").Trim()
 
             If pid.Length = 0 OrElse aid.Length = 0 Then
                 Await WriteJson(context, 400, New With {
@@ -95,7 +96,8 @@ Namespace ApiServer.Handlers
                 updates,
                 If(kbDocumentId.Length > 0, kbDocumentId, Nothing),
                 reset,
-                context.RequestAborted
+                context.RequestAborted,
+                If(userUtterance.Length > 0, userUtterance, Nothing)
             ).ConfigureAwait(False)
 
             Dim errTag = If(String.IsNullOrEmpty(runResult.ErrorCode), Nothing, runResult.ErrorCode)

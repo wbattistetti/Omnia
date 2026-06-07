@@ -89,6 +89,11 @@ Namespace ApiServer.Handlers
             userInput As String
         ) As Task
             Dim compiledTask = LoadCompiledTaskFromSession(session)
+            If IsKbDeterministicCompiledTask(compiledTask) Then
+                Await RunKbDialogTurnAndEmit(session, sessionId, userInput).ConfigureAwait(False)
+                Return
+            End If
+
             Dim execState = GetOrCreateExecutionState(sessionId)
             Dim emitter = SessionManager.GetOrCreateEventEmitter(sessionId)
 
@@ -143,6 +148,82 @@ Namespace ApiServer.Handlers
                 SessionManager.SaveCompiledTaskSession(session)
                 Throw
             End Try
+        End Function
+
+        ''' <summary>
+        ''' kb_deterministic: orchestrazione unica VB (OmniaDialogStepRunner). EL non orchestra i turni slot.
+        ''' </summary>
+        Private Async Function RunKbDialogTurnAndEmit(
+            session As CompiledTaskSession,
+            sessionId As String,
+            userInput As String
+        ) As Task
+            Dim compiledTask = LoadCompiledTaskFromSession(session)
+            Dim ai = TryCast(compiledTask, CompiledAIAgentTask)
+            If ai Is Nothing Then
+                Throw New InvalidOperationException("KB dialog turn requires CompiledAIAgentTask.")
+            End If
+
+            Dim conversationId = If(ai.ConvaiSessionConversationId, "").Trim()
+            If conversationId.Length = 0 Then
+                Throw New InvalidOperationException(
+                    "convaiSessionConversationId missing — run Test agente after Deploy ConvAI.")
+            End If
+
+            Dim pid = If(session.ProjectId, "").Trim()
+            Dim aid = If(compiledTask.Id, "").Trim()
+            Dim utterance = If(userInput, "").Trim()
+            Dim started = DateTime.UtcNow
+
+            Dim runResult = Await OmniaDialogStepRunner.ExecuteAsync(
+                pid,
+                aid,
+                conversationId,
+                New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase),
+                Nothing,
+                False,
+                System.Threading.CancellationToken.None,
+                If(utterance.Length > 0, utterance, Nothing)
+            ).ConfigureAwait(False)
+
+            Dim cidLog = If(conversationId.Length > 12, conversationId.Substring(0, 12) & "…", conversationId)
+            Console.WriteLine(
+                $"[compiled-task KB turn] omnia_dialog_step status={runResult.HttpStatus} dialog={runResult.Status} conv={cidLog} ms={CInt((DateTime.UtcNow - started).TotalMilliseconds)}")
+
+            If runResult.HttpStatus <> 200 Then
+                Throw New InvalidOperationException(
+                    If(String.IsNullOrWhiteSpace(runResult.Say), runResult.ErrorCode, runResult.Say))
+            End If
+
+            Dim say = If(runResult.Say, "").Trim()
+            If say.Length > 0 Then
+                EmitAssistantMessages(session, sessionId, New List(Of String) From {say})
+            End If
+
+            Dim terminal = OmniaDialogStepRunner.IsTerminalDialogStatus(runResult.Status)
+            If OmniaDialogStepRunner.IsWaitingDialogStatus(runResult.Status) Then
+                session.IsWaitingForInput = True
+                session.WaitingForInputData = New With {
+                    .taskId = session.TaskId,
+                    .timestamp = DateTime.UtcNow.ToString("O"),
+                    .source = "kb_dialog_vb",
+                    .dialogStatus = runResult.Status
+                }
+                SessionManager.GetOrCreateEventEmitter(sessionId).Emit("waitingForInput", session.WaitingForInputData)
+            Else
+                session.IsWaitingForInput = False
+                session.WaitingForInputData = Nothing
+                session.IsCompleted = terminal
+                If terminal Then
+                    SessionManager.GetOrCreateEventEmitter(sessionId).Emit("complete", New With {
+                        .success = True,
+                        .timestamp = DateTime.UtcNow.ToString("O"),
+                        .dialogStatus = runResult.Status
+                    })
+                End If
+            End If
+
+            SessionManager.SaveCompiledTaskSession(session)
         End Function
 
         Private Function ResolveOpeningMessage(compiledTask As CompiledTask) As String
@@ -207,7 +288,7 @@ Namespace ApiServer.Handlers
         End Sub
 
         ''' <summary>
-        ''' kb_deterministic: POST omnia_dialog_step (updates vuoti) → emette say → warmup EL (no readPrompt iniziale).
+        ''' kb_deterministic turno 0: OmniaDialogStepRunner (updates vuoti) — stesso percorso dei turni successivi.
         ''' </summary>
         Private Sub ScheduleKbDialogBootstrap(sessionId As String, projectId As String, compiledTask As CompiledTask)
             System.Threading.Tasks.Task.Run(
@@ -215,70 +296,15 @@ Namespace ApiServer.Handlers
                     Try
                         Dim session = SessionManager.GetCompiledTaskSession(sessionId)
                         If session Is Nothing Then Return
-                        Dim ai = TryCast(compiledTask, CompiledAIAgentTask)
-                        If ai Is Nothing Then
-                            LogError("KB dialog bootstrap: not an AI agent task", Nothing, New With {.sessionId = sessionId})
-                            Return
+                        Await RunKbDialogTurnAndEmit(session, sessionId, "").ConfigureAwait(False)
+                        session = SessionManager.GetCompiledTaskSession(sessionId)
+                        If session IsNot Nothing Then
+                            session.InitialTurnExecuted = True
+                            SessionManager.SaveCompiledTaskSession(session)
                         End If
-
-                        Dim conversationId = If(ai.ConvaiSessionConversationId, "").Trim()
-                        If conversationId.Length = 0 Then
-                            LogError(
-                                "KB dialog bootstrap: convaiSessionConversationId missing — run Test agente after Deploy ConvAI",
-                                Nothing,
-                                New With {.sessionId = sessionId, .taskId = session.TaskId})
-                            Return
-                        End If
-
-                        Dim pid = If(projectId, "").Trim()
-                        Dim aid = If(compiledTask.Id, "").Trim()
-                        Dim started = DateTime.UtcNow
-                        Dim runResult = Await OmniaDialogStepRunner.ExecuteAsync(
-                            pid,
-                            aid,
-                            conversationId,
-                            New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase),
-                            Nothing,
-                            False,
-                            System.Threading.CancellationToken.None
-                        ).ConfigureAwait(False)
-
-                        Dim cidLog = If(conversationId.Length > 12, conversationId.Substring(0, 12) & "…", conversationId)
-                        Console.WriteLine(
-                            $"[compiled-task KB bootstrap] omnia_dialog_step status={runResult.HttpStatus} dialog={runResult.Status} conv={cidLog} ms={CInt((DateTime.UtcNow - started).TotalMilliseconds)}")
-
-                        If runResult.HttpStatus <> 200 OrElse String.IsNullOrWhiteSpace(runResult.Say) Then
-                            LogError(
-                                "KB dialog bootstrap failed",
-                                Nothing,
-                                New With {
-                                    .sessionId = sessionId,
-                                    .httpStatus = runResult.HttpStatus,
-                                    .error = runResult.ErrorCode,
-                                    .sayChars = If(runResult.Say, "").Length
-                                })
-                            Return
-                        End If
-
-                        EmitAssistantMessages(session, sessionId, New List(Of String) From {runResult.Say.Trim()})
-                        session.IsWaitingForInput = True
-                        session.WaitingForInputData = New With {
-                            .taskId = session.TaskId,
-                            .timestamp = DateTime.UtcNow.ToString("O"),
-                            .source = "kb_dialog_bootstrap"
-                        }
-                        session.InitialTurnExecuted = True
-                        SessionManager.SaveCompiledTaskSession(session)
-
-                        Dim emitter = SessionManager.GetOrCreateEventEmitter(sessionId)
-                        emitter.Emit("waitingForInput", session.WaitingForInputData)
-
-                        ScheduleElevenLabsWarmupIfNeeded(sessionId, compiledTask)
                         LogInfo("Compiled task session: KB dialog bootstrap OK", New With {
                             .sessionId = sessionId,
-                            .taskId = session.TaskId,
-                            .sayChars = runResult.Say.Length,
-                            .dialogStatus = runResult.Status
+                            .taskId = session?.TaskId
                         })
                     Catch ex As Exception
                         LogError("KB dialog bootstrap failed", ex, New With {.sessionId = sessionId})
@@ -286,8 +312,9 @@ Namespace ApiServer.Handlers
                 End Function)
         End Sub
 
-        ''' <summary>Con incipit statico: apre WebSocket ConvAI in background (no readPrompt) così il primo input non fa startAgent+send in fretta.</summary>
+        ''' <summary>Legacy / non-kb: warmup WebSocket ConvAI (non usato per orchestrazione slot kb_deterministic).</summary>
         Private Sub ScheduleElevenLabsWarmupIfNeeded(sessionId As String, compiledTask As CompiledTask)
+            If IsKbDeterministicCompiledTask(compiledTask) Then Return
             Dim ai = TryCast(compiledTask, CompiledAIAgentTask)
             If ai Is Nothing OrElse ai.Platform <> IAPlatform.ElevenLabs Then Return
             If String.IsNullOrWhiteSpace(ai.AgentId) Then Return
