@@ -751,12 +751,12 @@ Module Program
                                                End Sub
 
             Dim onBackendCallDiagnostic As Action(Of Object) = Sub(data)
-                                                                     Try
-                                                                         sseStreamManager.EmitEvent(sessionId, "backendCallDiagnostic", data)
-                                                                     Catch ex As Exception
-                                                                         Console.WriteLine($"❌ [SSE] Error in onBackendCallDiagnostic handler: {ex.Message}")
-                                                                     End Try
-                                                                 End Sub
+                                                                   Try
+                                                                       sseStreamManager.EmitEvent(sessionId, "backendCallDiagnostic", data)
+                                                                   Catch ex As Exception
+                                                                       Console.WriteLine($"❌ [SSE] Error in onBackendCallDiagnostic handler: {ex.Message}")
+                                                                   End Try
+                                                               End Sub
 
             ' ✅ HANDSHAKE: Register listeners - questo fa replay automatico dei messaggi buffered da EventEmitter
             ' EventEmitter gestisce TUTTO il replay, quindi NON chiamiamo SendBufferedMessages (evita doppio invio)

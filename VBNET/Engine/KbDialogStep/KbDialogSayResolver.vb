@@ -74,8 +74,11 @@ Namespace KbDialogStep
                     If BindingPrefixMatches(whenDict, binding) Then
                         Dim say = If(rowTok.Value(Of String)("say"), "").Trim()
                         If say.Length > 0 Then
+                            Dim valueLabels = If(index IsNot Nothing, index("valueLabels"), Nothing)
+                            Dim interpolated = InterpolateAcquisitionSay(
+                                say, binding, valueLabels, allowedValues, selectorColumnId)
                             Return New AcquisitionResolveResult With {
-                                .Say = say,
+                                .Say = interpolated,
                                 .UseCaseId = useCaseId,
                                 .UseCaseKind = "acquisition"
                             }
@@ -84,37 +87,7 @@ Namespace KbDialogStep
                 Next
             End If
 
-            Dim label = ""
-            If col IsNot Nothing Then
-                label = If(Not String.IsNullOrEmpty(col.PromptTemplate), col.PromptTemplate, If(col.HeaderLabel, "")).Trim()
-            End If
-            Dim policy = If(col IsNot Nothing AndAlso String.Equals(col.AskPolicy, "required", StringComparison.OrdinalIgnoreCase),
-                              " (obbligatoria)", " (se necessario)")
-            Dim baseText = If(label.Contains("("c), label, label & policy)
-            Dim valueLabels As JToken = If(index IsNot Nothing, index("valueLabels"), Nothing)
-
-            If (col IsNot Nothing AndAlso String.Equals(col.PromptType, "open_question", StringComparison.OrdinalIgnoreCase)) OrElse
-               allowedValues Is Nothing OrElse allowedValues.Count = 0 Then
-                Return New AcquisitionResolveResult With {.Say = baseText & "?", .UseCaseId = useCaseId, .UseCaseKind = "acquisition"}
-            End If
-
-            If allowedValues.Count <= KB_DIALOG_EXPLICIT_LIST_MAX Then
-                Dim labels = allowedValues.Select(Function(v) GetNaturalLabel(selectorColumnId, v, valueLabels)).ToList()
-                If labels.Count = 2 Then
-                    Return New AcquisitionResolveResult With {
-                        .Say = "Desidera " & labels(0) & " o " & labels(1) & "?",
-                        .UseCaseId = useCaseId,
-                        .UseCaseKind = "acquisition"
-                    }
-                End If
-                Return New AcquisitionResolveResult With {
-                    .Say = baseText & ": " & String.Join(", ", labels) & "?",
-                    .UseCaseId = useCaseId,
-                    .UseCaseKind = "acquisition"
-                }
-            End If
-
-            Return New AcquisitionResolveResult With {.Say = baseText & "?", .UseCaseId = useCaseId, .UseCaseKind = "acquisition"}
+            Return Nothing
         End Function
 
         Public Shared Function IsCorrectionUpdate(priorBinding As Dictionary(Of String, String), updates As Dictionary(Of String, String)) As String
@@ -344,6 +317,84 @@ Namespace KbDialogStep
                 Next
             End If
             Return System.Text.RegularExpressions.Regex.Replace(outText, "\s+", " ").Trim()
+        End Function
+
+        ''' <summary>Interpola say acquisition: {col_nat}, [col] da binding, [semantic] da allowedValues.</summary>
+        Public Shared Function InterpolateAcquisitionSay(
+            say As String,
+            binding As Dictionary(Of String, String),
+            valueLabels As JToken,
+            Optional allowedValues As IList(Of String) = Nothing,
+            Optional selectorColumnId As String = Nothing
+        ) As String
+            Dim raw = If(say, "").Trim()
+            If raw.Length = 0 Then Return raw
+
+            Dim placeholders = BuildAcquisitionPlaceholders(binding, valueLabels)
+            Dim withCurlies = InterpolateTemplate(raw, placeholders)
+            Return InterpolateBracketPlaceholders(withCurlies, binding, valueLabels, allowedValues, selectorColumnId)
+        End Function
+
+        Private Shared Function BuildAcquisitionPlaceholders(binding As Dictionary(Of String, String), valueLabels As JToken) As Dictionary(Of String, String)
+            Dim map As New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase)
+            If binding Is Nothing Then Return map
+            For Each kvp In binding
+                If KbDialogBindings.NormalizeCellValue(kvp.Value).Length = 0 Then Continue For
+                map(kvp.Key & "_nat") = GetNaturalLabel(kvp.Key, kvp.Value, valueLabels)
+                map(kvp.Key) = kvp.Value
+            Next
+            Return map
+        End Function
+
+        Private Shared Function InterpolateBracketPlaceholders(
+            text As String,
+            binding As Dictionary(Of String, String),
+            valueLabels As JToken,
+            allowedValues As IList(Of String),
+            selectorColumnId As String
+        ) As String
+            Return System.Text.RegularExpressions.Regex.Replace(
+                If(text, ""),
+                "\[([a-z0-9_]+)\]",
+                Function(m As System.Text.RegularExpressions.Match)
+                    Dim token = If(m.Groups(1).Value, "").Trim()
+                    If token.Length = 0 Then Return m.Value
+
+                    If binding IsNot Nothing AndAlso binding.ContainsKey(token) Then
+                        Dim bound = KbDialogBindings.NormalizeCellValue(binding(token))
+                        If bound.Length > 0 Then
+                            Return GetNaturalLabel(token, bound, valueLabels)
+                        End If
+                    End If
+
+                    If allowedValues IsNot Nothing Then
+                        For Each av In allowedValues
+                            Dim semantic = If(av, "").Trim()
+                            If semantic.Length = 0 Then Continue For
+                            If String.Equals(KbDialogBindings.NormalizeToken(semantic), KbDialogBindings.NormalizeToken(token), StringComparison.OrdinalIgnoreCase) Then
+                                Dim col = If(selectorColumnId, "").Trim()
+                                Return GetNaturalLabel(If(col.Length > 0, col, token), semantic, valueLabels)
+                            End If
+                            Dim nat = GetNaturalLabel(If(selectorColumnId, token), semantic, valueLabels)
+                            If String.Equals(KbDialogBindings.NormalizeToken(nat), KbDialogBindings.NormalizeToken(token), StringComparison.OrdinalIgnoreCase) Then
+                                Return nat
+                            End If
+                        Next
+                    End If
+
+                    If binding IsNot Nothing Then
+                        For Each kvp In binding
+                            If KbDialogBindings.NormalizeCellValue(kvp.Value).Length = 0 Then Continue For
+                            Dim nat = GetNaturalLabel(kvp.Key, kvp.Value, valueLabels)
+                            If String.Equals(KbDialogBindings.NormalizeToken(nat), KbDialogBindings.NormalizeToken(token), StringComparison.OrdinalIgnoreCase) Then
+                                Return nat
+                            End If
+                        Next
+                    End If
+
+                    Return m.Value
+                End Function,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
         End Function
     End Class
 End Namespace

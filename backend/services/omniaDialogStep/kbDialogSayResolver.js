@@ -118,37 +118,80 @@ function resolveAcquisitionSay(index, selectorColumnId, binding, col, allowedVal
     );
     for (const row of sorted) {
       if (bindingPrefixMatches(row.bindingWhen, binding)) {
-        return {
-          say: row.say,
-          useCaseId: entry.useCaseId,
-          useCaseKind: 'acquisition',
-        };
+        const say = String(row.say ?? '').trim();
+        if (say) {
+          return {
+            say: interpolateAcquisitionSay(
+              say,
+              binding,
+              index?.valueLabels ?? {},
+              allowedValues,
+              selectorColumnId
+            ),
+            useCaseId: entry.useCaseId,
+            useCaseKind: 'acquisition',
+          };
+        }
       }
     }
   }
 
-  const label = String(col?.promptTemplate ?? col?.headerLabel ?? '').trim();
-  const policy = col?.askPolicy === 'required' ? ' (obbligatoria)' : ' (se necessario)';
-  const base = label.includes('(') ? label : `${label}${policy}`;
-  if (col?.promptType === 'open_question' || allowedValues.length === 0) {
-    return { say: `${base}?`, useCaseId: entry?.useCaseId ?? null, useCaseKind: 'acquisition' };
+  return null;
+}
+
+function buildAcquisitionPlaceholders(binding, valueLabels) {
+  const map = {};
+  for (const [colId, raw] of Object.entries(binding ?? {})) {
+    if (!normalizeCellValue(raw)) continue;
+    map[`${colId}_nat`] = getNaturalLabel(colId, raw, valueLabels);
+    map[colId] = raw;
   }
-  if (allowedValues.length <= KB_DIALOG_EXPLICIT_LIST_MAX) {
-    const labels = allowedValues.map((v) => getNaturalLabel(selectorColumnId, v, index?.valueLabels ?? {}));
-    if (labels.length === 2) {
-      return {
-        say: `Desidera ${labels[0]} o ${labels[1]}?`,
-        useCaseId: entry?.useCaseId ?? null,
-        useCaseKind: 'acquisition',
-      };
+  return map;
+}
+
+/** Interpola say acquisition: {col_nat}, [col] da binding, [semantic] da allowedValues. */
+function interpolateAcquisitionSay(
+  say,
+  binding,
+  valueLabels,
+  allowedValues,
+  selectorColumnId
+) {
+  const raw = String(say ?? '').trim();
+  if (!raw) return raw;
+  const withCurlies = interpolateTemplate(raw, buildAcquisitionPlaceholders(binding, valueLabels));
+  return withCurlies.replace(/\[([a-z0-9_]+)\]/gi, (full, token) => {
+    const key = String(token ?? '').trim();
+    if (!key) return full;
+
+    if (binding && normalizeCellValue(binding[key] ?? '')) {
+      return getNaturalLabel(key, binding[key], valueLabels);
     }
-    return {
-      say: `${base}: ${labels.join(', ')}?`,
-      useCaseId: entry?.useCaseId ?? null,
-      useCaseKind: 'acquisition',
-    };
-  }
-  return { say: `${base}?`, useCaseId: entry?.useCaseId ?? null, useCaseKind: 'acquisition' };
+
+    for (const av of allowedValues ?? []) {
+      const semantic = String(av ?? '').trim();
+      if (!semantic) continue;
+      const normSemantic = normalizeCellValue(semantic).toLowerCase().replace(/\s+/g, '_');
+      const normToken = normalizeCellValue(key).toLowerCase().replace(/\s+/g, '_');
+      if (normSemantic === normToken) {
+        const col = selectorColumnId || key;
+        return getNaturalLabel(col, semantic, valueLabels);
+      }
+      const nat = getNaturalLabel(selectorColumnId || key, semantic, valueLabels);
+      const normNat = normalizeCellValue(nat).toLowerCase().replace(/\s+/g, '_');
+      if (normNat === normToken) return nat;
+    }
+
+    for (const [colId, val] of Object.entries(binding ?? {})) {
+      if (!normalizeCellValue(val)) continue;
+      const nat = getNaturalLabel(colId, val, valueLabels);
+      const normNat = normalizeCellValue(nat).toLowerCase().replace(/\s+/g, '_');
+      const normToken = normalizeCellValue(key).toLowerCase().replace(/\s+/g, '_');
+      if (normNat === normToken) return nat;
+    }
+
+    return full;
+  });
 }
 
 function listSelectorColumns(selectorSpec) {
@@ -245,5 +288,6 @@ module.exports = {
   isCorrectionUpdate,
   getNaturalLabel,
   interpolateTemplate,
+  interpolateAcquisitionSay,
   KB_DIALOG_EXPLICIT_LIST_MAX,
 };

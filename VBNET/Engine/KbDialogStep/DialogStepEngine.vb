@@ -251,15 +251,25 @@ Namespace KbDialogStep
             If dialogIndex IsNot Nothing Then
                 acquired = KbDialogSayResolver.ResolveAcquisitionSay(dialogIndex, nextColId, merged, nextCol, allowedValues)
             End If
-            Dim sayAsk = If(acquired IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(acquired.Say),
-                            acquired.Say,
-                            If(Not String.IsNullOrEmpty(nextCol.PromptTemplate), nextCol.PromptTemplate, nextCol.HeaderLabel) & "?")
+            If acquired Is Nothing OrElse String.IsNullOrWhiteSpace(acquired.Say) Then
+                Dim label = If(Not String.IsNullOrEmpty(nextCol.HeaderLabel), nextCol.HeaderLabel, nextColId)
+                Return New DialogStepResult With {
+                    .Status = "error",
+                    .Say = "Configurazione dialogo incompleta: messaggio acquisition mancante per «" & label & "». Compila il use case nel designer.",
+                    .UseCaseId = If(acquired?.UseCaseId, Nothing),
+                    .UseCaseKind = "acquisition",
+                    .Binding = merged,
+                    .InformState = informState,
+                    .NextColumnId = nextColId,
+                    .RemainingRowCount = filtered.Count
+                }
+            End If
 
             Return New DialogStepResult With {
                 .Status = "ask",
-                .Say = sayAsk,
-                .UseCaseId = If(acquired?.UseCaseId, Nothing),
-                .UseCaseKind = If(acquired?.UseCaseKind, "acquisition"),
+                .Say = acquired.Say,
+                .UseCaseId = acquired.UseCaseId,
+                .UseCaseKind = acquired.UseCaseKind,
                 .Binding = merged,
                 .InformState = informState,
                 .NextColumnId = nextColId,

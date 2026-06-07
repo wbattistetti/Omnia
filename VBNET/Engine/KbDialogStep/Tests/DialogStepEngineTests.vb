@@ -30,6 +30,8 @@ Namespace KbDialogStep.Tests
             ok = ok AndAlso TestCompleteWithDialogIndex()
             ok = ok AndAlso TestCorrectionWalk()
             ok = ok AndAlso TestUtteranceResolverMatch()
+            ok = ok AndAlso TestSlotLexiconParserMultiSlot()
+            ok = ok AndAlso TestAcquisitionSayInterpolation()
             If ok Then
                 Console.WriteLine("[DialogStepEngineTests] All passed.")
             Else
@@ -235,9 +237,14 @@ Namespace KbDialogStep.Tests
 
         Private Shared Function TestUtteranceResolverMatch() As Boolean
             Dim allowed = New List(Of String) From {"Cardiologia", "Ortopedia"}
-            Dim m1 = KbDialogUtteranceResolver.MatchAllowedValue("cardiologia", allowed)
+            Dim m1 = KbDialogUtteranceResolver.MatchAllowedValue("cardiologia", allowed, "specialita")
             If Not String.Equals(m1, "Cardiologia", StringComparison.OrdinalIgnoreCase) Then
                 Console.WriteLine("FAIL TestUtteranceResolverMatch exact")
+                Return False
+            End If
+            Dim mNat = KbDialogUtteranceResolver.MatchAllowedValue("cardiologica", allowed, "specialita")
+            If Not String.Equals(mNat, "Cardiologia", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("FAIL TestUtteranceResolverMatch natural label")
                 Return False
             End If
             Dim m2 = KbDialogUtteranceResolver.MatchAllowedValue("pneumologia", New List(Of String) From {"Pneumologia"})
@@ -248,6 +255,55 @@ Namespace KbDialogStep.Tests
             Dim binary = KbDialogUtteranceResolver.MatchAllowedValue("si", New List(Of String) From {"nessuno", "Spirometria"})
             If Not String.Equals(binary, "Spirometria", StringComparison.OrdinalIgnoreCase) Then
                 Console.WriteLine("FAIL TestUtteranceResolverMatch binary yes")
+                Return False
+            End If
+            Return True
+        End Function
+
+        Private Shared Function TestSlotLexiconParserMultiSlot() As Boolean
+            Dim grid = SampleGrid()
+            Dim spec = BaseSelectorSpec()
+            Dim indexJson = "{
+  ""valueLabels"": {
+    ""specialita"": { ""cardiologia"": ""cardiologica"" },
+    ""tipo_visita"": { ""prima_visita"": ""prima visita"", ""controllo"": ""visita di controllo"" }
+  },
+  ""slotLexicon"": {
+    ""specialita"": [{ ""semantic"": ""Cardiologia"", ""synonyms"": [""Cardiologia"", ""cardiologica""] }],
+    ""tipo_visita"": [{ ""semantic"": ""Prima visita"", ""synonyms"": [""Prima visita"", ""prima visita""] }]
+  }
+}"
+            Dim index = Newtonsoft.Json.Linq.JObject.Parse(indexJson)
+            Dim r = KbDialogSlotLexiconParser.ParseUtterance(
+                "vorrei una prima visita cardiologica",
+                grid,
+                spec,
+                New Dictionary(Of String, String),
+                index)
+            If Not r.Updates.ContainsKey("specialita") OrElse
+               Not String.Equals(r.Updates("specialita"), "Cardiologia", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("FAIL TestSlotLexiconParserMultiSlot specialita")
+                Return False
+            End If
+            If Not r.Updates.ContainsKey("tipo_visita") OrElse
+               Not String.Equals(r.Updates("tipo_visita"), "Prima visita", StringComparison.OrdinalIgnoreCase) Then
+                Console.WriteLine("FAIL TestSlotLexiconParserMultiSlot tipo_visita")
+                Return False
+            End If
+            Return True
+        End Function
+
+        Private Shared Function TestAcquisitionSayInterpolation() As Boolean
+            Dim valueLabels = Newtonsoft.Json.Linq.JObject.Parse("{ ""specialita"": { ""cardiologia"": ""cardiologica"" } }")
+            Dim binding As New Dictionary(Of String, String) From {{"specialita", "Cardiologia"}}
+            Dim say = KbDialogSayResolver.InterpolateAcquisitionSay(
+                "Una prima visita [specialita] o una visita di controllo?",
+                binding,
+                valueLabels,
+                New List(Of String) From {"Prima visita", "Controllo"},
+                "tipo_visita")
+            If say <> "Una prima visita cardiologica o una visita di controllo?" Then
+                Console.WriteLine("FAIL TestAcquisitionSayInterpolation: " & say)
                 Return False
             End If
             Return True

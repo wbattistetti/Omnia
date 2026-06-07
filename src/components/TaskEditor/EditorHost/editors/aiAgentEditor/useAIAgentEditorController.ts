@@ -24,7 +24,10 @@ import {
 import { listKbDocumentsReadyFromStaged } from '@domain/convai/kbDialogDeployReadiness';
 import { generateKbDialogUseCasesFromDocument } from '@domain/knowledgeBase/kbDialog/generateKbDialogFromDocument';
 import { formatKbDialogGapSummary } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/useGenerateKbDialogUseCases';
-import { serializeKbDialogRuntimeIndex } from '@domain/knowledgeBase/kbDialog/kbDialogUseCaseGeneration';
+import {
+  refreshKbDialogRuntimeIndexJsonFromUseCases,
+  serializeKbDialogRuntimeIndex,
+} from '@domain/knowledgeBase/kbDialog/kbDialogUseCaseGeneration';
 import { parseAgentKnowledgeBaseDocumentsJson } from '@domain/knowledgeBase/serializeKbDocuments';
 import {
   extractStructuredDesign,
@@ -1797,6 +1800,9 @@ export function useAIAgentEditorController({
     persistReasonRef.current = 'direct';
     const agentUseCasesJson = serializeUseCases(useCases, useCaseCategories);
     const agentConversationalRulesJson = serializeConversationalRules(conversationalRules);
+    const agentKbDialogIndexJsonForPersist = isKbDeterministicDeployMode(agentConvaiDeployMode)
+      ? refreshKbDialogRuntimeIndexJsonFromUseCases(agentKbDialogIndexJson, useCases)
+      : agentKbDialogIndexJson;
     const taskBeforePersist = taskRepository.getTask(instanceId);
     let iaRuntimeForPersist = mergeConvaiAgentIdFromGlobalDefaults(
       iaRuntimeConfig,
@@ -1847,7 +1853,7 @@ export function useAIAgentEditorController({
       agentConversationStyleSelections,
       agentConversationDeployStyleId,
       agentConvaiDeployMode,
-      agentKbDialogIndexJson,
+      agentKbDialogIndexJson: agentKbDialogIndexJsonForPersist,
       agentLogUseCase,
       agentLogBackendCalls,
       agentBehavior,
@@ -1861,6 +1867,9 @@ export function useAIAgentEditorController({
         instanceId,
       });
       return;
+    }
+    if (agentKbDialogIndexJsonForPersist !== agentKbDialogIndexJson) {
+      setAgentKbDialogIndexJsonState(agentKbDialogIndexJsonForPersist);
     }
     logAiAgentPersistUseCases('TaskRepository.updateTask (in-memory before Mongo)', {
       reason,

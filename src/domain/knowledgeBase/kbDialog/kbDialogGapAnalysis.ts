@@ -90,6 +90,12 @@ export function runKbDialogGapAnalysis(params: RunKbDialogGapAnalysisParams): Kb
         message: `Manca UC acquisizione per selettore «${col.headerLabel}».`,
         blocking: true,
       });
+    } else if (needsAcquisition && entry?.rows.some((r) => !String(r.say ?? '').trim())) {
+      issues.push({
+        code: 'acquisition_say_missing',
+        message: `Messaggio assistant mancante nell'UC acquisizione per «${col.headerLabel}».`,
+        blocking: true,
+      });
     }
 
     const informEntry = runtimeIndex.inform?.[col.columnId];

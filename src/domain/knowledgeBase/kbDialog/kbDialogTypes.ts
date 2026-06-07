@@ -74,6 +74,8 @@ export type KbDialogRuntimeIndex = {
   kbDocumentId?: string;
   completeTemplate: string;
   valueLabels: SelectorValueLabels;
+  /** Lessico NL: semantica = valore cella; synonyms = linguistica gruppo. */
+  slotLexicon?: import('./kbDialogSlotLexicon').KbDialogSlotLexicon;
   acquisition: Record<string, KbDialogAcquisitionIndexEntry>;
   inform: Record<string, KbDialogInformIndexEntry>;
   correction: readonly KbDialogCorrectionIndexEntry[];

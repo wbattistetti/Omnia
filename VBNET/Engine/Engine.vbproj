@@ -90,6 +90,7 @@
     <Compile Include="KbDialogStep\KbDialogSayResolver.vb" />
     <Compile Include="KbDialogStep\KbDialogSelectorSemantics.vb" />
     <Compile Include="KbDialogStep\KbDialogUtteranceResolver.vb" />
+    <Compile Include="KbDialogStep\KbDialogSlotLexiconParser.vb" />
     <Compile Include="KbDialogStep\DialogStepEngine.vb" />
     <Compile Include="KbDialogStep\Tests\DialogStepEngineTests.vb" />
   </ItemGroup>

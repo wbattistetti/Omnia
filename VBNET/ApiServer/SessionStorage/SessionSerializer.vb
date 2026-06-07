@@ -88,6 +88,7 @@ Namespace ApiServer.SessionStorage
             Public Property IsCompleted As Boolean
             Public Property SseConnected As Boolean = False
             Public Property InitialTurnExecuted As Boolean = False
+            Public Property AgentTaskSnapshotJson As String
         End Class
 
         ''' <summary>
@@ -267,7 +268,8 @@ Namespace ApiServer.SessionStorage
                     .WaitingForInputData = session.WaitingForInputData,
                     .IsCompleted = session.IsCompleted,
                     .SseConnected = session.SseConnected,
-                    .InitialTurnExecuted = session.InitialTurnExecuted
+                    .InitialTurnExecuted = session.InitialTurnExecuted,
+                    .AgentTaskSnapshotJson = session.AgentTaskSnapshotJson
                 }
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -296,6 +298,7 @@ Namespace ApiServer.SessionStorage
                     .IsCompleted = data.IsCompleted,
                     .SseConnected = data.SseConnected,
                     .InitialTurnExecuted = data.InitialTurnExecuted,
+                    .AgentTaskSnapshotJson = data.AgentTaskSnapshotJson,
                     .EventEmitter = Nothing
                 }
             Catch ex As Exception

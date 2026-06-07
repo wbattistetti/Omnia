@@ -33,7 +33,16 @@ import type {
   KbDialogInformRow,
   KbDialogUseCaseMeta,
 } from './kbDialogTypes';
+export {
+  compileKbDialogRuntimeIndex,
+  getKbDialogUseCaseAssistantSay,
+  parseKbDialogRuntimeIndex,
+  refreshKbDialogRuntimeIndexJsonFromUseCases,
+  refreshKbDialogRuntimeIndexSayFromUseCases,
+  serializeKbDialogRuntimeIndex,
+} from './kbDialogRuntimeIndex';
 import { compileKbDialogRuntimeIndex } from './kbDialogRuntimeIndex';
+import { buildKbDialogSlotLexicon } from './kbDialogSlotLexicon';
 import { runKbDialogGapAnalysis } from './kbDialogGapAnalysis';
 
 function newUseCaseId(prefix: string): string {
@@ -371,6 +380,8 @@ export function generateKbDialogUseCases(
 
   const categories: AIAgentUseCaseCategory[] = [...KB_DIALOG_CATEGORIES];
 
+  const slotLexicon = buildKbDialogSlotLexicon({ grid, askable, valueLabels });
+
   const runtimeIndex = compileKbDialogRuntimeIndex({
     useCases,
     valueLabels,
@@ -378,6 +389,7 @@ export function generateKbDialogUseCases(
     kbDocumentId,
     acquisitionRowsBySelector,
     informRowsBySelector,
+    slotLexicon,
   });
 
   const gapIssues = runKbDialogGapAnalysis({
@@ -395,21 +407,4 @@ export function generateKbDialogUseCases(
     completeTemplate,
     gapIssues,
   };
-}
-
-export function serializeKbDialogRuntimeIndex(index: import('./kbDialogTypes').KbDialogRuntimeIndex): string {
-  return JSON.stringify(index);
-}
-
-export function parseKbDialogRuntimeIndex(raw: string | undefined | null): import('./kbDialogTypes').KbDialogRuntimeIndex | null {
-  const trimmed = String(raw ?? '').trim();
-  if (!trimmed) return null;
-  try {
-    const parsed = JSON.parse(trimmed) as import('./kbDialogTypes').KbDialogRuntimeIndex;
-    if (parsed?.schemaVersion !== 1 || !parsed.complete) return null;
-    if (!parsed.inform) parsed.inform = {};
-    return parsed;
-  } catch {
-    return null;
-  }
 }

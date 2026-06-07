@@ -276,6 +276,8 @@ Public Class CompiledTaskSession
     Public Property IsCompleted As Boolean
     Public Property SseConnected As Boolean = False
     Public Property InitialTurnExecuted As Boolean = False
+    ''' <summary>Overlay task agente dal designer (Test agente) — prevale su Mongo per index/KB.</summary>
+    Public Property AgentTaskSnapshotJson As String
 End Class
 
 ''' <summary>

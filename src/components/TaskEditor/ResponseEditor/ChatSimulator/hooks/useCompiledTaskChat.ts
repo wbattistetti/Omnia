@@ -7,7 +7,12 @@ import {
   type OrchestratorSseErrorPayload,
 } from '@components/DialogueEngine/orchestratorAdapter';
 import { compileSingleAiAgentTask } from '@domain/compiledTaskRunner/compileSingleAiAgentTask';
+import { buildKbDialogAgentTaskSnapshotForRuntime } from '@domain/compiledTaskRunner/buildKbDialogAgentTaskSnapshot';
 import { prepareKbDialogCompiledTaskTestSession } from '@domain/compiledTaskRunner/prepareKbDialogCompiledTaskTestSession';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
 import { fetchInvocationsForAgentTaskTurnWithRetry } from '@domain/convaiObservability/fetchInvocationsForAgentTaskTurn';
 
 const VB_BASE_URL = 'http://localhost:5000';
@@ -66,10 +71,18 @@ export function useCompiledTaskChat(
   const messageIdCounter = React.useRef(0);
   const convaiRuntimeFetchSinceRef = React.useRef<string>(new Date().toISOString());
   const convaiRuntimeLogEnabledRef = React.useRef(options?.convaiRuntimeLogEnabled === true);
+  const kbDialogNativeOrchestrationRef = React.useRef(
+    task
+      ? isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode))
+      : false
+  );
 
   React.useEffect(() => {
     convaiRuntimeLogEnabledRef.current = options?.convaiRuntimeLogEnabled === true;
-  }, [options?.convaiRuntimeLogEnabled]);
+    kbDialogNativeOrchestrationRef.current = task
+      ? isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode))
+      : false;
+  }, [options?.convaiRuntimeLogEnabled, task]);
 
   const reportStartError = React.useCallback((err: unknown) => {
     setError(toErrorMessage(err));
@@ -104,7 +117,10 @@ export function useCompiledTaskChat(
       if (!trimmed) return;
 
       let convaiRuntimeInvocations: Message['convaiRuntimeInvocations'];
-      if (convaiRuntimeLogEnabledRef.current) {
+      if (
+        convaiRuntimeLogEnabledRef.current &&
+        !kbDialogNativeOrchestrationRef.current
+      ) {
         const pid = String(projectId ?? '').trim();
         const agentTaskId = String(taskId ?? task?.id ?? '').trim();
         if (pid && agentTaskId) {
@@ -208,6 +224,8 @@ export function useCompiledTaskChat(
     });
     compiledTask = prepared.compiledTask;
 
+    const agentTaskSnapshot = buildKbDialogAgentTaskSnapshotForRuntime(task);
+
     const startResponse = await fetch(`${VB_BASE_URL}/api/runtime/compiled-task/session/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -215,6 +233,7 @@ export function useCompiledTaskChat(
         projectId: pid,
         locale,
         compiledTask,
+        ...(agentTaskSnapshot ? { agentTaskSnapshot } : {}),
       }),
     });
 

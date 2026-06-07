@@ -29,7 +29,8 @@ Namespace OmniaDialogStepInfra
             Optional kbDocumentId As String = Nothing,
             Optional reset As Boolean = False,
             Optional cancellationToken As CancellationToken = Nothing,
-            Optional userUtterance As String = Nothing
+            Optional userUtterance As String = Nothing,
+            Optional agentTaskSnapshot As JObject = Nothing
         ) As Task(Of OmniaDialogStepRunResult)
             Dim pid = If(projectId, "").Trim()
             Dim aid = If(agentTaskId, "").Trim()
@@ -45,12 +46,16 @@ Namespace OmniaDialogStepInfra
             End If
 
             Dim agentTask As JObject = Nothing
-            Try
-                agentTask = Await ProjectTaskHttpLoader.LoadProjectTaskAsync(pid, aid, cancellationToken).ConfigureAwait(False)
-            Catch ex As Exception
-                Console.WriteLine("[omnia-dialog-step VB] load task: " & ex.Message)
-                Return Fail(500, "task_load_failed", "Impossibile caricare il task agente.")
-            End Try
+            If agentTaskSnapshot IsNot Nothing Then
+                agentTask = agentTaskSnapshot
+            Else
+                Try
+                    agentTask = Await ProjectTaskHttpLoader.LoadProjectTaskAsync(pid, aid, cancellationToken).ConfigureAwait(False)
+                Catch ex As Exception
+                    Console.WriteLine("[omnia-dialog-step VB] load task: " & ex.Message)
+                    Return Fail(500, "task_load_failed", "Impossibile caricare il task agente.")
+                End Try
+            End If
 
             If agentTask Is Nothing Then
                 Return Fail(404, "agent_task_not_found", "Task agente non trovato.")
@@ -94,7 +99,9 @@ Namespace OmniaDialogStepInfra
                     Return Fail(500, "dialog_engine_failed", "Il motore dialogo non è disponibile.")
                 End Try
 
-                slotUpdates = KbDialogUtteranceResolver.ResolveUpdates(utterance, peek)
+                Dim valueLabels = If(dialogIndex IsNot Nothing, dialogIndex("valueLabels"), Nothing)
+                slotUpdates = KbDialogUtteranceResolver.ResolveUpdates(
+                    utterance, peek, valueLabels, runtime.Grid, runtime.SelectorSpec, binding, dialogIndex)
                 If slotUpdates.Count = 0 Then
                     Dim repeatSay = If(peek.Say, "").Trim()
                     If repeatSay.Length = 0 Then repeatSay = "Può ripetere?"

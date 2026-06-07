@@ -82,13 +82,42 @@ describe('executeDialogStep', () => {
   const grid = parseKbPipeTable(SAMPLE_MD);
   const selectorSpec = baseSelectorSpec();
 
-  it('asks first selector column when binding is empty', () => {
+  const baseDialogIndex = {
+    schemaVersion: 1,
+    valueLabels: {},
+    acquisition: {
+      specialita: {
+        useCaseId: 'uc_ask_specialita',
+        rows: [{ bindingWhen: {}, say: 'Quale specialità desidera?' }],
+      },
+      tipo_visita: {
+        useCaseId: 'uc_ask_tipo_visita',
+        rows: [{ bindingWhen: {}, say: 'Che tipo di visita desidera?' }],
+      },
+    },
+    correction: [],
+    complete: { useCaseId: 'uc_complete', sayTemplate: 'Ok.' },
+  };
+
+  it('errors when binding is empty and dialog index has no acquisition say', () => {
     const r = executeDialogStep({ grid, selectorSpec, binding: {}, updates: {} });
+    assert.equal(r.status, 'error');
+    assert.ok(r.say.includes('messaggio acquisition mancante'));
+  });
+
+  it('asks first selector column when dialog index provides UC say', () => {
+    const r = executeDialogStep({
+      grid,
+      selectorSpec,
+      binding: {},
+      updates: {},
+      dialogIndex: baseDialogIndex,
+    });
     assert.equal(r.status, 'ask');
     assert.equal(r.nextColumnId, 'specialita');
     assert.ok(r.allowedValues.includes('Cardiologia'));
     assert.ok(r.allowedValues.includes('Ortopedia'));
-    assert.ok(r.say.includes('specialità'));
+    assert.equal(r.say, 'Quale specialità desidera?');
   });
 
   it('completes via auto-fill when specialty leaves a single matching row', () => {
@@ -115,10 +144,12 @@ describe('executeDialogStep', () => {
       selectorSpec,
       binding: {},
       updates: { specialita: 'Cardiologia' },
+      dialogIndex: baseDialogIndex,
     });
     assert.equal(r.status, 'ask');
     assert.equal(r.nextColumnId, 'tipo_visita');
     assert.deepEqual(r.allowedValues, ['Controllo', 'Prima visita']);
+    assert.equal(r.say, 'Che tipo di visita desidera?');
     assert.equal(r.remainingRowCount, 2);
   });
 
@@ -192,6 +223,24 @@ describe('executeDialogStep', () => {
     assert.equal(r.say, 'Quale specialità desidera?');
     assert.equal(r.useCaseId, 'uc_ask_specialita');
     assert.equal(r.useCaseKind, 'acquisition');
+  });
+
+  it('errors when acquisition UC say is missing (no promptTemplate fallback)', () => {
+    const dialogIndex = {
+      schemaVersion: 1,
+      valueLabels: {},
+      acquisition: {
+        specialita: {
+          useCaseId: 'uc_ask_specialita',
+          rows: [{ bindingWhen: {}, say: '' }],
+        },
+      },
+      correction: [],
+      complete: { useCaseId: 'uc_complete', sayTemplate: 'Ok.' },
+    };
+    const r = executeDialogStep({ grid, selectorSpec, binding: {}, updates: {}, dialogIndex });
+    assert.equal(r.status, 'error');
+    assert.ok(r.say.includes('messaggio acquisition mancante'));
   });
 
   it('returns correction when slot change invalidates downstream value', () => {

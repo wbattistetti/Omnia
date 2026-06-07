@@ -150,6 +150,16 @@ Namespace ApiServer.Handlers
             End Try
         End Function
 
+        Private Function ResolveAgentTaskSnapshot(session As CompiledTaskSession) As JObject
+            Dim raw = If(session?.AgentTaskSnapshotJson, "").Trim()
+            If raw.Length = 0 Then Return Nothing
+            Try
+                Return TryCast(JToken.Parse(raw), JObject)
+            Catch
+                Return Nothing
+            End Try
+        End Function
+
         ''' <summary>
         ''' kb_deterministic: orchestrazione unica VB (OmniaDialogStepRunner). EL non orchestra i turni slot.
         ''' </summary>
@@ -183,7 +193,8 @@ Namespace ApiServer.Handlers
                 Nothing,
                 False,
                 System.Threading.CancellationToken.None,
-                If(utterance.Length > 0, utterance, Nothing)
+                If(utterance.Length > 0, utterance, Nothing),
+                ResolveAgentTaskSnapshot(session)
             ).ConfigureAwait(False)
 
             Dim cidLog = If(conversationId.Length > 12, conversationId.Substring(0, 12) & "…", conversationId)
@@ -412,6 +423,12 @@ Namespace ApiServer.Handlers
                     compiledTaskJson,
                     compiledTask.Id
                 )
+
+                Dim snapshotTok = requestObj("agentTaskSnapshot")
+                If snapshotTok IsNot Nothing AndAlso snapshotTok.Type = JTokenType.Object Then
+                    session.AgentTaskSnapshotJson = snapshotTok.ToString(Formatting.None)
+                    SessionManager.SaveCompiledTaskSession(session)
+                End If
 
                 LogInfo("Compiled task session created", New With {
                     .sessionId = sessionId,

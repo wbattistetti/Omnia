@@ -502,11 +502,23 @@ function executeDialogStep({
   const acquired = dialogIndex
     ? resolveAcquisitionSay(dialogIndex, askColId, merged, askCol, allowedValues)
     : null;
-  const say = acquired?.say ?? `${askCol.promptTemplate ?? askCol.headerLabel}?`;
+  if (!acquired?.say) {
+    const label = askCol.headerLabel || askColId;
+    return baseResult({
+      status: 'error',
+      say: `Configurazione dialogo incompleta: messaggio acquisition mancante per «${label}». Compila il use case nel designer.`,
+      useCaseId: acquired?.useCaseId ?? dialogIndex?.acquisition?.[askColId]?.useCaseId ?? null,
+      useCaseKind: 'acquisition',
+      binding: merged,
+      informState,
+      nextColumnId: askColId,
+      remainingRowCount: filtered.length,
+    });
+  }
 
   return baseResult({
     status: 'ask',
-    say,
+    say: acquired.say,
     useCaseId: acquired?.useCaseId ?? null,
     useCaseKind: acquired?.useCaseKind ?? 'acquisition',
     binding: merged,

@@ -406,6 +406,11 @@ export default function DDEBubbleChat({
     return isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode));
   }, [isCompiledTaskMode, task]);
 
+  const showCompiledTaskConvaiWebhookWarning = React.useMemo(() => {
+    if (!showCompiledTaskConvaiLog || !task) return false;
+    return !isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode));
+  }, [showCompiledTaskConvaiLog, task]);
+
   const compiledTaskChat = useCompiledTaskChat(isCompiledTaskMode ? task : null, projectId, {
     autoStart: compiledTaskAutoStart,
     onMessage: onFlowModeMessage,
@@ -2234,7 +2239,7 @@ export default function DDEBubbleChat({
                   >
                     {dialogStepSummary}
                   </p>
-                ) : isCompiledTaskMode && showCompiledTaskConvaiLog ? (
+                ) : showCompiledTaskConvaiWebhookWarning ? (
                   <p className="mt-1 max-w-xs lg:max-w-md font-mono text-[10px] leading-snug text-amber-600/90">
                     Nessuna invocazione omnia_dialog_step in questo turno (webhook non chiamato da EL o Express
                     :3100 non raggiungibile).
