@@ -34,6 +34,7 @@ import {
   buildOmniaDialogStepConvaiTool,
   isOmniaDialogStepConvaiTool,
 } from './omniaDialogStepConvaiTool';
+import { collectKbDialogSlotColumnIds } from '@domain/convai/kbDialogSlotMapPrompt';
 
 /** Istruzioni aggiuntive ConvAI quando è presente un tool webhook BookFromAgenda (API v4.6). */
 const BOOK_FROM_AGENDA_ELEVENLABS_PROMPT_APPEND = `BOOKFROMAGENDA (webhook POST …/bookfromagenda, contratto API v4.6):
@@ -235,6 +236,9 @@ export function conversationConfigFragmentFromIaAgentConfig(
       projectId,
       agentTaskId,
       gatewayOrigin: convaiGateway?.gatewayOrigin,
+      slotColumnIds: task
+        ? collectKbDialogSlotColumnIds(task.agentKnowledgeBaseDocumentsJson)
+        : [],
     });
     elevenTools = [
       ...elevenTools.filter((t) => !isOmniaDialogStepConvaiTool(t)),

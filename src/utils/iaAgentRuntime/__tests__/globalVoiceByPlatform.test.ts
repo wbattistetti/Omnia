@@ -14,6 +14,7 @@ import {
   AGENT_PLATFORM_DISPLAY_LABEL,
   SUPPORTED_AGENT_PLATFORMS,
   describeVoice,
+  describeVoiceForDeployMenu,
   getGlobalVoiceFor,
   loadGlobalVoiceByPlatform,
   resolveVoiceForPlatform,
@@ -218,5 +219,20 @@ describe('describeVoice', () => {
     expect(describeVoice({ id: 'voice_id_xyz', language: 'it', settings: { name: '   ' } })).toBe(
       'voice_id_xyz'
     );
+  });
+});
+
+describe('describeVoiceForDeployMenu', () => {
+  it('returns friendly name only, never raw id', () => {
+    expect(
+      describeVoiceForDeployMenu({
+        id: '21m00Tcm4TlvDq8ikWAM',
+        language: 'it',
+        settings: { name: 'Simon' },
+      })
+    ).toBe('Simon');
+    expect(
+      describeVoiceForDeployMenu({ id: '21m00Tcm4TlvDq8ikWAM', language: 'it' })
+    ).toBeNull();
   });
 });

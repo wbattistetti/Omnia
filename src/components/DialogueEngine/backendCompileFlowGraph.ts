@@ -264,6 +264,18 @@ export async function backendCompileFlowGraph(
       const compileInput = {
         ...t,
         agentIaRuntimeOverrideJson: overrideStr,
+        agentElevenLabsConvaiLinkJson:
+          live != null && typeof live.agentElevenLabsConvaiLinkJson === 'string'
+            ? live.agentElevenLabsConvaiLinkJson
+            : typeof t.agentElevenLabsConvaiLinkJson === 'string'
+              ? t.agentElevenLabsConvaiLinkJson
+              : undefined,
+        agentConvaiDeployMode:
+          live != null && typeof (live as { agentConvaiDeployMode?: string }).agentConvaiDeployMode === 'string'
+            ? (live as { agentConvaiDeployMode: string }).agentConvaiDeployMode
+            : typeof (t as { agentConvaiDeployMode?: string }).agentConvaiDeployMode === 'string'
+              ? (t as { agentConvaiDeployMode: string }).agentConvaiDeployMode
+              : undefined,
         ...(immediateFromLive !== undefined ? { agentImmediateStart: immediateFromLive } : {}),
       } as Parameters<typeof buildMinimalAiAgentCompileTask>[0];
       iaConvaiTraceCompileVsRepository(taskId, {
@@ -467,9 +479,18 @@ export async function backendCompileFlowGraph(
     );
   }
 
+  /** Orchestrator POST usa `mergedTasks`: allinea platform/agentId al payload inviato al compilatore VB. */
+  const allTasksWithTemplatesForSession = allTasksWithTemplates.map((row, index) => {
+    const compiled = tasksForCompile[index] as Record<string, unknown> | undefined;
+    if ((row as { type?: number }).type === TaskType.AIAgent && compiled) {
+      return { ...row, ...compiled };
+    }
+    return row;
+  });
+
   return {
     compileJson,
-    allTasksWithTemplates,
+    allTasksWithTemplates: allTasksWithTemplatesForSession,
     allDDTs,
   };
 }

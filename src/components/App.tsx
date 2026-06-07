@@ -14,7 +14,7 @@ import { TaskEditorProvider } from './TaskEditor/EditorHost/TaskEditorContext'; 
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { AiCallLogProvider } from '../context/AiCallLogContext';
-import { ConvaiWebhookInvocationLogProvider } from '../context/ConvaiWebhookInvocationLogContext';
+import { ConvaiRuntimeInvocationLogProvider } from '../context/ConvaiRuntimeInvocationLogContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 import { CompilationErrorsProvider } from '../context/CompilationErrorsContext';
 import { ErrorReportFocusProvider } from '../context/ErrorReportFocusContext';
@@ -182,7 +182,7 @@ export default function App() {
         <ProjectTranslationsProvider>
           <AIProviderProvider>
             <AiCallLogProvider>
-            <ConvaiWebhookInvocationLogProvider>
+            <ConvaiRuntimeInvocationLogProvider>
             <DesignerLlmSetupHost>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
@@ -204,7 +204,7 @@ export default function App() {
               </SpeechRecognitionProvider>
             </DndProvider>
             </DesignerLlmSetupHost>
-            </ConvaiWebhookInvocationLogProvider>
+            </ConvaiRuntimeInvocationLogProvider>
             </AiCallLogProvider>
         </AIProviderProvider>
         </ProjectTranslationsProvider>

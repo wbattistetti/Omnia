@@ -38,5 +38,14 @@ Namespace ApiServer.Interfaces
         ''' Elimina una OrchestratorSession
         ''' </summary>
         Sub DeleteOrchestratorSession(sessionId As String)
+
+        ''' <summary>Recupera CompiledTaskSession (runner atomico).</summary>
+        Function GetCompiledTaskSession(sessionId As String) As CompiledTaskSession
+
+        ''' <summary>Salva CompiledTaskSession.</summary>
+        Sub SaveCompiledTaskSession(session As CompiledTaskSession)
+
+        ''' <summary>Elimina CompiledTaskSession.</summary>
+        Sub DeleteCompiledTaskSession(sessionId As String)
     End Interface
 End Namespace

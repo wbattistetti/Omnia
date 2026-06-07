@@ -259,6 +259,26 @@ Public Class TaskSession
 End Class
 
 ''' <summary>
+''' Sessione runtime per un singolo <see cref="CompiledTask"/> eseguito via <see cref="TaskExecutor"/>.
+''' Nessun grafo, nessun FlowOrchestrator.
+''' </summary>
+Public Class CompiledTaskSession
+    Public Property SessionId As String
+    Public Property ProjectId As String
+    Public Property Locale As String
+    ''' <summary>JSON del task compilato (polimorfico, deserializzato con CompiledTaskConverter).</summary>
+    Public Property CompiledTaskJson As String
+    Public Property TaskId As String
+    Public Property EventEmitter As EventEmitter
+    Public Property Messages As New List(Of Object)
+    Public Property IsWaitingForInput As Boolean
+    Public Property WaitingForInputData As Object
+    Public Property IsCompleted As Boolean
+    Public Property SseConnected As Boolean = False
+    Public Property InitialTurnExecuted As Boolean = False
+End Class
+
+''' <summary>
 ''' Risultato della validazione traduzioni
 ''' </summary>
 Public Class TranslationValidationResult
@@ -975,6 +995,77 @@ Public Class SessionManager
             End If
         End SyncLock
     End Sub
+
+    ''' <summary>Crea sessione per esecuzione atomica di un CompiledTask.</summary>
+    Public Shared Function CreateCompiledTaskSession(
+        sessionId As String,
+        projectId As String,
+        locale As String,
+        compiledTaskJson As String,
+        taskId As String
+    ) As CompiledTaskSession
+        If String.IsNullOrWhiteSpace(projectId) Then
+            Throw New ArgumentException("ProjectId cannot be null or empty.", NameOf(projectId))
+        End If
+        If String.IsNullOrWhiteSpace(locale) Then
+            Throw New ArgumentException("Locale cannot be null or empty.", NameOf(locale))
+        End If
+        If String.IsNullOrWhiteSpace(compiledTaskJson) Then
+            Throw New ArgumentException("CompiledTaskJson cannot be null or empty.", NameOf(compiledTaskJson))
+        End If
+        If String.IsNullOrWhiteSpace(taskId) Then
+            Throw New ArgumentException("TaskId cannot be null or empty.", NameOf(taskId))
+        End If
+
+        SyncLock _lock
+            Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
+            Dim session As New CompiledTaskSession() With {
+                .SessionId = sessionId,
+                .ProjectId = projectId.Trim(),
+                .Locale = locale.Trim(),
+                .CompiledTaskJson = compiledTaskJson,
+                .TaskId = taskId.Trim(),
+                .EventEmitter = sharedEmitter,
+                .IsWaitingForInput = False,
+                .IsCompleted = False,
+                .InitialTurnExecuted = False
+            }
+            _storage.SaveCompiledTaskSession(session)
+            Return session
+        End SyncLock
+    End Function
+
+    Public Shared Function GetCompiledTaskSession(sessionId As String) As CompiledTaskSession
+        SyncLock _lock
+            Return _storage.GetCompiledTaskSession(sessionId)
+        End SyncLock
+    End Function
+
+    Public Shared Sub SaveCompiledTaskSession(session As CompiledTaskSession)
+        SyncLock _lock
+            _storage.SaveCompiledTaskSession(session)
+        End SyncLock
+    End Sub
+
+    Public Shared Sub DeleteCompiledTaskSession(sessionId As String)
+        SyncLock _lock
+            _storage.DeleteCompiledTaskSession(sessionId)
+            If _executionStateStorage IsNot Nothing Then
+                Try
+                    _executionStateStorage.DeleteExecutionState(sessionId)
+                Catch
+                End Try
+            End If
+            If _eventEmitters.ContainsKey(sessionId) Then
+                _eventEmitters.Remove(sessionId)
+            End If
+        End SyncLock
+    End Sub
+
+    ''' <summary>Payload SSE event message (camelCase, con taskId).</summary>
+    Public Shared Function BuildSseChatMessage(msgId As String, body As String, rowTaskId As String) As Dictionary(Of String, Object)
+        Return BuildOrchestratorSseChatMessage(msgId, body, rowTaskId)
+    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Restituisce DialogRepository (per ProcessTurn)

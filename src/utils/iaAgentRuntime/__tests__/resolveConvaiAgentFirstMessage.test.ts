@@ -24,12 +24,26 @@ function makeStartUseCase(): AIAgentUseCase {
 }
 
 describe('resolveConvaiAgentFirstMessage', () => {
-  it('returns empty first_message for kb_deterministic deploy', () => {
+  it('returns empty first_message for kb_deterministic without explicit opener', () => {
+    expect(
+      resolveConvaiAgentFirstMessage({
+        agentConvaiDeployMode: 'kb_deterministic',
+      })
+    ).toBe('');
+  });
+
+  it('ignores start UC and start prompt in kb_deterministic (bootstrap via omnia_dialog_step)', () => {
     expect(
       resolveConvaiAgentFirstMessage({
         agentConvaiDeployMode: 'kb_deterministic',
         startUseCaseId: 'uc-start',
         useCases: [makeStartUseCase()],
+      })
+    ).toBe('');
+    expect(
+      resolveConvaiAgentFirstMessage({
+        agentConvaiDeployMode: 'kb_deterministic',
+        agentStartPromptJson: JSON.stringify({ schemaVersion: 1, text: 'Salve.' }),
       })
     ).toBe('');
   });

@@ -19,7 +19,13 @@ import type { ConversationStyleSelections } from '@domain/aiAgentConversationSty
 import {
   type AgentConvaiDeployMode,
   DEFAULT_AGENT_CONVAI_DEPLOY_MODE,
+  isKbDeterministicDeployMode,
 } from '@domain/convai/agentConvaiDeployMode';
+import { listKbDocumentsReadyFromStaged } from '@domain/convai/kbDialogDeployReadiness';
+import { generateKbDialogUseCasesFromDocument } from '@domain/knowledgeBase/kbDialog/generateKbDialogFromDocument';
+import { formatKbDialogGapSummary } from '@components/TaskEditor/EditorHost/editors/aiAgentEditor/useGenerateKbDialogUseCases';
+import { serializeKbDialogRuntimeIndex } from '@domain/knowledgeBase/kbDialog/kbDialogUseCaseGeneration';
+import { parseAgentKnowledgeBaseDocumentsJson } from '@domain/knowledgeBase/serializeKbDocuments';
 import {
   extractStructuredDesign,
   createAIAgentUseCaseApi,
@@ -153,6 +159,7 @@ import {
   EMPTY_OUTPUT_MAPPINGS,
   LABEL_CREATING_MULTIPLE_USE_CASES,
   LABEL_CREATING_ONE_USE_CASE,
+  LABEL_GENERATING_KB_DIALOG_USE_CASES,
 } from './constants';
 import { mergeUseCaseGlobalStyleContract } from './mergeUseCaseGlobalStyleContract';
 import { logUseCaseRootBatch } from './useCaseRootBatchDebug';
@@ -439,6 +446,9 @@ export function useAIAgentEditorController({
   /** Pass IA di categorizzazione tematica dopo riordino narrativo. */
   const [useCaseBundleGenerationCategorizing, setUseCaseBundleGenerationCategorizing] =
     React.useState(false);
+  /** Generazione deterministica UC da KB (tabella + selectorSpec). */
+  const [useCaseKbDialogGenerationBusy, setUseCaseKbDialogGenerationBusy] =
+    React.useState(false);
   /** Solo propagazione stile frasi esempio (LLM): indipendente da {@link useCaseBundleGenerationBusy}. */
   const [useCasePhraseStylePropagationBusy, setUseCasePhraseStylePropagationBusy] =
     React.useState(false);
@@ -496,6 +506,7 @@ export function useAIAgentEditorController({
   >(null);
   const [agentConvaiDeployMode, setAgentConvaiDeployModeState] =
     React.useState<AgentConvaiDeployMode>(DEFAULT_AGENT_CONVAI_DEPLOY_MODE);
+  const [agentKbDialogIndexJson, setAgentKbDialogIndexJsonState] = React.useState('');
 
   /**
    * Toggle "Logga Use Case" del deploy menu. Quando true, il compilatore di prompt:
@@ -616,6 +627,8 @@ export function useAIAgentEditorController({
   const persistTimerRef = React.useRef<ReturnType<typeof window.setTimeout> | null>(null);
   /** Why {@link persistEditorStateToRepository} ran (for persist logs). */
   const persistReasonRef = React.useRef<'debounced' | 'projectSave' | 'unmount' | 'direct'>('direct');
+  /** Guard sincrona: generazione UC KB in corso (evita doppio click e stale closure su busy state). */
+  const kbDialogGenerateInFlightRef = React.useRef(false);
   /** Latest `dirty` / persist fn for unmount cleanup (avoids stale closure). */
   const dirtyRef = React.useRef(false);
   const persistEditorStateToRepositoryRef = React.useRef<() => void>(() => {});
@@ -1698,6 +1711,7 @@ export function useAIAgentEditorController({
     setAgentConversationStyleSelectionsState(b.agentConversationStyleSelections);
     setAgentConversationDeployStyleIdState(b.agentConversationDeployStyleId);
     setAgentConvaiDeployModeState(b.agentConvaiDeployMode);
+    setAgentKbDialogIndexJsonState(b.agentKbDialogIndexJson);
     setAgentLogUseCaseState(b.agentLogUseCase);
     setAgentLogBackendCallsState(b.agentLogBackendCalls);
     setAgentBehaviorState(b.agentBehavior);
@@ -1833,6 +1847,7 @@ export function useAIAgentEditorController({
       agentConversationStyleSelections,
       agentConversationDeployStyleId,
       agentConvaiDeployMode,
+      agentKbDialogIndexJson,
       agentLogUseCase,
       agentLogBackendCalls,
       agentBehavior,
@@ -1895,6 +1910,7 @@ export function useAIAgentEditorController({
     agentInterfaceJson,
     agentKnowledgeBaseDocumentsJson,
     agentBackendOutputSlotBindingsJson,
+    agentKbDialogIndexJson,
     agentStartPromptConfig,
     agentStartUseCaseId,
     agentLogBackendCalls,
@@ -3450,6 +3466,81 @@ export function useAIAgentEditorController({
     [loadFromPersisted]
   );
 
+  const handleGenerateKbDialogUseCases = React.useCallback(async () => {
+    if (kbDialogGenerateInFlightRef.current) return;
+    if (!isKbDeterministicDeployMode(agentConvaiDeployMode)) {
+      setUseCaseComposerError('Disponibile solo in modalità kb_deterministic.');
+      return;
+    }
+    const ready = listKbDocumentsReadyFromStaged(knowledgeBaseDocuments);
+    if (ready.length === 0) {
+      setUseCaseComposerError('Approva un documento KB con selectorSpec nella tab Riformattato.');
+      return;
+    }
+
+    kbDialogGenerateInFlightRef.current = true;
+    setUseCaseKbDialogGenerationBusy(true);
+    setUseCaseComposerError(null);
+    setUseCaseCreationMessage(LABEL_GENERATING_KB_DIALOG_USE_CASES);
+    const startedAt = Date.now();
+
+    try {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+
+      const doc = ready[0]!;
+      const gen = generateKbDialogUseCasesFromDocument(doc);
+      if (!gen.ok) {
+        const kbErrorMessages: Record<string, string> = {
+          kb_not_approved: 'Documento KB non approvato per il runtime (tab Riformattato).',
+          kb_restructure_missing: 'Manca il contenuto riformattato del documento KB.',
+          kb_selector_spec_missing: 'Manca selectorSpec sul documento KB.',
+          kb_table_parse_failed: 'Impossibile leggere la tabella dal markdown riformattato.',
+        };
+        const detail = kbErrorMessages[gen.error] ?? gen.error;
+        setUseCaseComposerError(`Generazione UC KB: ${detail}`);
+        setUseCaseCreationMessage(null);
+        return;
+      }
+
+      const kbOnly = gen.result.useCases;
+      setUseCasesUser(normalizeUseCaseSiblingOrder(kbOnly, 'logical'));
+      setUseCaseCategories(gen.result.categories);
+      setAgentKbDialogIndexJsonState(serializeKbDialogRuntimeIndex(gen.result.runtimeIndex));
+      knowledgeBaseUpdateDocument(doc.id, {
+        documentSelectorSpec: gen.updatedSelectorSpec,
+      });
+      setUseCaseCreationMessage(
+        `Generati ${kbOnly.length} UC da KB. ${formatKbDialogGapSummary(gen.result.gapIssues)}`
+      );
+      setUseCaseComposerError(null);
+      setDirty(true);
+    } catch (err) {
+      console.error('[handleGenerateKbDialogUseCases]', err);
+      setUseCaseComposerError(
+        err instanceof Error ? err.message : 'Generazione UC KB non riuscita.'
+      );
+      setUseCaseCreationMessage(null);
+    } finally {
+      const minBusyMs = 350;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < minBusyMs) {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, minBusyMs - elapsed);
+        });
+      }
+      kbDialogGenerateInFlightRef.current = false;
+      setUseCaseKbDialogGenerationBusy(false);
+    }
+  }, [
+    agentConvaiDeployMode,
+    knowledgeBaseDocuments,
+    knowledgeBaseUpdateDocument,
+    setUseCasesUser,
+    setUseCaseCategories,
+  ]);
+
   return {
     instanceId,
     /** Helper esposto per altri hook locali (es. `useAIAgentConversationActions`) che hanno
@@ -3518,6 +3609,7 @@ export function useAIAgentEditorController({
     useCaseBundleGenerationCount,
     useCaseBundleGenerationOrdering,
     useCaseBundleGenerationCategorizing,
+    useCaseKbDialogGenerationBusy,
     useCaseCategories,
     setUseCaseCategories,
     useCasePhraseStylePropagationBusy,
@@ -3526,6 +3618,8 @@ export function useAIAgentEditorController({
     useCaseComposerError,
     clearUseCaseComposerError,
     handleGenerateUseCaseBundle,
+    handleGenerateKbDialogUseCases,
+    agentKbDialogIndexJson,
     handleCreateUseCase,
     handleSplitRootUseCaseDraft,
     handleRegenerateUseCase,

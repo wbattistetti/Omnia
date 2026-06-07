@@ -4,10 +4,15 @@
 
 'use strict';
 
-const { appendInvocation } = require('./convaiWebhookInvocationLogService');
+const {
+  extractConversationId,
+  recordConvaiRuntimeInvocation,
+  buildDialogStepDraft,
+} = require('./convaiRuntimeInvocationLog');
 const { stripEmptyConvaiOptionalFieldsInPlace } = require('./convaiOptionalFieldSemantics');
 const { loadKbDialogRuntime } = require('./omniaDialogStep/kbDialogRuntimeLoader');
 const { executeDialogStep, bindingKeysCanonical } = require('./omniaDialogStep/dialogStepEngine');
+const { parseKbDialogRuntimeIndex } = require('./omniaDialogStep/kbDialogIndexLoader');
 const {
   loadDialogBinding,
   saveDialogBinding,
@@ -16,16 +21,6 @@ const {
 
 function isRecord(x) {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
-}
-
-function readConversationId(body, req) {
-  const fromBody = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
-  if (fromBody) return fromBody;
-  const hdr =
-    typeof req.headers['x-conversation-id'] === 'string'
-      ? req.headers['x-conversation-id'].trim()
-      : '';
-  return hdr;
 }
 
 /**
@@ -39,6 +34,7 @@ function createOmniaDialogStepHandler(deps) {
     const started = Date.now();
     const projectId = String(req.params.projectId ?? req.body?.projectId ?? '').trim();
     const agentTaskId = String(req.params.agentTaskId ?? req.body?.agentTaskId ?? '').trim();
+    const gatewayPath = req.originalUrl || req.url || '';
 
     let bodyObj = isRecord(req.body) ? { ...req.body } : {};
     if (!isRecord(req.body) && typeof req.body === 'string' && req.body.trim()) {
@@ -50,24 +46,47 @@ function createOmniaDialogStepHandler(deps) {
     }
     stripEmptyConvaiOptionalFieldsInPlace(bodyObj);
 
-    const conversationId = readConversationId(bodyObj, req);
+    const conversationId = extractConversationId(bodyObj, req);
     const kbDocumentId =
       typeof bodyObj.kbDocumentId === 'string' ? bodyObj.kbDocumentId.trim() : '';
     const reset = bodyObj.reset === true;
     const updates = isRecord(bodyObj.updates) ? bodyObj.updates : isRecord(bodyObj.slots) ? bodyObj.slots : {};
 
-    const logContext = {
-      projectId,
-      agentTaskId,
-      conversationId,
-      gatewayPath: req.originalUrl || req.url || '',
+    const logBase = {
+      projectId: projectId || null,
+      agentTaskId: agentTaskId || null,
+      conversationId: conversationId || null,
+      gatewayPath,
+      requestBodyFromClient: bodyObj,
+      durationMs: 0,
+    };
+
+    const respond = (httpStatus, responseBody, error) => {
+      recordConvaiRuntimeInvocation(
+        buildDialogStepDraft({
+          ...logBase,
+          httpStatus,
+          responseBody,
+          durationMs: Date.now() - started,
+          error: error || null,
+        })
+      );
+      return res.status(httpStatus).json(responseBody);
     };
 
     if (!projectId || !agentTaskId) {
-      return res.status(400).json({ status: 'error', error: 'missing_project_or_agent_task' });
+      return respond(
+        400,
+        { status: 'error', error: 'missing_project_or_agent_task' },
+        'missing_project_or_agent_task'
+      );
     }
     if (!conversationId) {
-      return res.status(400).json({ status: 'error', error: 'missing_conversation_id' });
+      return respond(
+        400,
+        { status: 'error', error: 'missing_conversation_id' },
+        'missing_conversation_id'
+      );
     }
 
     let agentTask;
@@ -75,24 +94,23 @@ function createOmniaDialogStepHandler(deps) {
       agentTask = await loadProjectTask(projectId, agentTaskId);
     } catch (err) {
       console.error('[omnia-dialog-step] load task', err);
-      return res.status(500).json({ status: 'error', error: 'task_load_failed' });
+      return respond(500, { status: 'error', error: 'task_load_failed' }, 'task_load_failed');
     }
     if (!agentTask) {
-      return res.status(404).json({ status: 'error', error: 'agent_task_not_found' });
+      return respond(404, { status: 'error', error: 'agent_task_not_found' }, 'agent_task_not_found');
     }
 
     const runtime = loadKbDialogRuntime(agentTask, kbDocumentId || undefined);
     if (runtime.error) {
-      appendInvocation({
-        ...logContext,
-        durationMs: Date.now() - started,
-        error: runtime.error,
-      });
-      return res.status(422).json({
-        status: 'error',
-        error: runtime.error,
-        say: 'Configurazione knowledge base non pronta per il dialogo strutturato.',
-      });
+      return respond(
+        422,
+        {
+          status: 'error',
+          error: runtime.error,
+          say: 'Configurazione knowledge base non pronta per il dialogo strutturato.',
+        },
+        runtime.error
+      );
     }
 
     const scope = {
@@ -107,11 +125,28 @@ function createOmniaDialogStepHandler(deps) {
     }
 
     let binding = await loadDialogBinding(scope);
+    const dialogIndex =
+      parseKbDialogRuntimeIndex(agentTask.agentKbDialogIndexJson) ||
+      (runtime.completeTemplate || Object.keys(runtime.valueLabels || {}).length
+        ? {
+            schemaVersion: 1,
+            completeTemplate: runtime.completeTemplate || '',
+            valueLabels: runtime.valueLabels || {},
+            acquisition: {},
+            correction: [],
+            complete: {
+              useCaseId: 'uc_complete',
+              sayTemplate: runtime.completeTemplate || '',
+            },
+          }
+        : null);
+
     const result = executeDialogStep({
       grid: runtime.grid,
       selectorSpec: runtime.selectorSpec,
       binding,
       updates,
+      dialogIndex,
     });
 
     const canonicalBinding = bindingKeysCanonical(result.binding ?? binding, runtime.grid.headers);
@@ -124,6 +159,9 @@ function createOmniaDialogStepHandler(deps) {
       kbDocumentId: runtime.documentId,
       kbDocumentName: runtime.documentName,
       remainingRowCount: result.remainingRowCount ?? 0,
+      ...(result.useCaseId ? { useCaseId: result.useCaseId } : {}),
+      ...(result.useCaseKind ? { useCaseKind: result.useCaseKind } : {}),
+      ...(result.sayCore ? { sayCore: result.sayCore } : {}),
       ...(result.nextColumnId ? { nextColumnId: result.nextColumnId } : {}),
       ...(result.nextHeaderLabel ? { nextHeaderLabel: result.nextHeaderLabel } : {}),
       ...(result.allowedValues ? { allowedValues: result.allowedValues } : {}),
@@ -132,20 +170,15 @@ function createOmniaDialogStepHandler(deps) {
       ...(result.rejected ? { rejected: result.rejected } : {}),
     };
 
-    appendInvocation({
-      ...logContext,
-      kbDocumentId: runtime.documentId,
-      requestBodyFromClient: bodyObj,
-      upstreamStatus: 200,
-      upstreamResponsePreview: JSON.stringify(response).slice(0, 4000),
-      durationMs: Date.now() - started,
-      error: result.status === 'error' ? 'dialog_step_error' : null,
-    });
-
-    return res.status(200).json(response);
+    return respond(
+      200,
+      response,
+      result.status === 'error' ? 'dialog_step_error' : null
+    );
   };
 }
 
 module.exports = {
   createOmniaDialogStepHandler,
 };
+

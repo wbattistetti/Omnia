@@ -12,15 +12,33 @@ import { effectiveBySectionFromPersistedStructured } from '@components/TaskEdito
 import { buildKbDialogSlotMapPromptSection } from '@domain/convai/kbDialogSlotMapPrompt';
 
 export const OMNIA_DIALOG_STEP_PROMPT_APPEND = `OMNIA_DIALOG_STEP (webhook POST …/omnia-dialog-step/{projectId}/{agentTaskId}):
-- **All'avvio e ogni turno** di raccolta dati: chiama \`omnia_dialog_step\` **prima** di parlare. Primo passo: \`updates: {}\`.
-- **Pronuncia solo** il campo \`say\` della risposta Omnia. Non inventare domande, opzioni o scuse.
-- **conversationId**: obbligatorio — usa **omnia_conversation_id** (variabile runtime).
-- **updates**: slot→valore dal messaggio utente (chiavi nella sezione Slot NLU). Vuoto solo al primo passo.
+
+## Regola assoluta
+Ogni domanda sui dati prestazione (slot tabella KB) **deve** passare dal tool. **Non** pronunciare domande slot senza aver ricevuto \`say\` dal tool nello stesso turno. **Non** inventare domande, opzioni o scuse.
+
+## Turno 0 (bootstrap)
+- L'host Omnia può aver già chiamato il tool con \`updates: {}\` e pronunciato la prima domanda. **Non** ripetere bootstrap con \`updates: {}\` se l'utente ha già sentito una domanda slot.
+- Se la conversazione è appena iniziata e non c'è ancora una domanda slot attiva: POST con \`updates: {}\` e \`conversationId\` valorizzato, poi leggi **solo** \`say\`.
+
+## Dopo OGNI utterance dell'utente (obbligatorio)
+1. Estrai slot e valori dall'ultimo messaggio utente (chiavi nella sezione Slot NLU).
+2. POST \`omnia_dialog_step\` con \`updates: { "<slotId>": "<valore normalizzato>", ... }\` — **sempre** se l'utente ha risposto; **vietato** lasciare \`updates\` vuoto dopo una risposta utente.
+3. Leggi **solo** \`say\` e pronuncialo. **Non** ripetere domande già superate; **non** avanzare senza tool.
+
+## Parametri
+- **conversationId**: obbligatorio — valore runtime \`omnia_conversation_id\` (o binding sessione corrente).
+- **updates**: slot→valore; \`{}\` solo al bootstrap iniziale o dopo \`reset: true\`.
 - **reset**: solo se l'utente chiede esplicitamente di ricominciare.
-- Se \`status\` è \`ask\` o \`invalid\`, leggi \`say\` e attendi la risposta; non proseguire con domande non presenti in \`say\`.
-- Se \`status\` è \`complete\`, conferma con \`say\` e \`matchedRow\` (senza id tecnici); poi eventuali tool backend post-prenotazione.
-- **Se il tool fallisce**: riprova **una volta** con gli stessi parametri; se fallisce ancora, chiedi scusa brevemente e invita a riprovare — **non** simulare il flusso domande e **non** dire «problema tecnico» continuando a interrogare.
-- Saluto/eccezioni fuori tabella: breve e naturale; per i dati prestazione usa sempre il tool.`;
+
+## Stati risposta
+- \`status\` = \`ask\` o \`invalid\`: leggi \`say\`, attendi risposta; non aggiungere domande non presenti in \`say\`.
+- \`status\` = \`complete\`: conferma con \`say\` e \`matchedRow\` (senza id tecnici); poi eventuali tool backend post-prenotazione.
+
+## Errori tool
+- Riprova **una volta** con gli stessi parametri; se fallisce di nuovo, scusa brevemente — **non** simulare il flusso e **non** continuare a chiedere slot.
+
+## Saluti fuori tabella
+- Breve e naturale; per i dati prestazione usa **sempre** il tool.`;
 
 type TaskLike = Pick<
   Task,

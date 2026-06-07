@@ -209,6 +209,8 @@ Public Class SimpleTaskCompiler
                     agentTask.LlmEndpoint = If(agentDef.LlmEndpoint, "")
                     agentTask.ImmediateStart = agentDef.ImmediateStart
                     agentTask.ConvaiSessionConversationId = If(agentDef.ConvaiSessionConversationId, "")
+                    agentTask.FirstMessage = If(agentDef.FirstMessage, "")
+                    agentTask.KbDeterministic = agentDef.KbDeterministic
                 Else
                     If task.Value IsNot Nothing Then
                         agentTask.Platform = IAPlatform.OpenAI
@@ -240,8 +242,29 @@ Public Class SimpleTaskCompiler
                         If task.Value.ContainsKey("convaiSessionConversationId") Then
                             agentTask.ConvaiSessionConversationId = If(task.Value("convaiSessionConversationId")?.ToString(), "")
                         End If
+                        If task.Value.ContainsKey("firstMessage") Then
+                            agentTask.FirstMessage = If(task.Value("firstMessage")?.ToString(), "")
+                        End If
+                        If task.Value.ContainsKey("kbDeterministic") Then
+                            Dim kbDet = task.Value("kbDeterministic")
+                            If TypeOf kbDet Is Boolean Then
+                                agentTask.KbDeterministic = DirectCast(kbDet, Boolean)
+                            ElseIf kbDet IsNot Nothing Then
+                                Dim s = kbDet.ToString().Trim().ToLowerInvariant()
+                                agentTask.KbDeterministic = (s = "true")
+                            End If
+                        End If
                     End If
                 End If
+                Dim platWire = "openai"
+                Select Case agentTask.Platform
+                    Case IAPlatform.ElevenLabs
+                        platWire = "elevenlabs"
+                    Case IAPlatform.Google
+                        platWire = "google"
+                End Select
+                Console.WriteLine(
+                    $"[IA·ConvAI] VB compile AIAgent: taskId={taskId} platform={platWire} agentIdChars={If(agentTask.AgentId, """").Trim().Length} llmEndpointSet={Not String.IsNullOrWhiteSpace(agentTask.LlmEndpoint)}")
                 compiledTask = agentTask
 
             Case Else

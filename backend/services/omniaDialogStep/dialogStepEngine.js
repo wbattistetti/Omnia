@@ -1,5 +1,5 @@
 /**
- * Motore runtime dialogo KB: filtra tabella, prossima domanda, invalidazione, completamento.
+ * Motore runtime dialogo KB: filtra tabella, UC acquisition/correction/complete.
  */
 
 'use strict';
@@ -13,6 +13,13 @@ const {
   listAskableColumns,
   fillInvalidationTemplate,
 } = require('./kbDialogBindings');
+const {
+  resolveCompleteSay,
+  resolveAcquisitionSay,
+  findCorrectionIncompatibilities,
+  resolveCorrectionMessages,
+  isCorrectionUpdate,
+} = require('./kbDialogSayResolver');
 
 function normalizeUpdates(updates, headers) {
   const out = {};
@@ -29,7 +36,7 @@ function normalizeUpdates(updates, headers) {
 
 function bindingKeysCanonical(binding, headers) {
   const out = {};
-  for (const [key, val] of Object.entries(binding)) {
+  for (const [key, val] of Object.entries(binding || {})) {
     const idx = headerIndex(headers, key);
     if (idx < 0) continue;
     const v = normalizeCellValue(val);
@@ -62,20 +69,6 @@ function applyAutoFills(binding, headers, rows, selectorSpec) {
   return next;
 }
 
-function buildAskSay(col, allowedValues) {
-  const label = String(col.promptTemplate ?? col.headerLabel ?? '').trim();
-  const policy =
-    col.askPolicy === 'required' ? ' (obbligatoria)' : ' (se necessario)';
-  const base = label.includes('(') ? label : `${label}${policy}`;
-  if (col.promptType === 'open_question' || allowedValues.length === 0) {
-    return `${base}?`;
-  }
-  if (allowedValues.length <= 6) {
-    return `${base}: ${allowedValues.join(', ')}?`;
-  }
-  return `${base}?`;
-}
-
 function pickInvalidationTemplate(selectorSpec) {
   const templates = selectorSpec?.invalidationTemplates ?? [];
   const approved = templates.find((t) => t.approved && t.template?.trim());
@@ -94,14 +87,19 @@ function rowToObject(row, headers) {
   return out;
 }
 
+function baseResult(fields) {
+  return fields;
+}
+
 /**
  * @param {object} params
  * @param {{ headers: string[], rows: string[][] }} params.grid
  * @param {object} params.selectorSpec
  * @param {Record<string, string>} params.binding
  * @param {Record<string, string>} [params.updates]
+ * @param {object|null} [params.dialogIndex]
  */
-function executeDialogStep({ grid, selectorSpec, binding, updates }) {
+function executeDialogStep({ grid, selectorSpec, binding, updates, dialogIndex }) {
   const headers = grid.headers;
   const rows = grid.rows;
   const askable = listAskableColumns(selectorSpec);
@@ -119,6 +117,41 @@ function executeDialogStep({ grid, selectorSpec, binding, updates }) {
 
   let filtered = filterRowsByBinding(rows, headers, merged);
 
+  const correctionTrigger = isCorrectionUpdate(priorBinding, normalizedUpdates);
+  if (correctionTrigger && dialogIndex) {
+    const selectorColumns = listSelectorColumns(selectorSpec);
+    const incompatibles = findCorrectionIncompatibilities(
+      priorBinding,
+      merged,
+      headers,
+      rows,
+      selectorColumns,
+      correctionTrigger
+    );
+    if (incompatibles.length > 0) {
+      const { messages, binding: clearedBinding } = resolveCorrectionMessages(
+        dialogIndex,
+        correctionTrigger,
+        incompatibles,
+        merged,
+        filtered,
+        headers,
+        rows,
+        dialogIndex.valueLabels ?? {}
+      );
+      merged = applyAutoFills(clearedBinding, headers, rows, selectorSpec);
+      filtered = filterRowsByBinding(rows, headers, merged);
+      return baseResult({
+        status: 'correction',
+        say: messages.filter(Boolean).join(' '),
+        binding: merged,
+        useCaseKind: 'correction',
+        remainingRowCount: filtered.length,
+        corrections: incompatibles,
+      });
+    }
+  }
+
   if (filtered.length === 0 && rowsBefore.length > 0 && updateKeys.length > 0) {
     const rejectedColId = updateKeys[updateKeys.length - 1];
     const rejectedVal = merged[rejectedColId];
@@ -128,7 +161,10 @@ function executeDialogStep({ grid, selectorSpec, binding, updates }) {
     const col = askable.find((c) => slugifyColumnId(c.headerLabel) === rejectedColId);
     const colIdx = headerIndex(headers, rejectedColId);
     const alternatives = colIdx >= 0 ? distinctColumnValues(partialRows, colIdx) : [];
-    const alt = alternatives.find((a) => a.toLowerCase() !== String(rejectedVal).toLowerCase()) ?? alternatives[0] ?? '';
+    const alt =
+      alternatives.find((a) => a.toLowerCase() !== String(rejectedVal).toLowerCase()) ??
+      alternatives[0] ??
+      '';
 
     const tpl = pickInvalidationTemplate(selectorSpec);
     const colLabel = col?.promptTemplate ?? rejectedColId;
@@ -144,14 +180,14 @@ function executeDialogStep({ grid, selectorSpec, binding, updates }) {
         })
       : `La combinazione scelta non è disponibile. ${alt ? `Può andare bene ${alt}.` : ''}`;
 
-    return {
+    return baseResult({
       status: 'invalid',
       say: say.trim(),
       binding: partial,
       rejected: { columnId: rejectedColId, value: rejectedVal, alternative: alt },
       remainingRowCount: partialRows.length,
       allowedValues: alternatives,
-    };
+    });
   }
 
   merged = applyAutoFills(merged, headers, rows, selectorSpec);
@@ -164,40 +200,61 @@ function executeDialogStep({ grid, selectorSpec, binding, updates }) {
 
   if (pending.length === 0 || filtered.length <= 1) {
     const matched = filtered[0] ?? null;
+    if (matched && dialogIndex) {
+      const resolved = resolveCompleteSay(dialogIndex, merged, headers, matched);
+      return baseResult({
+        status: filtered.length > 0 ? 'complete' : 'error',
+        say: resolved.say,
+        sayCore: resolved.sayCore,
+        useCaseId: resolved.useCaseId,
+        useCaseKind: resolved.useCaseKind,
+        binding: merged,
+        remainingRowCount: filtered.length,
+        matchedRow: rowToObject(matched, headers),
+        matchedRows: filtered.map((r) => rowToObject(r, headers)),
+      });
+    }
     const say = matched
       ? 'Perfetto, ho trovato la combinazione disponibile.'
       : 'Non ho trovato combinazioni disponibili con le scelte fatte.';
-    return {
+    return baseResult({
       status: filtered.length > 0 ? 'complete' : 'error',
       say,
       binding: merged,
       remainingRowCount: filtered.length,
       matchedRow: matched ? rowToObject(matched, headers) : null,
       matchedRows: filtered.map((r) => rowToObject(r, headers)),
-    };
+    });
   }
 
   const nextCol = pending[0];
   const colIdx = headerIndex(headers, nextCol.headerLabel);
   const allowedValues = colIdx >= 0 ? distinctColumnValues(filtered, colIdx) : [];
+  const nextColId = slugifyColumnId(nextCol.headerLabel);
 
   if (allowedValues.length === 1) {
-    const colId = slugifyColumnId(nextCol.headerLabel);
-    merged[colId] = allowedValues[0];
-    return executeDialogStep({ grid, selectorSpec, binding: merged, updates: {} });
+    merged[nextColId] = allowedValues[0];
+    return executeDialogStep({ grid, selectorSpec, binding: merged, updates: {}, dialogIndex });
   }
 
-  return {
+  const acquired = dialogIndex
+    ? resolveAcquisitionSay(dialogIndex, nextColId, merged, nextCol, allowedValues)
+    : null;
+  const say = acquired?.say ?? `${nextCol.promptTemplate ?? nextCol.headerLabel}?`;
+
+  return baseResult({
     status: 'ask',
-    say: buildAskSay(nextCol, allowedValues),
+    say,
+    useCaseId: acquired?.useCaseId ?? null,
+    useCaseKind: acquired?.useCaseKind ?? 'acquisition',
     binding: merged,
-    nextColumnId: slugifyColumnId(nextCol.headerLabel),
+    nextColumnId: nextColId,
     nextHeaderLabel: nextCol.headerLabel,
     promptType: nextCol.promptType,
     askPolicy: nextCol.askPolicy,
     allowedValues,
     remainingRowCount: filtered.length,
-  };
+  });
 }
 
 module.exports = {

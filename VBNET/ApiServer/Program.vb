@@ -327,6 +327,40 @@ Module Program
                                                             Return ApiServer.Handlers.TaskSessionHandlers.HandleTaskSessionDelete(context, id)
                                                         End Function)
 
+        ' POST /api/runtime/compiled-task/session/start — esecuzione atomica TaskExecutor (no flow)
+        app.MapPost("/api/runtime/compiled-task/session/start", Async Function(context As HttpContext) As Task(Of IResult)
+                                                                    Dim result = Await ApiServer.Handlers.CompiledTaskSessionHandlers.HandleCompiledTaskSessionStart(context)
+                                                                    If result IsNot Nothing Then
+                                                                        Await result.ExecuteAsync(context)
+                                                                    End If
+                                                                    Return Results.Empty
+                                                                End Function)
+
+        app.MapGet("/api/runtime/compiled-task/session/{id}/stream", Function(context As HttpContext, id As String) As Task
+                                                                         Return ApiServer.Handlers.CompiledTaskSessionHandlers.HandleCompiledTaskSessionStream(context, id)
+                                                                     End Function)
+
+        app.MapPost("/api/runtime/compiled-task/session/{id}/input", Async Function(context As HttpContext, id As String) As Task(Of IResult)
+                                                                         Dim result = Await ApiServer.Handlers.CompiledTaskSessionHandlers.HandleCompiledTaskSessionInput(context, id)
+                                                                         If result IsNot Nothing Then
+                                                                             Await result.ExecuteAsync(context)
+                                                                         End If
+                                                                         Return Results.Empty
+                                                                     End Function)
+
+        app.MapDelete("/api/runtime/compiled-task/session/{id}", Async Function(context As HttpContext, id As String) As Task(Of IResult)
+                                                                     Dim result = Await ApiServer.Handlers.CompiledTaskSessionHandlers.HandleCompiledTaskSessionDelete(context, id)
+                                                                     If result IsNot Nothing Then
+                                                                         Await result.ExecuteAsync(context)
+                                                                     End If
+                                                                     Return Results.Empty
+                                                                 End Function)
+
+        ' POST /api/runtime/omnia-dialog-step/{projectId}/{agentTaskId} — dialogo KB deterministico (motore VB)
+        app.MapPost("/api/runtime/omnia-dialog-step/{projectId}/{agentTaskId}", Async Function(context As HttpContext, projectId As String, agentTaskId As String) As Task
+                                                                                    Await ApiServer.Handlers.OmniaDialogStepHandlers.HandleOmniaDialogStep(context, projectId, agentTaskId)
+                                                                                End Function)
+
         ' POST /api/runtime/orchestrator/session/start
         app.MapPost("/api/runtime/orchestrator/session/start", Async Function(context As HttpContext) As Task(Of IResult)
                                                                    Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")

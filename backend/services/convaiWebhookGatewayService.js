@@ -6,7 +6,11 @@
 'use strict';
 
 const { applySendHintsToBody } = require('./sendHintRuntime/applySendPathToBody');
-const { appendInvocation } = require('./convaiWebhookInvocationLogService');
+const {
+  extractConversationId,
+  recordConvaiRuntimeInvocation,
+  buildGatewayDraft,
+} = require('./convaiRuntimeInvocationLog');
 const { stripEmptyConvaiOptionalFieldsInPlace } = require('./convaiOptionalFieldSemantics');
 
 function isRecord(x) {
@@ -74,53 +78,7 @@ function createConvaiWebhookGatewayHandler(deps) {
     const projectId = String(req.params.projectId ?? '').trim();
     const agentTaskId = String(req.params.agentTaskId ?? '').trim();
     const backendTaskId = String(req.params.backendTaskId ?? '').trim();
-
-    if (!projectId || !agentTaskId || !backendTaskId) {
-      return res.status(400).json({ error: 'missing_path_params' });
-    }
-
-    /** @type {Record<string, unknown>} */
-    let logContext = {
-      projectId,
-      agentTaskId,
-      backendTaskId,
-      gatewayPath: req.originalUrl || req.url || '',
-      forwardMethod: 'POST',
-    };
-
-    let agentTask;
-    let backendTask;
-    try {
-      agentTask = await loadProjectTask(projectId, agentTaskId);
-      backendTask = await loadProjectTask(projectId, backendTaskId);
-    } catch (err) {
-      console.error('[convai-webhook-gateway] load task', err);
-      return res.status(500).json({ error: 'task_load_failed' });
-    }
-
-    if (!backendTask) {
-      return res.status(404).json({ error: 'backend_task_not_found', backendTaskId });
-    }
-
-    const { url: targetUrl, method: targetMethod, headers: targetHeaders } = readBackendEndpoint(backendTask);
-    if (!targetUrl) {
-      appendInvocation({
-        ...logContext,
-        backendLabel: String(backendTask.label ?? '').trim() || null,
-        upstreamUrl: null,
-        durationMs: Date.now() - started,
-        error: 'backend_missing_endpoint_url',
-      });
-      return res.status(502).json({ error: 'backend_missing_endpoint_url' });
-    }
-
-    logContext = {
-      ...logContext,
-      backendLabel: String(backendTask.label ?? '').trim() || null,
-      upstreamUrl: targetUrl,
-    };
-
-    const hints = agentTask ? parseSendHintsJson(agentTask.agentBackendOutputSlotBindingsJson) : [];
+    const gatewayPath = req.originalUrl || req.url || '';
 
     let bodyObj = isRecord(req.body) ? { ...req.body } : {};
     if (!isRecord(req.body) && typeof req.body === 'string' && req.body.trim()) {
@@ -130,10 +88,85 @@ function createConvaiWebhookGatewayHandler(deps) {
         bodyObj = {};
       }
     }
+    const conversationId = extractConversationId(bodyObj, req);
 
-    const requestBodyFromClient = { ...bodyObj };
-    /** ConvAI/ElevenLabs: "" su opzionali = omit (regola standard backend webhook). */
+    const logRespond = (params) => {
+      recordConvaiRuntimeInvocation(
+        buildGatewayDraft({
+          projectId: projectId || null,
+          agentTaskId: agentTaskId || null,
+          backendTaskId: backendTaskId || null,
+          conversationId: conversationId || null,
+          gatewayPath,
+          durationMs: Date.now() - started,
+          ...params,
+        })
+      );
+    };
+
+    if (!projectId || !agentTaskId || !backendTaskId) {
+      const body = { error: 'missing_path_params' };
+      logRespond({
+        backendLabel: 'convai_webhook_gateway',
+        httpStatus: 400,
+        requestBodyFromClient: bodyObj,
+        upstreamResponsePreview: body,
+        error: 'missing_path_params',
+      });
+      return res.status(400).json(body);
+    }
+
+    let agentTask;
+    let backendTask;
+    try {
+      agentTask = await loadProjectTask(projectId, agentTaskId);
+      backendTask = await loadProjectTask(projectId, backendTaskId);
+    } catch (err) {
+      console.error('[convai-webhook-gateway] load task', err);
+      const body = { error: 'task_load_failed' };
+      logRespond({
+        backendLabel: 'convai_webhook_gateway',
+        httpStatus: 500,
+        requestBodyFromClient: bodyObj,
+        upstreamResponsePreview: body,
+        error: 'task_load_failed',
+      });
+      return res.status(500).json(body);
+    }
+
+    if (!backendTask) {
+      const body = { error: 'backend_task_not_found', backendTaskId };
+      logRespond({
+        backendLabel: 'convai_webhook_gateway',
+        httpStatus: 404,
+        requestBodyFromClient: bodyObj,
+        upstreamResponsePreview: body,
+        error: 'backend_task_not_found',
+      });
+      return res.status(404).json(body);
+    }
+
+    const backendLabel = String(backendTask.label ?? '').trim() || backendTaskId;
+    const { url: targetUrl, method: targetMethod, headers: targetHeaders } = readBackendEndpoint(backendTask);
+
+    if (!targetUrl) {
+      const body = { error: 'backend_missing_endpoint_url' };
+      logRespond({
+        backendLabel,
+        upstreamUrl: null,
+        forwardMethod: 'POST',
+        httpStatus: 502,
+        requestBodyFromClient: bodyObj,
+        upstreamResponsePreview: body,
+        error: 'backend_missing_endpoint_url',
+      });
+      return res.status(502).json(body);
+    }
+
+    const hints = agentTask ? parseSendHintsJson(agentTask.agentBackendOutputSlotBindingsJson) : [];
+
     stripEmptyConvaiOptionalFieldsInPlace(bodyObj);
+    const requestBodyFromClient = { ...bodyObj };
 
     const applied = applySendHintsToBody(bodyObj, hints, { referenceDate: new Date() });
     if (applied > 0) {
@@ -146,7 +179,6 @@ function createConvaiWebhookGatewayHandler(deps) {
     }
 
     const forwardMethod = targetMethod || 'POST';
-    logContext.forwardMethod = forwardMethod;
     const forwardHeaders = new Headers();
     for (const [k, v] of Object.entries(targetHeaders)) {
       if (!isHopByHopHeader(k)) forwardHeaders.set(k, v);
@@ -169,13 +201,15 @@ function createConvaiWebhookGatewayHandler(deps) {
     try {
       const upstream = await fetch(targetUrl, fetchInit);
       const text = await upstream.text();
-      appendInvocation({
-        ...logContext,
+      logRespond({
+        backendLabel,
+        upstreamUrl: targetUrl,
+        forwardMethod,
+        httpStatus: upstream.status,
         requestBodyFromClient,
         requestBodyAfterSendHints: bodyObj,
-        upstreamStatus: upstream.status,
         upstreamResponsePreview: text,
-        durationMs: Date.now() - started,
+        upstreamHttpStatus: upstream.status,
         sendHintsApplied: applied,
         error: upstream.status >= 400 ? `upstream_http_${upstream.status}` : null,
       });
@@ -186,18 +220,19 @@ function createConvaiWebhookGatewayHandler(deps) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[convai-webhook-gateway] forward', { targetUrl, err });
-      appendInvocation({
-        ...logContext,
+      const body = { error: 'upstream_forward_failed', message };
+      logRespond({
+        backendLabel,
+        upstreamUrl: targetUrl,
+        forwardMethod,
+        httpStatus: 502,
         requestBodyFromClient,
         requestBodyAfterSendHints: bodyObj,
-        durationMs: Date.now() - started,
+        upstreamResponsePreview: body,
         sendHintsApplied: applied,
         error: message,
       });
-      return res.status(502).json({
-        error: 'upstream_forward_failed',
-        message,
-      });
+      return res.status(502).json(body);
     }
   };
 }

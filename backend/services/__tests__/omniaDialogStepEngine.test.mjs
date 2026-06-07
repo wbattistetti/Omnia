@@ -148,15 +148,83 @@ describe('executeDialogStep', () => {
     assert.equal(r.rejected.value, 'RX');
   });
 
-  it('completes when all selectors resolved to single row', () => {
+  it('completes with interpolated say when dialogIndex is provided', () => {
+    const dialogIndex = {
+      schemaVersion: 1,
+      completeTemplate: 'Perfetto, prenoto {tipo_visita_nat} {specialita_nat}{esame_suffix}.',
+      valueLabels: {
+        specialita: { cardiologia: 'cardiologica' },
+        tipo_visita: { controllo: 'visita di controllo' },
+        esame_associato: { ecg: 'ECG' },
+      },
+      acquisition: {},
+      correction: [],
+      complete: { useCaseId: 'uc_complete', sayTemplate: 'Perfetto, prenoto {tipo_visita_nat} {specialita_nat}{esame_suffix}.' },
+    };
     const r = executeDialogStep({
       grid,
       selectorSpec,
       binding: { specialita: 'Cardiologia' },
       updates: { tipo_visita: 'Controllo' },
+      dialogIndex,
     });
     assert.equal(r.status, 'complete');
-    assert.equal(r.matchedRow.codice, 'A2');
+    assert.equal(r.useCaseKind, 'complete');
+    assert.ok(r.say.toLowerCase().includes('cardiolog'));
+    assert.ok(!r.say.includes('Perfetto, ho trovato'));
+  });
+
+  it('uses acquisition say from dialog index when provided', () => {
+    const dialogIndex = {
+      schemaVersion: 1,
+      valueLabels: {},
+      acquisition: {
+        specialita: {
+          useCaseId: 'uc_ask_specialita',
+          rows: [{ bindingWhen: {}, say: 'Quale specialità desidera?' }],
+        },
+      },
+      correction: [],
+      complete: { useCaseId: 'uc_complete', sayTemplate: 'Ok.' },
+    };
+    const r = executeDialogStep({ grid, selectorSpec, binding: {}, updates: {}, dialogIndex });
+    assert.equal(r.status, 'ask');
+    assert.equal(r.say, 'Quale specialità desidera?');
+    assert.equal(r.useCaseId, 'uc_ask_specialita');
+    assert.equal(r.useCaseKind, 'acquisition');
+  });
+
+  it('returns correction when slot change invalidates downstream value', () => {
+    const ambigMd = `| codice | specialita | tipo_visita | esame_associato |
+| --- | --- | --- | --- |
+| A1 | Cardiologia | Prima visita | ECG |
+| A2 | Cardiologia | Controllo | Holter |
+`;
+    const ambigGrid = parseKbPipeTable(ambigMd);
+    const dialogIndex = {
+      schemaVersion: 1,
+      valueLabels: { esame_associato: { ecg: 'ECG', holter: 'Holter' } },
+      acquisition: {},
+      correction: [
+        {
+          useCaseId: 'uc_corr_tipo_esame',
+          triggerColumnId: 'tipo_visita',
+          incompatibleColumnId: 'esame_associato',
+          sayTemplate: 'Cambiando visita, {esame_associato_nat} non è più valido. {alternativa_messaggio}',
+        },
+      ],
+      complete: { useCaseId: 'uc_complete', sayTemplate: 'Ok.' },
+    };
+    const r = executeDialogStep({
+      grid: ambigGrid,
+      selectorSpec,
+      binding: { specialita: 'Cardiologia', tipo_visita: 'Prima visita', esame_associato: 'ECG' },
+      updates: { tipo_visita: 'Controllo' },
+      dialogIndex,
+    });
+    assert.equal(r.status, 'correction');
+    assert.equal(r.useCaseKind, 'correction');
+    assert.ok(r.say.toLowerCase().includes('non'));
   });
 });
 

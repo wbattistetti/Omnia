@@ -16,6 +16,8 @@ import { interpolateVariableBracketsInText } from './interpolateVariableBrackets
 import type { FlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
 import { parseFlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
 import type { FlowConvaiWebhookDiagnostic } from '@features/debugger/types/flowConvaiWebhookDiagnostic';
+import type { ConvaiRuntimeInvocationRecord } from '@domain/convaiObservability/convaiRuntimeInvocationRecord';
+import { fetchInvocationsForTurn } from '@domain/convaiObservability/fetchInvocationsForTurn';
 import { collectConvaiWebhookDiagnosticsFromMergedTasks } from '@utils/iaAgentRuntime/convaiWebhookToolDiagnostics';
 import { formatBackendInvocationsDebugBlock } from '@domain/useCaseGeneratorWizard/backendCallDebugPrompt';
 
@@ -36,7 +38,8 @@ interface UseDialogueEngineOptions {
     /** Navigazione Fix (simulatore chat) — stesso flusso del debugger Run. */
     compilationFixError?: CompilationError;
     backendInvocations?: FlowBackendCallInvocation[];
-    convaiWebhookInvocations?: FlowConvaiWebhookDiagnostic[];
+    convaiToolConfigDiagnostics?: FlowConvaiWebhookDiagnostic[];
+    convaiRuntimeInvocations?: ConvaiRuntimeInvocationRecord[];
   }) => void;
   onDDTStart?: (data: { ddt: any; taskId: string }) => void;
   onWaitingForInput?: (data: { taskId: string; nodeId?: string; taskLabel?: string; nodeLabel?: string }) => void;
@@ -53,6 +56,8 @@ interface UseDialogueEngineOptions {
   projectId?: string;
   /** Mostra righe DEBUG backend in messaggi conversazione (debugger / flow chat). */
   agentLogBackendCalls?: boolean;
+  /** Test editor: riusa agente ConvAI già deployato (no createAgent / modal payload). */
+  reuseDeployedConvaiAgent?: boolean;
 }
 
 /**
@@ -98,6 +103,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
   const pendingBackendInvocationsRef = useRef<FlowBackendCallInvocation[]>([]);
   const pendingConvaiWebhookDiagnosticsRef = useRef<FlowConvaiWebhookDiagnostic[]>([]);
   const convaiWebhookEmittedRef = useRef(false);
+  const convaiSessionConversationIdRef = useRef<string | undefined>(undefined);
+  const convaiRuntimeFetchSinceRef = useRef<string | undefined>(undefined);
 
   // ✅ REFS: Stable state that survives remounts
   const engineRef = useRef<{
@@ -244,6 +251,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             nodes: (currentOptions.nodes || []) as unknown[],
             edges: (currentOptions.edges || []) as unknown[],
           },
+          reuseDeployedConvaiAgent: currentOptions.reuseDeployedConvaiAgent === true,
         });
         if (provisionResult.provisioned.length > 0) {
           console.info('[IA·ConvAI] ConvAI provision summary', provisionResult);
@@ -252,6 +260,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           console.warn('[IA·ConvAI] provision: some tasks failed', provisionResult);
         }
         convaiSessionConversationId = provisionResult.sessionConversationId;
+        convaiSessionConversationIdRef.current = convaiSessionConversationId;
+        convaiRuntimeFetchSinceRef.current = new Date().toISOString();
       }
 
       const workspaceResult = await compileWorkspaceForOrchestratorSession({
@@ -441,11 +451,49 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           console.warn('[useDialogueEngine] ConvAI webhook diagnostics skipped', convaiDiagErr);
         }
 
-        const takeConvaiWebhookBatch = (): FlowConvaiWebhookDiagnostic[] => {
+        const takeConvaiToolConfigDiagnosticsBatch = (): FlowConvaiWebhookDiagnostic[] => {
           if (convaiWebhookEmittedRef.current) return [];
           if (pendingConvaiWebhookDiagnosticsRef.current.length === 0) return [];
           convaiWebhookEmittedRef.current = true;
           return pendingConvaiWebhookDiagnosticsRef.current.splice(0);
+        };
+
+        const fetchRuntimeInvocationsForTurn = async (): Promise<
+          ConvaiRuntimeInvocationRecord[] | undefined
+        > => {
+          const conversationId = String(convaiSessionConversationIdRef.current ?? '').trim();
+          if (!conversationId) return undefined;
+          const since = convaiRuntimeFetchSinceRef.current;
+          const projectIdForLog =
+            typeof currentOptions.projectId === 'string' && currentOptions.projectId.trim()
+              ? currentOptions.projectId.trim()
+              : typeof projectData?.id === 'string' && projectData.id.trim()
+                ? projectData.id.trim()
+                : undefined;
+          try {
+            const items = await fetchInvocationsForTurn({
+              conversationId,
+              since,
+              projectId: projectIdForLog,
+            });
+            convaiRuntimeFetchSinceRef.current = new Date().toISOString();
+            return items.length > 0 ? items : undefined;
+          } catch (runtimeLogErr) {
+            console.warn('[useDialogueEngine] ConvAI runtime log fetch skipped', runtimeLogErr);
+            return undefined;
+          }
+        };
+
+        const emitOrchestratorMessage = async (
+          payload: Parameters<NonNullable<UseDialogueEngineOptions['onMessage']>>[0]
+        ) => {
+          const opts = optionsRef.current;
+          if (!opts.onMessage) return;
+          const runtimeBatch = await fetchRuntimeInvocationsForTurn();
+          opts.onMessage({
+            ...payload,
+            ...(runtimeBatch ? { convaiRuntimeInvocations: runtimeBatch } : {}),
+          });
         };
 
         const orchestratorControl = await executeOrchestratorBackend(
@@ -465,17 +513,17 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
               }
               const interpolatedText = interpolateOutgoingMessageText(rawText, store);
               const backendBatch = pendingBackendInvocationsRef.current.splice(0);
-              const convaiBatch = takeConvaiWebhookBatch();
+              const convaiBatch = takeConvaiToolConfigDiagnosticsBatch();
               const backendDebugText =
                 opts.agentLogBackendCalls === true && backendBatch.length > 0
                   ? formatBackendInvocationsDebugBlock(backendBatch)
                   : undefined;
-              opts.onMessage({
+              void emitOrchestratorMessage({
                 ...message,
                 text: interpolatedText,
                 ...(backendBatch.length > 0 ? { backendInvocations: backendBatch } : {}),
                 ...(backendDebugText ? { backendDebugText } : {}),
-                ...(convaiBatch.length > 0 ? { convaiWebhookInvocations: convaiBatch } : {}),
+                ...(convaiBatch.length > 0 ? { convaiToolConfigDiagnostics: convaiBatch } : {}),
               });
             },
             onBackendCallDiagnostic: (payload) => {
@@ -507,17 +555,19 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
                     if (resolved !== entry.text) {
                       const backendExtra =
                         i === 0 ? pendingBackendInvocationsRef.current.splice(0) : [];
-                      const convaiExtra = i === 0 ? takeConvaiWebhookBatch() : [];
+                      const convaiExtra = i === 0 ? takeConvaiToolConfigDiagnosticsBatch() : [];
                       const backendDebugText =
                         opts.agentLogBackendCalls === true && backendExtra.length > 0
                           ? formatBackendInvocationsDebugBlock(backendExtra)
                           : undefined;
-                      opts.onMessage({
+                      void emitOrchestratorMessage({
                         ...(entry.raw as object),
                         text: resolved,
                         ...(backendExtra.length > 0 ? { backendInvocations: backendExtra } : {}),
                         ...(backendDebugText ? { backendDebugText } : {}),
-                        ...(convaiExtra.length > 0 ? { convaiWebhookInvocations: convaiExtra } : {}),
+                        ...(convaiExtra.length > 0
+                          ? { convaiToolConfigDiagnostics: convaiExtra }
+                          : {}),
                       } as Parameters<typeof opts.onMessage>[0]);
                     }
                   }

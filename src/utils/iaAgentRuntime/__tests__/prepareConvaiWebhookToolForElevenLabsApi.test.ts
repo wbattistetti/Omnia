@@ -138,3 +138,36 @@ describe('analyzeLocalhostEndpointReachability', () => {
     expect(reach.missingPorts).toEqual([3100]);
   });
 });
+
+describe('collectConvaiWebhookTunnelReadinessForSync — kb_deterministic', () => {
+  const kbAgentTask = {
+    id: 'agent-1',
+    type: TaskType.AIAgent,
+    agentConvaiDeployMode: 'kb_deterministic',
+    agentIaRuntimeOverrideJson: JSON.stringify({ platform: 'elevenlabs' }),
+  } as Task;
+
+  it('requires tunnel on 3100 for omnia_dialog_step when no backend tools', () => {
+    const out = collectConvaiWebhookTunnelReadinessForSync({
+      agentTask: kbAgentTask,
+      projectId: 'proj-1',
+      manualCatalogBackendTaskIds: [],
+    });
+    expect(out.ready).toBe(false);
+    expect(out.errors[0]).toMatch(/omnia_dialog_step/);
+    expect(out.errors[0]).toMatch(/3100/);
+  });
+
+  it('accepts omnia_dialog_step when tunnel map has port 3100', () => {
+    saveDevTunnelPortMapToStorage({ 3100: 'https://abc.ngrok-free.app' });
+    const out = collectConvaiWebhookTunnelReadinessForSync({
+      agentTask: kbAgentTask,
+      projectId: 'proj-1',
+      manualCatalogBackendTaskIds: [],
+    });
+    expect(out.ready).toBe(true);
+    expect(out.publicUrlsByBackendId.omnia_dialog_step).toBe(
+      'https://abc.ngrok-free.app/api/runtime/omnia-dialog-step/proj-1/agent-1'
+    );
+  });
+});

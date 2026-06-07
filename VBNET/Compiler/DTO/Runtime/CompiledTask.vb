@@ -444,6 +444,18 @@ Public Class CompiledAIAgentTask
     <JsonProperty("convaiSessionConversationId")>
     Public Property ConvaiSessionConversationId As String
 
+    ''' <summary>
+    ''' Frase statica di apertura (ConvAI first_message) — pronunciata al turno 0 senza slot compilati.
+    ''' </summary>
+    <JsonProperty("firstMessage")>
+    Public Property FirstMessage As String
+
+    ''' <summary>
+    ''' Deploy deterministico KB: bootstrap prima domanda via omnia_dialog_step (Test agente / Run ConvAI).
+    ''' </summary>
+    <JsonProperty("kbDeterministic")>
+    Public Property KbDeterministic As Boolean
+
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.AIAgent
@@ -466,6 +478,8 @@ Public Class CompiledAIAgentTask
         LlmEndpoint = ""
         ImmediateStart = False
         ConvaiSessionConversationId = ""
+        FirstMessage = ""
+        KbDeterministic = False
     End Sub
 End Class
 

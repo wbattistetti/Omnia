@@ -31,10 +31,17 @@ export type SelectorInvalidationTemplate = {
   approved: boolean;
 };
 
+/** Label naturali per valore cella: columnId → valore canonico → testo parlato. */
+export type SelectorValueLabels = Record<string, Record<string, string>>;
+
 export type KbDocumentSelectorSpec = {
   schemaVersion: typeof KB_DOCUMENT_SELECTOR_SPEC_SCHEMA_VERSION;
   columns: SelectorColumnSpec[];
   invalidationTemplates: SelectorInvalidationTemplate[];
+  /** Lexicon design-time per interpolazione complete/acquisition. */
+  valueLabels?: SelectorValueLabels;
+  /** Template unico conferma binding completo (approccio B). */
+  completeTemplate?: string;
 };
 
 const META_COLUMN_IDS = new Set([
@@ -302,10 +309,32 @@ export function parseKbDocumentSelectorSpec(raw: unknown): KbDocumentSelectorSpe
     if (parsed) invalidationTemplates.push(parsed);
   }
   if (columns.length === 0) return null;
+
+  let valueLabels: SelectorValueLabels | undefined;
+  if (o.valueLabels && typeof o.valueLabels === 'object' && !Array.isArray(o.valueLabels)) {
+    valueLabels = {};
+    for (const [colId, rawCol] of Object.entries(o.valueLabels as Record<string, unknown>)) {
+      if (!rawCol || typeof rawCol !== 'object' || Array.isArray(rawCol)) continue;
+      const colMap: Record<string, string> = {};
+      for (const [valKey, label] of Object.entries(rawCol as Record<string, unknown>)) {
+        if (typeof label === 'string' && label.trim()) colMap[valKey] = label.trim();
+      }
+      if (Object.keys(colMap).length > 0) valueLabels[colId] = colMap;
+    }
+    if (Object.keys(valueLabels).length === 0) valueLabels = undefined;
+  }
+
+  const completeTemplate =
+    typeof o.completeTemplate === 'string' && o.completeTemplate.trim()
+      ? o.completeTemplate.trim()
+      : undefined;
+
   return applySelectorSpecDomainRules({
     schemaVersion: KB_DOCUMENT_SELECTOR_SPEC_SCHEMA_VERSION,
     columns: columns.sort((a, b) => a.sortOrder - b.sortOrder || a.headerLabel.localeCompare(b.headerLabel, 'it')),
     invalidationTemplates,
+    ...(valueLabels ? { valueLabels } : {}),
+    ...(completeTemplate ? { completeTemplate } : {}),
   });
 }
 

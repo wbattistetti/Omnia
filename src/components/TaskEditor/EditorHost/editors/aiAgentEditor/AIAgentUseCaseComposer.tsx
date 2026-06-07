@@ -56,6 +56,7 @@ import { usePatchUseCaseResponseTasks } from './usePatchUseCaseResponseTasks';
 import { isPrimaryPhraseParametricEnabled } from './useCaseMessageHelpers';
 import { PhraseParametricEditor } from './useCaseBundle/PhraseParametricEditor';
 import { UseCaseRowDeployChips } from './useCaseBundle/UseCaseRowDeployChips';
+import { KbDialogUseCaseRoleChips } from './useCaseBundle/KbDialogUseCaseRoleChips';
 import { UseCaseStartChip } from './useCaseBundle/UseCaseStartChip';
 import { UseCaseCatalogNumberBadge } from './useCaseBundle/UseCaseCatalogNumberBadge';
 import { getUseCaseDeployRowStats } from './useCaseBundle/useCaseBundleDeployStats';
@@ -96,6 +97,7 @@ import {
   LABEL_POLISH_USE_CASE_SCENARIO_PENDING,
   LABEL_REGENERATE_AGENT_EXAMPLE,
   LABEL_REGENERATE_USE_CASE_FOR_SCENARIO,
+  isUseCaseCreationBusyMessage,
   PLACEHOLDER_ROOT_USE_CASE_DRAFT,
   TOOLTIP_POLISH_USE_CASE_SCENARIO,
 } from './constants';
@@ -283,6 +285,11 @@ export interface AIAgentUseCaseComposerProps {
   onPreviewStyleIdChange?: (styleId: string) => void;
   /** When set, empty state shows a primary CTA (e.g. tab toolbar hidden). */
   onGenerateUseCaseBundle?: () => void | Promise<void>;
+  /** kb_deterministic: genera UC da tabella KB + selectorSpec. */
+  onGenerateKbDialogUseCases?: () => void | Promise<void>;
+  kbDeterministicMode?: boolean;
+  /** Generazione deterministica UC da KB in corso. */
+  kbDialogGenerateBusy?: boolean;
   /** Disables generate CTA while Create/Refine agent is running. */
   generating?: boolean;
   /** Etichetta durante generazione bundle chunked (es. «Generando use case… (8)»). */
@@ -400,6 +407,9 @@ export function AIAgentUseCaseComposer({
   previewStyleId = AI_AGENT_DEFAULT_PREVIEW_STYLE_ID,
   onPreviewStyleIdChange = () => {},
   onGenerateUseCaseBundle,
+  onGenerateKbDialogUseCases,
+  kbDeterministicMode = false,
+  kbDialogGenerateBusy = false,
   generating = false,
   bundleGenerateBusyLabel,
   useCaseBundleGenerationCount = null,
@@ -2884,8 +2894,16 @@ export function AIAgentUseCaseComposer({
       ) : null}
 
       {creationMessage && !suppressTopCreationMessage ? (
-        <div className="rounded-lg border border-violet-800/70 bg-violet-950/40 px-3 py-2 text-sm text-violet-100 inline-flex items-center gap-2">
-          <Loader2 size={14} className="animate-spin shrink-0" aria-hidden />
+        <div
+          className={`rounded-lg border px-3 py-2 text-sm inline-flex items-center gap-2 ${
+            isUseCaseCreationBusyMessage(creationMessage) || kbDialogGenerateBusy
+              ? 'border-violet-800/70 bg-violet-950/40 text-violet-100'
+              : 'border-emerald-800/60 bg-emerald-950/35 text-emerald-100'
+          }`}
+        >
+          {isUseCaseCreationBusyMessage(creationMessage) || kbDialogGenerateBusy ? (
+            <Loader2 size={14} className="animate-spin shrink-0" aria-hidden />
+          ) : null}
           <span>{creationMessage}</span>
         </div>
       ) : null}
@@ -2977,6 +2995,9 @@ export function AIAgentUseCaseComposer({
                   bundleGenerationOrdering={useCaseBundleGenerationOrdering}
                   bundleGenerationCategorizing={bundleGenerationCategorizing}
                   onGenerateUseCaseBundle={onGenerateUseCaseBundle}
+                  onGenerateKbDialogUseCases={onGenerateKbDialogUseCases}
+                  kbDeterministicMode={kbDeterministicMode}
+                  kbDialogGenerateBusy={kbDialogGenerateBusy}
                   generating={generating}
                   hasExistingUseCases={ordered.length > 0}
                 />
@@ -3020,6 +3041,9 @@ export function AIAgentUseCaseComposer({
                   onAnalyzeClick={() => void handleCreateRoot()}
                   rootBatchWarning={rootBatchWarning}
                   onGenerateFromScratch={onGenerateUseCaseBundle}
+                  onGenerateKbDialogUseCases={onGenerateKbDialogUseCases}
+                  kbDeterministicMode={kbDeterministicMode}
+                  kbDialogGenerateBusy={kbDialogGenerateBusy}
                   generating={generating}
                   bundleGenerateBusy={bundleGenerateBusy}
                   bundleGenerationCount={useCaseBundleGenerationCount}
@@ -3346,6 +3370,7 @@ export function AIAgentUseCaseComposer({
                               }
                               onInspectCompiled={undefined}
                             />
+                            <KbDialogUseCaseRoleChips meta={u.kb_dialog_meta} />
                             <UseCaseOverlapBadge
                               hint={u.overlapHint}
                               analyzing={overlapAnalyzingIds.has(u.id)}

@@ -4,40 +4,61 @@
 
 import {
   buildOmniaDialogStepUrl,
-  resolveOmniaRuntimeOrigin,
+  resolveOmniaDialogStepRuntimeOrigin,
 } from '@domain/convaiRuntime/convaiWebhookGatewayUrl';
 import { toElevenLabsRequestBodySchema } from '@domain/openApi/adaptOpenApiJsonSchemaToElevenLabsToolSchema';
 
 export const OMNIA_DIALOG_STEP_TOOL_NAME = 'omnia_dialog_step';
 
-const REQUEST_SCHEMA = {
-  type: 'object',
-  required: ['conversationId'],
-  properties: {
-    conversationId: {
+function buildUpdatesRequestSchema(slotColumnIds: readonly string[]): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const slotId of slotColumnIds) {
+    const key = String(slotId ?? '').trim();
+    if (!key) continue;
+    properties[key] = {
       type: 'string',
-      description: 'ID conversazione runtime (omnia_conversation_id).',
+      description: `Valore normalizzato per lo slot \`${key}\` dall'utterance utente corrente.`,
+    };
+  }
+  return {
+    type: 'object',
+    properties,
+    additionalProperties: { type: 'string' },
+    description:
+      slotColumnIds.length > 0
+        ? 'Slot NLU → valore dal turno corrente. Dopo ogni risposta utente: almeno una chiave valorizzata. Solo `{}` al bootstrap o con reset.'
+        : 'Slot NLU → valore scelto dall’utente nel turno corrente. Dopo la risposta utente, obbligatorio: `{ "<nextColumnId>": "<valore>" }`. Solo `{}` al primo passo dialogo KB o con reset.',
+  };
+}
+
+function buildRequestSchema(slotColumnIds: readonly string[]): Record<string, unknown> {
+  return {
+    type: 'object',
+    required: ['conversationId'],
+    properties: {
+      conversationId: {
+        type: 'string',
+        description: 'ID conversazione runtime (omnia_conversation_id).',
+      },
+      updates: buildUpdatesRequestSchema(slotColumnIds),
+      kbDocumentId: {
+        type: 'string',
+        description: 'Documento KB specifico; opzionale se c’è un solo documento approvato.',
+      },
+      reset: {
+        type: 'boolean',
+        description: 'True per azzerare la sessione dialogo prima del passo.',
+      },
     },
-    updates: {
-      type: 'object',
-      additionalProperties: { type: 'string' },
-      description: 'Slot NLU → valore scelto dall’utente nel turno corrente.',
-    },
-    kbDocumentId: {
-      type: 'string',
-      description: 'Documento KB specifico; opzionale se c’è un solo documento approvato.',
-    },
-    reset: {
-      type: 'boolean',
-      description: 'True per azzerare la sessione dialogo prima del passo.',
-    },
-  },
-} as const;
+  };
+}
 
 export type BuildOmniaDialogStepConvaiToolParams = {
   projectId: string;
   agentTaskId: string;
   gatewayOrigin?: string;
+  /** Chiavi slot selector KB per schema `updates` esplicito (ElevenLabs tool tester + LLM). */
+  slotColumnIds?: readonly string[];
 };
 
 /** Payload tool webhook ElevenLabs per omnia_dialog_step. */
@@ -46,10 +67,14 @@ export function buildOmniaDialogStepConvaiTool(
 ): Record<string, unknown> {
   const projectId = String(params.projectId ?? '').trim();
   const agentTaskId = String(params.agentTaskId ?? '').trim();
-  const origin = resolveOmniaRuntimeOrigin(params.gatewayOrigin);
+  const origin = resolveOmniaDialogStepRuntimeOrigin(params.gatewayOrigin);
   const url = buildOmniaDialogStepUrl({ origin, projectId, agentTaskId });
+  const slotColumnIds = (params.slotColumnIds ?? []).map((x) => String(x ?? '').trim()).filter(Boolean);
   const description =
-    'Passo dialogo KB deterministico Omnia: restituisce `say` da leggere all’utente e gestisce filtro tabella.';
+    'Passo dialogo KB deterministico Omnia: restituisce `say` da leggere all’utente e gestisce filtro tabella. ' +
+    'Bootstrap: `updates: {}`. Dopo ogni risposta utente: POST obbligatorio con `updates` valorizzato; non richiamare con `updates` vuoti se l’utente ha già risposto.';
+
+  const requestSchema = buildRequestSchema(slotColumnIds);
 
   return {
     type: 'webhook',
@@ -58,10 +83,7 @@ export function buildOmniaDialogStepConvaiTool(
     api_schema: {
       url,
       method: 'POST',
-      request_body_schema: toElevenLabsRequestBodySchema(
-        REQUEST_SCHEMA as unknown as Record<string, unknown>,
-        { description }
-      ),
+      request_body_schema: toElevenLabsRequestBodySchema(requestSchema, { description }),
     },
     response_timeout_secs: 20,
   };
@@ -124,4 +146,62 @@ export function enforceOmniaDialogStepRuntimeToolPolicy(
     bodyOrQuery.properties = properties;
     bodyOrQuery.required = [...required];
   }
+}
+
+/**
+ * Allinea conversationId del tool omnia_dialog_step alla sessione Test agente / Run corrente.
+ * Necessario quando si riusa l’agente deployato (reuseDeployedConvaiAgent): senza patch il binding Redis resta vuoto → loop sulla prima domanda.
+ */
+export async function patchOmniaDialogStepSessionOnAgent(params: {
+  agentId: string;
+  sessionConversationId: string;
+  projectId: string;
+  agentTaskId: string;
+  useDevTunnel?: boolean;
+}): Promise<void> {
+  const agentId = String(params.agentId ?? '').trim();
+  const sessionConversationId = String(params.sessionConversationId ?? '').trim();
+  const projectId = String(params.projectId ?? '').trim();
+  const agentTaskId = String(params.agentTaskId ?? '').trim();
+  if (!agentId || !sessionConversationId) {
+    throw new Error('patchOmniaDialogStepSessionOnAgent: agentId e sessionConversationId obbligatori.');
+  }
+
+  const { getConvaiAgentDetail } = await import(
+    '@workspaces/elevenlabs/api/convaiAgentApi'
+  );
+  const { rewriteCompilePayloadWithDevTunnel } = await import(
+    '@domain/devTunnel/devTunnelCompileBridge'
+  );
+  const { mergeInlineWebhookToolsByName, readRawInlineToolsFromConversationConfig, patchConvaiAgentInlineWebhookTools } = await import(
+    './convaiInlineAgentTools'
+  );
+  const { sanitizeConvaiWebhookToolForApi } = await import(
+    '@domain/openApi/sanitizeConvaiWebhookToolForApi'
+  );
+
+  const detail = await getConvaiAgentDetail(agentId);
+  const outbound = { ...detail.conversationConfig } as Record<string, unknown>;
+  let tools = readRawInlineToolsFromConversationConfig(outbound);
+  if (!tools.some(isOmniaDialogStepConvaiTool) && projectId && agentTaskId) {
+    let dialogTool = buildOmniaDialogStepConvaiTool({ projectId, agentTaskId });
+    if (params.useDevTunnel !== false) {
+      dialogTool = rewriteCompilePayloadWithDevTunnel(dialogTool) as Record<string, unknown>;
+    }
+    tools = mergeInlineWebhookToolsByName(
+      tools,
+      sanitizeConvaiWebhookToolForApi(dialogTool)
+    );
+    const agent = (outbound.agent ?? {}) as Record<string, unknown>;
+    const prompt = (agent.prompt ?? {}) as Record<string, unknown>;
+    prompt.tools = tools;
+    agent.prompt = prompt;
+    outbound.agent = agent;
+  }
+
+  enforceOmniaDialogStepRuntimeToolPolicy(outbound, sessionConversationId);
+  const patchedTools = readRawInlineToolsFromConversationConfig(outbound).map((t) =>
+    sanitizeConvaiWebhookToolForApi(t)
+  );
+  await patchConvaiAgentInlineWebhookTools(agentId, patchedTools);
 }

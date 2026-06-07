@@ -8,7 +8,12 @@ vi.mock('@utils/iaAgentRuntime/globalIaAgentPersistence', () => ({
   loadGlobalIaAgentConfig: vi.fn(),
 }));
 
+vi.mock('@utils/iaAgentRuntime/convaiSessionAgentStore', () => ({
+  getConvaiSessionBinding: vi.fn(),
+}));
+
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
+import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 import { getDefaultConfig } from '@utils/iaAgentRuntime/platformHelpers';
 import {
   buildMinimalAiAgentCompileTask,
@@ -17,10 +22,12 @@ import {
 } from '../composeRuntimeRulesFromCompact';
 
 const mockLoadGlobalIa = vi.mocked(loadGlobalIaAgentConfig);
+const mockGetConvaiSessionBinding = vi.mocked(getConvaiSessionBinding);
 
 describe('composeRuntimeRulesFromCompact', () => {
   beforeEach(() => {
     mockLoadGlobalIa.mockReturnValue(getDefaultConfig('openai'));
+    mockGetConvaiSessionBinding.mockReturnValue(undefined);
   });
   it('parseAgentRuntimeCompactJson returns null for empty or invalid', () => {
     expect(parseAgentRuntimeCompactJson('')).toBeNull();
@@ -70,10 +77,23 @@ describe('composeRuntimeRulesFromCompact', () => {
     expect(minimal.rules).toMatch(/Purpose|Serve users/i);
     expect(minimal.llmEndpoint).toBe('http://localhost:3100/api/runtime/ai-agent/step');
     expect(minimal.immediateStart).toBe(false);
-    expect(minimal.firstMessage).toBe('Hello! How can I help you today?');
+    expect(minimal.firstMessage).toBe('');
     expect(Object.keys(minimal).sort()).toEqual(
       ['firstMessage', 'immediateStart', 'id', 'llmEndpoint', 'rules', 'templateId', 'type'].sort()
     );
+  });
+
+  it('buildMinimalAiAgentCompileTask uses default greeting in legacy deploy mode', () => {
+    const minimal = buildMinimalAiAgentCompileTask({
+      id: 'task-legacy',
+      type: 6,
+      templateId: null,
+      llmEndpoint: '',
+      agentStructuredSectionsJson: '',
+      agentPrompt: '## Purpose\n\nServe users politely.',
+      agentConvaiDeployMode: 'legacy',
+    });
+    expect(minimal.firstMessage).toBe('Hello! How can I help you today?');
   });
 
   it('buildMinimalAiAgentCompileTask keeps explicit llmEndpoint', () => {
@@ -184,5 +204,69 @@ describe('composeRuntimeRulesFromCompact', () => {
     });
     expect(minimal.platform).toBe('elevenlabs');
     expect(minimal.agentId).toBe('only_in_local_storage');
+  });
+
+  it('buildMinimalAiAgentCompileTask uses deploy link agentId when kb_deterministic even if override is openai', () => {
+    mockLoadGlobalIa.mockReturnValue(getDefaultConfig('openai'));
+    const minimal = buildMinimalAiAgentCompileTask({
+      id: 'agent-kb',
+      type: 6,
+      templateId: null,
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'KB agent.',
+      agentIaRuntimeOverrideJson: JSON.stringify(getDefaultConfig('openai')),
+      agentConvaiDeployMode: 'kb_deterministic',
+      agentElevenLabsConvaiLinkJson: JSON.stringify({
+        schemaVersion: 1,
+        agentId: 'agent_from_deploy_link',
+        agentName: 'nuovo con doc formattato',
+        kbRemoteByOmniaDocId: {},
+        lastKbRemoteIds: [],
+      }),
+    });
+    expect(minimal.platform).toBe('elevenlabs');
+    expect(minimal.agentId).toBe('agent_from_deploy_link');
+  });
+
+  it('buildMinimalAiAgentCompileTask uses session agentId when kb_deterministic even without deploy link', () => {
+    mockLoadGlobalIa.mockReturnValue(getDefaultConfig('openai'));
+    mockGetConvaiSessionBinding.mockReturnValue({
+      agentId: 'agent_from_session',
+      lastProvisionKey: 'k',
+    });
+    const minimal = buildMinimalAiAgentCompileTask({
+      id: 'agent-session',
+      type: 6,
+      templateId: null,
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'KB agent.',
+      agentIaRuntimeOverrideJson: JSON.stringify(getDefaultConfig('openai')),
+      agentConvaiDeployMode: 'kb_deterministic',
+    });
+    expect(minimal.platform).toBe('elevenlabs');
+    expect(minimal.agentId).toBe('agent_from_session');
+  });
+
+  it('buildMinimalAiAgentCompileTask prefers deploy link over task convaiAgentId', () => {
+    mockLoadGlobalIa.mockReturnValue(getDefaultConfig('elevenlabs'));
+    const minimal = buildMinimalAiAgentCompileTask({
+      id: 'agent-priority',
+      type: 6,
+      templateId: null,
+      agentStructuredSectionsJson: '',
+      agentPrompt: 'Test.',
+      agentConvaiDeployMode: 'kb_deterministic',
+      agentIaRuntimeOverrideJson: JSON.stringify({
+        ...getDefaultConfig('elevenlabs'),
+        convaiAgentId: 'agent_on_override',
+      }),
+      agentElevenLabsConvaiLinkJson: JSON.stringify({
+        schemaVersion: 1,
+        agentId: 'agent_from_link',
+        kbRemoteByOmniaDocId: {},
+        lastKbRemoteIds: [],
+      }),
+    });
+    expect(minimal.agentId).toBe('agent_from_link');
   });
 });

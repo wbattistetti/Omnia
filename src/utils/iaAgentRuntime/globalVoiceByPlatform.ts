@@ -195,3 +195,17 @@ export function describeVoice(voice: IAAgentVoiceConfig): string {
   }
   return voice.id;
 }
+
+/**
+ * Etichetta voce per menu Deploy: solo nome umano, mai l'id tecnico ElevenLabs/OpenAI.
+ */
+export function describeVoiceForDeployMenu(voice: IAAgentVoiceConfig): string | null {
+  const settings = voice.settings;
+  if (settings && typeof settings === 'object') {
+    const name = (settings as Record<string, unknown>).name;
+    if (typeof name === 'string' && name.trim().length > 0) {
+      return name.trim();
+    }
+  }
+  return null;
+}

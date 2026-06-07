@@ -13,6 +13,7 @@ import { taskRepository } from '@services/TaskRepository';
 import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 import { FlowBackendCallInvocationsPanel } from '@features/debugger/ui/FlowBackendCallInvocationsPanel';
 import { FlowConvaiWebhookInvocationsPanel } from '@features/debugger/ui/FlowConvaiWebhookInvocationsPanel';
+import { FlowConvaiRuntimeInvocationsPanel } from '@features/debugger/ui/FlowConvaiRuntimeInvocationsPanel';
 import { DebuggerBotStyleRulePanel } from '@features/debugger/ui/DebuggerBotStyleRulePanel';
 import {
   analyzeDebuggerTurnUseCaseApi,
@@ -136,8 +137,9 @@ export function FlowBotTurnLabel(props: {
   debuggerFlowId?: string | null;
   /** Ref al contenitore scrollabile della lista messaggi (flow debugger). */
   flowDebuggerScrollParentRef?: React.RefObject<HTMLElement | null>;
-  /** Toggle task «Mostra chiamate backend»: pannello tecnico invocazioni. */
+  /** Toggle task «Mostra chiamate backend»: pannello tecnico invocazioni + log runtime ConvAI. */
   showBackendCallInvocationsPanel?: boolean;
+  showConvaiRuntimeInvocationsPanel?: boolean;
 }) {
   const {
     message,
@@ -147,6 +149,7 @@ export function FlowBotTurnLabel(props: {
     debuggerFlowId = null,
     flowDebuggerScrollParentRef,
     showBackendCallInvocationsPanel = false,
+    showConvaiRuntimeInvocationsPanel = false,
   } = props;
   const [stylePanelOpen, setStylePanelOpen] = React.useState(false);
   const [styleBlockedHint, setStyleBlockedHint] = React.useState<string | null>(null);
@@ -753,8 +756,13 @@ export function FlowBotTurnLabel(props: {
       message.backendInvocations.length > 0 ? (
         <FlowBackendCallInvocationsPanel invocations={message.backendInvocations} />
       ) : null}
-      {message.convaiWebhookInvocations && message.convaiWebhookInvocations.length > 0 ? (
-        <FlowConvaiWebhookInvocationsPanel invocations={message.convaiWebhookInvocations} />
+      {message.convaiToolConfigDiagnostics && message.convaiToolConfigDiagnostics.length > 0 ? (
+        <FlowConvaiWebhookInvocationsPanel invocations={message.convaiToolConfigDiagnostics} />
+      ) : null}
+      {showConvaiRuntimeInvocationsPanel &&
+      message.convaiRuntimeInvocations &&
+      message.convaiRuntimeInvocations.length > 0 ? (
+        <FlowConvaiRuntimeInvocationsPanel invocations={message.convaiRuntimeInvocations} />
       ) : null}
     </div>
   );

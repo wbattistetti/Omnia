@@ -57,6 +57,13 @@ import {
 import { useChatOrchestrator } from '../hooks/useChatOrchestrator';
 import { FlowWorkspaceSnapshot } from '../flows/FlowWorkspaceSnapshot';
 import { resolveFlowTabDisplayTitle } from '@utils/resolveFlowTabDisplayTitle';
+import { registerOpenAgentTestDebugger } from '@domain/aiAgentDebugger/openAgentTestDebuggerBridge';
+import { taskRepository } from '@services/TaskRepository';
+import { useAppToolbarBottom } from './TaskEditor/EditorHost/editors/aiAgentEditor/useAppToolbarBottom';
+import {
+  OMNIA_OPEN_AGENT_TEST_DEBUGGER,
+  type OpenAgentTestDebuggerDetail,
+} from './TaskEditor/EditorHost/editors/aiAgentEditor/aiAgentDockPanelIds';
 import { variableCreationService } from '../services/VariableCreationService';
 import { logVariableHydration } from '../utils/variableMenuDebug';
 import { buildFlowCanvasRowFingerprint } from '../utils/flowWorkspaceUtteranceFingerprint';
@@ -92,7 +99,6 @@ import type { AIAgentUseCase } from '../types/aiAgentUseCases';
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
 import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
-import { taskRepository } from '../services/TaskRepository';
 import {
   setSubflowSyncFlows,
   setSubflowSyncTranslations,
@@ -1091,6 +1097,26 @@ export const AppContent: React.FC<AppContentProps> = ({
     ensureWorkspacesBootstrapped();
   }, []);
   const [showGlobalDebugger, setShowGlobalDebugger] = useState(false);
+  /** `overlay` = pannello fixed sopra editor fullscreen (Test agente); `inline` = colonna destra Run flow. */
+  const [debuggerPresentation, setDebuggerPresentation] = useState<'inline' | 'overlay'>('inline');
+  const appToolbarBottom = useAppToolbarBottom();
+  const [debuggerFlowOverride, setDebuggerFlowOverride] = useState<{
+    flowId: string;
+    nodes: unknown[];
+    edges: unknown[];
+    tasks: unknown[];
+    executionFlowName: string;
+    executionLaunchType?: 'flow' | 'rowTask' | 'node';
+    executionLaunchLabel?: string;
+    reuseDeployedConvaiAgent?: boolean;
+    flowAutoStart?: boolean;
+  } | null>(null);
+  /** Test agente: esecuzione atomica TaskExecutor (no slice flow / orchestrator). */
+  const [debuggerAgentTest, setDebuggerAgentTest] = useState<{
+    agentTaskId: string;
+    taskLabel: string;
+    autoStart: boolean;
+  } | null>(null);
   const [showUseCasePanel, setShowUseCasePanel] = useState(false);
   /** When set, global debugger runs this flow; when null, uses {@link FlowWorkspaceSnapshot.getActiveFlowId}. */
   const [debuggerTargetFlowId, setDebuggerTargetFlowId] = useState<string | null>(null);
@@ -1124,16 +1150,46 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   React.useEffect(() => {
     openGlobalDebuggerForFlowRef.current = (flowId: string) => {
+      setDebuggerPresentation('inline');
+      setDebuggerFlowOverride(null);
       setDebuggerTargetFlowId(flowId);
       setShowGlobalDebugger(true);
       setDebuggerLaunchKey((k) => k + 1);
     };
   }, []);
 
+  const openAgentTestDebuggerHandler = React.useCallback((detail: OpenAgentTestDebuggerDetail) => {
+    const agentTaskId = String(detail?.agentTaskId ?? '').trim();
+    if (!agentTaskId) return;
+    const taskLabel = String(detail?.taskLabel ?? '').trim() || 'AI Agent';
+    const autoStart = detail.autoStartDialogue !== false;
+    setDebuggerPresentation('overlay');
+    setDebuggerFlowOverride(null);
+    setDebuggerAgentTest({ agentTaskId, taskLabel, autoStart });
+    setDebuggerTargetFlowId(null);
+    setShowGlobalDebugger(true);
+    setDebuggerLaunchKey((k) => k + 1);
+  }, []);
+
+  React.useEffect(() => {
+    return registerOpenAgentTestDebugger(openAgentTestDebuggerHandler);
+  }, [openAgentTestDebuggerHandler]);
+
+  React.useEffect(() => {
+    const handler = (ev: Event): void => {
+      openAgentTestDebuggerHandler((ev as CustomEvent<OpenAgentTestDebuggerDetail>).detail);
+    };
+    document.addEventListener(OMNIA_OPEN_AGENT_TEST_DEBUGGER, handler);
+    return () => document.removeEventListener(OMNIA_OPEN_AGENT_TEST_DEBUGGER, handler);
+  }, [openAgentTestDebuggerHandler]);
+
   React.useEffect(() => {
     if (!showGlobalDebugger) {
       setShowUseCasePanel(false);
       runtimeBridgeRef.current = null;
+      setDebuggerFlowOverride(null);
+      setDebuggerAgentTest(null);
+      setDebuggerPresentation('inline');
     }
   }, [showGlobalDebugger]);
 
@@ -1517,6 +1573,8 @@ export const AppContent: React.FC<AppContentProps> = ({
     void import('../context/CompilationErrorsContext').then(({ clearCompilationErrorsGlobal }) => {
       clearCompilationErrorsGlobal();
     });
+    setDebuggerPresentation('inline');
+    setDebuggerFlowOverride(null);
     setDebuggerTargetFlowId(null);
     setShowGlobalDebugger(true);
     setDebuggerLaunchKey((k) => k + 1);
@@ -1777,6 +1835,10 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   const globalDebuggerFlowProps = React.useMemo(() => {
     if (!showGlobalDebugger) return null;
+    if (debuggerAgentTest) return null;
+    if (debuggerFlowOverride) {
+      return debuggerFlowOverride;
+    }
     void debuggerSnapshotTick;
     const fid = debuggerTargetFlowId ?? FlowWorkspaceSnapshot.getActiveFlowId();
     const slice = FlowWorkspaceSnapshot.getFlowById(fid);
@@ -1793,7 +1855,72 @@ export const AppContent: React.FC<AppContentProps> = ({
       tasks: (slice as { tasks?: unknown[] } | null)?.tasks ?? [],
       executionFlowName,
     };
-  }, [showGlobalDebugger, debuggerTargetFlowId, debuggerLaunchKey, debuggerSnapshotTick]);
+  }, [showGlobalDebugger, debuggerTargetFlowId, debuggerLaunchKey, debuggerSnapshotTick, debuggerFlowOverride, debuggerAgentTest]);
+
+  const closeGlobalDebugger = React.useCallback(() => {
+    setShowGlobalDebugger(false);
+    setDebuggerTargetFlowId(null);
+    setDebuggerFlowOverride(null);
+    setDebuggerAgentTest(null);
+    setShowUseCasePanel(false);
+    setDebuggerPresentation('inline');
+  }, []);
+
+  const globalDebuggerChatNode =
+    showGlobalDebugger && debuggerAgentTest ? (
+      (() => {
+        const agentTask = taskRepository.getTask(debuggerAgentTest.agentTaskId);
+        if (!agentTask) return null;
+        const label = debuggerAgentTest.taskLabel || agentTask.label || 'AI Agent';
+        return (
+          <FontProvider>
+            <DDEBubbleChat
+              key={`agent-test-${debuggerAgentTest.agentTaskId}-${debuggerLaunchKey}`}
+              task={agentTask}
+              projectId={currentPid ?? null}
+              translations={compiledTranslations || {}}
+              taskTree={null}
+              mode="interactive"
+              compiledTaskRunner
+              compiledTaskAutoStart={debuggerAgentTest.autoStart}
+              executionFlowName="Test agente"
+              executionLaunchType="rowTask"
+              executionLaunchLabel={label}
+              onToggleUseCasePanel={() => setShowUseCasePanel((v) => !v)}
+              onSaveUseCase={saveUseCaseFromDebugger}
+              onRuntimeBridgeReady={handleGlobalDebuggerRuntimeBridgeReady}
+              onMessagesSnapshotChange={setRuntimeMessagesSnapshot}
+              onClosePanel={closeGlobalDebugger}
+            />
+          </FontProvider>
+        );
+      })()
+    ) : showGlobalDebugger && globalDebuggerFlowProps ? (
+      <FontProvider>
+        <DDEBubbleChat
+          key={`global-dbg-${globalDebuggerFlowProps.flowId}-${debuggerLaunchKey}`}
+          task={null}
+          projectId={currentPid ?? null}
+          translations={compiledTranslations || {}}
+          taskTree={null}
+          mode="interactive"
+          flowNodes={globalDebuggerFlowProps.nodes}
+          flowEdges={globalDebuggerFlowProps.edges}
+          flowTasks={globalDebuggerFlowProps.tasks}
+          executionFlowName={globalDebuggerFlowProps.executionFlowName}
+          orchestratorCompileRootFlowId={globalDebuggerFlowProps.flowId}
+          flowAutoStart={globalDebuggerFlowProps.flowAutoStart !== false}
+          executionLaunchType={globalDebuggerFlowProps.executionLaunchType ?? 'flow'}
+          executionLaunchLabel={globalDebuggerFlowProps.executionLaunchLabel}
+          reuseDeployedConvaiAgent={globalDebuggerFlowProps.reuseDeployedConvaiAgent === true}
+          onToggleUseCasePanel={() => setShowUseCasePanel((v) => !v)}
+          onSaveUseCase={saveUseCaseFromDebugger}
+          onRuntimeBridgeReady={handleGlobalDebuggerRuntimeBridgeReady}
+          onMessagesSnapshotChange={setRuntimeMessagesSnapshot}
+          onClosePanel={closeGlobalDebugger}
+        />
+      </FontProvider>
+    ) : null;
 
   return (
     <div className={`h-screen overflow-hidden ${combinedClass}`} style={{ position: 'relative' }}>
@@ -2041,7 +2168,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     </div>
                   ) : null}
                 </div>
-                {showGlobalDebugger && globalDebuggerFlowProps && (
+                {debuggerPresentation === 'inline' && showGlobalDebugger && globalDebuggerFlowProps && (
                   <>
                     <div
                       onMouseDown={handleResizeStart}
@@ -2074,32 +2201,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                         flexShrink: 0,
                       }}
                     >
-                      <FontProvider>
-                        <DDEBubbleChat
-                          key={`global-dbg-${globalDebuggerFlowProps.flowId}-${debuggerLaunchKey}`}
-                          task={null}
-                          projectId={currentPid ?? null}
-                          translations={compiledTranslations || {}}
-                          taskTree={null}
-                          mode="interactive"
-                          flowNodes={globalDebuggerFlowProps.nodes}
-                          flowEdges={globalDebuggerFlowProps.edges}
-                          flowTasks={globalDebuggerFlowProps.tasks}
-                          executionFlowName={globalDebuggerFlowProps.executionFlowName}
-                          orchestratorCompileRootFlowId={globalDebuggerFlowProps.flowId}
-                          flowAutoStart
-                          executionLaunchType="flow"
-                          onToggleUseCasePanel={() => setShowUseCasePanel((v) => !v)}
-                          onSaveUseCase={saveUseCaseFromDebugger}
-                          onRuntimeBridgeReady={handleGlobalDebuggerRuntimeBridgeReady}
-                          onMessagesSnapshotChange={setRuntimeMessagesSnapshot}
-                          onClosePanel={() => {
-                            setShowGlobalDebugger(false);
-                            setDebuggerTargetFlowId(null);
-                            setShowUseCasePanel(false);
-                          }}
-                        />
-                      </FontProvider>
+                      {globalDebuggerChatNode}
                     </div>
                     {showUseCasePanel && (
                       <>
@@ -2160,6 +2262,27 @@ export const AppContent: React.FC<AppContentProps> = ({
           </div>
         </div>
       )}
+
+      {debuggerPresentation === 'overlay' &&
+        typeof document !== 'undefined' &&
+        globalDebuggerChatNode &&
+        createPortal(
+          <div
+            className="fixed z-[60] flex flex-col overflow-hidden bg-white shadow-2xl border-l border-slate-200 dark:bg-slate-950 dark:border-slate-700"
+            style={{
+              top: appToolbarBottom ?? 0,
+              right: 0,
+              bottom: 0,
+              width: `${debuggerWidth}px`,
+              maxWidth: '92vw',
+            }}
+            role="region"
+            aria-label="Debugger test agente"
+          >
+            {globalDebuggerChatNode}
+          </div>,
+          document.body
+        )}
 
       {/* ✅ Old TaskTree Wizard Modal removed - now using new TaskBuilderAIWizard integrated in ResponseEditor */}
     </div>

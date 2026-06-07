@@ -1,185 +1,75 @@
 /**
- * Dropdown «Deploy» dello stepper del wizard di costruzione AI Agent.
+ * Dropdown «Deploy» del wizard AI Agent — percorso deterministico KB (ElevenLabs + omnia_dialog_step).
  *
- * Visibile quando il catalogo ha almeno un use case (parent). Upload è gated su mapping
- * valido; Copy compila e mostra errori senza nascondere il menu.
- *
- * Layout (sezioni separate da divider, sotto un titolo «UPLOAD TO PLATFORM»):
- *   ─── UPLOAD TO PLATFORM ────────────
- *   ☐ Avvio immediato         ← runtime toggle (persistito sul Task)
- *   ☐ Mostra Usecases         ← trace USECASE nel prompt (persistito sul Task)
- *   ☐ Mostra chiamate backend ← righe DEBUG tool nel prompt (persistito sul Task)
- *   ─────────────────────────────────────
- *   ▸ STILE  (opzionale; pill solo se l'utente ne ha checkati nel gate)
- *       [Cortese (2)] [Ironico (1)]
- *   ─────────────────────────────────────
- *   ▸ PLATFORM  (header non cliccabile)
- *       • Anthropic     Manca la voce  [Fix]
- *       • ElevenLabs    Simon
- *       • Gemini        Manca la voce  [Fix]
- *       • OpenAI        Manca la voce  [Fix]
- *   ─────────────────────────────────────
- *   ▸ Compila e Copy system prompt
- *   ▸ Deploy (espande inline sync ConvAI: crea/aggiorna agente ElevenLabs)
- *
- * **Selezione voce per platform**: la `voicesByPlatform` ricevuta dal parent è già il
- * risultato del resolver (`resolveVoicesByPlatform`), che applica priorità
- * `globale → override del task` (vedi `globalVoiceByPlatform.ts`). Questo componente
- * non conosce la regola: si limita a renderizzare cosa gli viene passato.
- *
- * **Fix**: se la voce è `null`, il bottone Fix è ATTIVO. L'Upload richiede solo che la
- * voce sia configurata; lo stile è opzionale (se selezionato viene propagato).
- *
- * **Deploy**: espande inline il pannello sync ConvAI (create/update agente ElevenLabs).
- * **Compila e Copy**: compile + mapping IA, poi dialog copia o Slot Mapping se invalido.
- *
- * Il componente è puramente presentazionale: niente fetch, niente `localStorage` diretto.
+ * Il menu non mostra diagnostica nel dropdown: al click espande sync ConvAI inline.
  */
 
 import React from 'react';
-import {
-  ChevronDown,
-  ClipboardList,
-  Loader2,
-  PlayCircle,
-  Rocket,
-  ScrollText,
-  Sparkles,
-  Upload,
-  Wrench,
-} from 'lucide-react';
+import { ChevronDown, Loader2, PlayCircle, Rocket, ScrollText, Upload, Wrench } from 'lucide-react';
 import type { ConvaiAgentSyncParams, ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
 import { ConvaiAgentSyncPanel } from '../ConvaiAgentSyncPanel';
-import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
+import type { IAAgentPlatform } from 'types/iaAgentRuntimeSetup';
 import {
   AGENT_PLATFORM_DISPLAY_LABEL,
   SUPPORTED_AGENT_PLATFORMS,
-  describeVoice,
+  describeVoiceForDeployMenu,
   type GlobalVoiceByPlatformMap,
 } from '@utils/iaAgentRuntime/globalVoiceByPlatform';
-import { ConversationStyleSelector } from '../useCaseGeneratorWizard/ConversationStyleSelector';
-import {
-  AGENT_CONVAI_DEPLOY_MODE_LABELS,
-  AGENT_CONVAI_DEPLOY_MODES,
-  type AgentConvaiDeployMode,
-} from '@domain/convai/agentConvaiDeployMode';
 
-/** Piattaforme effettivamente esposte nel dropdown (ordine alfabetico per UX). */
-const DROPDOWN_PLATFORMS: readonly IAAgentPlatform[] = SUPPORTED_AGENT_PLATFORMS.filter(
+/** Piattaforme nel combobox (ordine UX). */
+const DEPLOY_PLATFORMS: readonly IAAgentPlatform[] = SUPPORTED_AGENT_PLATFORMS.filter(
   (p) => p !== 'custom'
 );
 
+/** Sync ConvAI attualmente disponibile solo su ElevenLabs. */
+const CONVAI_DEPLOY_PLATFORM: IAAgentPlatform = 'elevenlabs';
+
 export interface DeployHandlers {
-  /**
-   * Chiamato quando l'utente clicca «Upload to Platform → <Platform>» con voce CONFIGURATA.
-   * Il chiamante è responsabile del provisioning effettivo (es. `createConvaiAgentViaOmniaServer`
-   * per ElevenLabs) o del fallback informativo (toast) per le piattaforme non ancora supportate.
-   */
-  onUploadToPlatform: (platform: IAAgentPlatform, voice: IAAgentVoiceConfig) => void;
-  /**
-   * Chiamato quando l'utente clicca su un item con voce MANCANTE («Fix»). Tipicamente apre
-   * il pannello Settings > IA Runtime con `platform` settata su `platform` e focus al picker voce.
-   */
   onFixVoice: (platform: IAAgentPlatform) => void;
-  /** Compila catalogo + mapping IA, poi dialog copia o Slot Mapping se fallisce. */
-  onCompileAndCopySystemPrompt: () => void;
-  /** Parametri sync ConvAI per pannello Deploy inline. */
+  /** Flush editor state prima di aprire sync (salvataggio task). */
+  onDeployAction: () => void;
   convaiSyncParams?: ConvaiAgentSyncParams | null;
-  /** Callback dopo sync ConvAI riuscita (persist link, catalogo, …). */
   onConvaiSynced?: (result: ConvaiAgentSyncResult) => void;
-  /** True se «Deploy» inline non è disponibile. */
-  deployInlineDisabled?: boolean;
-  deployInlineDisabledReason?: string;
-  /** True se «Compila e Copy» non è disponibile (es. catalogo vuoto). */
-  compileAndCopyDisabled?: boolean;
-  compileAndCopyDisabledReason?: string;
-  /** Compilazione in corso (spinner su Deploy e sulla voce Compila e Copy). */
   compilePhrasesBusy?: boolean;
-  /** Apre il report readiness OpenAPI / webhook per i backend ConvAI collegati. */
-  onOpenWebhookReadinessReport?: () => void;
 }
 
 export interface AIAgentDeployMenuProps extends DeployHandlers {
-  /** Mappa platform → voce di default globale (caricata dal parent). Manca = «non configurata». */
   voicesByPlatform: GlobalVoiceByPlatformMap;
-  /**
-   * Stili attivi nel gate conversazionale (output di `listCheckedStyleIds`). Sono
-   * solo informativi/opzionali: l'Upload non li richiede. Se vuoto, la sezione Stile
-   * non viene mostrata e l'Upload resta comunque abilitato per ogni Platform con voce.
-   */
-  availableStyleIds: readonly string[];
-  /** Counter conversazioni per stile (per badge nel picker), può essere vuoto. */
-  countByStyleId?: Readonly<Record<string, number>>;
-  /** Stile target di Upload (single per ora). `null` = nessuno scelto, opzionale. */
-  deployStyleId: string | null;
-  onDeployStyleIdChange: (next: string | null) => void;
-  /**
-   * Toggle "Logga Use Case" (vedi `Task.agentLogUseCase`). Quando true, il compilatore di
-   * prompt aggiunge il campo `log: "USECASE: \"<NOME>\""` nel JSON di ogni use case e
-   * antepone in testa al blocco use cases l'istruzione testuale per il caso "non
-   * riconosciuto" (l'agente runtime classifica e marca la risposta con
-   * `USECASE: "NUOVO_<TITOLO>"`). Persistito sul Task.
-   */
-  logUseCaseEnabled: boolean;
-  onToggleLogUseCase: (next: boolean) => void;
-  logBackendCallsEnabled: boolean;
-  onToggleLogBackendCalls: (next: boolean) => void;
-  /**
-   * Toggle "Avvio immediato" (vedi `Task.agentImmediateStart`). Quando true, l'orchestrator
-   * runtime inietta un primo turno utente sintetico così l'agente apre il dialogo senza
-   * attendere il primo messaggio dell'utente. Spostato qui dal tab "Prompt Finale": è una
-   * proprietà di deploy/runtime, naturale vicino agli altri toggle di pubblicazione.
-   */
+  selectedPlatform?: IAAgentPlatform;
+  onSelectedPlatformChange?: (platform: IAAgentPlatform) => void;
   immediateStartEnabled: boolean;
   onToggleImmediateStart: (next: boolean) => void;
-  /** Se false, Upload platform è disabilitato (Copy resta attivo). */
-  catalogUploadReady?: boolean;
-  catalogUploadBlockedReason?: string;
-  /** Modalità deploy ConvAI: classico (UC nel prompt) vs deterministico (omnia_dialog_step). */
-  convaiDeployMode: AgentConvaiDeployMode;
-  onConvaiDeployModeChange: (next: AgentConvaiDeployMode) => void;
+  logBackendCallsEnabled: boolean;
+  onToggleLogBackendCalls: (next: boolean) => void;
 }
 
 export function AIAgentDeployMenu({
   voicesByPlatform,
-  onUploadToPlatform,
+  selectedPlatform: selectedPlatformProp,
+  onSelectedPlatformChange,
   onFixVoice,
-  onCompileAndCopySystemPrompt,
+  onDeployAction,
   convaiSyncParams = null,
   onConvaiSynced,
-  deployInlineDisabled = false,
-  deployInlineDisabledReason,
-  compileAndCopyDisabled = false,
-  compileAndCopyDisabledReason,
   compilePhrasesBusy = false,
-  onOpenWebhookReadinessReport,
-  availableStyleIds,
-  countByStyleId,
-  deployStyleId,
-  onDeployStyleIdChange,
-  logUseCaseEnabled,
-  onToggleLogUseCase,
-  logBackendCallsEnabled,
-  onToggleLogBackendCalls,
   immediateStartEnabled,
   onToggleImmediateStart,
-  catalogUploadReady = true,
-  catalogUploadBlockedReason,
-  convaiDeployMode,
-  onConvaiDeployModeChange,
+  logBackendCallsEnabled,
+  onToggleLogBackendCalls,
 }: AIAgentDeployMenuProps): React.ReactElement {
   const [open, setOpen] = React.useState(false);
   const [inlineDeployOpen, setInlineDeployOpen] = React.useState(false);
+  const [selectedPlatformInternal, setSelectedPlatformInternal] =
+    React.useState<IAAgentPlatform>(CONVAI_DEPLOY_PLATFORM);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const selectedPlatform = selectedPlatformProp ?? selectedPlatformInternal;
+  const setSelectedPlatform = onSelectedPlatformChange ?? setSelectedPlatformInternal;
 
   React.useEffect(() => {
     if (!open) setInlineDeployOpen(false);
   }, [open]);
 
-  /**
-   * Chiusura del dropdown su click esterno e su tasto Esc. Coerente con i pattern UI già usati
-   * altrove nell'editor AI Agent (vedi VoicePicker / ModelTreePicker).
-   */
   React.useEffect(() => {
     if (!open) return undefined;
     const onDocClick = (e: MouseEvent) => {
@@ -206,9 +96,21 @@ export function AIAgentDeployMenu({
     };
   }, [open, inlineDeployOpen]);
 
+  const voice = voicesByPlatform[selectedPlatform] ?? null;
+  const voiceLabel = voice ? describeVoiceForDeployMenu(voice) : null;
+  const platformLabel = AGENT_PLATFORM_DISPLAY_LABEL[selectedPlatform];
+  const convaiPlatformSelected = selectedPlatform === CONVAI_DEPLOY_PLATFORM;
+  const canOpenDeploy = convaiPlatformSelected && !compilePhrasesBusy;
+
   const panelWidthClass = inlineDeployOpen
     ? 'w-[min(32rem,calc(100vw-1.5rem))] max-h-[min(85vh,44rem)] overflow-y-auto'
-    : 'w-96 overflow-hidden';
+    : 'w-80 overflow-hidden';
+
+  const handleDeployClick = React.useCallback(() => {
+    if (!canOpenDeploy) return;
+    onDeployAction();
+    setInlineDeployOpen((v) => !v);
+  }, [canOpenDeploy, onDeployAction]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -220,7 +122,7 @@ export function AIAgentDeployMenu({
         }}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Deploy: pubblica l'agente su ElevenLabs o compila il system prompt"
+        title="Deploy: pubblica l'agente sulla piattaforma selezionata"
         className={[
           'inline-flex items-center gap-1.5 rounded-md border border-amber-500/70 bg-amber-700/85 px-2.5 py-1.5 text-xs font-semibold text-white shadow hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70',
           compilePhrasesBusy ? 'cursor-wait opacity-90' : '',
@@ -244,67 +146,10 @@ export function AIAgentDeployMenu({
           aria-label="Azioni di deploy"
           className={`absolute right-0 z-50 mt-1 rounded-md border border-slate-700 bg-slate-950 shadow-xl ${panelWidthClass}`}
         >
-          {/* Title bar non cliccabile, semantica analoga al titolo «UPLOAD TO PLATFORM» nella spec. */}
           <div className="bg-slate-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
-            Upload to Platform
+            Deploy
           </div>
 
-          {!catalogUploadReady && catalogUploadBlockedReason ? (
-            <p className="border-b border-amber-700/40 bg-amber-950/50 px-3 py-2 text-[11px] leading-snug text-amber-100">
-              Upload disabilitato: {catalogUploadBlockedReason}
-            </p>
-          ) : null}
-
-          <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Modalità deploy
-            </div>
-            <div className="mt-1.5 space-y-1 pl-1">
-              {AGENT_CONVAI_DEPLOY_MODES.map((mode) => (
-                <label
-                  key={mode}
-                  className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs text-slate-100 hover:bg-slate-800"
-                >
-                  <input
-                    type="radio"
-                    name="convai-deploy-mode"
-                    checked={convaiDeployMode === mode}
-                    onChange={() => onConvaiDeployModeChange(mode)}
-                    className="mt-0.5 accent-amber-500"
-                  />
-                  <span>
-                    <span className="font-medium">{AGENT_CONVAI_DEPLOY_MODE_LABELS[mode]}</span>
-                    {mode === 'kb_deterministic' ? (
-                      <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">
-                        Dialogo KB via Omnia (tool omnia_dialog_step). Richiede tabella approvata e selettori.
-                      </span>
-                    ) : (
-                      <span className="mt-0.5 block text-[10px] leading-snug text-slate-400">
-                        Catalogo use case nel system prompt (comportamento attuale).
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/*
-            ── Toggle 1: «Avvio immediato» ─────────────────────────────────────────────
-
-            Spostato qui dal tab "Prompt Finale" (single-pane wizard step 1): è una
-            proprietà di runtime/deploy. Persistita su `Task.agentImmediateStart`.
-
-            ── Toggle 2: «Logga Use Case» ─────────────────────────────────────────────
-
-            Decisione che CAMBIA il system prompt e il JSON inviati con l'Upload, quindi
-            va valutata PRIMA di scegliere stile/voci.
-
-            Pattern UI condiviso: <label> intera cliccabile (input + testo): il click
-            ovunque sulla riga toggla la checkbox. Niente `onClick` su `onChange` per
-            evitare doppio fire. Manteniamo il dropdown aperto (no setOpen(false)) così
-            l'utente continua a configurare stile/upload subito dopo.
-          */}
           <div className="border-t border-slate-700 bg-slate-950">
             <label
               role="menuitemcheckbox"
@@ -323,34 +168,8 @@ export function AIAgentDeployMenu({
             </label>
             <label
               role="menuitemcheckbox"
-              aria-checked={logUseCaseEnabled}
-              aria-disabled={convaiDeployMode === 'kb_deterministic'}
-              title={
-                convaiDeployMode === 'kb_deterministic'
-                  ? 'Ignorato in deploy deterministico: le domande strutturate le gestisce Omnia.'
-                  : 'Quando attivo, ogni risposta dell\'agente include in coda «USECASE: "<NOME>"» (MAIUSCOLO). Per input non classificabili, l\'agente assegna un nome nuovo e logga «USECASE: "NUOVO_<TITOLO>"».'
-              }
-              className={[
-                'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100',
-                convaiDeployMode === 'kb_deterministic'
-                  ? 'cursor-not-allowed opacity-50'
-                  : 'cursor-pointer hover:bg-slate-800',
-              ].join(' ')}
-            >
-              <input
-                type="checkbox"
-                checked={logUseCaseEnabled}
-                disabled={convaiDeployMode === 'kb_deterministic'}
-                onChange={(e) => onToggleLogUseCase(e.target.checked)}
-                className="h-3.5 w-3.5 cursor-pointer accent-amber-500 disabled:cursor-not-allowed"
-              />
-              <ScrollText size={12} aria-hidden className="shrink-0 text-amber-300" />
-              <span className="flex-1">Mostra Usecases</span>
-            </label>
-            <label
-              role="menuitemcheckbox"
               aria-checked={logBackendCallsEnabled}
-              title="Quando attivo, il system prompt chiede righe DEBUG dopo ogni tool backend e in debugger/chat compaiono riepiloghi delle invocazioni (endpoint e primi risultati)."
+              title="Quando attivo, in debugger/chat compaiono riepiloghi delle invocazioni webhook/tool."
               className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800"
             >
               <input
@@ -364,27 +183,6 @@ export function AIAgentDeployMenu({
             </label>
           </div>
 
-          {/* ── Sezione STILE: opzionale, mostrata solo se l'utente ha checkato stili ── */}
-          {availableStyleIds.length > 0 ? (
-            <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
-              <div
-                className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
-                role="presentation"
-              >
-                Stile (opzionale)
-              </div>
-              <div className="mt-1.5 pl-3">
-                <ConversationStyleSelector
-                  value={deployStyleId}
-                  onChange={onDeployStyleIdChange}
-                  availableStyleIds={availableStyleIds}
-                  countByStyleId={countByStyleId}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {/* ── Sezione PLATFORM: header non cliccabile + voci indentate ───────────── */}
           <div className="border-t border-slate-700 bg-slate-950 px-3 py-2">
             <div
               className="text-[10px] font-semibold uppercase tracking-wide text-slate-400"
@@ -392,82 +190,54 @@ export function AIAgentDeployMenu({
             >
               Platform
             </div>
-            <ul className="mt-1 pl-3">
-              {DROPDOWN_PLATFORMS.map((platform) => {
-                const voice = voicesByPlatform[platform] ?? null;
-                const label = AGENT_PLATFORM_DISPLAY_LABEL[platform];
-                /**
-                 * Voce presente → Upload diretto (lo stile è opzionale e, se settato,
-                 * viene comunque propagato dal compilatore a monte).
-                 * Voce assente   → Fix: apre il pannello voci della platform.
-                 * La riga è SEMPRE cliccabile.
-                 */
-                const uploadEnabled = catalogUploadReady && voice !== null;
-                return (
-                  <li key={platform}>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      disabled={!catalogUploadReady && voice !== null}
-                      onClick={() => {
-                        setOpen(false);
-                        if (!catalogUploadReady) return;
-                        if (uploadEnabled && voice) {
-                          onUploadToPlatform(platform, voice);
-                        } else {
-                          onFixVoice(platform);
-                        }
-                      }}
-                      title={
-                        voice
-                          ? `Pubblica l'agente su ${label} usando la voce «${describeVoice(voice)}»${
-                              deployStyleId ? ' nello stile selezionato' : ''
-                            }`
-                          : `Voce non configurata per ${label}: clicca per aprire il pannello e sceglierla`
-                      }
-                      className="flex w-full items-center justify-between gap-3 rounded px-2 py-1 text-left text-xs text-slate-100 hover:bg-slate-800"
-                    >
-                      <span className="font-medium">{label}</span>
-                      {voice ? (
-                        <span className="truncate text-slate-300" title={describeVoice(voice)}>
-                          {describeVoice(voice)}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-amber-300">
-                          <span className="italic">Manca la voce</span>
-                          <span className="inline-flex items-center gap-0.5 rounded border border-amber-500/55 bg-amber-950/40 px-1 py-px text-[10px] font-semibold uppercase tracking-wide">
-                            <Wrench size={9} aria-hidden />
-                            Fix
-                          </span>
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <select
+                value={selectedPlatform}
+                onChange={(e) => setSelectedPlatform(e.target.value as IAAgentPlatform)}
+                className="min-w-[8.5rem] flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:border-violet-500 focus:outline-none"
+                aria-label="Piattaforma di deploy"
+              >
+                {DEPLOY_PLATFORMS.map((platform) => (
+                  <option key={platform} value={platform}>
+                    {AGENT_PLATFORM_DISPLAY_LABEL[platform]}
+                  </option>
+                ))}
+              </select>
+              {voiceLabel ? (
+                <span className="truncate text-xs text-slate-300">{voiceLabel}</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onFixVoice(selectedPlatform);
+                  }}
+                  className="inline-flex items-center gap-0.5 rounded border border-amber-500/55 bg-amber-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300 hover:bg-amber-900/50"
+                >
+                  <Wrench size={9} aria-hidden />
+                  Fix voce
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* ── Sezione finale: compila + copia / solo copia ───────────────────────── */}
           <div className="border-t border-slate-700 bg-slate-950">
             <button
               type="button"
               role="menuitem"
-              disabled={compileAndCopyDisabled || compilePhrasesBusy}
-              onClick={() => {
-                if (compilePhrasesBusy || compileAndCopyDisabled) return;
-                onCompileAndCopySystemPrompt();
-              }}
+              disabled={!canOpenDeploy}
+              aria-expanded={inlineDeployOpen}
+              onClick={handleDeployClick}
               title={
                 compilePhrasesBusy
-                  ? 'Compilazione mapping in corso…'
-                  : compileAndCopyDisabled
-                    ? compileAndCopyDisabledReason ||
-                      'Aggiungi almeno uno use case al catalogo'
-                    : 'Compila mapping IA + lessico, poi apre il dialog per copiare il system prompt'
+                  ? 'Attendi la fine della compilazione in corso'
+                  : convaiPlatformSelected
+                    ? `Deploy su ${platformLabel}: report nel debugger Omnia + sync agente`
+                    : `Deploy automatico disponibile solo su ${AGENT_PLATFORM_DISPLAY_LABEL[CONVAI_DEPLOY_PLATFORM]}`
               }
               className={[
-                'flex w-full items-center gap-2 border-b border-slate-800/80 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45',
+                'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45',
+                inlineDeployOpen ? 'bg-slate-900/80' : '',
                 compilePhrasesBusy ? 'cursor-wait' : '',
               ].join(' ')}
               aria-busy={compilePhrasesBusy}
@@ -475,34 +245,9 @@ export function AIAgentDeployMenu({
               {compilePhrasesBusy ? (
                 <Loader2 size={12} aria-hidden className="animate-spin text-violet-300" />
               ) : (
-                <Sparkles size={12} aria-hidden className="text-violet-300" />
+                <Upload size={12} aria-hidden className="text-violet-300" />
               )}
-              {compilePhrasesBusy ? 'Compilazione mapping…' : 'Compila e Copy system prompt'}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={deployInlineDisabled || compilePhrasesBusy}
-              aria-expanded={inlineDeployOpen}
-              onClick={() => {
-                if (compilePhrasesBusy || deployInlineDisabled) return;
-                setInlineDeployOpen((v) => !v);
-              }}
-              title={
-                compilePhrasesBusy
-                  ? 'Attendi la fine della compilazione in corso'
-                  : deployInlineDisabled
-                    ? deployInlineDisabledReason ||
-                      'Disponibile quando tutti gli use case inclusi sono compilabili nel catalogo'
-                    : 'Crea o aggiorna l’agente ElevenLabs (prompt, tool webhook, KB)'
-              }
-              className={[
-                'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45',
-                inlineDeployOpen ? 'bg-slate-900/80' : '',
-              ].join(' ')}
-            >
-              <Upload size={12} aria-hidden className="text-violet-300" />
-              Deploy
+              {compilePhrasesBusy ? 'Compilazione…' : `Deploy su ${platformLabel}`}
             </button>
             {inlineDeployOpen ? (
               <div className="border-t border-violet-800/40 bg-slate-950">
@@ -514,23 +259,6 @@ export function AIAgentDeployMenu({
                   onSynced={onConvaiSynced}
                 />
               </div>
-            ) : null}
-            {onOpenWebhookReadinessReport ? (
-              <button
-                type="button"
-                role="menuitem"
-                disabled={compilePhrasesBusy}
-                onClick={() => {
-                  if (compilePhrasesBusy) return;
-                  onOpenWebhookReadinessReport();
-                  setOpen(false);
-                }}
-                title="Audit OpenAPI per tool ConvAI: type, format, vincoli, description, extension — report copiabile per il team backend"
-                className="flex w-full items-center gap-2 border-t border-slate-800/80 px-3 py-2 text-left text-xs font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <ClipboardList size={12} aria-hidden className="text-cyan-300" />
-                Report webhook / OpenAPI
-              </button>
             ) : null}
           </div>
         </div>

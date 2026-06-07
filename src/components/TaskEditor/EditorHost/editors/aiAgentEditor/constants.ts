@@ -9,6 +9,16 @@ export const LABEL_GENERATE_USE_CASES = 'Genera use case';
 /** Empty tutor: titolo accanto alla mascotte (una riga). */
 export const LABEL_EMPTY_USE_CASE_TUTOR_HEADLINE =
   'Generiamo gli use case per guidare l’agente!';
+/** Empty tutor kb_deterministic: titolo accanto alla mascotte. */
+export const LABEL_EMPTY_USE_CASE_KB_TUTOR_HEADLINE =
+  'Genera gli use case deterministici dalla knowledge base';
+/** Empty tutor kb_deterministic: guida sotto il titolo. */
+export const HINT_EMPTY_USE_CASE_KB_GENERATE =
+  'Usa la tabella KB approvata (Riformattato + selectorSpec) per creare acquisizione, correzione e conferma. Puoi svuotare la lista e rigenerare in qualsiasi momento.';
+/** CTA empty state + header: generazione deterministica da KB. */
+export const LABEL_GENERATE_KB_DIALOG_USE_CASES = 'Genera UC da KB';
+/** Stato busy durante generazione deterministica da KB. */
+export const LABEL_GENERATING_KB_DIALOG_USE_CASES = 'Generazione UC da KB…';
 /** Link inline nello stato vuoto use case (due occorrenze nel paragrafo intro). */
 export const LABEL_EMPTY_USE_CASE_CLICK_HERE = 'clicca qui';
 /** Placeholder textarea quando l’utente sceglie «incolla lista». */
@@ -122,3 +132,16 @@ Spiega in modo chiaro:
 Più la descrizione è completa e precisa, più il sistema potrà generare un design coerente (comportamento, dati da raccogliere, scenari).
 
 Esempio: «Prenotazione visita medica: chiedere tipo di visita, date preferite, nome e cognome, telefono; confermare la prenotazione; consentire correzioni in qualsiasi momento.»`;
+
+/** True se il banner creationMessage indica un'operazione ancora in corso (mostra spinner). */
+export function isUseCaseCreationBusyMessage(message: string | null | undefined): boolean {
+  if (!message?.trim()) return false;
+  return (
+    message === LABEL_GENERATING_KB_DIALOG_USE_CASES ||
+    message === LABEL_CREATING_ONE_USE_CASE ||
+    message === LABEL_CREATING_MULTIPLE_USE_CASES ||
+    message.startsWith('Generando use case') ||
+    message.startsWith('Ordinamento') ||
+    message.startsWith('Categorizzazione')
+  );
+}

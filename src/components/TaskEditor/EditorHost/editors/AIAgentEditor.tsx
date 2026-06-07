@@ -26,7 +26,6 @@ import { normalizeUseCaseSiblingOrder } from './aiAgentEditor/useCaseHierarchy';
 import { useUseCaseGeneratorWizard } from './aiAgentEditor/useCaseGeneratorWizard/useUseCaseGeneratorWizard';
 import { USE_CASE_GENERATOR_WIZARD_MAX_CONVERSATIONS } from '@domain/useCaseGeneratorWizard/registry';
 import {
-  countConversationsByStyleId,
   listCheckedStyleIds,
 } from '@domain/aiAgentConversationStyle/conversationStyleSelections';
 import { mergeAssistantPhraseDraftIntoUseCases } from './aiAgentEditor/mergeAssistantPhraseDraftIntoUseCases';
@@ -38,29 +37,21 @@ import { useFullscreenEditorPref } from './aiAgentEditor/useFullscreenEditorPref
 import { useAppToolbarBottom } from './aiAgentEditor/useAppToolbarBottom';
 import {
   areAllUseCasesProjectable,
-  areCatalogUseCasesDeployReady,
 } from '@domain/useCaseGeneratorWizard/useCaseJsonProjection';
-import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
-import {
-  isKbDeterministicDeployMode,
-} from '@domain/convai/agentConvaiDeployMode';
-import {
-  collectKbDialogDeployIssues,
-  isKbDialogDeployReady,
-} from '@domain/convai/kbDialogDeployReadiness';
 import { DEFAULT_CONVERSATIONAL_CATALOG_FORMAT } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import type { ConversationalCatalogFormat } from '@domain/useCaseGeneratorWizard/catalogFormat';
 import { ConversationalPromptDialog } from './aiAgentEditor/useCaseGeneratorWizard/ConversationalPromptDialog';
+import { flushAiAgentEditorsBeforeProjectSave } from './aiAgentEditor/aiAgentProjectSaveFlush';
 import { buildConvaiAgentSyncParams } from '@domain/convai/buildConvaiAgentSyncParams';
+import { parseAgentElevenLabsConvaiLinkJson } from '@domain/convai/agentElevenLabsConvaiLink';
 import type { ConvaiAgentSyncResult } from '@domain/convai/convaiAgentSyncTypes';
 import { persistConvaiAgentSyncLinkOnTask } from '@domain/convai/persistConvaiAgentSyncLinkOnTask';
-import { WebhookReadinessReportDialog } from './aiAgentEditor/webhookReadiness/WebhookReadinessReportDialog';
-import type { AgentWebhookReadinessReport } from '@domain/openApi/webhookOpenApiReadiness';
+import { isKbDeterministicDeployMode } from '@domain/convai/agentConvaiDeployMode';
 import {
   AGENT_WIZARD_PROMPTS_STEP_INDEX,
-  formatMappingBlockedReasonShort,
 } from './aiAgentEditor/useCaseBundle/mappingBlockedReasonCopy';
 import { extractManualCatalogBackendTaskIdsFromProjectData } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
+import { mergeConvaiBackendToolIdLists } from '@domain/iaAgentTools/manualCatalogBackendToolIds';
 import { createPortal } from 'react-dom';
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
@@ -71,6 +62,7 @@ import { AIAgentEditorDockProvider } from './aiAgentEditor/AIAgentEditorDockCont
 import { AIAgentConstructionWizardShell } from './aiAgentEditor/constructionWizard/AIAgentConstructionWizardShell';
 import { AddBackendDropdown } from './aiAgentEditor/AddBackendDropdown';
 import { AIAgentDeployMenu } from './aiAgentEditor/constructionWizard/AIAgentDeployMenu';
+import { AIAgentTestButton } from './aiAgentEditor/constructionWizard/AIAgentTestButton';
 import { AIAgentReviewToolbar } from './aiAgentEditor/constructionWizard/AIAgentReviewToolbar';
 import {
   AGENT_WIZARD_FIRST_STEP_INDEX,
@@ -80,20 +72,17 @@ import {
   evaluateAgentWizardCompletion,
 } from '@domain/aiAgentConstruction/agentWizardStepCompletion';
 import {
-  AGENT_PLATFORM_DISPLAY_LABEL,
   loadGlobalVoiceByPlatform,
   resolveVoicesByPlatform,
 } from '@utils/iaAgentRuntime/globalVoiceByPlatform';
-import {
-  conversationConfigForConvaiApi,
-  conversationConfigFragmentFromIaAgentConfig,
-} from '@utils/iaAgentRuntime/convaiAgentCreatePayload';
-import { createConvaiAgentViaOmniaServer } from '@services/convaiProvisionApi';
-import type { IAAgentPlatform, IAAgentVoiceConfig } from 'types/iaAgentRuntimeSetup';
+import type { IAAgentPlatform } from 'types/iaAgentRuntimeSetup';
 import { parseElevenLabsImportRecapFromIaJson } from '@workspaces/elevenlabs/elevenLabsImportRecap';
 import { useAgentReviewChannel } from './aiAgentEditor/useAgentReviewChannel';
 import { ActiveTutorLayout } from './aiAgentEditor/activeTutor/ActiveTutorLayout';
 import { useActiveTutorSync } from './aiAgentEditor/activeTutor/useActiveTutorSync';
+import {
+  OMNIA_EXIT_AI_AGENT_EDITOR_FULLSCREEN,
+} from './aiAgentEditor/aiAgentDockPanelIds';
 import {
   TUTOR_ENSURE_VIEW_EVENT,
   type TutorEnsureViewDetail,
@@ -328,6 +317,14 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    */
   const fullscreenPref = useFullscreenEditorPref();
   const appToolbarBottom = useAppToolbarBottom();
+
+  React.useEffect(() => {
+    const exitFullscreen = (): void => {
+      if (fullscreenPref.enabled) fullscreenPref.setEnabled(false);
+    };
+    document.addEventListener(OMNIA_EXIT_AI_AGENT_EDITOR_FULLSCREEN, exitFullscreen);
+    return () => document.removeEventListener(OMNIA_EXIT_AI_AGENT_EDITOR_FULLSCREEN, exitFullscreen);
+  }, [fullscreenPref.enabled, fullscreenPref.setEnabled]);
 
   /**
    * Side-effect post-apply per il bundle use case (replace o extend): drafts, baseline,
@@ -950,9 +947,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
    * compilabili dal builder deterministico (`areAllUseCasesProjectable`).
    */
   const [conversationalPromptDialogOpen, setConversationalPromptDialogOpen] = React.useState(false);
-  const [webhookReadinessReportOpen, setWebhookReadinessReportOpen] = React.useState(false);
-  const [webhookReadinessReport, setWebhookReadinessReport] =
-    React.useState<AgentWebhookReadinessReport | null>(null);
   const [slotMappingOpenRequestNonce, setSlotMappingOpenRequestNonce] = React.useState(0);
   const [conversationalCatalogFormat, setConversationalCatalogFormat] =
     React.useState<ConversationalCatalogFormat>(DEFAULT_CONVERSATIONAL_CATALOG_FORMAT);
@@ -969,43 +963,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     [c.iaRuntimeConfig?.convaiBackendToolTaskIds, manualCatalogBackendTaskIds]
   );
   const hasCatalogUseCases = Array.isArray(c.useCases) && c.useCases.length > 0;
-  const catalogDeployReady = React.useMemo(() => {
-    if (isKbDeterministicDeployMode(c.agentConvaiDeployMode)) {
-      return isKbDialogDeployReady(c.agentKnowledgeBaseDocumentsJson);
-    }
-    return (
-      hasCatalogUseCases &&
-      areCatalogUseCasesDeployReady(
-        c.useCases,
-        c.projectSlotLexicon,
-        c.backendOutputSlotBindings,
-        backendToolTaskIds.length > 0
-      )
-    );
-  }, [
-    c.agentConvaiDeployMode,
-    c.agentKnowledgeBaseDocumentsJson,
-    hasCatalogUseCases,
-    c.useCases,
-    c.projectSlotLexicon,
-    c.backendOutputSlotBindings,
-    backendToolTaskIds.length,
-  ]);
-  const catalogDeployBlockedReason = React.useMemo(() => {
-    if (isKbDeterministicDeployMode(c.agentConvaiDeployMode)) {
-      const issues = collectKbDialogDeployIssues(c.agentKnowledgeBaseDocumentsJson);
-      return issues[0]?.message;
-    }
-    if (!catalogDeployReady) {
-      return formatMappingBlockedReasonShort(c.compileMappingBanner);
-    }
-    return undefined;
-  }, [
-    c.agentConvaiDeployMode,
-    c.agentKnowledgeBaseDocumentsJson,
-    catalogDeployReady,
-    c.compileMappingBanner,
-  ]);
   /** Dialog prompt: tutti gli UC inclusi proiettabili (compile può ancora fallire su slot/backend). */
   const canCreateConversationalPrompt = React.useMemo(
     () =>
@@ -1013,16 +970,10 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       areAllUseCasesProjectable(c.useCases, c.projectSlotLexicon, c.backendOutputSlotBindings),
     [hasCatalogUseCases, c.useCases, c.projectSlotLexicon, c.backendOutputSlotBindings]
   );
+
+  const showAgentTestChrome = true;
   const onCloseConversationalPromptDialog = React.useCallback(
     () => setConversationalPromptDialogOpen(false),
-    []
-  );
-  const onOpenWebhookReadinessReport = React.useCallback(() => {
-    setWebhookReadinessReport(c.buildWebhookReadinessReport());
-    setWebhookReadinessReportOpen(true);
-  }, [c.buildWebhookReadinessReport]);
-  const onCloseWebhookReadinessReport = React.useCallback(
-    () => setWebhookReadinessReportOpen(false),
     []
   );
 
@@ -1106,30 +1057,12 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     }
     if (!canCreateConversationalPrompt) {
       window.alert(
-        'Completa la compilazione degli use case (o usa «Compila e Copy system prompt») prima di copiare.'
+        'Completa la compilazione degli use case (slot mapping) prima di copiare il system prompt.'
       );
       return;
     }
     setConversationalPromptDialogOpen(true);
   }, [hasCatalogUseCases, canCreateConversationalPrompt]);
-
-  const onCompileAndCopySystemPrompt = React.useCallback(() => {
-    if (!hasCatalogUseCases) {
-      window.alert('Aggiungi almeno uno use case prima di compilare.');
-      return;
-    }
-    void c.compileUseCasePhrasesForCatalog().then((ok) => {
-      if (ok) {
-        setConversationalPromptDialogOpen(true);
-        return;
-      }
-      openSlotMappingForMappingWork();
-    });
-  }, [
-    hasCatalogUseCases,
-    c.compileUseCasePhrasesForCatalog,
-    openSlotMappingForMappingWork,
-  ]);
 
   const convaiSyncParams = React.useMemo(
     () =>
@@ -1146,7 +1079,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
             backendCatalog: projectData?.backendCatalog,
             manualCatalogBackendTaskIds,
             knowledgeBaseDocuments: c.knowledgeBaseDocuments,
-            agentConvaiDeployMode: c.agentConvaiDeployMode,
+            agentConvaiDeployMode: 'kb_deterministic',
           })
         : null,
     [
@@ -1157,7 +1090,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
       c.agentLogBackendCalls,
       c.agentBehavior,
       c.knowledgeBaseDocuments,
-      c.agentConvaiDeployMode,
       conversationalCatalogFormat,
       manualCatalogBackendTaskIds,
       pdUpdate,
@@ -1166,12 +1098,35 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     ]
   );
 
+  const [convaiLinkRefreshTick, setConvaiLinkRefreshTick] = React.useState(0);
+
+  const hasConvaiAgentLinkLive = React.useMemo(() => {
+    void convaiLinkRefreshTick;
+    const row = instanceId ? taskRepository.getTask(instanceId) : null;
+    const link = parseAgentElevenLabsConvaiLinkJson(
+      String(row?.agentElevenLabsConvaiLinkJson ?? task?.agentElevenLabsConvaiLinkJson ?? '')
+    );
+    return Boolean(link?.agentId?.trim());
+  }, [convaiLinkRefreshTick, instanceId, task?.agentElevenLabsConvaiLinkJson]);
+
+  /** Abilitato solo dopo Deploy ConvAI (link agente ElevenLabs sul task). */
+  const agentTestButtonReady = hasConvaiAgentLinkLive && Boolean(instanceId?.trim());
+
+  const agentTestButtonDisabledReason = React.useMemo(() => {
+    if (agentTestButtonReady) return undefined;
+    if (!hasConvaiAgentLinkLive) {
+      return 'Esegui Deploy (menu Deploy) prima del test: agente ElevenLabs non ancora collegato.';
+    }
+    return 'Task agente non identificato.';
+  }, [agentTestButtonReady, hasConvaiAgentLinkLive]);
+
   const onConvaiSyncedFromDeploy = React.useCallback(
     async (result: ConvaiAgentSyncResult) => {
       const tid = String(instanceId ?? '').trim();
       const pid = String(pdUpdate?.getCurrentProjectId() ?? projectData?.projectId ?? '').trim();
       if (tid && result.link) {
         await persistConvaiAgentSyncLinkOnTask(tid, result, pid || undefined);
+        setConvaiLinkRefreshTick((t) => t + 1);
       }
       if (!projectData || !pdUpdate?.updateDataDirectly) return;
       const catalog = projectData.backendCatalog;
@@ -1357,130 +1312,38 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     ]
   );
 
-  /**
-   * «Upload to Platform → Platform X». Provisioning reale solo per ElevenLabs (createAgent
-   * ConvAI esistente). Per le altre 3 platform: alert informativo che spiega perché non è
-   * disponibile, evitando false aspettative (regola progetto: fail-loud, no silent fallback).
-   */
-  const onUploadToPlatform = React.useCallback(
-    async (platform: IAAgentPlatform, voice: IAAgentVoiceConfig) => {
-      const platformLabel = AGENT_PLATFORM_DISPLAY_LABEL[platform];
-      if (platform !== 'elevenlabs') {
-        window.alert(
-          `Provisioning verso ${platformLabel} non ancora implementato.\n\n` +
-            (platform === 'openai'
-              ? 'OpenAI Assistants API è prevista come prossima integrazione.'
-              : `${platformLabel} non espone un concetto nativo di "agent persistente": ` +
-                'usa «Copy system prompt» per portare il prompt manualmente nella console.')
-        );
-        return;
-      }
-      try {
-        // Costruisco la conversation_config a partire dall'IAAgentConfig del task corrente,
-        // forzando la voce scelta nel dropdown (single source: la voce è la default GLOBALE
-        // per la platform target, non quella del task — sono concetti separati).
-        const cfgWithVoice = { ...c.iaRuntimeConfig, platform: 'elevenlabs' as const, voice };
-        const fragment = conversationConfigFragmentFromIaAgentConfig(cfgWithVoice);
-        if (!fragment) {
-          throw new Error('IA Runtime config insufficiente per generare il payload ConvAI');
-        }
-        const outbound = conversationConfigForConvaiApi(fragment) ?? fragment;
-        const displayName =
-          (typeof task?.label === 'string' && task.label.trim()) ||
-          `Omnia agent ${instanceId.slice(0, 8)}`;
-        const { agentId } = await createConvaiAgentViaOmniaServer({
-          name: displayName,
-          conversation_config: outbound,
-        });
-        window.alert(
-          `Deploy ${platformLabel} riuscito.\nAgent ID: ${agentId}\nVoce: ${voice.id}`
-        );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        window.alert(`Deploy ${platformLabel} fallito:\n\n${msg}`);
-      }
-    },
-    [c.iaRuntimeConfig, instanceId, task?.label]
-  );
-
-  /**
-   * Slot del dropdown «Deploy» nello stepper: presente appena gli use case sono pronti
-   * (compilabili dal builder deterministico, vedi `canCreateConversationalPrompt`).
-   * Le conversazioni NON sono prerequisito di Upload: l'Upload pubblica il prompt
-   * runtime dell'agente; le conversazioni restano un artefatto di review opzionale.
-   * Il flag `costsActive` non lo nasconde — resta accessibile anche dalla vista Costi.
-   */
-  /**
-   * Stili disponibili nel menu Deploy = stili checkati nel gate conversazionale.
-   * Sono solo informativi/opzionali: non bloccano l'Upload (vedi `AIAgentDeployMenu`).
-   * I badge mostrano quante conversazioni esistono per quello stile, se presenti.
-   */
-  const deployAvailableStyleIds = React.useMemo(
-    () => listCheckedStyleIds(c.agentConversationStyleSelections),
-    [c.agentConversationStyleSelections]
-  );
-  const deployCountByStyleId = React.useMemo(
-    () => countConversationsByStyleId(useCaseGenWizard.conversations),
-    [useCaseGenWizard.conversations]
-  );
-
-  /**
-   * Auto-reset del `deployStyleId` quando lo stile selezionato non è più checkato.
-   * Le conversazioni non sono più un prerequisito di Upload, quindi il check è solo
-   * sulla coerenza con la lista degli stili attivi nel gate.
-   * Idempotente: niente effetto se `deployStyleId` è già valido o `null`.
-   */
-  React.useEffect(() => {
-    const current = c.agentConversationDeployStyleId;
-    if (current && !deployAvailableStyleIds.includes(current)) {
-      c.setAgentConversationDeployStyleId(null);
-    }
-  }, [
-    deployAvailableStyleIds,
-    c.agentConversationDeployStyleId,
-    c.setAgentConversationDeployStyleId,
-  ]);
-
   const reviewPublishSlot: React.ReactNode = agentReviewChannel.canUseChannel ? (
     <AIAgentReviewToolbar channel={agentReviewChannel} />
   ) : null;
 
-  const deploySlot: React.ReactNode = hasCatalogUseCases ? (
+  const testSlot: React.ReactNode = showAgentTestChrome ? (
+    <AIAgentTestButton
+      agentTaskId={instanceId}
+      taskLabel={typeof task?.label === 'string' ? task.label : ''}
+      disabled={!agentTestButtonReady}
+      disabledReason={agentTestButtonDisabledReason}
+      compilePhrasesBusy={c.compilePhrasesBusy}
+    />
+  ) : null;
+
+  const onDeployAction = React.useCallback(() => {
+    flushAiAgentEditorsBeforeProjectSave();
+  }, []);
+
+  const deploySlot: React.ReactNode = (
     <AIAgentDeployMenu
       voicesByPlatform={voicesByPlatform}
-      onUploadToPlatform={(platform, voice) => {
-        void onUploadToPlatform(platform, voice);
-      }}
       onFixVoice={onFixVoiceForPlatform}
-      onCompileAndCopySystemPrompt={onCompileAndCopySystemPrompt}
-      onOpenWebhookReadinessReport={onOpenWebhookReadinessReport}
+      onDeployAction={onDeployAction}
       compilePhrasesBusy={c.compilePhrasesBusy}
       convaiSyncParams={convaiSyncParams}
       onConvaiSynced={(result) => void onConvaiSyncedFromDeploy(result)}
-      deployInlineDisabled={!canCreateConversationalPrompt}
-      deployInlineDisabledReason={
-        canCreateConversationalPrompt
-          ? undefined
-          : 'Use case non ancora proiettabili: usa «Compila e Copy» o completa Slot mapping.'
-      }
-      compileAndCopyDisabled={!hasCatalogUseCases}
-      compileAndCopyDisabledReason="Aggiungi almeno uno use case al catalogo."
-      catalogUploadReady={catalogDeployReady}
-      catalogUploadBlockedReason={catalogDeployBlockedReason}
-      convaiDeployMode={c.agentConvaiDeployMode}
-      onConvaiDeployModeChange={c.setAgentConvaiDeployMode}
-      availableStyleIds={deployAvailableStyleIds}
-      countByStyleId={deployCountByStyleId}
-      deployStyleId={c.agentConversationDeployStyleId}
-      onDeployStyleIdChange={c.setAgentConversationDeployStyleId}
-      logUseCaseEnabled={c.agentLogUseCase}
-      onToggleLogUseCase={c.setAgentLogUseCase}
-      logBackendCallsEnabled={c.agentLogBackendCalls}
-      onToggleLogBackendCalls={c.setAgentLogBackendCalls}
       immediateStartEnabled={c.agentImmediateStart}
       onToggleImmediateStart={c.setAgentImmediateStart}
+      logBackendCallsEnabled={c.agentLogBackendCalls}
+      onToggleLogBackendCalls={c.setAgentLogBackendCalls}
     />
-  ) : null;
+  );
 
   const dockValue: AIAgentEditorDockContextValue = {
     instanceId: c.instanceId,
@@ -1530,6 +1393,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCaseBundleGenerationCount: c.useCaseBundleGenerationCount,
     useCaseBundleGenerationOrdering: c.useCaseBundleGenerationOrdering,
     useCaseBundleGenerationCategorizing: c.useCaseBundleGenerationCategorizing,
+    useCaseKbDialogGenerationBusy: c.useCaseKbDialogGenerationBusy,
     useCaseCategories: c.useCaseCategories,
     setUseCaseCategories: c.setUseCaseCategories,
     useCasePhraseStylePropagationBusy: c.useCasePhraseStylePropagationBusy,
@@ -1538,6 +1402,8 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
     useCaseComposerError: c.useCaseComposerError,
     onClearUseCaseComposerError: c.clearUseCaseComposerError,
     onGenerateUseCaseBundle: runGenerateUseCaseBundle,
+    onGenerateKbDialogUseCases: c.handleGenerateKbDialogUseCases,
+    kbDeterministicMode: isKbDeterministicDeployMode(c.agentConvaiDeployMode),
     onCreateUseCase: c.handleCreateUseCase,
     onSplitRootUseCaseDraft: c.handleSplitRootUseCaseDraft,
     onRootUseCaseBatchCreated,
@@ -1839,6 +1705,7 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
               taskLabel={typeof task?.label === 'string' ? task.label : ''}
               backendToolTaskIds={backendToolTaskIds}
               deploySlot={deploySlot}
+              testSlot={testSlot}
               reviewPublishSlot={reviewPublishSlot}
               bypassGating={c.hasAgentGeneration}
               elevenLabsImportRecap={elevenLabsImportRecap}
@@ -1851,11 +1718,6 @@ export default function AIAgentEditor({ task, onToolbarUpdate, hideHeader }: Edi
           viewport) — sta sopra al dock ma sotto la chrome esterna. Usa portal interno via
           `absolute inset-0 z-[60]` (vedi `ConversationalPromptDialog`).
         */}
-        <WebhookReadinessReportDialog
-          open={webhookReadinessReportOpen}
-          report={webhookReadinessReport}
-          onClose={onCloseWebhookReadinessReport}
-        />
         <ConversationalPromptDialog
           open={conversationalPromptDialogOpen}
           useCases={c.useCases}

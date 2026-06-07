@@ -25,7 +25,7 @@ export type KbDialogDeployIssue = {
 function gridFromDoc(doc: StagedKbDocument) {
   const md = extractRestructuredDataForRuntime(String(doc.documentRestructuredMarkdown ?? ''));
   if (!md) return null;
-  return parseMarkdownPipeTable(md);
+  return parseMarkdownPipeTable(md)?.grid ?? null;
 }
 
 function eligibleKbDialogDocuments(docs: StagedKbDocument[]): StagedKbDocument[] {
@@ -45,6 +45,13 @@ export function listKbDocumentsReadyForDialogDeploy(
 ): StagedKbDocument[] {
   const docs = parseAgentKnowledgeBaseDocumentsJson(String(agentKnowledgeBaseDocumentsJson ?? ''));
   return eligibleKbDialogDocuments(docs);
+}
+
+/** Stessa validazione su documenti live dell'editor KB. */
+export function listKbDocumentsReadyFromStaged(
+  docs: readonly StagedKbDocument[] | undefined | null
+): StagedKbDocument[] {
+  return eligibleKbDialogDocuments(docs ? [...docs] : []);
 }
 
 /** Issue bloccanti per deploy deterministico. Vuoto = pronto. */

@@ -76,6 +76,20 @@ Namespace ApiServer.SessionStorage
             Public Property SubflowCompilations As Dictionary(Of String, CompiledFlow)
         End Class
 
+        Private Class CompiledTaskSessionData
+            Public Property SessionId As String
+            Public Property ProjectId As String
+            Public Property Locale As String
+            Public Property CompiledTaskJson As String
+            Public Property TaskId As String
+            Public Property Messages As List(Of Object)
+            Public Property IsWaitingForInput As Boolean
+            Public Property WaitingForInputData As Object
+            Public Property IsCompleted As Boolean
+            Public Property SseConnected As Boolean = False
+            Public Property InitialTurnExecuted As Boolean = False
+        End Class
+
         ''' <summary>
         ''' ✅ STATELESS: Serializza TaskSession (solo stato runtime, non configurazione immutabile)
         ''' </summary>
@@ -237,6 +251,55 @@ Namespace ApiServer.SessionStorage
                 Return session
             Catch ex As Exception
                 Throw New Exception($"Failed to deserialize OrchestratorSession: {ex.Message}", ex)
+            End Try
+        End Function
+
+        Public Shared Function SerializeCompiledTaskSession(session As CompiledTaskSession) As String
+            Try
+                Dim data As New CompiledTaskSessionData() With {
+                    .SessionId = session.SessionId,
+                    .ProjectId = session.ProjectId,
+                    .Locale = session.Locale,
+                    .CompiledTaskJson = session.CompiledTaskJson,
+                    .TaskId = session.TaskId,
+                    .Messages = session.Messages,
+                    .IsWaitingForInput = session.IsWaitingForInput,
+                    .WaitingForInputData = session.WaitingForInputData,
+                    .IsCompleted = session.IsCompleted,
+                    .SseConnected = session.SseConnected,
+                    .InitialTurnExecuted = session.InitialTurnExecuted
+                }
+                Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
+                    .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                    .NullValueHandling = NullValueHandling.Ignore
+                })
+            Catch ex As Exception
+                Throw New Exception($"Failed to serialize CompiledTaskSession: {ex.Message}", ex)
+            End Try
+        End Function
+
+        Public Shared Function DeserializeCompiledTaskSession(json As String) As CompiledTaskSession
+            Try
+                Dim data = JsonConvert.DeserializeObject(Of CompiledTaskSessionData)(json)
+                If data Is Nothing Then
+                    Return Nothing
+                End If
+                Return New CompiledTaskSession() With {
+                    .SessionId = data.SessionId,
+                    .ProjectId = data.ProjectId,
+                    .Locale = data.Locale,
+                    .CompiledTaskJson = data.CompiledTaskJson,
+                    .TaskId = data.TaskId,
+                    .Messages = If(data.Messages, New List(Of Object)()),
+                    .IsWaitingForInput = data.IsWaitingForInput,
+                    .WaitingForInputData = data.WaitingForInputData,
+                    .IsCompleted = data.IsCompleted,
+                    .SseConnected = data.SseConnected,
+                    .InitialTurnExecuted = data.InitialTurnExecuted,
+                    .EventEmitter = Nothing
+                }
+            Catch ex As Exception
+                Throw New Exception($"Failed to deserialize CompiledTaskSession: {ex.Message}", ex)
             End Try
         End Function
     End Class

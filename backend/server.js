@@ -108,7 +108,7 @@ const { bookFromAgendaRuntimeTrace } = require('./middleware/bookFromAgendaRunti
 const AIHealthChecker = require('./health/AIHealthChecker');
 const { mountIaCatalog, runStartupIaCatalogSync } = require('./services/iaCatalog/catalogRoutes');
 const { mountAiCostRoutes } = require('./services/aiCost/aiCostRoutes');
-const { mountConvaiWebhookInvocationRoutes } = require('./services/convaiWebhookInvocationRoutes');
+const { mountConvaiRuntimeInvocationRoutes } = require('./services/convaiRuntimeInvocationLog/routes');
 const { syncPricingFromOpenRouter } = require('./services/aiCost/pricingSync');
 const { getUsdToEur } = require('./services/aiCost/exchangeRateSync');
 const {
@@ -214,7 +214,7 @@ app.use(bookFromAgendaRuntimeTrace);
 
 mountIaCatalog(app);
 mountAiCostRoutes(app);
-mountConvaiWebhookInvocationRoutes(app);
+mountConvaiRuntimeInvocationRoutes(app);
 
 // AI cost catalog: best-effort prefetch on startup (pricing from OpenRouter, USD->EUR from frankfurter.dev).
 // Failures are non-fatal: the cost calculator still records calls with costUsd=0 when pricing is missing.
@@ -255,11 +255,28 @@ app.post(
 );
 
 const { createOmniaDialogStepHandler } = require('./services/omniaDialogStepService');
+const { proxyOmniaDialogStepToApiServer } = require('./services/omniaDialogStepProxy');
+
+/** Carica singolo task agente per ApiServer VB (omnia_dialog_step). */
+app.get('/api/runtime/project-task/:projectId/:taskId', async (req, res) => {
+  try {
+    const projectId = String(req.params.projectId ?? '').trim();
+    const taskId = String(req.params.taskId ?? '').trim();
+    if (!projectId || !taskId) {
+      return res.status(400).json({ error: 'missing_project_or_task' });
+    }
+    const task = await loadProjectTaskFromMongo(projectId, taskId);
+    if (!task) return res.status(404).json({ error: 'task_not_found' });
+    return res.json(task);
+  } catch (err) {
+    console.error('[GET /api/runtime/project-task]', err);
+    return res.status(500).json({ error: 'task_load_failed' });
+  }
+});
+
 app.post(
   '/api/runtime/omnia-dialog-step/:projectId/:agentTaskId',
-  createOmniaDialogStepHandler({
-    loadProjectTask: loadProjectTaskFromMongo,
-  })
+  (req, res) => proxyOmniaDialogStepToApiServer(req, res)
 );
 
 /** Route tunnel: `mount` è chiamato poco sotto, subito prima di `app.listen` (coda dello stack Express, dopo tutte le altre route). */
@@ -8914,8 +8931,18 @@ app.post('/step2-with-provider', async (req, res) => {
  */
 app.post('/api/runtime/ai-agent/step', async (req, res) => {
   try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const userMsg = typeof body.user_message === 'string' ? body.user_message : '';
+    const state = body.state && typeof body.state === 'object' ? body.state : {};
+    const rulesEmbedded =
+      typeof state.__omnia_runtime_rules === 'string' ? state.__omnia_runtime_rules.length : 0;
+    console.warn('[IA·ConvAI] POST /api/runtime/ai-agent/step (ramo LLM VB — NON omnia_dialog_step)', {
+      userMessageChars: userMsg.length,
+      rulesEmbeddedChars: rulesEmbedded,
+      hint: 'Se kb_deterministic: VB compiled task ha platform≠elevenlabs; filtra console [IA·ConvAI] Execute / VB compile AIAgent',
+    });
     const { runAIAgentRuntimeStep } = require('./services/AIAgentRuntimeBridgeService');
-    const result = await runAIAgentRuntimeStep(req.body || {}, aiProviderService);
+    const result = await runAIAgentRuntimeStep(body, aiProviderService);
     res.json(result);
   } catch (error) {
     console.error('[POST /api/runtime/ai-agent/step]', error);

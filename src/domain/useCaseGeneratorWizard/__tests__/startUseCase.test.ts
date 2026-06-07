@@ -48,8 +48,8 @@ describe('startUseCase', () => {
     const section = buildStartUseCaseRuleSection([makeUseCase()], 'uc-1');
     expect(section).toContain('Regola di Start');
     expect(section).toContain('FASE START');
-    expect(section).toContain('**Use Case 1** («Saluto cliente»)');
-    expect(section).toContain('Vietato: «Ciao»');
+    expect(section).toContain('Use Case 1 «Saluto cliente»');
+    expect(section).toContain('frase statica');
     expect(section).toContain('Buongiorno');
   });
 

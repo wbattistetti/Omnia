@@ -109,6 +109,10 @@ export interface AIAgentEditorDockContextValue {
   useCaseComposerError: string | null;
   onClearUseCaseComposerError: () => void;
   onGenerateUseCaseBundle: () => void | Promise<void>;
+  /** kb_deterministic: genera UC da KB. */
+  onGenerateKbDialogUseCases?: () => void | Promise<void>;
+  kbDeterministicMode?: boolean;
+  useCaseKbDialogGenerationBusy?: boolean;
   onCreateUseCase: (params: {
     label: string;
     parentId: string | null;

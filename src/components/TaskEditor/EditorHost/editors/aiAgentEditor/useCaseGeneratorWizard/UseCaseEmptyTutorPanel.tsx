@@ -8,8 +8,12 @@ import { formatUseCaseBundleProgressBanner } from '@domain/aiAgentUseCase/useCas
 import { useAiBusyLabel } from '@hooks/useAiBusyLabel';
 import { MissingAiModelToast } from '@components/common/MissingAiModelToast';
 import {
+  HINT_EMPTY_USE_CASE_KB_GENERATE,
   LABEL_EMPTY_USE_CASE_CLICK_HERE,
+  LABEL_EMPTY_USE_CASE_KB_TUTOR_HEADLINE,
   LABEL_EMPTY_USE_CASE_TUTOR_HEADLINE,
+  LABEL_GENERATE_KB_DIALOG_USE_CASES,
+  LABEL_GENERATING_KB_DIALOG_USE_CASES,
   LABEL_GENERATE_USE_CASES,
   PLACEHOLDER_EMPTY_USE_CASE_DRAFT,
 } from '../constants';
@@ -32,6 +36,9 @@ export type UseCaseEmptyTutorPanelProps = {
   onAnalyzeClick: () => void;
   rootBatchWarning: string | null;
   onGenerateFromScratch?: () => void | Promise<void>;
+  onGenerateKbDialogUseCases?: () => void | Promise<void>;
+  kbDeterministicMode?: boolean;
+  kbDialogGenerateBusy?: boolean;
   generating?: boolean;
   bundleGenerateBusy?: boolean;
   bundleGenerationCount?: number | null;
@@ -53,6 +60,9 @@ export function UseCaseEmptyTutorPanel({
   onAnalyzeClick,
   rootBatchWarning,
   onGenerateFromScratch,
+  onGenerateKbDialogUseCases,
+  kbDeterministicMode = false,
+  kbDialogGenerateBusy = false,
   generating = false,
   bundleGenerateBusy = false,
   bundleGenerationCount = null,
@@ -64,13 +74,18 @@ export function UseCaseEmptyTutorPanel({
   const [pasteAreaVisible, setPasteAreaVisible] = React.useState(false);
   const [optimisticBundleBusy, setOptimisticBundleBusy] = React.useState(false);
   const bundleBusy = generating || bundleGenerateBusy || optimisticBundleBusy;
+  const kbGenerateBusy = kbDialogGenerateBusy;
+  const panelBusy = bundleBusy || kbGenerateBusy;
 
   React.useEffect(() => {
     if (!generating && !bundleGenerateBusy) {
       setOptimisticBundleBusy(false);
     }
   }, [generating, bundleGenerateBusy]);
-  const canGenerateFromScratch = typeof onGenerateFromScratch === 'function';
+  const canGenerateFromScratch =
+    !kbDeterministicMode && typeof onGenerateFromScratch === 'function';
+  const canGenerateKb =
+    kbDeterministicMode && typeof onGenerateKbDialogUseCases === 'function';
   const progressMessage = formatUseCaseBundleProgressBanner(
     bundleGenerationCount,
     bundleGenerationOrdering,
@@ -112,21 +127,45 @@ export function UseCaseEmptyTutorPanel({
             decoding="async"
           />
           <h2 className="max-w-md text-base font-semibold leading-snug tracking-tight text-slate-50 sm:max-w-lg sm:text-lg lg:text-xl">
-            {LABEL_EMPTY_USE_CASE_TUTOR_HEADLINE}
+            {kbDeterministicMode
+              ? LABEL_EMPTY_USE_CASE_KB_TUTOR_HEADLINE
+              : LABEL_EMPTY_USE_CASE_TUTOR_HEADLINE}
           </h2>
         </header>
 
-        {bundleBusy ? (
+        {panelBusy ? (
           <div
             className="flex flex-1 flex-col items-center justify-center gap-4 px-2 py-12 text-center"
             role="status"
             aria-live="polite"
             aria-busy="true"
           >
-            <Loader2 className="h-10 w-10 animate-spin text-violet-300" aria-hidden />
-            <p className="max-w-lg text-base font-medium leading-relaxed text-violet-100/95 sm:text-lg">
-              {progressMessage}
+            <Loader2 className="h-10 w-10 animate-spin text-emerald-300" aria-hidden />
+            <p className="max-w-lg text-base font-medium leading-relaxed text-emerald-100/95 sm:text-lg">
+              {kbGenerateBusy
+                ? LABEL_GENERATING_KB_DIALOG_USE_CASES
+                : progressMessage}
             </p>
+          </div>
+        ) : canGenerateKb ? (
+          <div className="flex flex-col items-center gap-5 sm:gap-6">
+            <p className="mx-auto max-w-lg text-center text-sm leading-relaxed text-pretty text-slate-300 sm:max-w-xl sm:text-base">
+              {HINT_EMPTY_USE_CASE_KB_GENERATE}
+            </p>
+            <button
+              type="button"
+              disabled={rootComposerLocked || generating || kbDialogGenerateBusy}
+              aria-busy={kbDialogGenerateBusy}
+              onClick={() => void onGenerateKbDialogUseCases?.()}
+              className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-lg border border-emerald-500/55 bg-emerald-950/60 px-5 py-3 text-sm font-semibold text-emerald-50 shadow-sm hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {kbDialogGenerateBusy ? (
+                <Loader2 size={16} className="shrink-0 animate-spin" aria-hidden />
+              ) : null}
+              {kbDialogGenerateBusy
+                ? LABEL_GENERATING_KB_DIALOG_USE_CASES
+                : LABEL_GENERATE_KB_DIALOG_USE_CASES}
+            </button>
           </div>
         ) : (
           <div className="flex flex-col gap-5 sm:gap-6">

@@ -27,7 +27,11 @@ import {
   mergeResolvedAndLiveIaConfig,
   peekConvaiLiveIaConfig,
 } from '../../utils/iaAgentRuntime/convaiLiveIaConfigBridge';
-import { setConvaiSessionBinding } from '../../utils/iaAgentRuntime/convaiSessionAgentStore';
+import { setConvaiSessionBinding, getConvaiSessionBinding } from '../../utils/iaAgentRuntime/convaiSessionAgentStore';
+import {
+  parseAgentElevenLabsConvaiLinkJson,
+  resolveLinkedConvaiAgentId,
+} from '@domain/convai/agentElevenLabsConvaiLink';
 import type { NormalizedIaProviderError } from '@domain/compileErrors/iaProviderErrors';
 import { normalizeProviderError } from '@domain/compileErrors/normalizeProviderError';
 import { setIaProvisioningError } from '@domain/compileErrors/iaProvisioningErrorStore';
@@ -46,7 +50,7 @@ import {
   normalizeAgentConvaiDeployMode,
 } from '@domain/convai/agentConvaiDeployMode';
 import { collectKbDialogDeployIssues } from '@domain/convai/kbDialogDeployReadiness';
-import { enforceOmniaDialogStepRuntimeToolPolicy } from '@utils/iaAgentRuntime/omniaDialogStepConvaiTool';
+import { enforceOmniaDialogStepRuntimeToolPolicy, patchOmniaDialogStepSessionOnAgent } from '@utils/iaAgentRuntime/omniaDialogStepConvaiTool';
 import {
   CONVAI_WEBHOOK_GATEWAY_PORT,
   ensureConvaiDeployTunnelReady,
@@ -71,6 +75,10 @@ export type ConvaiProvisionContext = {
   omniaVersionLabel?: string;
   /** Grafo corrente per reachability Backend Call vs lista tool vuota. */
   flowSlice?: { nodes: unknown[]; edges: unknown[] };
+  /**
+   * Test editor agente: riusa l'agente ElevenLabs già deployato (no createAgent, no modal payload).
+   */
+  reuseDeployedConvaiAgent?: boolean;
 };
 
 /**
@@ -414,6 +422,61 @@ export async function ensureConvaiAgentsProvisioned(
       }
       if (backendToolValidationFailed) continue;
 
+      if (context.reuseDeployedConvaiAgent) {
+        const link = parseAgentElevenLabsConvaiLinkJson(
+          String(task.agentElevenLabsConvaiLinkJson ?? '')
+        );
+        const agentId = resolveLinkedConvaiAgentId(link, getConvaiSessionBinding(taskId)?.agentId);
+        if (!agentId) {
+          failed.push(taskId);
+          setIaProvisioningError(taskId, {
+            provider: 'elevenlabs',
+            code: 'convaiAgentNotDeployed',
+            message:
+              'Test agente: esegui Deploy prima del test (agente ElevenLabs non collegato al task).',
+            raw: null,
+          });
+          continue;
+        }
+        setConvaiSessionBinding(taskId, agentId, provisionKey);
+        if (kbDeterministicDeploy) {
+          const projectId = String(context.projectId ?? '').trim();
+          if (!projectId) {
+            failed.push(taskId);
+            setIaProvisioningError(taskId, {
+              provider: 'elevenlabs',
+              code: 'projectIdMissing',
+              message: 'Test agente KB: projectId mancante nel contesto provision.',
+              raw: null,
+            });
+            continue;
+          }
+          try {
+            await patchOmniaDialogStepSessionOnAgent({
+              agentId,
+              sessionConversationId,
+              projectId,
+              agentTaskId: taskId,
+            });
+          } catch (patchErr) {
+            failed.push(taskId);
+            setIaProvisioningError(taskId, {
+              provider: 'elevenlabs',
+              code: 'omniaDialogStepSessionPatch',
+              message:
+                patchErr instanceof Error
+                  ? patchErr.message
+                  : 'Impossibile allineare sessione dialogo KB sull’agente ElevenLabs.',
+              raw: patchErr,
+            });
+            continue;
+          }
+        }
+        skipped.push(taskId);
+        setIaProvisioningError(taskId, null);
+        continue;
+      }
+
       const reachableBackendIds = collectReachableBackendCallTaskIdsFromFlow(
         context.flowSlice ?? null,
         taskId
@@ -607,19 +670,21 @@ export async function ensureConvaiAgentsProvisioned(
     }
   }
 
-  if (payloadPreviewItems.length > 0) {
-    emitConvaiProvisionPayloadPreview(payloadPreviewItems);
-  } else if (isConvaiPayloadPreviewOnRunDebugEnabled()) {
-    emitConvaiProvisionPayloadPreview([
-      {
-        taskId: 'convai-preview-no-elevenlabs-tasks',
-        displayName: 'ConvAI — nessun task da provisionare',
-        bodyText:
-          '// Debug Run: nessun task AI Agent con piattaforma ElevenLabs nel flusso passato a ensureConvaiAgentsProvisioned.\n' +
-          '// Il pannello è mostrato in sviluppo (import.meta.env.DEV) o con localStorage omnia.debug.convaiPayloadOnRun=1.\n' +
-          '// Per non aprirlo in dev: localStorage.setItem("omnia.debug.convaiPayloadOnRun", "0").',
-      },
-    ]);
+  if (!context.reuseDeployedConvaiAgent) {
+    if (payloadPreviewItems.length > 0) {
+      emitConvaiProvisionPayloadPreview(payloadPreviewItems);
+    } else if (isConvaiPayloadPreviewOnRunDebugEnabled()) {
+      emitConvaiProvisionPayloadPreview([
+        {
+          taskId: 'convai-preview-no-elevenlabs-tasks',
+          displayName: 'ConvAI — nessun task da provisionare',
+          bodyText:
+            '// Debug Run: nessun task AI Agent con piattaforma ElevenLabs nel flusso passato a ensureConvaiAgentsProvisioned.\n' +
+            '// Il pannello è mostrato in sviluppo (import.meta.env.DEV) o con localStorage omnia.debug.convaiPayloadOnRun=1.\n' +
+            '// Per non aprirlo in dev: localStorage.setItem("omnia.debug.convaiPayloadOnRun", "0").',
+        },
+      ]);
+    }
   }
 
   return { provisioned, skipped, failed, sessionConversationId };

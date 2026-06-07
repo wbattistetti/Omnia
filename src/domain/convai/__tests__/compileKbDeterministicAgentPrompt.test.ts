@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   compileKbDeterministicAgentPrompt,
-  OMNIA_DIALOG_STEP_PROMPT_APPEND,
 } from '../compileKbDeterministicAgentPrompt';
 
 const APPROVED_KB_JSON = JSON.stringify([
@@ -61,7 +60,8 @@ describe('compileKbDeterministicAgentPrompt', () => {
       agentIaRuntimeOverrideJson: '',
     });
     expect(prompt).toContain('OMNIA_DIALOG_STEP');
-    expect(prompt).toContain(OMNIA_DIALOG_STEP_PROMPT_APPEND.slice(0, 40));
+    expect(prompt).toContain('Dopo OGNI utterance');
+    expect(prompt).toContain('Turno 0');
     expect(prompt).toContain('Slot NLU');
     expect(prompt).toContain('`specialita`');
     expect(prompt).not.toContain('Operational sequence');

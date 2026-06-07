@@ -63,6 +63,8 @@
     <Compile Include="Streaming\SseStreamManager.vb" />
     <Compile Include="Interfaces\Handlers\CompilationHandlers.vb" />
     <Compile Include="Interfaces\Handlers\TaskSessionHandlers.vb" />
+    <Compile Include="Interfaces\Handlers\CompiledTaskSessionHandlers.vb" />
+    <Compile Include="Interfaces\Handlers\OmniaDialogStepHandlers.vb" />
     <Compile Include="Interfaces\Handlers\TestExtractionHandlers.vb" />
     <Compile Include="Interfaces\Handlers\GrammarTestHandlers.vb" />
     <Compile Include="Interfaces\Handlers\GrammarFlowExtractHandlers.vb" />
@@ -79,6 +81,11 @@
     <Compile Include="ElevenLabs\OmniaDiagnosticBridgeSecret.vb" />
     <Compile Include="ElevenLabs\ElevenLabsEndpoints.vb" />
     <Compile Include="Designer\BackendCallTestProxyHandler.vb" />
+    <Compile Include="KbDialogStep\OmniaDialogStepSessionScope.vb" />
+    <Compile Include="KbDialogStep\ConvaiOptionalFieldSemantics.vb" />
+    <Compile Include="KbDialogStep\DialogStepSessionStore.vb" />
+    <Compile Include="KbDialogStep\ProjectTaskHttpLoader.vb" />
+    <Compile Include="KbDialogStep\OmniaDialogStepRunner.vb" />
     <!-- ❌ RIMOSSO: Migration\ContractMigrationRunner.vb - migrazione completata -->
   </ItemGroup>
 

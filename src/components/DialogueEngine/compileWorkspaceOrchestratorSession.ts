@@ -12,7 +12,10 @@ import { backendCompileFlowGraph, discoverSubflowCanvasIdsTransitively } from '.
 import { loadFlow } from '../../flows/FlowPersistence';
 import { collectSubflowWorkspaceCompileErrors } from '../../domain/compileErrors/collectSubflowWorkspaceCompileErrors';
 import { normalizeSeverity } from '../../utils/severityUtils';
-import { iaConvaiTraceMergedCompileTasks } from '../../utils/debug/iaConvaiFlowTrace';
+import {
+  iaConvaiTraceCompiledFlowAiAgents,
+  iaConvaiTraceMergedCompileTasks,
+} from '../../utils/debug/iaConvaiFlowTrace';
 import {
   collectIaAgentRuntimeCompileErrors,
   mergeAiAgentTaskLocations,
@@ -330,6 +333,7 @@ export async function compileWorkspaceForOrchestratorSession(
   }
 
   iaConvaiTraceMergedCompileTasks(rootFlowId, mergedTasks);
+  iaConvaiTraceCompiledFlowAiAgents(rootFlowId, primaryCompileJson);
 
   return {
     primaryCompileJson,

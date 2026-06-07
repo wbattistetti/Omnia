@@ -36,6 +36,8 @@ export type UseFlowModeChatOptions = {
   /** Persist debugger steps (same key as compile root when isolating a subflow). */
   projectId?: string | null;
   flowId?: string | null;
+  /** Test editor agente: riusa deploy ConvAI esistente. */
+  reuseDeployedConvaiAgent?: boolean;
 };
 
 /**
@@ -263,7 +265,8 @@ export function useFlowModeChat(
         compilationFixError?: CompilationError;
         backendInvocations?: Message['backendInvocations'];
         backendDebugText?: string;
-        convaiWebhookInvocations?: Message['convaiWebhookInvocations'];
+        convaiToolConfigDiagnostics?: Message['convaiToolConfigDiagnostics'];
+        convaiRuntimeInvocations?: Message['convaiRuntimeInvocations'];
       }) => {
         const messageId =
           message.id != null && String(message.id) !== ''
@@ -294,7 +297,8 @@ export function useFlowModeChat(
           compilationFixError: message.compilationFixError,
           backendInvocations: message.backendInvocations,
           backendDebugText: message.backendDebugText,
-          convaiWebhookInvocations: message.convaiWebhookInvocations,
+          convaiToolConfigDiagnostics: message.convaiToolConfigDiagnostics,
+          convaiRuntimeInvocations: message.convaiRuntimeInvocations,
           ...(sourceTaskId ? { sourceTaskId } : {}),
         };
         const currentOnMessage = onMessageRef.current;
@@ -329,6 +333,7 @@ export function useFlowModeChat(
       },
       orchestratorCompileRootFlowId: options?.orchestratorCompileRootFlowId ?? null,
       agentLogBackendCalls: options?.agentLogBackendCalls === true,
+      reuseDeployedConvaiAgent: options?.reuseDeployedConvaiAgent === true,
       onWaitingForInput: (data?: {
         taskId: string;
         nodeId?: string;
@@ -372,6 +377,7 @@ export function useFlowModeChat(
       toReadableLabel,
       options?.orchestratorCompileRootFlowId,
       options?.agentLogBackendCalls,
+      options?.reuseDeployedConvaiAgent,
       debuggerController,
       setStartAgentRuntimeError,
       setOrchestratorTaskIdHint,

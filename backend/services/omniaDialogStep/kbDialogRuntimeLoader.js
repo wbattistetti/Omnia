@@ -49,6 +49,11 @@ function parseSelectorSpec(raw) {
     schemaVersion: raw.schemaVersion === 1 ? 1 : 1,
     columns,
     invalidationTemplates,
+    valueLabels:
+      raw.valueLabels && typeof raw.valueLabels === 'object' && !Array.isArray(raw.valueLabels)
+        ? raw.valueLabels
+        : {},
+    completeTemplate: typeof raw.completeTemplate === 'string' ? raw.completeTemplate.trim() : '',
   };
 }
 
@@ -91,6 +96,8 @@ function loadKbDialogRuntime(agentTask, preferredDocId) {
     documentName: doc.name,
     grid: { headers: parsed.headers, rows: parsed.rows },
     selectorSpec,
+    valueLabels: selectorSpec.valueLabels ?? {},
+    completeTemplate: selectorSpec.completeTemplate ?? '',
   };
 }
 

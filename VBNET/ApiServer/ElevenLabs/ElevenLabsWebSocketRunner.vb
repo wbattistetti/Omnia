@@ -31,6 +31,13 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
     Private _receiveTask As Task
     Private _externalConversationId As String
     Private _disposed As Boolean
+    Private _sessionReadyTcs As TaskCompletionSource(Of Boolean)
+
+    Public ReadOnly Property IsWebSocketOpen As Boolean
+        Get
+            Return _ws IsNot Nothing AndAlso _ws.State = WebSocketState.Open
+        End Get
+    End Property
 
     Public Sub New(
         agentId As String,
@@ -62,6 +69,7 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
             Throw New InvalidOperationException("ElevenLabs returned an empty signed_url.")
         End If
 
+        _sessionReadyTcs = New TaskCompletionSource(Of Boolean)(TaskCreationOptions.RunContinuationsAsynchronously)
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct)
         Dim token = _cts.Token
 
@@ -73,10 +81,21 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
         Await SendRawTextAsync(initiation, token).ConfigureAwait(False)
 
         _receiveTask = Task.Run(Function() ReceiveLoopAsync(token), token)
+
+        Dim readyTimeout = TimeSpan.FromSeconds(12)
+        Dim completed = Await Task.WhenAny(_sessionReadyTcs.Task, Task.Delay(readyTimeout, token)).ConfigureAwait(False)
+        If completed IsNot _sessionReadyTcs.Task Then
+            If Not IsWebSocketOpen Then
+                Throw New InvalidOperationException("ElevenLabs WebSocket closed before session became ready.")
+            End If
+            Console.WriteLine($"{_logPrefix} session ready timeout — proceeding with open WebSocket (metadata not confirmed)")
+        Else
+            Console.WriteLine($"{_logPrefix} session ready (ConvAI initiation acknowledged)")
+        End If
     End Function
 
     Public Async Function SendUserMessageAsync(userText As String, ct As CancellationToken) As Task
-        If _ws Is Nothing OrElse _ws.State <> WebSocketState.Open Then
+        If Not IsWebSocketOpen Then
             Throw New InvalidOperationException("ElevenLabs WebSocket is not connected.")
         End If
         Dim jo As New JObject From {
@@ -107,10 +126,17 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
             ' Expected on shutdown.
         Catch ex As Exception
             Console.WriteLine($"{_logPrefix} ReceiveLoop error: {ex.Message}")
+            _hostSession?.MarkConnectionLost()
             _queue.Enqueue(New ElevenLabsAgentTurnPayload With {
                 .Text = "",
                 .Status = "completed"
             })
+        Finally
+            If Not _disposed AndAlso _hostSession IsNot Nothing AndAlso _hostSession.ConnectionAlive Then
+                If Not IsWebSocketOpen Then
+                    _hostSession.MarkConnectionLost()
+                End If
+            End If
         End Try
     End Function
 
@@ -159,6 +185,7 @@ Public NotInheritable Class ElevenLabsWebSocketRunner
             If Not String.IsNullOrEmpty(cid) Then
                 _externalConversationId = cid
             End If
+            _sessionReadyTcs?.TrySetResult(True)
             Return
         End If
 

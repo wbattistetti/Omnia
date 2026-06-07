@@ -8,7 +8,6 @@ import {
   isUseCaseIncludedInConversations,
   type AIAgentUseCase,
 } from '@types/aiAgentUseCases';
-import { projectUseCaseToConversationalJson } from './useCaseJsonProjection';
 import { isStartAgentUseCase } from './agentStartPrompt';
 
 /** Metadati use case Start per header prompt e allineamento ConvAI. */
@@ -33,17 +32,25 @@ export function resolveStartUseCase(
   return uc;
 }
 
-/** Testo runtime (prima variante tokenizzata) per ElevenLabs `first_message`. */
-export function resolveStartUseCaseSpeechText(
+/**
+ * Frase di apertura statica per ConvAI `first_message` (testo naturale del designer).
+ * Non usa `tokenizedExample`: gli slot si compilano dal turno 1 in poi.
+ */
+export function resolveStartUseCaseOpeningSpeechText(
   useCases: readonly AIAgentUseCase[],
   startUseCaseId: string | undefined | null
 ): string {
   const uc = resolveStartUseCase(useCases, startUseCaseId);
   if (!uc) return '';
-  const projected = projectUseCaseToConversationalJson(uc);
-  const fromVariant = projected?.variants[0]?.tokenizedExample?.trim();
-  if (fromVariant) return fromVariant;
   return getAssistantExample(uc).trim();
+}
+
+/** @deprecated Prefer {@link resolveStartUseCaseOpeningSpeechText} for first_message; keeps natural opener for callers. */
+export function resolveStartUseCaseSpeechText(
+  useCases: readonly AIAgentUseCase[],
+  startUseCaseId: string | undefined | null
+): string {
+  return resolveStartUseCaseOpeningSpeechText(useCases, startUseCaseId);
 }
 
 /** Metadati Start se l'id è valido e l'UC è nel catalogo conversazionale. */
@@ -66,7 +73,7 @@ export function resolveStartUseCasePromptMeta(
     catalogNumber,
     label: String(uc.label ?? '').trim() || uc.id,
     scenario: String(uc.payoff ?? uc.refinement_prompt ?? '').trim(),
-    speechTemplate: resolveStartUseCaseSpeechText(useCases, uc.id),
+    speechTemplate: resolveStartUseCaseOpeningSpeechText(useCases, uc.id),
   };
 }
 
@@ -100,19 +107,18 @@ export function buildStartUseCaseRuleSection(
 
   const lines = [
     'Regola di Start — FASE START (turno 0)',
-    `Stato iniziale obbligatorio della conversazione: applica **Use Case ${meta.catalogNumber}** («${meta.label}»).`,
-    `Condizione: all'avvio della sessione, finché l'utente non ha ancora fornito contesto utile e non hai completato il turno 0.`,
+    `All'avvio sessione pronuncia **subito** la frase statica di apertura (Use Case ${meta.catalogNumber} «${meta.label}»), allineata a \`first_message\` su ElevenLabs.`,
+    'Non attendere slot, backend o compilazione token per parlare al turno 0.',
     '',
     'Passi obbligatori (in ordine):',
-    '1. Identifica che sei in **FASE START** (turno 0): nessun altro use case è ammesso.',
-    `2. Se lo scenario o \`tokenBindings\` / \`slotBackendContract\` dell'Use Case ${meta.catalogNumber} richiedono dati dal backend, **invoca prima** i tool webhook indicati (\`toolName\`, SEND in tokenBindings); leggi RECEIVE (blocco BACKEND RECEIVE).`,
-    '3. Compila **solo** i token `[…]` del template sotto; non lasciare parentesi quadre visibili; non aggiungere parole fuori dal template (Template-Only).',
-    '4. Pronuncia la frase risultante come **unica** output del turno 0.',
-    '5. Vietato: «Ciao», «Come posso aiutarti», «Hello», o qualsiasi saluto/frase non presente nel template Start.',
+    '1. **Turno 0**: pronuncia la frase di apertura statica sotto; nessun altro use case.',
+    '2. **Attendi** la risposta dell\'utente.',
+    '3. **Dal turno 1**: slot filling, tool backend e selezione use case come da catalogo e regole generali.',
+    '4. Vietato al turno 0: saluti generici diversi dalla frase configurata («Ciao», «Come posso aiutarti», …).',
     scenarioLine,
     speechLine,
     '',
-    'Dopo il turno 0 completato, passa alla selezione use case normale (regola 1 generale).',
+    'Dopo la prima risposta utente, passa alla selezione use case normale (regola 1 generale).',
   ];
   return lines.join('\n').trim();
 }
@@ -126,8 +132,8 @@ export function buildElevenLabsStartPhaseAppend(
   return [
     '---',
     'ElevenLabs — FASE START e first_message',
-    `Il campo \`first_message\` configurato sull'agente è il template dell'Use Case ${meta.catalogNumber} Start.`,
-    'Alla connessione: trattala come **turno 0** — completa i token con backend/tool se necessario, poi pronuncia quella frase (o l\'equivalente già compilato).',
-    'Non sostituire con saluti generici. Non passare ad altri use case prima di aver chiuso il turno 0.',
+    `Il campo \`first_message\` è la frase statica dell'Use Case ${meta.catalogNumber} Start — pronunciala **subito** alla connessione.`,
+    'Non compilare slot al turno 0. Dopo la risposta utente: slot filling e use case successivi.',
+    'Non sostituire con saluti generici.',
   ].join('\n');
 }

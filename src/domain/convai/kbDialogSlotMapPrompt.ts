@@ -14,6 +14,29 @@ function formatSelectorColumn(col: SelectorColumnSpec): string {
   return `- \`${key}\`: ${label} (${kind}, ${policy})`;
 }
 
+/** Chiavi slot selector (ordine tabella) per schema tool e prompt. */
+export function collectKbDialogSlotColumnIds(
+  agentKnowledgeBaseDocumentsJson: string | undefined | null
+): string[] {
+  const docs = listKbDocumentsReadyForDialogDeploy(agentKnowledgeBaseDocumentsJson);
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const doc of docs) {
+    const spec = doc.documentSelectorSpec;
+    if (!spec?.columns?.length) continue;
+    const selectors = spec.columns
+      .filter((c) => c.role === 'selector')
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.headerLabel.localeCompare(b.headerLabel, 'it'));
+    for (const col of selectors) {
+      const key = slugifySelectorColumnId(col.headerLabel);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      ids.push(key);
+    }
+  }
+  return ids;
+}
+
 /** Blocco markdown con slot da compilare in `updates` per omnia_dialog_step. */
 export function buildKbDialogSlotMapPromptSection(
   agentKnowledgeBaseDocumentsJson: string | undefined | null

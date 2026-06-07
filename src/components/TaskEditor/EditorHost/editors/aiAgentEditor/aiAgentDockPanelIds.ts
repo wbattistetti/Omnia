@@ -29,6 +29,21 @@ export const OMNIA_ACTIVATE_AI_AGENT_USE_CASES_TAB = 'omnia:activate-ai-agent-us
  */
 export const OMNIA_AI_AGENT_REHYDRATE_FROM_REPO = 'omnia:ai-agent-rehydrate-from-repo';
 
+/** Document event: apre debugger Omnia scoped al task AI Agent (dopo deploy test). */
+export const OMNIA_OPEN_AGENT_TEST_DEBUGGER = 'omnia:open-agent-test-debugger';
+
+/** Document event: esci da fullscreen editor AI Agent (prima di aprire debugger test). */
+export const OMNIA_EXIT_AI_AGENT_EDITOR_FULLSCREEN = 'omnia:exit-ai-agent-editor-fullscreen';
+
+export type OpenAgentTestDebuggerDetail = {
+  agentTaskId: string;
+  taskLabel?: string;
+  /** Default true (Test). Deploy passa false: solo report compilatore, niente avvio dialogo. */
+  autoStartDialogue?: boolean;
+  /** Se impostato, popola il report errori del debugger prima dell'apertura. */
+  deployCompileErrors?: import('@components/FlowCompiler/types').CompilationError[];
+};
+
 export interface DockPanelRef {
   readonly id: string;
 }

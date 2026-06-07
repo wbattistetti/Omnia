@@ -178,8 +178,8 @@ export default defineConfig(({ mode }) => {
 
       // Express AI cost tracker — before catch-all /api → FastAPI
       '/api/ai-calls': expressProxy(),
-      /** ConvAI webhook guardalog (Task Editor) — Express :3100 */
-      '/api/convai-webhook-invocations': expressProxy(),
+      /** ConvAI runtime guardalog V2 (Task Editor + debugger) — Express :3100 */
+      '/api/convai-runtime-invocations': expressProxy(),
 
       /** Dev tunnel ngrok (Express) — before catch-all /api → FastAPI */
       '/api/dev-tunnel': expressProxy(),
@@ -194,7 +194,7 @@ export default defineConfig(({ mode }) => {
       '/api/designer': expressProxy(),
       '/api/dev-tunnel': expressProxy(),
       '/api/ai-calls': expressProxy(),
-      '/api/convai-webhook-invocations': expressProxy(),
+      '/api/convai-runtime-invocations': expressProxy(),
       '/api/runtime/ai-agent': expressProxy(),
       '/api/runtime/scheduling': expressProxy(),
       '/api/runtime/bookfromagenda': expressProxy(),

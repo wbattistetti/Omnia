@@ -66,6 +66,8 @@ export interface AIAgentConstructionStepperProps {
    * o `undefined`, lo spazio non viene riservato.
    */
   readonly deploySlot?: React.ReactNode;
+  /** Pulsante Test agente (deploy + debugger) — tipicamente subito prima di {@link deploySlot}. */
+  readonly testSlot?: React.ReactNode;
   /** Menu «Pubblica for review» — tipicamente a sinistra di {@link deploySlot}. */
   readonly reviewPublishSlot?: React.ReactNode;
   /**
@@ -108,6 +110,7 @@ export function AIAgentConstructionStepper({
   interfaceActive = false,
   onToggleInterface,
   deploySlot = null,
+  testSlot = null,
   reviewPublishSlot = null,
   bypassGating = false,
 }: AIAgentConstructionStepperProps): React.ReactElement {
@@ -288,9 +291,10 @@ export function AIAgentConstructionStepper({
             </button>
           </li>
         ) : null}
-        {reviewPublishSlot || deploySlot ? (
+        {reviewPublishSlot || testSlot || deploySlot ? (
           <li className="ml-auto flex shrink-0 items-center gap-2">
             {reviewPublishSlot}
+            {testSlot}
             {deploySlot}
           </li>
         ) : null}

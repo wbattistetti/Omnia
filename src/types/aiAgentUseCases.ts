@@ -19,6 +19,7 @@ import {
 } from '@domain/aiAgentUseCase/useCaseTestQuestions';
 import type { UseCaseOverlapHint } from '@domain/aiAgentUseCase/useCaseSemanticOverlap';
 import { parseOverlapHintField } from '@domain/aiAgentUseCase/useCaseSemanticOverlap';
+import type { KbDialogUseCaseMeta } from '@domain/knowledgeBase/kbDialog/kbDialogTypes';
 import {
   ensureUseCaseResponse,
   parseUseCaseResponseField,
@@ -172,6 +173,9 @@ export interface AIAgentUseCase {
 
   /** Ultima analisi sovrapposizione semantica vs catalogo (design-time). */
   overlapHint?: UseCaseOverlapHint;
+
+  /** Metadati dialogo KB deterministico (generazione da tabella + selectorSpec). */
+  kb_dialog_meta?: KbDialogUseCaseMeta;
 }
 
 export type {
@@ -180,6 +184,7 @@ export type {
   UseCaseTestQuestionKind,
 } from '@domain/aiAgentUseCase/useCaseTestQuestions';
 export type { UseCaseOverlapHint } from '@domain/aiAgentUseCase/useCaseSemanticOverlap';
+export type { KbDialogUseCaseMeta } from '@domain/knowledgeBase/kbDialog/kbDialogTypes';
 
 /** Stable id for a dialogue turn (exported for UI bridge). */
 export function newAgentUseCaseTurnId(): string {
@@ -459,6 +464,7 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
       const response = parseUseCaseResponseField(o.response);
       const testQuestions = parseTestQuestionsField(o.testQuestions);
       const overlapHint = parseOverlapHintField(o.overlapHint);
+      const kb_dialog_meta = parseKbDialogUseCaseMetaField(o.kb_dialog_meta);
       out.push({
         id,
         label,
@@ -490,9 +496,43 @@ export function parseAgentUseCasesJsonLegacyArray(v: unknown): AIAgentUseCase[] 
         ...(response ? { response } : {}),
         ...(testQuestions.length > 0 ? { testQuestions } : {}),
         ...(overlapHint ? { overlapHint } : {}),
+        ...(kb_dialog_meta ? { kb_dialog_meta } : {}),
       });
     }
   return out.map((uc) => ensureUseCaseResponse(ensureUseCasePhrases(uc)));
+}
+
+function parseKbDialogUseCaseMetaField(raw: unknown): KbDialogUseCaseMeta | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const kind = o.kind;
+  if (kind !== 'acquisition' && kind !== 'correction' && kind !== 'complete') return undefined;
+  const bindingWhen =
+    o.bindingWhen && typeof o.bindingWhen === 'object' && !Array.isArray(o.bindingWhen)
+      ? Object.fromEntries(
+          Object.entries(o.bindingWhen as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string'
+          )
+        )
+      : undefined;
+  const invalidatedColumnIds = Array.isArray(o.invalidatedColumnIds)
+    ? o.invalidatedColumnIds.map((x) => String(x ?? '').trim()).filter(Boolean)
+    : undefined;
+  return {
+    kind,
+    ...(typeof o.selectorColumnId === 'string' && o.selectorColumnId.trim()
+      ? { selectorColumnId: o.selectorColumnId.trim() }
+      : {}),
+    ...(bindingWhen && Object.keys(bindingWhen).length > 0 ? { bindingWhen } : {}),
+    ...(typeof o.triggerColumnId === 'string' && o.triggerColumnId.trim()
+      ? { triggerColumnId: o.triggerColumnId.trim() }
+      : {}),
+    ...(invalidatedColumnIds && invalidatedColumnIds.length > 0
+      ? { invalidatedColumnIds }
+      : {}),
+    ...(o.skipAsk === true ? { skipAsk: true } : {}),
+    ...(typeof o.allowedValueCount === 'number' ? { allowedValueCount: o.allowedValueCount } : {}),
+  };
 }
 
 function parsePhrasesField(raw: unknown): AIAgentCanonicalPhrase[] {

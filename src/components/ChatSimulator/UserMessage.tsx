@@ -3,6 +3,7 @@ import { Check, X as XIcon, CheckCircle, AlertCircle, AlertTriangle, ChevronDown
 import type { CompilationError } from '@components/FlowCompiler/types';
 import type { FlowBackendCallInvocation } from '@features/debugger/types/flowBackendCallDiagnostic';
 import type { FlowConvaiWebhookDiagnostic } from '@features/debugger/types/flowConvaiWebhookDiagnostic';
+import type { ConvaiRuntimeInvocationRecord } from '@domain/convaiObservability/convaiRuntimeInvocationRecord';
 
 export interface ExtractedValue {
   variable: string; // Nome della variabile (es. "Day", "Month", "Year")
@@ -30,8 +31,10 @@ export interface Message {
   backendInvocations?: FlowBackendCallInvocation[];
   /** Righe DEBUG backend in conversazione (toggle `agentLogBackendCalls`). */
   backendDebugText?: string;
-  /** Debugger flusso: tool ConvAI webhook (URL effettivi post-tunnel). */
-  convaiWebhookInvocations?: FlowConvaiWebhookDiagnostic[];
+  /** Debugger flusso: diagnostica compile tool ConvAI (catalogo URL post-tunnel). */
+  convaiToolConfigDiagnostics?: FlowConvaiWebhookDiagnostic[];
+  /** Debugger flusso: log runtime Express V2 (omnia_dialog_step + gateway). */
+  convaiRuntimeInvocations?: ConvaiRuntimeInvocationRecord[];
   /** Debugger flusso: task che ha emesso il messaggio bot (SSE orchestrator). */
   sourceTaskId?: string;
 }

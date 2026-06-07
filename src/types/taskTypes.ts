@@ -458,6 +458,8 @@ export interface Task {
   agentLogicalStepsJson?: string;
   /** JSON array: use cases tree + dialogue (design-time). */
   agentUseCasesJson?: string;
+  /** Indice runtime compile per omnia_dialog_step (acquisition/correction/complete). */
+  agentKbDialogIndexJson?: string;
   /**
    * Start Prompt (scenario `startAgent`): frase di apertura sessione.
    * @see `parseAgentStartPromptJson` in `@domain/useCaseGeneratorWizard/agentStartPrompt`.

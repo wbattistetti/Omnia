@@ -60,6 +60,14 @@ Public Class AIAgentTaskDefinition
     <JsonProperty("convaiSessionConversationId")>
     Public Property ConvaiSessionConversationId As String
 
+    ''' <summary>Frase statica di apertura (allineata a ConvAI first_message).</summary>
+    <JsonProperty("firstMessage")>
+    Public Property FirstMessage As String
+
+    ''' <summary>Deploy deterministico KB (omnia_dialog_step).</summary>
+    <JsonProperty("kbDeterministic")>
+    Public Property KbDeterministic As Boolean
+
     Public Sub New()
         MyBase.New()
         Platform = IAPlatform.OpenAI
@@ -70,5 +78,7 @@ Public Class AIAgentTaskDefinition
         LlmEndpoint = ""
         ImmediateStart = False
         ConvaiSessionConversationId = ""
+        FirstMessage = ""
+        KbDeterministic = False
     End Sub
 End Class

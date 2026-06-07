@@ -2,8 +2,20 @@
  * URL gateway Omnia per webhook ConvAI: applica sendHints (valueKind → ISO) poi inoltra al Backend Call.
  */
 
-/** Express runtime default (allineato a `backend/server.js` PORT). */
+/** Express runtime default (legacy gateway BookFromAgenda, designer). */
 export const OMNIA_RUNTIME_DEFAULT_ORIGIN = 'http://localhost:3100';
+
+/** ApiServer .NET default (omnia_dialog_step, ElevenLabs bridge). */
+export const OMNIA_API_SERVER_DEFAULT_ORIGIN = 'http://127.0.0.1:5000';
+
+/**
+ * Origine webhook omnia_dialog_step per ConvAI (ElevenLabs cloud).
+ * Default Express :3100 (proxy → ApiServer VB); stesso tunnel ngrok degli altri webhook ConvAI.
+ * Override esplicito via `explicitBase` / `gatewayOrigin` in sync.
+ */
+export function resolveOmniaDialogStepRuntimeOrigin(explicitBase?: string): string {
+  return resolveOmniaRuntimeOrigin(explicitBase);
+}
 
 /**
  * Origine assoluta del runtime Omnia (gateway, bookfromagenda, proxy designer).

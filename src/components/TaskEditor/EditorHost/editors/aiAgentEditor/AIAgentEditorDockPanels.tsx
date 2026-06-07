@@ -159,6 +159,7 @@ export function EditorUseCasesPanel({
     useCaseBundleGenerationCount,
     useCaseBundleGenerationOrdering,
     useCaseBundleGenerationCategorizing,
+    useCaseKbDialogGenerationBusy = false,
     useCaseCategories,
     setUseCaseCategories,
     useCasePhraseStylePropagationBusy,
@@ -194,6 +195,8 @@ export function EditorUseCasesPanel({
     showRightPanel,
     generating,
     onGenerateUseCaseBundle,
+    onGenerateKbDialogUseCases,
+    kbDeterministicMode = false,
     useCaseGeneratorWizard,
     useCaseBundleFeedback,
     onDismissUseCaseBundleFeedback,
@@ -278,6 +281,7 @@ export function EditorUseCasesPanel({
     useCaseComposerBusy ||
     useCaseBundleGenerationBusy ||
     useCaseBundleGenerationCategorizing ||
+    useCaseKbDialogGenerationBusy ||
     useCasePhraseStylePropagationBusy;
 
   const bundleGenerateBusyLabel = useCaseBundleGenerationBusy
@@ -378,6 +382,11 @@ export function EditorUseCasesPanel({
       onGenerateUseCaseBundle={
         isErrorHandlingCatalog ? undefined : onGenerateUseCaseBundle
       }
+      onGenerateKbDialogUseCases={
+        isErrorHandlingCatalog ? undefined : onGenerateKbDialogUseCases
+      }
+      kbDeterministicMode={kbDeterministicMode}
+      kbDialogGenerateBusy={useCaseKbDialogGenerationBusy}
       generating={generating}
       bundleGenerateBusyLabel={bundleGenerateBusyLabel}
       useCaseBundleGenerationCount={useCaseBundleGenerationCount}

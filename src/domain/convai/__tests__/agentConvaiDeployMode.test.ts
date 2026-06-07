@@ -6,8 +6,8 @@ import {
 } from '../agentConvaiDeployMode';
 
 describe('agentConvaiDeployMode', () => {
-  it('defaults to legacy', () => {
-    expect(normalizeAgentConvaiDeployMode(undefined)).toBe('legacy');
+  it('defaults to kb_deterministic', () => {
+    expect(normalizeAgentConvaiDeployMode(undefined)).toBe('kb_deterministic');
     expect(normalizeAgentConvaiDeployMode('invalid')).toBe(DEFAULT_AGENT_CONVAI_DEPLOY_MODE);
   });
 

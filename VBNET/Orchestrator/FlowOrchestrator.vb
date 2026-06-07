@@ -609,52 +609,19 @@ Public Class FlowOrchestrator
         Dim utterance = nav.PendingUtterance
         nav.PendingUtterance = ""
 
-        Dim emittedMessages As New List(Of String)()
-        Dim diagnosticJsons As New List(Of String)()
-        Dim execState = RuntimeStateForActiveFlow()
-
-        Dim effectiveUtterance = utterance
-        If rowTask.ImmediateStart AndAlso String.IsNullOrWhiteSpace(effectiveUtterance) Then
-            Dim hasExistingDialogue = execState.DialogueContexts IsNot Nothing AndAlso execState.DialogueContexts.ContainsKey(rowTask.Id)
-            If Not hasExistingDialogue Then
-                effectiveUtterance = AIAgentTaskExecutor.ImmediateStartSyntheticUserMessage
-            End If
-        End If
-
-        Dim result = Await TaskExecutor.ExecuteTask(
+        Dim outcome = Await CompiledTaskTurnService.ExecuteTurn(
             rowTask,
-            execState,
+            RuntimeStateForActiveFlow(),
+            utterance,
             Sub(text As String, stepType As String, escalationNumber As Integer)
-                If String.Equals(stepType, "AIAgent", StringComparison.OrdinalIgnoreCase) AndAlso Not String.IsNullOrWhiteSpace(text) Then
-                    emittedMessages.Add(text)
-                ElseIf String.Equals(stepType, "BackendCallDiagnostic", StringComparison.OrdinalIgnoreCase) AndAlso Not String.IsNullOrWhiteSpace(text) Then
-                    diagnosticJsons.Add(text)
-                End If
+                ' Messaggi raccolti in TurnOutcome
             End Sub,
-            effectiveUtterance
+            Sub(jsonText As String)
+                RaiseEvent BackendCallDiagnostic(Me, jsonText)
+            End Sub
         ).ConfigureAwait(False)
 
-        If Not String.IsNullOrWhiteSpace(result.BackendCallDiagnosticJson) Then
-            diagnosticJsons.Add(result.BackendCallDiagnosticJson)
-        End If
-        For Each d In diagnosticJsons
-            RaiseEvent BackendCallDiagnostic(Me, d)
-        Next
-
-        If Not result.Success Then
-            Dim errMsg = If(String.IsNullOrEmpty(result.Err), "Unknown error", result.Err)
-            ' ConvAI/startAgent: eccezione strutturata → ExecutionError SSE con payload ricco (non solo testo bubble).
-            If Not String.IsNullOrWhiteSpace(result.ErrDetailJson) Then
-                Throw RuntimeConvaiException.FromJsonDetail(errMsg, result.ErrDetailJson)
-            End If
-            Return RowTurnResult.Completed(New List(Of String) From { errMsg })
-        End If
-
-        If result.IsCompleted Then
-            Return RowTurnResult.Completed(emittedMessages)
-        End If
-
-        Return RowTurnResult.WaitingForInput(rowTask.Id, emittedMessages)
+        Return outcome.RowResult
     End Function
 
     ''' <summary>

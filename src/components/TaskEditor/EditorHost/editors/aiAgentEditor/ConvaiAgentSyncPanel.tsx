@@ -74,6 +74,7 @@ export function ConvaiAgentSyncPanel({
   const [tunnelMapVersion, setTunnelMapVersion] = React.useState(0);
   const [tunnelEnsuring, setTunnelEnsuring] = React.useState(false);
   const [tunnelStatusHint, setTunnelStatusHint] = React.useState<string | null>(null);
+  const [showAdvancedAgents, setShowAdvancedAgents] = React.useState(false);
   const tunnelAutoEnsureRef = React.useRef(false);
 
   React.useEffect(() => {
@@ -153,9 +154,15 @@ export function ConvaiAgentSyncPanel({
     if (!task) return null;
     const link = parseAgentElevenLabsConvaiLinkJson(task.agentElevenLabsConvaiLinkJson);
     const name = link?.agentName?.trim();
-    const id = link?.agentId?.trim();
-    if (!id) return null;
-    return name ? `${name} (${id})` : id;
+    if (name) return name;
+    return null;
+  }, [syncParams?.agentTask]);
+
+  const linkedAgentId = React.useMemo(() => {
+    const task = syncParams?.agentTask;
+    if (!task) return '';
+    const link = parseAgentElevenLabsConvaiLinkJson(task.agentElevenLabsConvaiLinkJson);
+    return link?.agentId?.trim() ?? '';
   }, [syncParams?.agentTask]);
 
   const loadWorkflowForAgent = React.useCallback(async (agentId: string, name: string) => {
@@ -203,10 +210,6 @@ export function ConvaiAgentSyncPanel({
     setLoadingAgents(true);
     setError(null);
     try {
-      const page = await listConvaiAgentsForWorkspace({ pageSize: 100 });
-      setAgents(page.agents);
-      setTreeEntries({});
-
       const task = syncParams?.agentTask;
       const taskId = String(task?.id ?? '').trim();
       const link = task
@@ -214,6 +217,22 @@ export function ConvaiAgentSyncPanel({
         : null;
       const session = taskId ? getConvaiSessionBinding(taskId) : undefined;
       const preferredId = resolveLinkedConvaiAgentId(link, session?.agentId);
+
+      if (compact && !showAdvancedAgents && preferredId) {
+        const label =
+          link?.agentName?.trim() ||
+          selection?.displayName?.trim() ||
+          'Agente collegato';
+        setSelection({ scope: 'root', agentId: preferredId, displayName: label });
+        setAgents([]);
+        setTreeEntries({});
+        return;
+      }
+
+      const page = await listConvaiAgentsForWorkspace({ pageSize: 100 });
+      setAgents(page.agents);
+      setTreeEntries({});
+
       const preferredAgent = preferredId
         ? page.agents.find((a) => a.agentId === preferredId)
         : undefined;
@@ -240,7 +259,7 @@ export function ConvaiAgentSyncPanel({
     } finally {
       setLoadingAgents(false);
     }
-  }, [loadWorkflowForAgent, syncParams?.agentTask]);
+  }, [compact, loadWorkflowForAgent, showAdvancedAgents, syncParams?.agentTask]);
 
   const wasActiveRef = React.useRef(false);
   React.useEffect(() => {
@@ -261,9 +280,18 @@ export function ConvaiAgentSyncPanel({
     setTunnelEnsuring(false);
     setTunnelStatusHint(null);
     tunnelAutoEnsureRef.current = false;
+    setShowAdvancedAgents(false);
     setUseDevTunnelForWebhook(devTunnelMapHasAnyBase());
+
+    if (compact && syncParams) {
+      const current = resolveTaskIaConfig(syncParams.agentTask);
+      if (current.platform !== 'elevenlabs') {
+        setIaConfigEffective(applyIaPlatformToTaskConfig(current, 'elevenlabs'));
+      }
+    }
+
     void loadAgents();
-  }, [active, loadAgents]);
+  }, [active, compact, loadAgents, syncParams]);
 
   React.useEffect(() => {
     if (!active || !useDevTunnelForWebhook || backendCount === 0) return;
@@ -454,19 +482,6 @@ export function ConvaiAgentSyncPanel({
         />
       ) : null}
 
-      {syncParams && convaiSyncReady ? (
-        <p className="text-[11px] text-slate-500">
-          Runtime IA:{' '}
-          <span className="text-violet-200">{AGENT_PLATFORM_DISPLAY_LABEL.elevenlabs}</span>
-          {linkedAgentHint ? (
-            <>
-              {' '}
-              · Collegato: <span className="text-emerald-300/90">{linkedAgentHint}</span>
-            </>
-          ) : null}
-        </p>
-      ) : null}
-
       {syncParams && backendCount > 0 && convaiSyncReady ? (
         <label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-700/50 bg-slate-900/50 px-2.5 py-2">
           <input
@@ -523,69 +538,113 @@ export function ConvaiAgentSyncPanel({
 
       {convaiSyncReady ? (
         <>
-          <label className="block text-[11px] font-medium text-slate-400">
-            Crea nuovo agente
-            <input
-              type="text"
-              value={newAgentName}
-              onChange={(e) => setNewAgentName(e.target.value)}
-              disabled={syncing || !syncParamsForRun}
-              placeholder="Nome nuovo agente ConvAI"
-              className="mt-1 w-full rounded-lg border border-violet-500/40 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-400 focus:outline-none disabled:opacity-50"
-            />
-          </label>
-
-          <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Agenti e workflow
-              </span>
+          {compact && !showAdvancedAgents ? (
+            <div className="space-y-2">
+              {linkedAgentHint && linkedAgentId && !useNewAgent ? (
+                <p className="text-xs text-slate-200">
+                  Agente collegato:{' '}
+                  <span className="font-medium text-emerald-300">{linkedAgentHint}</span>
+                </p>
+              ) : null}
+              <label className="block text-[11px] font-medium text-slate-400">
+                Crea nuovo agente
+                <input
+                  type="text"
+                  value={newAgentName}
+                  onChange={(e) => {
+                    setNewAgentName(e.target.value);
+                    if (e.target.value.trim()) setSelection(null);
+                  }}
+                  disabled={syncing || !syncParamsForRun}
+                  placeholder="Nome nuovo agente ConvAI"
+                  className="mt-1 w-full rounded-lg border border-violet-500/40 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-400 focus:outline-none disabled:opacity-50"
+                />
+              </label>
               <button
                 type="button"
-                onClick={() => void loadAgents()}
-                disabled={loadingAgents || syncing || Boolean(deletingAgentId)}
-                className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                onClick={() => {
+                  setShowAdvancedAgents(true);
+                  void loadAgents();
+                }}
+                disabled={syncing || loadingAgents}
+                className="text-[11px] text-violet-300 underline-offset-2 hover:underline disabled:opacity-50"
               >
-                {loadingAgents ? (
-                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                ) : (
-                  <RefreshCw className="h-3 w-3" aria-hidden />
-                )}
-                Aggiorna elenco
+                Scegli un altro agente esistente…
               </button>
             </div>
+          ) : (
+            <>
+              {!compact && syncParams && convaiSyncReady && linkedAgentHint ? (
+                <p className="text-[11px] text-slate-500">
+                  Agente collegato:{' '}
+                  <span className="text-emerald-300/90">{linkedAgentHint}</span>
+                </p>
+              ) : null}
+              <label className="block text-[11px] font-medium text-slate-400">
+                Crea nuovo agente
+                <input
+                  type="text"
+                  value={newAgentName}
+                  onChange={(e) => setNewAgentName(e.target.value)}
+                  disabled={syncing || !syncParamsForRun}
+                  placeholder="Nome nuovo agente ConvAI"
+                  className="mt-1 w-full rounded-lg border border-violet-500/40 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-violet-400 focus:outline-none disabled:opacity-50"
+                />
+              </label>
 
-            {loadingAgents && agents.length === 0 ? (
-              <div
-                className={
-                  compact
-                    ? 'flex min-h-[10rem] items-center justify-center rounded-lg border border-slate-700/50 bg-slate-950/50'
-                    : 'flex min-h-[12rem] items-center justify-center rounded-lg border border-slate-700/50 bg-slate-950/50'
-                }
-              >
-                <Loader2 className="h-5 w-5 animate-spin text-slate-400" aria-hidden />
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Agenti e workflow
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void loadAgents()}
+                    disabled={loadingAgents || syncing || Boolean(deletingAgentId)}
+                    className="inline-flex items-center gap-1 rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {loadingAgents ? (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" aria-hidden />
+                    )}
+                    Aggiorna elenco
+                  </button>
+                </div>
+
+                {loadingAgents && agents.length === 0 ? (
+                  <div
+                    className={
+                      compact
+                        ? 'flex min-h-[10rem] items-center justify-center rounded-lg border border-slate-700/50 bg-slate-950/50'
+                        : 'flex min-h-[12rem] items-center justify-center rounded-lg border border-slate-700/50 bg-slate-950/50'
+                    }
+                  >
+                    <Loader2 className="h-5 w-5 animate-spin text-slate-400" aria-hidden />
+                  </div>
+                ) : (
+                  <ConvaiAgentSyncTreePanel
+                    agents={agents}
+                    entriesByAgentId={treeEntries}
+                    selection={useNewAgent ? null : selection}
+                    onSelectionChange={setSelection}
+                    onToggleExpand={handleToggleExpand}
+                    onLoadWorkflow={loadWorkflowForAgent}
+                    onDeleteAgent={(id) => void handleDeleteAgent(id)}
+                    disabled={treeDisabled}
+                    deletingAgentId={deletingAgentId}
+                  />
+                )}
+
+                {selection?.scope === 'workflow' ? (
+                  <p className="mt-1.5 text-[10px] text-slate-500">
+                    Sync attuale: prompt/tool/KB sull&apos;agente root; il nodo workflow è il target
+                    selezionato per il pulsante.
+                  </p>
+                ) : null}
               </div>
-            ) : (
-              <ConvaiAgentSyncTreePanel
-                agents={agents}
-                entriesByAgentId={treeEntries}
-                selection={useNewAgent ? null : selection}
-                onSelectionChange={setSelection}
-                onToggleExpand={handleToggleExpand}
-                onLoadWorkflow={loadWorkflowForAgent}
-                onDeleteAgent={(id) => void handleDeleteAgent(id)}
-                disabled={treeDisabled}
-                deletingAgentId={deletingAgentId}
-              />
-            )}
-
-            {selection?.scope === 'workflow' ? (
-              <p className="mt-1.5 text-[10px] text-slate-500">
-                Sync attuale: prompt/tool/KB sull&apos;agente root; il nodo workflow è il target
-                selezionato per il pulsante.
-              </p>
-            ) : null}
-          </div>
+            </>
+          )}
         </>
       ) : null}
 

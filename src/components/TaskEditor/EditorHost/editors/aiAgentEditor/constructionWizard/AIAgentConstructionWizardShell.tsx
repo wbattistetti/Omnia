@@ -21,7 +21,7 @@ import {
 import { EditorBackendsPanel } from '../EditorBackendsPanel';
 import { EditorIaRuntimePanel } from '../EditorIaRuntimePanel';
 import { EditorTaskCostsPanel } from '../EditorTaskCostsPanel';
-import { EditorWebhookInvocationsPanel } from '../EditorWebhookInvocationsPanel';
+import { EditorConvaiRuntimeInvocationsPanel } from '../EditorConvaiRuntimeInvocationsPanel';
 import {
   ElevenLabsImportRecapBanner,
   type ElevenLabsImportRecapBannerProps,
@@ -44,6 +44,7 @@ export interface AIAgentConstructionWizardShellProps {
   readonly taskLabel?: string;
   readonly backendToolTaskIds?: readonly string[];
   readonly deploySlot?: React.ReactNode;
+  readonly testSlot?: React.ReactNode;
   readonly reviewPublishSlot?: React.ReactNode;
   readonly bypassGating?: boolean;
   readonly elevenLabsImportRecap?: ElevenLabsImportRecapBannerProps['recap'] | null;
@@ -77,6 +78,7 @@ export function AIAgentConstructionWizardShell({
   taskLabel,
   backendToolTaskIds = [],
   deploySlot = null,
+  testSlot = null,
   reviewPublishSlot = null,
   bypassGating = false,
   elevenLabsImportRecap = null,
@@ -103,6 +105,7 @@ export function AIAgentConstructionWizardShell({
         interfaceActive={interfaceActive}
         onToggleInterface={onToggleInterface}
         deploySlot={deploySlot}
+        testSlot={testSlot}
         reviewPublishSlot={reviewPublishSlot}
         bypassGating={bypassGating}
       />
@@ -116,7 +119,7 @@ export function AIAgentConstructionWizardShell({
       {webhookLogActive ? (
         <main className="flex-1 min-h-0 overflow-hidden">
           {typeof taskId === 'string' && taskId && typeof projectId === 'string' && projectId ? (
-            <EditorWebhookInvocationsPanel
+            <EditorConvaiRuntimeInvocationsPanel
               projectId={projectId}
               agentTaskId={taskId}
               taskLabel={taskLabel || ''}

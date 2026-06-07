@@ -80,6 +80,18 @@
     <Compile Include="TaskExecutors\SubflowTaskExecutor.vb" />
   </ItemGroup>
 
+  <!-- KB dialog step (omnia_dialog_step runtime engine) -->
+  <ItemGroup>
+    <Compile Include="KbDialogStep\DialogStepModels.vb" />
+    <Compile Include="KbDialogStep\KbDialogBindings.vb" />
+    <Compile Include="KbDialogStep\KbPipeTableParser.vb" />
+    <Compile Include="KbDialogStep\KbDialogRuntimeLoader.vb" />
+    <Compile Include="KbDialogStep\KbDialogIndexLoader.vb" />
+    <Compile Include="KbDialogStep\KbDialogSayResolver.vb" />
+    <Compile Include="KbDialogStep\DialogStepEngine.vb" />
+    <Compile Include="KbDialogStep\Tests\DialogStepEngineTests.vb" />
+  </ItemGroup>
+
   <!-- Placeholder files removed - not implemented -->
   <!-- Interfaces folder removed - empty -->
 

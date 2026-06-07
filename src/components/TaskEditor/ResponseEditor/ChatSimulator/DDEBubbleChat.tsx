@@ -10,6 +10,13 @@ import {
   useFlowModeChat,
   type UseFlowModeChatOptions,
 } from '@responseEditor/ChatSimulator/hooks/useFlowModeChat';
+import { useCompiledTaskChat } from '@responseEditor/ChatSimulator/hooks/useCompiledTaskChat';
+import { FlowConvaiRuntimeInvocationsPanel } from '@features/debugger/ui/FlowConvaiRuntimeInvocationsPanel';
+import { pickDialogStepTurnSummary } from '@domain/convaiObservability/formatDialogStepTurnSummary';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
 import {
   createDebuggerActions,
   DebuggerLog,
@@ -39,6 +46,7 @@ import { getFlowFocusManager } from '@features/focus';
 import { StartAgentErrorCard } from '@responseEditor/ChatSimulator/StartAgentErrorCard';
 import { ConvaiTtsConstraintRuntimeCard } from '@responseEditor/ChatSimulator/ConvaiTtsConstraintRuntimeCard';
 import { isConvaiNonEnglishTtsConstraintError } from '@utils/convai/convaiTtsConstraintError';
+import { buildMinimalAiAgentCompileTask } from '../../EditorHost/editors/aiAgentEditor/composeRuntimeRulesFromCompact';
 
 /** Flow graph for error grouping when DDEBubbleChat is outside FlowWorkspaceProvider (global debugger). */
 function buildFlowsRecordFromWorkspaceSnapshot(): Record<string, Flow<Node<FlowNode>, Edge>> {
@@ -286,6 +294,9 @@ export default function DDEBubbleChat({
   flowAutoStart = false,
   executionLaunchType,
   executionLaunchLabel,
+  reuseDeployedConvaiAgent = false,
+  compiledTaskRunner = false,
+  compiledTaskAutoStart = false,
   onClosePanel,
   onToggleUseCasePanel,
   onSaveUseCase,
@@ -315,6 +326,12 @@ export default function DDEBubbleChat({
   flowAutoStart?: boolean;
   executionLaunchType?: 'flow' | 'rowTask' | 'node';
   executionLaunchLabel?: string;
+  /** Test editor agente: riusa agente ConvAI già deployato (no createAgent). */
+  reuseDeployedConvaiAgent?: boolean;
+  /** Esecuzione atomica via TaskExecutor (un CompiledTask, zero FlowOrchestrator). */
+  compiledTaskRunner?: boolean;
+  /** Avvio automatico sessione compiled-task (Test agente). */
+  compiledTaskAutoStart?: boolean;
   onClosePanel?: () => void;
   onToggleUseCasePanel?: () => void;
   onSaveUseCase?: (payload: { suggestedKey: string; messages: Message[] }) => void;
@@ -378,6 +395,23 @@ export default function DDEBubbleChat({
 
   // ✅ ARCHITECTURAL: Detect flow mode explicitly
   const isFlowMode = !task && !taskTree && mode === 'interactive';
+  const isCompiledTaskMode =
+    compiledTaskRunner === true &&
+    task?.type === TaskType.AIAgent &&
+    mode === 'interactive';
+
+  const showCompiledTaskConvaiLog = React.useMemo(() => {
+    if (!isCompiledTaskMode || !task) return false;
+    if (task.agentLogBackendCalls === true) return true;
+    return isKbDeterministicDeployMode(normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode));
+  }, [isCompiledTaskMode, task]);
+
+  const compiledTaskChat = useCompiledTaskChat(isCompiledTaskMode ? task : null, projectId, {
+    autoStart: compiledTaskAutoStart,
+    onMessage: onFlowModeMessage,
+    executionLaunchLabel: executionLaunchLabel,
+    convaiRuntimeLogEnabled: showCompiledTaskConvaiLog,
+  });
 
   const debuggerBlockedByCompile =
     isFlowMode && reportCompileErrors.length > 0;
@@ -406,6 +440,7 @@ export default function DDEBubbleChat({
   const flowDebuggerHookOpts = React.useMemo<UseFlowModeChatOptions>(
     () => ({
       agentLogBackendCalls: flowAgentLogBackendCalls,
+      reuseDeployedConvaiAgent: reuseDeployedConvaiAgent === true,
       onSessionStarted: () => {
         debuggerMachineRef.current?.setState('running');
       },
@@ -416,7 +451,7 @@ export default function DDEBubbleChat({
         debuggerMachineRef.current?.setState('idle');
       },
     }),
-    [flowAgentLogBackendCalls]
+    [flowAgentLogBackendCalls, reuseDeployedConvaiAgent]
   );
 
   // ✅ ARCHITECTURAL: Flow orchestrator (manual Play by default — no autoStart)
@@ -511,7 +546,9 @@ export default function DDEBubbleChat({
   }, [executionFlowName, executionLaunchType, executionLaunchLabel]);
   const executionLabel = isFlowMode
     ? (flowModeChat.currentExecutionLabel || launchExecutionLabel)
-    : '';
+    : isCompiledTaskMode
+      ? (compiledTaskChat.executionLabel || launchExecutionLabel)
+      : '';
   const executionParts = React.useMemo(() => {
     const raw = executionLabel || launchExecutionLabel;
     const idx = raw.indexOf(':');
@@ -523,12 +560,20 @@ export default function DDEBubbleChat({
 
 
   // ✅ ARCHITECTURAL: Merge flow mode state with component state
-  const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
+  const effectiveIsWaitingForInput = isFlowMode
+    ? flowModeChat.isWaitingForInput
+    : isCompiledTaskMode
+      ? compiledTaskChat.isWaitingForInput
+      : isWaitingForInput;
   const effectiveWaitingForInputRef = React.useRef(effectiveIsWaitingForInput);
   React.useEffect(() => {
     effectiveWaitingForInputRef.current = effectiveIsWaitingForInput;
   }, [effectiveIsWaitingForInput]);
-  const effectiveError = isFlowMode ? flowModeChat.error || backendError : backendError;
+  const effectiveError = isFlowMode
+    ? flowModeChat.error || backendError
+    : isCompiledTaskMode
+      ? compiledTaskChat.error || backendError
+      : backendError;
   const displayChatError = React.useMemo(
     () => userFacingChatErrorMessage(effectiveError),
     [effectiveError],
@@ -648,6 +693,11 @@ export default function DDEBubbleChat({
 
     // Skip if flow mode (handled by useFlowModeChat hook)
     if (isFlowMode) {
+      return;
+    }
+
+    // Skip if compiled-task runner (AI Agent test via TaskExecutor)
+    if (isCompiledTaskMode) {
       return;
     }
 
@@ -883,6 +933,29 @@ export default function DDEBubbleChat({
           })(),
           // ❌ NON includere: nodes (il compilatore VB.NET li materializza da zero)
         };
+
+        if (taskInstance.type === TaskType.AIAgent) {
+          Object.assign(
+            taskForCompilation,
+            buildMinimalAiAgentCompileTask({
+              id: taskInstance.id,
+              type: taskInstance.type,
+              templateId: taskInstance.templateId ?? null,
+              llmEndpoint:
+                typeof taskInstance.llmEndpoint === 'string' ? taskInstance.llmEndpoint : undefined,
+              agentStructuredSectionsJson: taskInstance.agentStructuredSectionsJson,
+              agentPrompt: taskInstance.agentPrompt,
+              agentPromptTargetPlatform: taskInstance.agentPromptTargetPlatform,
+              agentIaRuntimeOverrideJson: taskInstance.agentIaRuntimeOverrideJson,
+              agentElevenLabsConvaiLinkJson: taskInstance.agentElevenLabsConvaiLinkJson,
+              agentConvaiDeployMode: taskInstance.agentConvaiDeployMode,
+              agentImmediateStart: taskInstance.agentImmediateStart,
+              agentUseCasesJson: taskInstance.agentUseCasesJson,
+              agentStartPromptJson: taskInstance.agentStartPromptJson,
+              agentStartUseCaseId: taskInstance.agentStartUseCaseId,
+            })
+          );
+        }
 
         // ✅ CORRETTO: Raccogli template referenziati SOLO dall'istanza e dai template (NON da TaskTree)
         const referencedTemplateIds = new Set<string>();
@@ -1649,7 +1722,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId, mode, resetCounter, taskTree, translations, isFlowMode]);
+  }, [task?.id, projectId, mode, resetCounter, taskTree, translations, isFlowMode, isCompiledTaskMode]);
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -1717,7 +1790,28 @@ export default function DDEBubbleChat({
       return;
     }
 
-    // ✅ Task mode: existing SSE logic
+    if (isCompiledTaskMode) {
+      const userId = generateMessageId('user');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: userId,
+          type: 'user',
+          text: trimmed,
+          matchStatus: 'match',
+        },
+      ]);
+      sentTextRef.current = trimmed;
+      try {
+        await compiledTaskChat.handleUserInput(trimmed);
+      } catch (error) {
+        setBackendError(error instanceof Error ? error.message : 'Failed to send input');
+        setIsWaitingForInput(true);
+      }
+      return;
+    }
+
+    // ✅ Task mode: existing SSE logic (UtteranceInterpretation)
     // ✅ LOG: Verifica sessionId prima di inviare
     console.log('[DDEBubbleChat] 🔍 handleSend check:', {
       trimmed,
@@ -1793,12 +1887,19 @@ export default function DDEBubbleChat({
 
   // Reset function - restart session with same task
   const handleReset = async () => {
-    // ✅ Flow mode: hard restart via toolbar actions (same as Restart button)
     if (isFlowMode) {
       await debuggerActions.restart();
       return;
     }
 
+    if (isCompiledTaskMode) {
+      setMessages([]);
+      messageIdCounter.current = 0;
+      await compiledTaskChat.restart();
+      return;
+    }
+
+    // ✅ Utterance task mode: restart session with same task
     // ✅ Task mode: existing SSE reset logic
     // Close existing SSE connection
     if (eventSourceRef.current) {
@@ -1900,7 +2001,7 @@ export default function DDEBubbleChat({
           </button>
         )}
         <div className="flex items-start justify-between gap-3">
-          {isFlowMode ? (
+          {isFlowMode || isCompiledTaskMode ? (
             <div className="min-w-0 flex-1 flex items-center gap-2 text-sm font-semibold leading-5">
               <Workflow size={15} className="text-sky-800 flex-shrink-0" />
               <span className="break-words whitespace-normal">{executionParts.flowName}</span>
@@ -1923,6 +2024,29 @@ export default function DDEBubbleChat({
                   }}
                   onRestart={() => {
                     void debuggerActions.restart();
+                  }}
+                />
+                <span className="inline-block w-3 shrink-0" aria-hidden />
+              </>
+            ) : isCompiledTaskMode ? (
+              <>
+                <DebuggerToolbar
+                  state={
+                    compiledTaskChat.isStarting || compiledTaskChat.sessionActive
+                      ? 'running'
+                      : 'idle'
+                  }
+                  isRestarting={compiledTaskChat.isRestarting || compiledTaskChat.isStarting}
+                  playDisabled={false}
+                  onPlay={() => {
+                    void compiledTaskChat.play();
+                  }}
+                  onClear={() => {
+                    setMessages([]);
+                    messageIdCounter.current = 0;
+                  }}
+                  onRestart={() => {
+                    void handleReset();
                   }}
                 />
                 <span className="inline-block w-3 shrink-0" aria-hidden />
@@ -1992,6 +2116,9 @@ export default function DDEBubbleChat({
           ) : (
             <StartAgentErrorCard detail={flowModeChat.startAgentRuntimeError} />
           )
+        )}
+        {isCompiledTaskMode && compiledTaskChat.startAgentRuntimeError && (
+          <StartAgentErrorCard detail={compiledTaskChat.startAgentRuntimeError} />
         )}
       </div>
       {/* ✅ NEW: Tabs for preview mode */}
@@ -2064,6 +2191,7 @@ export default function DDEBubbleChat({
                 debuggerFlowId={orchestratorCompileRootFlowId ?? null}
                 flowDebuggerScrollParentRef={scrollContainerRef}
                 showBackendCallInvocationsPanel={flowAgentLogBackendCalls}
+                showConvaiRuntimeInvocationsPanel={flowAgentLogBackendCalls}
               />
             );
           }
@@ -2083,18 +2211,42 @@ export default function DDEBubbleChat({
           }
 
           if (m.type === 'bot') {
+            const dialogStepSummary =
+              isCompiledTaskMode && showCompiledTaskConvaiLog
+                ? pickDialogStepTurnSummary(m.convaiRuntimeInvocations)
+                : null;
             return (
-              <BotMessage
-                key={m.id}
-                message={m}
-                editingId={editingId}
-                draftText={draftText}
-                hoveredId={hoveredId}
-                onEdit={handleEdit}
-                onSave={handleSave}
-                onCancel={handleCancel}
-                onHover={setHoveredId}
-              />
+              <div key={m.id} className={`flex flex-col items-start ${combinedClass}`}>
+                <BotMessage
+                  message={m}
+                  editingId={editingId}
+                  draftText={draftText}
+                  hoveredId={hoveredId}
+                  onEdit={handleEdit}
+                  onSave={handleSave}
+                  onCancel={handleCancel}
+                  onHover={setHoveredId}
+                />
+                {dialogStepSummary ? (
+                  <p
+                    className="mt-1 max-w-xs lg:max-w-md xl:max-w-xl break-all font-mono text-[10px] leading-snug text-violet-300/95"
+                    title={dialogStepSummary}
+                  >
+                    {dialogStepSummary}
+                  </p>
+                ) : isCompiledTaskMode && showCompiledTaskConvaiLog ? (
+                  <p className="mt-1 max-w-xs lg:max-w-md font-mono text-[10px] leading-snug text-amber-600/90">
+                    Nessuna invocazione omnia_dialog_step in questo turno (webhook non chiamato da EL o Express
+                    :3100 non raggiungibile).
+                  </p>
+                ) : null}
+                {isCompiledTaskMode &&
+                showCompiledTaskConvaiLog &&
+                m.convaiRuntimeInvocations &&
+                m.convaiRuntimeInvocations.length > 0 ? (
+                  <FlowConvaiRuntimeInvocationsPanel invocations={m.convaiRuntimeInvocations} />
+                ) : null}
+              </div>
             );
           }
 
@@ -2146,11 +2298,20 @@ export default function DDEBubbleChat({
                 }
               }}
               placeholder={
-                isFlowMode && dbgToolbarState === 'idle'
-                  ? 'Premi Play nella toolbar per avviare il debugger…'
-                  : effectiveIsWaitingForInput
-                    ? 'Type response...'
-                    : 'Waiting for backend...'
+                isCompiledTaskMode && compiledTaskChat.isStarting
+                  ? 'Avvio agente…'
+                  : isCompiledTaskMode &&
+                      !compiledTaskAutoStart &&
+                      !compiledTaskChat.sessionActive &&
+                      !effectiveIsWaitingForInput
+                    ? 'Premi Play per avviare il test agente…'
+                    : isFlowMode && dbgToolbarState === 'idle'
+                      ? 'Premi Play nella toolbar per avviare il debugger…'
+                      : effectiveIsWaitingForInput
+                        ? 'Type response...'
+                        : isCompiledTaskMode
+                          ? 'Connessione al runtime…'
+                          : 'Waiting for backend...'
               }
               value={inlineDraft}
               onChange={(e) => {

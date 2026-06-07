@@ -10,12 +10,18 @@ import type { IAAgentConfig } from 'types/iaAgentRuntimeSetup';
 import { normalizeIAAgentConfig } from '@utils/iaAgentRuntime/iaAgentConfigNormalize';
 import { loadGlobalIaAgentConfig } from '@utils/iaAgentRuntime/globalIaAgentPersistence';
 import {
+  iaConvaiTraceCompileLlmBranchWarning,
   iaConvaiTraceCompilePayload,
   iaConvaiTraceElevenLabsFieldResolution,
 } from '@utils/debug/iaConvaiFlowTrace';
 import { getConvaiSessionBinding } from '@utils/iaAgentRuntime/convaiSessionAgentStore';
 import { parseAgentUseCasesJson } from '@types/aiAgentUseCases';
-import { resolveConvaiAgentFirstMessage } from '@utils/iaAgentRuntime/resolveConvaiAgentFirstMessage';
+import { resolveAgentOpeningMessage } from '@domain/convai/resolveAgentOpeningMessage';
+import { parseAgentElevenLabsConvaiLinkJson } from '@domain/convai/agentElevenLabsConvaiLink';
+import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
 
 /**
  * ElevenLabs ConvAI agent.language expects ISO 639-1; Omnia may persist BCP-47 (e.g. it-IT).
@@ -129,6 +135,10 @@ export interface MinimalAiAgentCompileTaskInput extends AiAgentTaskFieldsForComp
   agentStartPromptJson?: string | null;
   /** Use case marcato Start (`agentStartUseCaseId`). */
   agentStartUseCaseId?: string | null;
+  /** Link deploy ConvAI persistito sul task (`agentElevenLabsConvaiLinkJson`). */
+  agentElevenLabsConvaiLinkJson?: string;
+  /** Modalità deploy: in kb_deterministic il link deploy forza ramo ElevenLabs a compile. */
+  agentConvaiDeployMode?: string;
 }
 
 export interface BuildMinimalAiAgentCompileTaskOptions {
@@ -148,6 +158,8 @@ export type MinimalAiAgentCompilePayload = {
   /** Mirrors ConvAI `first_message` wiring (empty when immediate start). Same string as {@link CONVAI_DEFAULT_FIRST_MESSAGE}. */
   firstMessage: string;
   immediateStart: boolean;
+  /** Deploy deterministico KB: bootstrap prima domanda via omnia_dialog_step lato ApiServer. */
+  kbDeterministic?: boolean;
   platform?: 'elevenlabs';
   agentId?: string;
   backendBaseUrl?: string;
@@ -193,8 +205,15 @@ function peekConvaiAgentIdInRawOverride(raw: string): {
 function resolveElevenLabsMinimalCompileExtension(
   taskId: string,
   agentIaRuntimeOverrideJson: string | undefined,
-  globalIa: IAAgentConfig
+  globalIa: IAAgentConfig,
+  agentElevenLabsConvaiLinkJson?: string,
+  agentConvaiDeployMode?: string
 ): Pick<MinimalAiAgentCompilePayload, 'platform' | 'agentId' | 'backendBaseUrl'> | null {
+  const deployMode = normalizeAgentConvaiDeployMode(agentConvaiDeployMode);
+  const link = parseAgentElevenLabsConvaiLinkJson(agentElevenLabsConvaiLinkJson);
+  const linkAgentId = link?.agentId?.trim() ?? '';
+  const sessionId = getConvaiSessionBinding(taskId)?.agentId?.trim() ?? '';
+  const kbDeterministic = isKbDeterministicDeployMode(deployMode);
   const raw =
     typeof agentIaRuntimeOverrideJson === 'string' ? agentIaRuntimeOverrideJson.trim() : '';
   console.log('[IA·ConvAI] DIAG compile override raw', {
@@ -219,14 +238,19 @@ function resolveElevenLabsMinimalCompileExtension(
   let backendTask = '';
 
   if (parseOk && ia) {
-    if (ia.platform !== 'elevenlabs') return null;
-    useElevenLabs = true;
-    agentIdTask = ia.convaiAgentId?.trim() ?? '';
-    backendTask = ia.elevenLabsBackendBaseUrl?.trim() ?? '';
+    if (ia.platform === 'elevenlabs') {
+      useElevenLabs = true;
+      agentIdTask = ia.convaiAgentId?.trim() ?? '';
+      backendTask = ia.elevenLabsBackendBaseUrl?.trim() ?? '';
+    }
   } else if (!raw && globalIa.platform === 'elevenlabs') {
     useElevenLabs = true;
     agentIdTask = '';
     backendTask = '';
+  }
+
+  if (!useElevenLabs && kbDeterministic && (linkAgentId || sessionId)) {
+    useElevenLabs = true;
   }
 
   if (!useElevenLabs) return null;
@@ -235,18 +259,19 @@ function resolveElevenLabsMinimalCompileExtension(
   const backendGlobal =
     globalIa.platform === 'elevenlabs' ? globalIa.elevenLabsBackendBaseUrl?.trim() ?? '' : '';
 
-  const sessionId = getConvaiSessionBinding(taskId)?.agentId?.trim() ?? '';
-  const agentId = sessionId || agentIdTask || agentIdGlobal;
+  const agentId = sessionId || linkAgentId || agentIdTask || agentIdGlobal;
   const backendBaseUrl = backendTask || backendGlobal;
 
-  const agentIdSource: 'session' | 'task' | 'global' | 'none' =
+  const agentIdSource: 'session' | 'link' | 'task' | 'global' | 'none' =
     sessionId.length > 0
       ? 'session'
-      : agentIdTask.length > 0
-        ? 'task'
-        : agentIdGlobal.length > 0
-          ? 'global'
-          : 'none';
+      : linkAgentId.length > 0
+        ? 'link'
+        : agentIdTask.length > 0
+          ? 'task'
+          : agentIdGlobal.length > 0
+            ? 'global'
+            : 'none';
 
   iaConvaiTraceElevenLabsFieldResolution(taskId, {
     rawOverrideChars: raw.length,
@@ -260,6 +285,8 @@ function resolveElevenLabsMinimalCompileExtension(
     convaiPresentInGlobalDefaults: agentIdGlobal.length > 0,
     resolvedAgentIdChars: agentId.length,
     agentIdSource,
+    deployLinkAgentIdChars: linkAgentId.length,
+    kbDeterministic,
   });
 
   return {
@@ -282,6 +309,8 @@ export function buildMinimalAiAgentCompileTask(
   );
   const immediateStart = task.agentImmediateStart === true;
   const useCases = parseAgentUseCasesJson(String(task.agentUseCasesJson ?? ''));
+  const deployMode = normalizeAgentConvaiDeployMode(task.agentConvaiDeployMode);
+  const kbDeterministic = isKbDeterministicDeployMode(deployMode);
   const base: MinimalAiAgentCompilePayload = {
     id: task.id,
     type: task.type,
@@ -289,24 +318,50 @@ export function buildMinimalAiAgentCompileTask(
     rules,
     llmEndpoint: resolveAiAgentLlmEndpointForCompile(task),
     immediateStart,
-    firstMessage: resolveConvaiAgentFirstMessage({
+    firstMessage: resolveAgentOpeningMessage({
       agentImmediateStart: immediateStart,
       startUseCaseId: task.agentStartUseCaseId,
       agentStartPromptJson: task.agentStartPromptJson,
       useCases,
+      agentConvaiDeployMode: task.agentConvaiDeployMode,
+      allowDefaultFallback: true,
     }),
+    ...(kbDeterministic ? { kbDeterministic: true } : {}),
   };
 
   const globalIa = loadGlobalIaAgentConfig();
   const elFields = resolveElevenLabsMinimalCompileExtension(
     task.id,
     task.agentIaRuntimeOverrideJson,
-    globalIa
+    globalIa,
+    task.agentElevenLabsConvaiLinkJson,
+    task.agentConvaiDeployMode
   );
   if (elFields) {
     const el = { ...base, ...elFields };
     iaConvaiTraceCompilePayload(task.id, el);
     return el;
+  }
+
+  if (isKbDeterministicDeployMode(deployMode)) {
+    const link = parseAgentElevenLabsConvaiLinkJson(task.agentElevenLabsConvaiLinkJson);
+    let overridePlatform: string | undefined;
+    const rawOv = String(task.agentIaRuntimeOverrideJson ?? '').trim();
+    if (rawOv) {
+      try {
+        const parsed = JSON.parse(rawOv) as { platform?: string };
+        overridePlatform = typeof parsed.platform === 'string' ? parsed.platform : undefined;
+      } catch {
+        overridePlatform = '(invalid json)';
+      }
+    }
+    iaConvaiTraceCompileLlmBranchWarning(task.id, {
+      deployMode,
+      hasDeployLink: Boolean(link?.agentId?.trim()),
+      hasSessionAgent: Boolean(getConvaiSessionBinding(task.id)?.agentId?.trim()),
+      overridePlatform,
+      globalPlatform: globalIa.platform,
+    });
   }
 
   return base;

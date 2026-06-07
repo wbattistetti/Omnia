@@ -4,6 +4,10 @@
 
 import type { ConvaiAgentSyncParams } from '@domain/convai/convaiAgentSyncTypes';
 import {
+  isKbDeterministicDeployMode,
+  normalizeAgentConvaiDeployMode,
+} from '@domain/convai/agentConvaiDeployMode';
+import {
   analyzeLocalhostEndpointReachability,
   rewriteCompilePayloadWithDevTunnel,
 } from '@domain/devTunnel/devTunnelCompileBridge';
@@ -18,6 +22,10 @@ import {
   type BuildConvaiWebhookFromBackendTaskResult,
 } from './elevenLabsConvaiToolsPayload';
 import { sanitizeConvaiWebhookToolForApi } from '@domain/openApi/sanitizeConvaiWebhookToolForApi';
+import {
+  buildOmniaDialogStepConvaiTool,
+  OMNIA_DIALOG_STEP_TOOL_NAME,
+} from './omniaDialogStepConvaiTool';
 
 export type PrepareConvaiWebhookToolParams = {
   backendTask: Task;
@@ -55,6 +63,42 @@ function extractWebhookUrlFromTool(tool: Record<string, unknown>): string {
   if (!api || typeof api !== 'object' || Array.isArray(api)) return '';
   const url = (api as Record<string, unknown>).url;
   return typeof url === 'string' ? url.trim() : '';
+}
+
+/** URL tool omnia_dialog_step dopo gateway Express + rewrite tunnel (sync kb_deterministic). */
+function buildOmniaDialogStepToolPublicUrl(
+  projectId: string,
+  agentTaskId: string,
+  useDevTunnel: boolean
+): string {
+  let tool = buildOmniaDialogStepConvaiTool({ projectId, agentTaskId });
+  if (useDevTunnel) {
+    tool = rewriteCompilePayloadWithDevTunnel(tool) as Record<string, unknown>;
+  }
+  tool = sanitizeConvaiWebhookToolForApi(tool);
+  return extractWebhookUrlFromTool(tool);
+}
+
+function collectOmniaDialogStepTunnelReadiness(
+  projectId: string,
+  agentTaskId: string,
+  useDevTunnel: boolean
+): { error?: string; publicUrl?: string } {
+  if (!projectId || !agentTaskId) {
+    return {
+      error:
+        'omnia_dialog_step: projectId o agentTaskId mancante — impossibile pubblicare webhook dialogo KB.',
+    };
+  }
+  const publicUrl = buildOmniaDialogStepToolPublicUrl(projectId, agentTaskId, useDevTunnel);
+  if (!useDevTunnel) return { publicUrl };
+  const reach = analyzeLocalhostEndpointReachability(publicUrl);
+  if (reach.unreachable) {
+    return {
+      error: `omnia_dialog_step: ${reach.message ?? 'webhook non raggiungibile da cloud.'}`,
+    };
+  }
+  return { publicUrl };
 }
 
 /** Backend Call referenziati come tool webhook per sync agente ConvAI. */
@@ -224,11 +268,15 @@ export function collectConvaiWebhookTunnelReadinessForSync(
   getTask: (id: string) => Task | null | undefined = taskRepository.getTask.bind(taskRepository)
 ): ConvaiWebhookTunnelReadiness {
   const backendIds = resolveConvaiSyncBackendTaskIds(params);
-  if (backendIds.length === 0) {
+  const useDevTunnel = params.useDevTunnelForWebhook !== false;
+  const kbDeterministic = isKbDeterministicDeployMode(
+    normalizeAgentConvaiDeployMode(params.agentTask.agentConvaiDeployMode)
+  );
+
+  if (backendIds.length === 0 && !kbDeterministic) {
     return { ready: true, errors: [], publicUrlsByBackendId: {} };
   }
 
-  const useDevTunnel = params.useDevTunnelForWebhook !== false;
   const projectId = String(params.projectId ?? '').trim();
   const agentTaskId = String(params.agentTask.id ?? '').trim();
   const errors: string[] = [];
@@ -261,6 +309,14 @@ export function collectConvaiWebhookTunnelReadinessForSync(
       continue;
     }
     publicUrlsByBackendId[bid] = prepared.publicUrl;
+  }
+
+  if (kbDeterministic) {
+    const dialog = collectOmniaDialogStepTunnelReadiness(projectId, agentTaskId, useDevTunnel);
+    if (dialog.error) errors.push(dialog.error);
+    else if (dialog.publicUrl) {
+      publicUrlsByBackendId[OMNIA_DIALOG_STEP_TOOL_NAME] = dialog.publicUrl;
+    }
   }
 
   if (!useDevTunnel) {

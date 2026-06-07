@@ -62,6 +62,8 @@ export interface AIAgentPersistState {
   agentBackendOutputSlotBindingsJson: string;
   /** Modalità deploy ConvAI: legacy vs dialogo KB deterministico. */
   agentConvaiDeployMode: import('@domain/convai/agentConvaiDeployMode').AgentConvaiDeployMode;
+  /** Indice runtime compile per omnia_dialog_step. */
+  agentKbDialogIndexJson: string;
 }
 
 /**
@@ -109,5 +111,6 @@ export function buildAIAgentTaskPersistPatch(state: AIAgentPersistState): Record
     agentKnowledgeBaseDocumentsJson: state.agentKnowledgeBaseDocumentsJson,
     agentBackendOutputSlotBindingsJson: state.agentBackendOutputSlotBindingsJson,
     agentConvaiDeployMode: state.agentConvaiDeployMode,
+    agentKbDialogIndexJson: state.agentKbDialogIndexJson,
   };
 }

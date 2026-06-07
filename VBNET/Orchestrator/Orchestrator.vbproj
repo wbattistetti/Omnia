@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Compile Include="FlowOrchestrator.vb" />
+    <Compile Include="CompiledTaskTurnService.vb" />
     <Compile Include="TaskExecutor.vb" />
     <Compile Include="ConditionEvaluator.vb" />
     <Compile Include="FlowConditionLoader.vb" />

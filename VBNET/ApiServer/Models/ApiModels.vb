@@ -143,6 +143,24 @@ Namespace Models
     End Class
 
     ''' <summary>
+    ''' Avvio sessione per esecuzione atomica di un CompiledTask (senza FlowOrchestrator).
+    ''' </summary>
+    Public Class CompiledTaskSessionStartRequest
+        <JsonProperty("projectId")>
+        Public Property ProjectId As String
+
+        <JsonProperty("locale")>
+        Public Property Locale As String
+
+        <JsonProperty("compiledTask")>
+        Public Property CompiledTask As JObject
+
+        ''' <summary>Ignorato: la policy di apertura è derivata da compiledTask.firstMessage (server-side).</summary>
+        <JsonProperty("runInitialTurn")>
+        Public Property RunInitialTurn As Boolean = True
+    End Class
+
+    ''' <summary>
     ''' Result class for task compilation (replaces tuple to avoid VB.NET value-type issues)
     ''' </summary>
     Public Class CompileTaskResult

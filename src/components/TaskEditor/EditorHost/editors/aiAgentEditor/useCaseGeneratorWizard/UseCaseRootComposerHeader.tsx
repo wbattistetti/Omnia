@@ -7,6 +7,8 @@ import { Loader2 } from 'lucide-react';
 import { formatUseCaseBundleProgressBanner } from '@domain/aiAgentUseCase/useCaseBundleChunkConfig';
 import {
   LABEL_ANALYZE_AND_CREATE_USE_CASES,
+  LABEL_GENERATE_KB_DIALOG_USE_CASES,
+  LABEL_GENERATING_KB_DIALOG_USE_CASES,
 } from '../constants';
 import { UseCaseBundleGenerateButton } from './UseCaseBundleGenerateButton';
 
@@ -29,6 +31,9 @@ export type UseCaseRootComposerHeaderProps = {
   bundleGenerationOrdering: boolean;
   bundleGenerationCategorizing?: boolean;
   onGenerateUseCaseBundle?: () => void | Promise<void>;
+  onGenerateKbDialogUseCases?: () => void | Promise<void>;
+  kbDeterministicMode?: boolean;
+  kbDialogGenerateBusy?: boolean;
   generating?: boolean;
   hasExistingUseCases: boolean;
 };
@@ -52,6 +57,9 @@ export function UseCaseRootComposerHeader({
   bundleGenerationOrdering,
   bundleGenerationCategorizing = false,
   onGenerateUseCaseBundle,
+  onGenerateKbDialogUseCases,
+  kbDeterministicMode = false,
+  kbDialogGenerateBusy = false,
   generating = false,
   hasExistingUseCases,
 }: UseCaseRootComposerHeaderProps): React.ReactElement {
@@ -84,6 +92,7 @@ export function UseCaseRootComposerHeader({
   }
 
   const canGenerateBundle = typeof onGenerateUseCaseBundle === 'function';
+  const canGenerateKb = kbDeterministicMode && typeof onGenerateKbDialogUseCases === 'function';
 
   return (
     <div className="shrink-0 border-b border-slate-700/50 px-2 pt-2 pb-2 sm:px-3">
@@ -100,7 +109,21 @@ export function UseCaseRootComposerHeader({
           placeholder={placeholder}
           className="min-h-[52px] min-w-0 flex-1 resize-none overflow-hidden rounded-md border-2 border-sky-400/60 bg-slate-900/95 px-2.5 py-2 text-xs text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] placeholder:text-slate-300/95 focus:border-sky-300/80 focus:outline-none focus:ring-2 focus:ring-sky-400/40 disabled:opacity-60 sm:text-sm"
         />
-        {canGenerateBundle ? (
+        {canGenerateKb ? (
+          <button
+            type="button"
+            disabled={rootComposerLocked || generating || kbDialogGenerateBusy}
+            aria-busy={kbDialogGenerateBusy}
+            onClick={() => void onGenerateKbDialogUseCases?.()}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-emerald-500/50 bg-emerald-950/50 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-900/60 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-0.5"
+          >
+            {kbDialogGenerateBusy ? (
+              <Loader2 size={14} className="shrink-0 animate-spin" aria-hidden />
+            ) : null}
+            {kbDialogGenerateBusy ? LABEL_GENERATING_KB_DIALOG_USE_CASES : LABEL_GENERATE_KB_DIALOG_USE_CASES}
+          </button>
+        ) : null}
+        {canGenerateBundle && !kbDeterministicMode ? (
           <UseCaseBundleGenerateButton
             generateBusy={false}
             onGenerate={onGenerateUseCaseBundle}

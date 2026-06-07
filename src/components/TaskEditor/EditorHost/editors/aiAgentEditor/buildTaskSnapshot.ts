@@ -102,6 +102,7 @@ export interface AIAgentTaskSnapshot {
   agentKnowledgeBaseDocumentsJson: string;
   agentBackendOutputSlotBindingsJson: string;
   agentConvaiDeployMode: AgentConvaiDeployMode;
+  agentKbDialogIndexJson: string;
 }
 
 /**
@@ -187,6 +188,7 @@ export function buildTaskSnapshotFromRaw(raw: unknown): AIAgentTaskSnapshot {
     agentKnowledgeBaseDocumentsJson: String(r?.agentKnowledgeBaseDocumentsJson ?? ''),
     agentBackendOutputSlotBindingsJson: String(r?.agentBackendOutputSlotBindingsJson ?? ''),
     agentConvaiDeployMode: normalizeAgentConvaiDeployMode(r?.agentConvaiDeployMode),
+    agentKbDialogIndexJson: String(r?.agentKbDialogIndexJson ?? ''),
   };
 }
 

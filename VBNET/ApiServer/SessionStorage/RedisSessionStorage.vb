@@ -65,6 +65,10 @@ Namespace ApiServer.SessionStorage
             Return $"{_keyPrefix}session:orchestrator:{sessionId}"
         End Function
 
+        Private Function GetCompiledTaskSessionKey(sessionId As String) As String
+            Return $"{_keyPrefix}session:compiled-task:{sessionId}"
+        End Function
+
         ''' <summary>
         ''' Recupera una TaskSession da Redis
         ''' </summary>
@@ -174,6 +178,38 @@ Namespace ApiServer.SessionStorage
                 ' ✅ STATELESS: Nessun fallback - solleva eccezione
                 Console.WriteLine($"[RedisSessionStorage] ❌ Error deleting orchestrator session: {ex.Message}")
                 Throw New Exception($"Failed to delete orchestrator session from Redis: {ex.Message}", ex)
+            End Try
+        End Sub
+
+        Public Function GetCompiledTaskSession(sessionId As String) As CompiledTaskSession Implements ApiServer.Interfaces.ISessionStorage.GetCompiledTaskSession
+            Try
+                Dim key = GetCompiledTaskSessionKey(sessionId)
+                Dim json = _database.StringGet(key)
+                If json.HasValue Then
+                    Return SessionSerializer.DeserializeCompiledTaskSession(json)
+                End If
+                Return Nothing
+            Catch ex As Exception
+                Throw New Exception($"Failed to get compiled task session from Redis: {ex.Message}", ex)
+            End Try
+        End Function
+
+        Public Sub SaveCompiledTaskSession(session As CompiledTaskSession) Implements ApiServer.Interfaces.ISessionStorage.SaveCompiledTaskSession
+            Try
+                Dim key = GetCompiledTaskSessionKey(session.SessionId)
+                Dim json = SessionSerializer.SerializeCompiledTaskSession(session)
+                _database.StringSet(key, json, _sessionTTL)
+            Catch ex As Exception
+                Throw New Exception($"Failed to save compiled task session to Redis: {ex.Message}", ex)
+            End Try
+        End Sub
+
+        Public Sub DeleteCompiledTaskSession(sessionId As String) Implements ApiServer.Interfaces.ISessionStorage.DeleteCompiledTaskSession
+            Try
+                Dim key = GetCompiledTaskSessionKey(sessionId)
+                _database.KeyDelete(key)
+            Catch ex As Exception
+                Throw New Exception($"Failed to delete compiled task session from Redis: {ex.Message}", ex)
             End Try
         End Sub
     End Class

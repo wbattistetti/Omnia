@@ -1,56 +1,61 @@
 /**
- * Polls `/api/convai-webhook-invocations` for the Task Editor webhook guardalog panel.
+ * Polls `/api/convai-runtime-invocations` for editor + debugger (schema V2).
  */
 
 import React from 'react';
 import {
-  clearConvaiWebhookInvocations,
-  fetchConvaiWebhookInvocations,
-  type ConvaiWebhookInvocationRecord,
-  type FetchConvaiWebhookInvocationsParams,
-} from '../services/convaiWebhookInvocationsApi';
+  clearConvaiRuntimeInvocations,
+  fetchConvaiRuntimeInvocations,
+  type FetchConvaiRuntimeInvocationsParams,
+} from '@services/convaiRuntimeInvocationsApi';
+import type { ConvaiRuntimeInvocationRecord } from '@domain/convaiObservability/convaiRuntimeInvocationRecord';
 import { useDocumentVisible } from '../hooks/useDocumentVisible';
 
 const POLL_INTERVAL_MS = 2_500;
 
-export interface ConvaiWebhookInvocationLogContextValue {
-  invocations: ConvaiWebhookInvocationRecord[];
+export interface ConvaiRuntimeInvocationLogContextValue {
+  invocations: ConvaiRuntimeInvocationRecord[];
   loading: boolean;
   error: string | null;
-  refreshNow: (filters?: FetchConvaiWebhookInvocationsParams) => Promise<void>;
+  refreshNow: (filters?: FetchConvaiRuntimeInvocationsParams) => Promise<void>;
   clear: () => Promise<void>;
 }
 
-const Ctx = React.createContext<ConvaiWebhookInvocationLogContextValue | null>(null);
+const Ctx = React.createContext<ConvaiRuntimeInvocationLogContextValue | null>(null);
 
-function signatureFor(items: ConvaiWebhookInvocationRecord[]): string {
+function signatureFor(items: ConvaiRuntimeInvocationRecord[]): string {
   if (items.length === 0) return 'empty';
   const head = items[0];
   return `${head?.id ?? ''}|${items.length}|${head?.ts ?? ''}`;
 }
 
-export function ConvaiWebhookInvocationLogProvider({
+export function ConvaiRuntimeInvocationLogProvider({
   children,
 }: {
   children: React.ReactNode;
 }): React.ReactElement {
   const documentVisible = useDocumentVisible();
-  const [invocations, setInvocations] = React.useState<ConvaiWebhookInvocationRecord[]>([]);
+  const [invocations, setInvocations] = React.useState<ConvaiRuntimeInvocationRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const lastSignatureRef = React.useRef<string>('');
-  const pollFiltersRef = React.useRef<FetchConvaiWebhookInvocationsParams>({});
+  const pollFiltersRef = React.useRef<FetchConvaiRuntimeInvocationsParams>({});
+  const pollEnabledRef = React.useRef(true);
 
   const fetchInvocations = React.useCallback(
-    async (options?: { showLoading?: boolean; filters?: FetchConvaiWebhookInvocationsParams }) => {
+    async (options?: {
+      showLoading?: boolean;
+      filters?: FetchConvaiRuntimeInvocationsParams;
+      force?: boolean;
+    }) => {
       const showLoading = options?.showLoading === true;
       const filters = options?.filters ?? pollFiltersRef.current;
       if (options?.filters) pollFiltersRef.current = options.filters;
       if (showLoading) setLoading(true);
       try {
-        const items = await fetchConvaiWebhookInvocations({ limit: 200, ...filters });
+        const items = await fetchConvaiRuntimeInvocations({ limit: 200, ...filters });
         const sig = signatureFor(items);
-        if (sig !== lastSignatureRef.current) {
+        if (options?.force || sig !== lastSignatureRef.current) {
           lastSignatureRef.current = sig;
           setInvocations(items);
         }
@@ -65,20 +70,20 @@ export function ConvaiWebhookInvocationLogProvider({
   );
 
   const refreshNow = React.useCallback(
-    async (filters?: FetchConvaiWebhookInvocationsParams) => {
-      await fetchInvocations({ showLoading: true, filters });
+    async (filters?: FetchConvaiRuntimeInvocationsParams) => {
+      await fetchInvocations({ showLoading: true, filters, force: true });
     },
     [fetchInvocations]
   );
 
   const clear = React.useCallback(async () => {
-    await clearConvaiWebhookInvocations();
+    await clearConvaiRuntimeInvocations();
     lastSignatureRef.current = '';
     setInvocations([]);
   }, []);
 
   React.useEffect(() => {
-    if (!documentVisible) return;
+    if (!documentVisible || !pollEnabledRef.current) return;
     void fetchInvocations({ showLoading: true });
     const id = window.setInterval(() => {
       void fetchInvocations();
@@ -94,15 +99,15 @@ export function ConvaiWebhookInvocationLogProvider({
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useConvaiWebhookInvocationLogOptional(): ConvaiWebhookInvocationLogContextValue | null {
+export function useConvaiRuntimeInvocationLogOptional(): ConvaiRuntimeInvocationLogContextValue | null {
   return React.useContext(Ctx);
 }
 
-export function useConvaiWebhookInvocationLog(): ConvaiWebhookInvocationLogContextValue {
-  const ctx = useConvaiWebhookInvocationLogOptional();
+export function useConvaiRuntimeInvocationLog(): ConvaiRuntimeInvocationLogContextValue {
+  const ctx = useConvaiRuntimeInvocationLogOptional();
   if (!ctx) {
     throw new Error(
-      'useConvaiWebhookInvocationLog must be used within <ConvaiWebhookInvocationLogProvider>'
+      'useConvaiRuntimeInvocationLog must be used within <ConvaiRuntimeInvocationLogProvider>'
     );
   }
   return ctx;

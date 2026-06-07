@@ -22,12 +22,16 @@ import {
   isOmniaDialogStepConvaiTool,
   OMNIA_DIALOG_STEP_TOOL_NAME,
 } from './omniaDialogStepConvaiTool';
+import { collectKbDialogSlotColumnIds } from '@domain/convai/kbDialogSlotMapPrompt';
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
 
-function readRawInlineTools(conversationConfig: unknown): Record<string, unknown>[] {
+/** Legge i tool inline da conversation_config ElevenLabs. */
+export function readRawInlineToolsFromConversationConfig(
+  conversationConfig: unknown
+): Record<string, unknown>[] {
   const cc = asRecord(conversationConfig);
   const agent = asRecord(cc?.agent);
   const prompt = asRecord(agent?.prompt);
@@ -115,7 +119,11 @@ export async function buildConvaiInlineWebhookToolsFromSyncParams(
   const agentTaskId = String(params.agentTask.id ?? '').trim();
   if (!projectId || !agentTaskId) return built;
 
-  let dialogTool = buildOmniaDialogStepConvaiTool({ projectId, agentTaskId });
+  let dialogTool = buildOmniaDialogStepConvaiTool({
+    projectId,
+    agentTaskId,
+    slotColumnIds: collectKbDialogSlotColumnIds(params.agentTask.agentKnowledgeBaseDocumentsJson),
+  });
   if (params.useDevTunnel) {
     dialogTool = rewriteCompilePayloadWithDevTunnel(dialogTool) as Record<string, unknown>;
   }
@@ -133,6 +141,17 @@ export async function buildConvaiInlineWebhookToolsFromSyncParams(
     },
   ];
   return { ok: true, tools, inlinePayloads };
+}
+
+/** ElevenLabs PATCH: non ammette `tools` e `tool_ids` insieme — solo inline tools. */
+export function stripPromptToolIdsForInlineToolsPatch(
+  conversationConfigOutbound: Record<string, unknown>
+): void {
+  const agent = (conversationConfigOutbound.agent ?? {}) as Record<string, unknown>;
+  const prompt = (agent.prompt ?? {}) as Record<string, unknown>;
+  prompt.tool_ids = [];
+  agent.prompt = prompt;
+  conversationConfigOutbound.agent = agent;
 }
 
 /**
@@ -170,7 +189,7 @@ export async function upsertInlineWebhookToolOnAgent(
   if (!id) throw new Error('upsertInlineWebhookToolOnAgent: agentId obbligatorio.');
 
   const detail = await getConvaiAgentDetail(id);
-  const existing = readRawInlineTools(detail.conversationConfig);
+  const existing = readRawInlineToolsFromConversationConfig(detail.conversationConfig);
   const merged = mergeInlineWebhookToolsByName(existing, toolPayload);
   await patchConvaiAgentInlineWebhookTools(id, merged);
 }

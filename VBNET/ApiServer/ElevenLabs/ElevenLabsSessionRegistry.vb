@@ -53,6 +53,14 @@ Public NotInheritable Class ElevenLabsHostedSession
     Public Property Runner As ElevenLabsWebSocketRunner
     Public Property Status As String
 
+    ''' <summary>False dopo chiusura/errori del WebSocket ConvAI (sessione non riusabile per sendUserTurn).</summary>
+    Public Property ConnectionAlive As Boolean = True
+
+    Public Sub MarkConnectionLost()
+        ConnectionAlive = False
+        Status = "disconnected"
+    End Sub
+
     ''' <summary>
     ''' Fallimenti tool/webhook ConvAI osservati sul WebSocket (es. POST BookFromAgenda 400), drainati con la risposta readPrompt.
     ''' </summary>

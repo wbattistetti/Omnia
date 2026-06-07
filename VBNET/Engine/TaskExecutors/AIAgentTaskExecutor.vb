@@ -310,6 +310,55 @@ Public Class AIAgentTaskExecutor
         Return (agentTurn, status, list)
     End Function
 
+    Private Shared Sub ClearElevenLabsDialogueContext(state As ExecutionState, taskId As String)
+        If state?.DialogueContexts Is Nothing Then Return
+        If state.DialogueContexts.ContainsKey(taskId) Then
+            state.DialogueContexts.Remove(taskId)
+        End If
+    End Sub
+
+    Private Shared Function IsRecoverableElevenLabsTransportError(ex As Exception) As Boolean
+        Dim msg = If(ex?.Message, "").ToLowerInvariant()
+        If msg.Length = 0 Then Return False
+        Return msg.Contains("session_stale") OrElse
+            msg.Contains("not connected") OrElse
+            msg.Contains("conversation not found") OrElse
+            msg.Contains("no active runner") OrElse
+            msg.Contains("http 404") OrElse
+            msg.Contains("http 410")
+    End Function
+
+    ''' <summary>Apre sessione ConvAI (POST startAgent) senza turno utente — warmup prima del primo input (Test agente).</summary>
+    Public Shared Async Function EnsureElevenLabsConnectionAsync(
+        ai As CompiledAIAgentTask,
+        taskId As String,
+        state As ExecutionState,
+        Optional ct As System.Threading.CancellationToken = Nothing
+    ) As System.Threading.Tasks.Task
+        If ai Is Nothing OrElse String.IsNullOrWhiteSpace(ai.AgentId) Then Return
+        If String.IsNullOrWhiteSpace(taskId) Then Return
+        If state Is Nothing Then Return
+
+        If state.DialogueContexts Is Nothing Then
+            state.DialogueContexts = New Dictionary(Of String, String)()
+        End If
+
+        Dim rawCtx = If(state.DialogueContexts.ContainsKey(taskId), state.DialogueContexts(taskId), "")
+        If TryGetElevenLabsConversationId(rawCtx) IsNot Nothing Then Return
+
+        Dim token = ct
+        Dim baseUrl = ResolveBackendBaseUrl(ai.BackendBaseUrl)
+        Dim conversationId = Await ElevenLabsStartAgentAsync(
+            baseUrl,
+            ai.AgentId.Trim(),
+            ai.DynamicVariables,
+            token,
+            If(ai.ConvaiSessionConversationId, "").Trim()).ConfigureAwait(False)
+        state.DialogueContexts(taskId) = BuildElevenLabsContextJson(conversationId)
+        Dim cidDisp = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
+        Console.WriteLine($"[IA·ConvAI] warmup startAgent conversationId={cidDisp}")
+    End Function
+
     Private Async Function ExecuteOpenAiBranch(
         ai As CompiledAIAgentTask,
         task As CompiledTask,
@@ -323,6 +372,8 @@ Public Class AIAgentTaskExecutor
         End If
 
         Dim endpoint = ResolveLlmEndpoint(ai.LlmEndpoint)
+        Console.WriteLine(
+            $"[IA·ConvAI] WARN LLM branch: task={task.Id} POST {endpoint} userChars={If(userInput, """").Length} — se vedi Groq qui, il compile VB non ha platform=elevenlabs")
         Dim result As AIAgentStepResult
         Try
             result = Await ExecuteStepAsync(stateJson, userInput, ai.Rules, endpoint).ConfigureAwait(False)
@@ -569,147 +620,166 @@ Public Class AIAgentTaskExecutor
             state.DialogueContexts = New Dictionary(Of String, String)()
         End If
 
-        Dim rawCtx = ""
-        If state.DialogueContexts.ContainsKey(task.Id) Then
-            rawCtx = state.DialogueContexts(task.Id)
-        End If
-
-        Dim conversationId = TryGetElevenLabsConversationId(rawCtx)
-
         Try
-            If conversationId Is Nothing Then
-                Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/startAgent → new conversation")
-                Dim startUrl = CombineUrl(baseUrl, "/elevenlabs/startAgent")
+            For transportAttempt As Integer = 1 To 2
+                Dim conversationId = TryGetElevenLabsConversationId(
+                    If(state.DialogueContexts.ContainsKey(task.Id), state.DialogueContexts(task.Id), ""))
+
+                If conversationId Is Nothing Then
+                    Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/startAgent → new conversation (attempt={transportAttempt})")
+                    Dim startUrl = CombineUrl(baseUrl, "/elevenlabs/startAgent")
+                    Try
+                        conversationId = Await ElevenLabsStartAgentAsync(
+                            baseUrl,
+                            ai.AgentId.Trim(),
+                            ai.DynamicVariables,
+                            System.Threading.CancellationToken.None,
+                            If(ai.ConvaiSessionConversationId, "").Trim()).ConfigureAwait(False)
+                        EmitElevenLabsBackendDiagnostic(
+                            task,
+                            startUrl,
+                            "POST",
+                            "http_success",
+                            Nothing,
+                            New List(Of KeyValuePair(Of String, Object)) From {
+                                New KeyValuePair(Of String, Object)("agentId", MaskAgentIdForLog(ai.AgentId))
+                            },
+                            New List(Of KeyValuePair(Of String, Object)) From {
+                                New KeyValuePair(Of String, Object)("conversationId", conversationId)
+                            })
+                    Catch ex As Exception
+                        EmitElevenLabsBackendDiagnostic(
+                            task,
+                            startUrl,
+                            "POST",
+                            "http_error",
+                            ex.Message,
+                            New List(Of KeyValuePair(Of String, Object)) From {
+                                New KeyValuePair(Of String, Object)("agentId", MaskAgentIdForLog(ai.AgentId))
+                            },
+                            New List(Of KeyValuePair(Of String, Object))())
+                        Throw
+                    End Try
+                    state.DialogueContexts(task.Id) = BuildElevenLabsContextJson(conversationId)
+                    Dim cidDisp = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
+                    Console.WriteLine($"[IA·ConvAI] ConvAI conversationId={cidDisp} (stored in DialogueContexts)")
+                Else
+                    Dim cidReuse = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
+                    Console.WriteLine($"[IA·ConvAI] reuse conversationId={cidReuse} (attempt={transportAttempt})")
+                End If
+
+                Dim transportFailed As Exception = Nothing
                 Try
-                    conversationId = Await ElevenLabsStartAgentAsync(
-                        baseUrl,
-                        ai.AgentId.Trim(),
-                        ai.DynamicVariables,
-                        System.Threading.CancellationToken.None,
-                        If(ai.ConvaiSessionConversationId, "").Trim()).ConfigureAwait(False)
+                    If Not String.IsNullOrWhiteSpace(userInput) Then
+                        Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/sendUserTurn chars={userInput.Length}")
+                        Dim sendUrl = CombineUrl(baseUrl, "/elevenlabs/sendUserTurn")
+                        Try
+                            Await ElevenLabsSendUserTurnAsync(baseUrl, conversationId, userInput, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                            EmitElevenLabsBackendDiagnostic(
+                                task,
+                                sendUrl,
+                                "POST",
+                                "http_success",
+                                Nothing,
+                                New List(Of KeyValuePair(Of String, Object)) From {
+                                    New KeyValuePair(Of String, Object)("conversationId", conversationId),
+                                    New KeyValuePair(Of String, Object)("userTextChars", userInput.Length)
+                                },
+                                New List(Of KeyValuePair(Of String, Object))())
+                        Catch ex As Exception
+                            EmitElevenLabsBackendDiagnostic(
+                                task,
+                                sendUrl,
+                                "POST",
+                                "http_error",
+                                ex.Message,
+                                New List(Of KeyValuePair(Of String, Object)) From {
+                                    New KeyValuePair(Of String, Object)("conversationId", conversationId),
+                                    New KeyValuePair(Of String, Object)("userTextChars", userInput.Length)
+                                },
+                                New List(Of KeyValuePair(Of String, Object))())
+                            Throw
+                        End Try
+                    End If
+
+                    Console.WriteLine($"[IA·ConvAI] GET /elevenlabs/readPrompt (long-poll)")
+                    Dim readUrl = CombineUrl(baseUrl, $"/elevenlabs/readPrompt/{Uri.EscapeDataString(conversationId)}")
+                    Dim turn As (Text As String, Status As String, ToolDiags As List(Of JObject))
+                    Try
+                        turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
+                    Catch ex As Exception
+                        EmitElevenLabsBackendDiagnostic(
+                            task,
+                            readUrl,
+                            "GET",
+                            "http_error",
+                            ex.Message,
+                            New List(Of KeyValuePair(Of String, Object)) From {
+                                New KeyValuePair(Of String, Object)("conversationId", conversationId)
+                            },
+                            New List(Of KeyValuePair(Of String, Object))())
+                        Throw
+                    End Try
+
+                    If turn.ToolDiags IsNot Nothing Then
+                        For Each td In turn.ToolDiags
+                            EmitElevenLabsBackendDiagnosticFromConvaiTool(task, td)
+                        Next
+                    End If
+
+                    Dim completed = turn.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)
                     EmitElevenLabsBackendDiagnostic(
                         task,
-                        startUrl,
-                        "POST",
+                        readUrl,
+                        "GET",
                         "http_success",
                         Nothing,
-                        New List(Of KeyValuePair(Of String, Object)) From {
-                            New KeyValuePair(Of String, Object)("agentId", MaskAgentIdForLog(ai.AgentId))
-                        },
                         New List(Of KeyValuePair(Of String, Object)) From {
                             New KeyValuePair(Of String, Object)("conversationId", conversationId)
+                        },
+                        New List(Of KeyValuePair(Of String, Object)) From {
+                            New KeyValuePair(Of String, Object)("status", turn.Status),
+                            New KeyValuePair(Of String, Object)("replyChars", If(turn.Text, "").Length),
+                            New KeyValuePair(Of String, Object)("completed", completed)
                         })
+                    Console.WriteLine($"[IA·ConvAI] agent turn status={turn.Status} replyChars={If(turn.Text, """").Length} completed={completed}")
+
+                    If completed Then
+                        If state.DialogueContexts.ContainsKey(task.Id) Then
+                            state.DialogueContexts.Remove(task.Id)
+                        End If
+                    End If
+
+                    If _messageCallback IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(turn.Text) Then
+                        _messageCallback(turn.Text, "AIAgent", 0)
+                    End If
+
+                    Dim requiresInput = Not completed
+                    Return New TaskExecutionResult With {
+                        .Success = True,
+                        .RequiresInput = requiresInput,
+                        .WaitingTaskId = If(requiresInput, task.Id, Nothing),
+                        .IsCompleted = completed
+                    }
                 Catch ex As Exception
-                    EmitElevenLabsBackendDiagnostic(
-                        task,
-                        startUrl,
-                        "POST",
-                        "http_error",
-                        ex.Message,
-                        New List(Of KeyValuePair(Of String, Object)) From {
-                            New KeyValuePair(Of String, Object)("agentId", MaskAgentIdForLog(ai.AgentId))
-                        },
-                        New List(Of KeyValuePair(Of String, Object))())
-                    Throw
+                    transportFailed = ex
                 End Try
-                state.DialogueContexts(task.Id) = BuildElevenLabsContextJson(conversationId)
-                Dim cidDisp = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
-                Console.WriteLine($"[IA·ConvAI] ConvAI conversationId={cidDisp} (stored in DialogueContexts)")
-            Else
-                Dim cidReuse = If(conversationId.Length <= 16, conversationId, conversationId.Substring(0, 12) & "…")
-                Console.WriteLine($"[IA·ConvAI] reuse conversationId={cidReuse}")
-            End If
 
-            If Not String.IsNullOrWhiteSpace(userInput) Then
-                Console.WriteLine($"[IA·ConvAI] POST /elevenlabs/sendUserTurn chars={userInput.Length}")
-                Dim sendUrl = CombineUrl(baseUrl, "/elevenlabs/sendUserTurn")
-                Try
-                    Await ElevenLabsSendUserTurnAsync(baseUrl, conversationId, userInput, System.Threading.CancellationToken.None).ConfigureAwait(False)
-                    EmitElevenLabsBackendDiagnostic(
-                        task,
-                        sendUrl,
-                        "POST",
-                        "http_success",
-                        Nothing,
-                        New List(Of KeyValuePair(Of String, Object)) From {
-                            New KeyValuePair(Of String, Object)("conversationId", conversationId),
-                            New KeyValuePair(Of String, Object)("userTextChars", userInput.Length)
-                        },
-                        New List(Of KeyValuePair(Of String, Object))())
-                Catch ex As Exception
-                    EmitElevenLabsBackendDiagnostic(
-                        task,
-                        sendUrl,
-                        "POST",
-                        "http_error",
-                        ex.Message,
-                        New List(Of KeyValuePair(Of String, Object)) From {
-                            New KeyValuePair(Of String, Object)("conversationId", conversationId),
-                            New KeyValuePair(Of String, Object)("userTextChars", userInput.Length)
-                        },
-                        New List(Of KeyValuePair(Of String, Object))())
-                    Throw
-                End Try
-            End If
-
-            Console.WriteLine($"[IA·ConvAI] GET /elevenlabs/readPrompt (long-poll)")
-            Dim readUrl = CombineUrl(baseUrl, $"/elevenlabs/readPrompt/{Uri.EscapeDataString(conversationId)}")
-            Dim turn As (Text As String, Status As String, ToolDiags As List(Of JObject))
-            Try
-                turn = Await ElevenLabsReadPromptAsync(baseUrl, conversationId, System.Threading.CancellationToken.None).ConfigureAwait(False)
-            Catch ex As Exception
-                EmitElevenLabsBackendDiagnostic(
-                    task,
-                    readUrl,
-                    "GET",
-                    "http_error",
-                    ex.Message,
-                    New List(Of KeyValuePair(Of String, Object)) From {
-                        New KeyValuePair(Of String, Object)("conversationId", conversationId)
-                    },
-                    New List(Of KeyValuePair(Of String, Object))())
-                Throw
-            End Try
-
-            If turn.ToolDiags IsNot Nothing Then
-                For Each td In turn.ToolDiags
-                    EmitElevenLabsBackendDiagnosticFromConvaiTool(task, td)
-                Next
-            End If
-
-            Dim completed = turn.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)
-            EmitElevenLabsBackendDiagnostic(
-                task,
-                readUrl,
-                "GET",
-                "http_success",
-                Nothing,
-                New List(Of KeyValuePair(Of String, Object)) From {
-                    New KeyValuePair(Of String, Object)("conversationId", conversationId)
-                },
-                New List(Of KeyValuePair(Of String, Object)) From {
-                    New KeyValuePair(Of String, Object)("status", turn.Status),
-                    New KeyValuePair(Of String, Object)("replyChars", If(turn.Text, "").Length),
-                    New KeyValuePair(Of String, Object)("completed", completed)
-                })
-            Console.WriteLine($"[IA·ConvAI] agent turn status={turn.Status} replyChars={If(turn.Text, """").Length} completed={completed}")
-
-            If completed Then
-                If state.DialogueContexts.ContainsKey(task.Id) Then
-                    state.DialogueContexts.Remove(task.Id)
+                If transportFailed IsNot Nothing AndAlso transportAttempt = 1 AndAlso IsRecoverableElevenLabsTransportError(transportFailed) Then
+                    Console.WriteLine($"[IA·ConvAI] transport recoverable — retry startAgent: {transportFailed.Message}")
+                    ClearElevenLabsDialogueContext(state, task.Id)
+                    Continue For
                 End If
-            End If
 
-            If _messageCallback IsNot Nothing AndAlso Not String.IsNullOrWhiteSpace(turn.Text) Then
-                _messageCallback(turn.Text, "AIAgent", 0)
-            End If
+                If transportFailed IsNot Nothing Then
+                    Throw transportFailed
+                End If
+            Next
 
-            Dim requiresInput = Not completed
             Return New TaskExecutionResult With {
-                .Success = True,
-                .RequiresInput = requiresInput,
-                .WaitingTaskId = If(requiresInput, task.Id, Nothing),
-                .IsCompleted = completed
+                .Success = False,
+                .Err = "ElevenLabs transport failed after retry.",
+                .IsCompleted = False
             }
         Catch ex As RuntimeConvaiException
             Throw
@@ -736,6 +806,16 @@ Public Class AIAgentTaskExecutor
                 .IsCompleted = False
             }
         End If
+
+        Dim branchName = "openai/llm"
+        Select Case ai.Platform
+            Case IAPlatform.ElevenLabs
+                branchName = "elevenlabs"
+            Case IAPlatform.Google
+                branchName = "google"
+        End Select
+        Console.WriteLine(
+            $"[IA·ConvAI] Execute: task={task.Id} branch={branchName} agentIdChars={If(ai.AgentId, """").Trim().Length} llmEndpointSet={Not String.IsNullOrWhiteSpace(ai.LlmEndpoint)}")
 
         Select Case ai.Platform
             Case IAPlatform.ElevenLabs
